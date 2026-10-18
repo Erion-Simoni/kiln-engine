@@ -118,7 +118,7 @@ Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 
 ## ADR-0007: Plugin system (proposed)
 
-**Date:** 2026-10-18  
+**Date:** 2026-10-18
 **Status:** proposed
 
 **Decision:** Rust plugins compiled to **WASM**, loaded via `kiln-plugin-api`, sandboxed. No native `cdylib` in default product path.
@@ -132,3 +132,22 @@ Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 - M14+ feature; not in initial product
 - Extension kinds: custom nodes, importers, editor panels, host calls
 - Capability-gated host calls for security
+
+---
+
+## ADR-0008: Async runtime for demo (accepted)
+
+**Date:** 2026-10-18
+**Status:** accepted
+
+**Decision:** Use `pollster 0.4` for blocking async in demo binary. Minimal dependency, no runtime overhead.
+
+**Alternatives:**
+- pollster: simple, blocking, no runtime
+- tokio/async-std: heavy, overkill for demo
+- Custom executor: unnecessary complexity
+
+**Consequences:**
+- Small binary impact
+- Demo uses blocking async for simplicity
+- M1 will evaluate proper async runtime for engine

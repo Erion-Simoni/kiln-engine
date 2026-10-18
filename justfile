@@ -13,11 +13,11 @@ test:
 
 # run editor or demo window
 run:
-    cargo run --bin kiln-editor
+    cargo run --bin demo
 
 # wasm demo in browser
 web:
-    trunk serve --open
+    cargo build --target wasm32-unknown-unknown --release -p kiln-web
 
 # wasm/native size budgets
 size:

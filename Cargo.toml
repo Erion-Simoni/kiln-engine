@@ -1,0 +1,18 @@
+[workspace]
+members = [
+    "kiln-render",
+    "kiln-web",
+    "demo",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.87"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+wgpu = { version = "30.0.1" }
+winit = { version = "0.30.13" }
+pollster = "0.4"
