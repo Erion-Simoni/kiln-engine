@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M10 complete
+**Current milestone:** M11 complete
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -102,12 +102,23 @@
   - Requires: wasm32-unknown-unknown target, wasm-bindgen-cli installed
   - Export workflow: cargo run --bin kiln-cli -- export --output web-export
 - All 51 tests pass (2 kiln-core, 5 kiln-render, 10 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-render tier/post)
+- M11: Audio + physics (feature-gated)
+  - ADR-0010 accepted: rodio 0.23 with symphonia for audio playback (OGG/Opus support)
+  - ADR-0011 accepted: rapier2d 0.36.1 for 2D physics
+  - kiln-runtime: Added audio.rs with AudioEngine (feature-gated via "audio" feature)
+  - kiln-runtime: Added physics.rs with PhysicsWorld wrapper (feature-gated via "physics" feature)
+  - kiln-runtime: Stub implementations when features disabled (no-op for size optimization)
+  - Tests: audio (2), physics (3) — all pass
+  - samples/audio: Audio sample demonstrating engine initialization
+  - samples/physics: Physics sample with falling ball and floor collision (10 steps simulated)
+  - Web build (kiln-web) excludes physics/audio by default (44 KB WASM, no rodio/rapier2d)
+  - Workspace updated to include samples/audio and samples/physics
+  - All 56 tests pass (2 kiln-core, 5 kiln-render, 10 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-render tier/post, 5 kiln-runtime audio/physics)
 
 **In progress:**
 - None
 
 **Next steps:**
-- M11: Audio + physics (feature-gated)
 - M12: Installers + size/perf pass
 - M13: First sample game + tutorial + docs
 
@@ -130,6 +141,11 @@
   - wasm-opt optimization and brotli compression for size measurement
   - Actual game content export (currently exports empty shell)
   - Live preview in editor (auto-reload on export)
+- M11 deferred features:
+  - Audio sample needs actual OGG/Opus file for playback testing (placeholder instruction added)
+  - Physics sample demonstrates collision but lacks visualization (console output only)
+  - Binary size impact not measured with features enabled (deferred to M12 size pass)
+  - kiln-editor integration not added (audio/physics controls in editor deferred)
 - Scene view uses egui painter for rendering (not actual GPU SpriteRenderer)
   — Simpler implementation for M7; full GPU rendering can be added later with framebuffer
 - Browser build deferred (kiln-web stub remains)
@@ -144,15 +160,23 @@
 - KilnScript has no function definitions yet
 
 **Last commands run:**
+- cargo test --workspace (all 56 tests pass)
+- cargo build --bin audio-sample (builds successfully)
+- cargo run --bin audio-sample (audio engine initializes successfully)
+- cargo build --bin physics-sample (builds successfully)
+- cargo run --bin physics-sample (physics simulation runs, ball falls 10 steps)
+- cargo build --package kiln-web --target wasm32-unknown-unknown --release (44 KB WASM)
 - cargo check --workspace (builds successfully with 1 warning)
-- cargo test --workspace (all 51 tests pass)
-- cargo run --bin kiln-cli -- export --output web-export (successful export)
-- rustup target add wasm32-unknown-unknown (added WASM target)
-- cargo install wasm-bindgen-cli (installed wasm-bindgen tool)
 
-**Files touched (M10):**
-- kiln-web/Cargo.toml (updated dependencies: wasm-bindgen, web-sys)
-- kiln-web/src/lib.rs (stub WASM runtime with panic hook)
-- kiln-cli/src/main.rs (added Export command with WASM build and HTML generation)
-- kiln-editor/src/app.rs (added Export to Web button in Settings tab)
+**Files touched (M11):**
+- kiln-runtime/Cargo.toml (added audio and physics features with rodio and rapier2d dependencies)
+- kiln-runtime/src/lib.rs (added feature-gated module exports)
+- kiln-runtime/src/audio.rs (new: AudioEngine with rodio/symphonia, stub when disabled, 2 tests)
+- kiln-runtime/src/physics.rs (new: PhysicsWorld with rapier2d wrapper, stub when disabled, 3 tests)
+- samples/audio/Cargo.toml (new: audio sample with audio feature)
+- samples/audio/src/main.rs (new: audio sample demonstrating engine initialization)
+- samples/physics/Cargo.toml (new: physics sample with physics feature and rapier2d dependency)
+- samples/physics/src/main.rs (new: physics sample with falling ball and floor collision)
+- Cargo.toml (added samples/audio and samples/physics to workspace members)
+- docs/DECISIONS.md (added ADR-0010 and ADR-0011 for audio and physics crate choices)
 - docs/STATE.md (updated progress)

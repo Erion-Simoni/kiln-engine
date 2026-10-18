@@ -184,3 +184,47 @@ Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 - Low: No post-processing, baked lighting, minimal effects
 - Medium: Bloom (3 passes), screen-space fog, soft shadows
 - High: Bloom (5 passes), LUT color grading, fog, outline, real-time lighting
+
+---
+
+## ADR-0010: Audio crate choice (accepted)
+
+**Date:** 2026-10-18
+**Status:** accepted
+
+**Decision:** Use **rodio 0.23** with **symphonia** for audio playback. Rodio provides a simple Source-based API, supports OGG/Opus via symphonia's optional opus feature, and is widely used in the Rust game dev ecosystem.
+
+**Alternatives:**
+- rodio + symphonia: mature, widely used (12M+ downloads), simple API, supports OGG/Opus (chosen)
+- kira: more features (spatial audio, tweens), but larger dependency tree
+- Pure opus decoders (opus-pure, opuscule): decode-only, no playback/OS integration
+- Custom: minimal, but significant maintenance burden
+
+**Consequences:**
+- Audio feature-gated in kiln-runtime to exclude from web builds by default
+- Rodio's symphonia feature enables OGG/Opus via `symphonia-all-codecs` and `symphonia-ogg`
+- Binary size impact measured in M11 (expected ~200-500 KB uncompressed)
+- Simple API: load file → decode → play via Sink
+- cpal backend for OS audio output
+
+---
+
+## ADR-0011: Physics engine choice (accepted)
+
+**Date:** 2026-10-18
+**Status:** accepted
+
+**Decision:** Use **rapier2d 0.36.1** for 2D physics. Rapier is a modern Rust physics engine with good performance, comprehensive features (colliders, joints, collision events), and active maintenance.
+
+**Alternatives:**
+- rapier2d: modern, fast, comprehensive 2D physics (chosen)
+- nphysics2d: predecessor to rapier, deprecated
+- custom: minimal collision detection only, maintenance burden
+- box2d-rs: Box2D port, less actively maintained
+
+**Consequences:**
+- Physics feature-gated in kiln-runtime to exclude from web builds by default
+- Binary size impact measured in M11 (expected ~500-800 KB uncompressed)
+- Provides rigid body dynamics, collision detection, joints, queries
+- 2D-specific version to avoid 3D overhead
+- Integration point in kiln-runtime via PhysicsWorld wrapper

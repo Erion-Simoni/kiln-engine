@@ -12,6 +12,8 @@ members = [
     "kiln-web",
     "demo",
     "samples/tilemap",
+    "samples/audio",
+    "samples/physics",
 ]
 resolver = "2"
 

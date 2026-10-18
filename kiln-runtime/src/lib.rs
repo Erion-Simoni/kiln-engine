@@ -6,7 +6,19 @@ pub mod input;
 pub mod world;
 pub mod sprite;
 
+#[cfg(feature = "audio")]
+pub mod audio;
+
+#[cfg(feature = "physics")]
+pub mod physics;
+
 pub use loop_::*;
 pub use input::*;
 pub use world::*;
 pub use sprite::*;
+
+#[cfg(feature = "audio")]
+pub use audio::*;
+
+#[cfg(feature = "physics")]
+pub use physics::*;

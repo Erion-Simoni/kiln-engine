@@ -5,8 +5,20 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+default = []
+audio = ["rodio", "symphonia"]
+physics = ["rapier2d"]
+
 [dependencies]
 kiln-core = { path = "../kiln-core" }
 kiln-render = { path = "../kiln-render" }
 hecs = { workspace = true }
 winit = { workspace = true }
+
+# Audio (feature-gated)
+rodio = { version = "0.23", optional = true, default-features = false, features = ["symphonia-ogg", "symphonia-all", "playback"] }
+symphonia = { version = "0.5", optional = true }
+
+# Physics (feature-gated)
+rapier2d = { version = "0.36.1", optional = true }
