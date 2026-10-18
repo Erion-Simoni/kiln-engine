@@ -1,0 +1,13 @@
+[package]
+name = "kiln-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "kiln-cli"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+kiln-assets = { workspace = true }
+anyhow = { workspace = true }

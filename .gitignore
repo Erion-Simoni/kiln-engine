@@ -24,6 +24,9 @@ Thumbs.db
 # Asset cache
 .kiln-cache/
 
+# Generated archives
+*.kar
+
 # Web
 web/dist/
 web/pkg/

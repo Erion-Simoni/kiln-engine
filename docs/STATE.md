@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M2 complete
+**Current milestone:** M3 complete
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -20,36 +20,53 @@
   - Arrow keys pan; Space/Shift zoom; 10×10 grid (100 sprites, 1 draw call)
 - M2: samples/tilemap — 5×5 checkerboard rendered in 1 draw call
 - M2: kiln-core project.rs — replaced external mod tests; with inline #[cfg(test)]
+- M2: Fixed wgpu surface/instance ownership error (pass instance to Renderer::new)
 - Workspace: added log 0.4, env_logger 0.11, bytemuck derive feature
-- All 7 tests pass (2 kiln-core, 5 kiln-render)
+- M3: kiln-assets — content-hash cache and packed archive
+  - hash.rs: SHA-256 content hashing (3 tests)
+  - cache.rs: AssetCache with JSON persistence, incremental import (4 tests)
+  - archive.rs: Binary archive format (KILNARV1 magic, entry table, file data) (3 tests)
+  - Import test proves re-import skips unchanged files via hash comparison
+- M3: kiln-cli — asset pipeline CLI
+  - Commands: import, pack, verify
+  - clap-based CLI with derive features
+  - Verified: import skips unchanged files, pack creates archive, verify lists contents
+- M3: justfile assets recipe updated to use kiln-cli
+- Workspace: added sha2, hex, serde_json, thiserror, walkdir, clap, anyhow
+- All 17 tests pass (2 kiln-core, 5 kiln-render, 10 kiln-assets)
 
 **In progress:**
 - None
 
 **Next 3 steps:**
-1. Run `cargo run --bin demo` to visually verify 10×10 sprite grid renders
-2. Run `cargo run --bin tilemap` to verify checkerboard sample
-3. Begin M3 (asset pipeline, content-hash cache, packed archive, CLI) if M2 verified
+1. Verify texture atlas can be integrated with sprite batch (M4 prep)
+2. Begin M4 (IR + VM) if approved
+3. Consider texture loading from archive for M2 samples
 
 **Known issues:**
 - SpriteRenderer render() re-borrows self.gpu after the ECS query (two step borrow)
   — works correctly; clippy may flag it; not a bug
 - Browser build deferred (kiln-web stub remains)
-- No texture support yet (sprite batch is solid colour only); texture atlas planned for M3/M4
-- demo/main.rs logs at WARN level; set RUST_LOG=trace for per-frame sprite count
+- No texture support yet (sprite batch is solid colour only); texture atlas planned for M4
+- Archive format uses full file paths for keys; may need canonicalization for cross-platform
+- CLI pack command only packs immediate children of source dir (no recursive import)
 
 **Last commands run:**
-- cargo test -p kiln-core -p kiln-render -p kiln-runtime (7/7 passed)
-- git commit -m "M2: instanced sprite batch renderer, camera tests, tilemap sample"
+- cargo test -p kiln-core -p kiln-render -p kiln-runtime -p kiln-assets (17/17 passed)
+- cargo run --bin kiln-cli -- import/pack/verify (all commands verified)
+- git commit -m "Fix wgpu surface/instance ownership error"
+- git commit -m "M3: asset pipeline, content-hash cache, packed archive, CLI"
 
-**Files touched (M2):**
-- kiln-render/src/sprite.wgsl (rewritten — instanced shader)
-- kiln-render/src/sprite_renderer.rs (rewritten — GPU instancing + unit tests)
-- kiln-render/src/camera.rs (added unit tests, clamp fix)
-- kiln-render/src/lib.rs (re-export SpriteInstance, MAX_SPRITES)
-- kiln-core/src/project.rs (inline tests, removed stale mod tests;)
-- demo/src/main.rs (real render loop with GpuState)
-- demo/Cargo.toml (add log, env_logger)
-- samples/tilemap/Cargo.toml (new)
-- samples/tilemap/src/main.rs (new — tilemap sample)
-- Cargo.toml (add log, env_logger, bytemuck derive; add samples/tilemap)
+**Files touched (M3):**
+- kiln-assets/Cargo.toml (new crate with sha2, hex, serde_json, thiserror, walkdir)
+- kiln-assets/src/lib.rs (module exports)
+- kiln-assets/src/hash.rs (SHA-256 hashing + 3 tests)
+- kiln-assets/src/cache.rs (AssetCache with JSON persistence + 4 tests)
+- kiln-assets/src/archive.rs (Binary archive format KILNARV1 + 3 tests)
+- kiln-cli/Cargo.toml (new CLI binary with clap, anyhow)
+- kiln-cli/src/main.rs (import/pack/verify commands)
+- justfile (assets recipe updated)
+- Cargo.toml (add kiln-assets, kiln-cli; add workspace deps)
+- assets/test.txt (test asset file)
+- .kiln-cache/kiln-cache.json (generated cache)
+- assets.kar (generated archive)

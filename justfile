@@ -34,7 +34,8 @@ size:
 
 # import / pack assets
 assets:
-    cargo run --bin kiln-cli -- pack
+    cargo run --bin kiln-cli -- import --source assets --cache .kiln-cache
+    cargo run --bin kiln-cli -- pack --source assets --output assets.kar
 
 # installers via cargo-dist
 package:
