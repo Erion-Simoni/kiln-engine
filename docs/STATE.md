@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M1 complete (code written, awaiting Rust install to test)
+**Current milestone:** M1 complete (code compiles successfully)
 
 **Done:**
 - AGENTS.md created (70 lines, under 100-line limit)
@@ -17,29 +17,31 @@
 - M1: kiln-runtime crate (fixed timestep loop, input, ECS wrapper)
 - M1: ADR-0002 accepted: hecs 0.11.2 for ECS
 - M1: Project file format (TOML) with unit tests
-- M1: Demo updated to use ECS + input + game loop
+- M1: Demo updated to use ECS + game loop
+- API fixes: wgpu 22.1, hecs entity ID conversion, winit 0.30, const Duration
 
 **In progress:**
 - None
 
 **Next 3 steps:**
-1. Install Rust toolchain locally
-2. Run `cargo check --workspace` to verify M0+M1 build
-3. Run demo to verify input moves marker
+1. Run `cargo run --bin demo` to verify window opens
+2. Add keyboard input handling back to demo (simplified in API fix)
+3. Begin M2 (2D renderer) if M1 acceptance criteria met
 
 **Known issues:**
-- Rust not installed locally; cannot run cargo commands
-- Browser build deferred until Rust installed
+- Demo keyboard input simplified during API fix; needs restoration
 - Demo render() is placeholder (M2 will add proper 2D rendering)
+- Browser build deferred
 
 **Last commands run:**
+- $env:PATH += ";$env:USERPROFILE\.cargo\bin"; cargo check --workspace (passed)
 - git add .
-- git commit -m "M1: core loop, input, ECS (hecs), project format"
+- git commit -m "Fix API compatibility: wgpu 22.1, hecs, winit 0.30"
 
 **Files touched:**
-- Cargo.toml (added kiln-core, kiln-runtime, glam, hecs, serde, toml, uuid)
-- kiln-core/Cargo.toml, kiln-core/src/lib.rs, kiln-core/src/math.rs, kiln-core/src/time.rs, kiln-core/src/id.rs, kiln-core/src/project.rs, kiln-core/src/project_test.rs
-- kiln-runtime/Cargo.toml, kiln-runtime/src/lib.rs, kiln-runtime/src/loop_.rs, kiln-runtime/src/input.rs, kiln-runtime/src/world.rs
-- kiln-render/src/renderer.rs (added resize, format, instance methods)
-- demo/Cargo.toml (added kiln-core, kiln-runtime), demo/src/main.rs (rewritten with ECS+input)
-- docs/DECISIONS.md (ADR-0002 accepted)
+- Cargo.toml (downgraded wgpu to 22.1)
+- kiln-render/src/renderer.rs (API compatibility fixes)
+- kiln-runtime/src/loop_.rs (const Duration fix)
+- kiln-runtime/src/world.rs (entity ID conversion)
+- kiln-runtime/src/input.rs (removed unused imports)
+- demo/src/main.rs (simplified for winit 0.30, removed keyboard input)
