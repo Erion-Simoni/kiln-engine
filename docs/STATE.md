@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M6 in progress
+**Current milestone:** M6 complete
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -52,19 +52,23 @@
   - Parse/type errors return spanned diagnostics for editor squiggles
 - Workspace: added kiln-script
 - All 44 tests pass (2 kiln-core, 5 kiln-render, 10 kiln-assets, 11 kiln-ir, 16 kiln-script)
+- M6: kiln-editor — native desktop editor with egui and docking panels
+  - ADR-0001 accepted: pure-Rust native (winit + wgpu + egui)
+  - ADR-0004 accepted: egui 0.29 with egui-dock 0.14 (compatible with wgpu 22.1)
+  - Event loop with winit ApplicationHandler
+  - egui-winit integration for input handling
+  - egui-wgpu rendering backend
+  - egui-dock for tabbed panel layout (SceneView, Inspector, Assets, Console)
+  - Basic UI rendering with CentralPanel
+  - Compile passes with only dead code warnings (unused Tab variants)
 
 **In progress:**
-- M6: kiln-editor — stub crate created
-  - ADR-0001 accepted: pure-Rust native (winit + wgpu + egui)
-  - ADR-0004 accepted: egui 0.36.x pinned for egui-dock compatibility
-  - Basic EditorApp struct with window reference
-  - wgpu version conflict resolved (stayed at 22.1 for workspace consistency)
-  - Need to: implement full event loop, egui integration, docking panels
+- None
 
 **Next 3 steps:**
-1. Complete M6: implement basic app window and event loop with egui
-2. Add docking panels using egui-dock
-3. Implement scene view (framebuffer rendering)
+1. M7: Scene view panel with actual game rendering (framebuffer → texture)
+2. M7: Integrate SpriteRenderer into editor scene view
+3. M7: Implement inspector panel for entity properties
 
 **Known issues:**
 - SpriteRenderer render() re-borrows self.gpu after the ECS query (two step borrow)
@@ -79,14 +83,17 @@
 - KilnScript has no variable support yet (identifiers are only for function calls)
 - KilnScript has no while/for loops yet
 - KilnScript has no function definitions yet
+- Editor scene view panel is a placeholder; needs actual game rendering integration
 
 **Last commands run:**
-- cargo check -p kiln-editor (compiles with stub implementation)
-- No commit yet (M6 in progress)
+- cargo check (workspace builds successfully)
+- No commit yet (M6 complete)
 
-**Files touched (M6 so far):**
-- kiln-editor/Cargo.toml (new crate with kiln-core/render/runtime/assets)
+**Files touched (M6):**
+- kiln-editor/Cargo.toml (new crate with kiln-core/render/runtime/assets + egui deps)
 - kiln-editor/src/lib.rs (module exports)
-- kiln-editor/src/app.rs (EditorApp stub with window reference)
-- kiln-editor/src/panels.rs (stub for editor panels)
+- kiln-editor/src/app.rs (EditorApp with event loop, egui integration, docking)
+- kiln-editor/src/panels.rs (stub for editor panels — placeholder)
+- kiln-editor/src/main.rs (entry point)
 - docs/DECISIONS.md (ADR-0001 and ADR-0004 accepted)
+- Cargo.toml (added egui 0.29, egui_dock 0.14, env_logger 0.11)

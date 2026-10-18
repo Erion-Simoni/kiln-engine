@@ -12,4 +12,9 @@ winit = { workspace = true }
 wgpu = { workspace = true }
 pollster = { workspace = true }
 log = { workspace = true }
+env_logger = { workspace = true }
 thiserror = { workspace = true }
+egui = { workspace = true }
+egui_dock = { workspace = true }
+egui-winit = "0.29"
+egui-wgpu = "0.29"
