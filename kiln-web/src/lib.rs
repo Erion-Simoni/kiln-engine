@@ -7,10 +7,11 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen(start)]
 pub fn start() {
     console_error_panic_hook::set_once();
-    // Web initialization will be added in M0
 }
 
+/// Placeholder for web runtime entry point
+/// Full game loop and wgpu integration will be added in future milestones
 #[wasm_bindgen]
 pub fn run() {
-    // Placeholder for web runtime entry point
+    // Placeholder for web runtime
 }

@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M9 complete
+**Current milestone:** M10 complete
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -93,13 +93,20 @@
   - kiln-editor: Added Settings tab with tier override UI (Low/Medium/High buttons)
   - kiln-editor: EditorApp tracks render_tier and applies changes at runtime
   - Tests: tier defaults (1), tier effects (3), post config (3) — all pass
+- M10: One-click web export from editor
+  - kiln-web: WASM export shell with wasm-bindgen (stub runtime, no full game loop yet)
+  - kiln-cli: Added export command — builds WASM, runs wasm-bindgen, generates HTML shell
+  - kiln-editor: Added "Export to Web" button in Settings tab (spawns CLI export in background thread)
+  - Web export produces: index.html, kiln_web.js, kiln_web_bg.wasm (27 KB uncompressed)
+  - WASM size: 27 KB (well under 1.5 MB budget; full game loop will increase size)
+  - Requires: wasm32-unknown-unknown target, wasm-bindgen-cli installed
+  - Export workflow: cargo run --bin kiln-cli -- export --output web-export
 - All 51 tests pass (2 kiln-core, 5 kiln-render, 10 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-render tier/post)
 
 **In progress:**
 - None
 
 **Next steps:**
-- M10: One-click web export from editor
 - M11: Audio + physics (feature-gated)
 - M12: Installers + size/perf pass
 - M13: First sample game + tutorial + docs
@@ -117,6 +124,12 @@
   - Actual shader implementation for post-processing effects (bloom, LUT, fog, outline)
   - Tier system and framebuffer structure complete; shader passes stubbed for future milestone
   - Frame budget measurement on reference hardware (deferred to M12)
+- M10 deferred features:
+  - Full game loop and wgpu integration in kiln-web (currently stub runtime only)
+  - Browser input handling (keyboard/mouse via web-sys)
+  - wasm-opt optimization and brotli compression for size measurement
+  - Actual game content export (currently exports empty shell)
+  - Live preview in editor (auto-reload on export)
 - Scene view uses egui painter for rendering (not actual GPU SpriteRenderer)
   — Simpler implementation for M7; full GPU rendering can be added later with framebuffer
 - Browser build deferred (kiln-web stub remains)
@@ -133,12 +146,13 @@
 **Last commands run:**
 - cargo check --workspace (builds successfully with 1 warning)
 - cargo test --workspace (all 51 tests pass)
+- cargo run --bin kiln-cli -- export --output web-export (successful export)
+- rustup target add wasm32-unknown-unknown (added WASM target)
+- cargo install wasm-bindgen-cli (installed wasm-bindgen tool)
 
-**Files touched (M9):**
-- kiln-render/src/tier.rs (new file - RenderTier enum with auto-selection)
-- kiln-render/src/post.rs (new file - PostConfig, PostFramebuffer, PostPipeline)
-- kiln-render/src/lib.rs (added tier, post module exports)
-- kiln-render/src/renderer.rs (integrated tier system, added set_tier method)
-- kiln-editor/src/app.rs (added Settings tab, render_tier tracking, tier override UI)
-- docs/DECISIONS.md (ADR-0009 added)
+**Files touched (M10):**
+- kiln-web/Cargo.toml (updated dependencies: wasm-bindgen, web-sys)
+- kiln-web/src/lib.rs (stub WASM runtime with panic hook)
+- kiln-cli/src/main.rs (added Export command with WASM build and HTML generation)
+- kiln-editor/src/app.rs (added Export to Web button in Settings tab)
 - docs/STATE.md (updated progress)

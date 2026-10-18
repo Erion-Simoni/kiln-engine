@@ -514,6 +514,23 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 ui.label(format!("LUT color grading: {}", self.render_tier.enable_lut()));
                 ui.label(format!("Screen-space fog: {}", self.render_tier.enable_fog()));
                 ui.label(format!("Outline effect: {}", self.render_tier.enable_outline()));
+
+                ui.separator();
+                ui.heading("Export");
+
+                ui.label("Export project for web (WASM):");
+                ui.horizontal(|ui| {
+                    if ui.button("Export to Web").clicked() {
+                        // Trigger export via CLI (non-blocking for UI)
+                        std::thread::spawn(|| {
+                            let _ = std::process::Command::new("cargo")
+                                .args(["run", "--bin", "kiln-cli", "--", "export", "--output", "web-export"])
+                                .status();
+                        });
+                    }
+                });
+
+                ui.label("Click to export. Check terminal for progress.");
             }
         }
     }

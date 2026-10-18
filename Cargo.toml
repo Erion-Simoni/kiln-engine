@@ -50,3 +50,4 @@ kiln-ir      = { path = "kiln-ir" }
 kiln-script  = { path = "kiln-script" }
 kiln-graph   = { path = "kiln-graph" }
 kiln-editor  = { path = "kiln-editor" }
+kiln-web     = { path = "kiln-web" }

@@ -1,7 +1,9 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use kiln_assets::{AssetCache, Archive};
+use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 
 #[derive(Parser)]
 #[command(name = "kiln-cli")]
@@ -36,6 +38,12 @@ enum Commands {
         /// Archive to verify
         #[arg(short, long)]
         archive: PathBuf,
+    },
+    /// Export project for web (WASM build + HTML shell)
+    Export {
+        /// Output directory for web build
+        #[arg(short, long, default_value = "web-export")]
+        output: PathBuf,
     },
 }
 
@@ -76,6 +84,86 @@ fn main() -> Result<()> {
             for file in files {
                 println!("  - {}", file);
             }
+        }
+        Commands::Export { output } => {
+            println!("Exporting to web build: {}", output.display());
+
+            // Create output directory
+            fs::create_dir_all(&output)?;
+
+            // Build WASM
+            println!("Building WASM...");
+            let build_status = Command::new("cargo")
+                .args([
+                    "build",
+                    "--target",
+                    "wasm32-unknown-unknown",
+                    "--release",
+                    "-p",
+                    "kiln-web",
+                ])
+                .status()?;
+
+            if !build_status.success() {
+                anyhow::bail!("WASM build failed");
+            }
+
+            // Run wasm-bindgen
+            println!("Running wasm-bindgen...");
+            let bindgen_status = Command::new("wasm-bindgen")
+                .args([
+                    "target/wasm32-unknown-unknown/release/kiln_web.wasm",
+                    "--out-dir",
+                    &output.to_string_lossy(),
+                    "--target",
+                    "web",
+                ])
+                .status()?;
+
+            if !bindgen_status.success() {
+                anyhow::bail!("wasm-bindgen failed");
+            }
+
+            // Generate HTML shell
+            let html = r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiln Web Export</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0d0d0d;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="kiln-canvas"></canvas>
+    <script type="module">
+        import init from './kiln_web.js';
+        init().then(() => {
+            console.log('Kiln web runtime initialized');
+        }).catch(err => {
+            console.error('Failed to initialize:', err);
+        });
+    </script>
+</body>
+</html>"#;
+
+            fs::write(output.join("index.html"), html)?;
+
+            println!("Web export complete: {}", output.display());
+            println!("Open {}/index.html in a browser", output.display());
         }
     }
 
