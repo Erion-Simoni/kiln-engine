@@ -3,7 +3,7 @@
 use kiln_core::Clock;
 use std::time::Duration;
 
-const FIXED_TIMESTEP: Duration = Duration::from_secs_f64(1.0 / 60.0);
+const FIXED_TIMESTEP_SECS: f64 = 1.0 / 60.0;
 
 pub struct GameLoop {
     clock: Clock,
@@ -25,9 +25,10 @@ impl GameLoop {
         self.clock.tick();
         self.accumulator += self.clock.delta();
 
-        while self.accumulator >= FIXED_TIMESTEP {
-            update(FIXED_TIMESTEP);
-            self.accumulator -= FIXED_TIMESTEP;
+        let fixed_timestep = Duration::from_secs_f64(FIXED_TIMESTEP_SECS);
+        while self.accumulator >= fixed_timestep {
+            update(fixed_timestep);
+            self.accumulator -= fixed_timestep;
         }
     }
 

@@ -1,13 +1,7 @@
 use kiln_core::Vec2;
 use kiln_runtime::{GameLoop, GameWorld, InputState};
 use kiln_render::Renderer;
-use winit::{
-    dpi::PhysicalSize,
-    event::{Event, KeyEvent, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    keyboard::{Key, NamedKey},
-    window::Window,
-};
+use winit::event_loop::EventLoop;
 
 #[derive(Clone, Copy)]
 struct Position {
@@ -17,107 +11,57 @@ struct Position {
 
 fn main() {
     let event_loop = EventLoop::new().expect("Failed to create event loop");
-    let window = Window::new(&event_loop).expect("Failed to create window");
+    let mut app = App::default();
 
-    let mut app = pollster::block_on(App::new(&window));
-
-    event_loop
-        .run(move |event, elwt| {
-            match event {
-                Event::WindowEvent {
-                    event: WindowEvent::CloseRequested,
-                    ..
-                } => elwt.exit(),
-                Event::WindowEvent {
-                    event: WindowEvent::Resized(size),
-                    ..
-                } => {
-                    app.resize(size);
-                }
-                Event::WindowEvent {
-                    event: WindowEvent::KeyboardInput { event, .. },
-                    ..
-                } => {
-                    app.handle_key(event);
-                }
-                Event::AboutToWait => {
-                    app.update();
-                    app.render();
-                }
-                _ => {}
-            }
-        })
-        .expect("Event loop error");
+    let _ = event_loop.run_app(&mut app);
 }
 
 struct App {
-    renderer: Renderer,
+    renderer: Option<Renderer>,
     game_loop: GameLoop,
     world: GameWorld,
     input: InputState,
     marker_pos: Vec2,
 }
 
-impl App {
-    async fn new(window: &Window) -> Self {
-        let size = window.inner_size();
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
-            ..Default::default()
-        });
-
-        let surface = unsafe {
-            instance
-                .create_surface(window)
-                .expect("Failed to create surface")
-        };
-
-        let renderer = Renderer::new(&surface, size.width, size.height).await;
+impl Default for App {
+    fn default() -> Self {
         let mut world = GameWorld::new();
-
         let marker_pos = Vec2::new(0.0, 0.0);
-        world.spawn(Position {
+        world.spawn((Position {
             x: marker_pos.x,
             y: marker_pos.y,
-        });
+        },));
 
         Self {
-            renderer,
+            renderer: None,
             game_loop: GameLoop::new(),
             world,
             input: InputState::new(),
             marker_pos,
         }
     }
+}
 
-    fn resize(&mut self, size: PhysicalSize<u32>) {
-        // Resize will be implemented with proper surface management
-        // For now, placeholder
-    }
+impl App {
+    async fn init_renderer(&mut self, window: &winit::window::Window) {
+        let size = window.inner_size();
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::PRIMARY,
+            ..Default::default()
+        });
 
-    fn handle_key(&mut self, event: KeyEvent) {
-        use winit::keyboard::PhysicalKey;
+        let surface = instance
+            .create_surface(window)
+            .expect("Failed to create surface");
 
-        match event.physical_key {
-            PhysicalKey::Named(NamedKey::ArrowUp) => {
-                self.marker_pos.y += 10.0;
-            }
-            PhysicalKey::Named(NamedKey::ArrowDown) => {
-                self.marker_pos.y -= 10.0;
-            }
-            PhysicalKey::Named(NamedKey::ArrowLeft) => {
-                self.marker_pos.x -= 10.0;
-            }
-            PhysicalKey::Named(NamedKey::ArrowRight) => {
-                self.marker_pos.x += 10.0;
-            }
-            _ => {}
-        }
+        let renderer = Renderer::new(&surface, size.width, size.height).await;
+        self.renderer = Some(renderer);
     }
 
     fn update(&mut self) {
         self.game_loop.tick(|_dt| {
-            for (_, mut pos) in self.world.world().query::<&mut Position>().iter() {
+            for pos in self.world.world().query_mut::<&mut Position>() {
                 pos.x = self.marker_pos.x;
                 pos.y = self.marker_pos.y;
             }
@@ -126,5 +70,34 @@ impl App {
 
     fn render(&mut self) {
         // Render placeholder - will be replaced with proper rendering in M2
+    }
+}
+
+impl winit::application::ApplicationHandler for App {
+    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        let window = event_loop
+            .create_window(winit::window::WindowAttributes::default())
+            .expect("Failed to create window");
+        
+        pollster::block_on(self.init_renderer(&window));
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        _window_id: winit::window::WindowId,
+        event: winit::event::WindowEvent,
+    ) {
+        match event {
+            winit::event::WindowEvent::CloseRequested => {
+                event_loop.exit();
+            }
+            _ => {}
+        }
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.update();
+        self.render();
     }
 }

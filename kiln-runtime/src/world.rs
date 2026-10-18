@@ -27,7 +27,7 @@ impl GameWorld {
         T: hecs::Bundle,
     {
         let entity = self.world.spawn(components);
-        EntityId::new(entity.id())
+        EntityId::new(entity.id() as u64)
     }
 }
 

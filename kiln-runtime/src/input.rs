@@ -1,11 +1,10 @@
 //! Input handling
 
-use winit::event::{KeyEvent, MouseButton, MouseScrollDelta};
-use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::event::MouseButton;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Key {
-    KeyCode(KeyCode),
+    KeyCode(winit::keyboard::KeyCode),
     Unknown,
 }
 
@@ -31,7 +30,7 @@ impl InputState {
         Self::default()
     }
 
-    pub fn is_key_pressed(&self, key: KeyCode) -> bool {
+    pub fn is_key_pressed(&self, key: winit::keyboard::KeyCode) -> bool {
         self.keys.iter().any(|k| matches!(k, Key::KeyCode(kc) if kc == &key))
     }
 

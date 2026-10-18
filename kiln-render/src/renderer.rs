@@ -3,14 +3,14 @@ use wgpu::{Instance, Adapter, Device, Queue, Surface, SurfaceConfiguration};
 /// Minimal renderer for M0/M1
 pub struct Renderer {
     instance: Instance,
-    adapter: Adapter,
+    _adapter: Adapter,
     device: Device,
     queue: Queue,
     surface_config: SurfaceConfiguration,
 }
 
 impl Renderer {
-    pub async fn new(surface: &Surface, width: u32, height: u32) -> Self {
+    pub async fn new(surface: &Surface<'_>, width: u32, height: u32) -> Self {
         let instance = Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             ..Default::default()
@@ -31,6 +31,7 @@ impl Renderer {
                     label: Some("Kiln Device"),
                     required_features: wgpu::Features::empty(),
                     required_limits: wgpu::Limits::default(),
+                    memory_hints: wgpu::MemoryHints::default(),
                 },
                 None,
             )
@@ -58,7 +59,7 @@ impl Renderer {
 
         Self {
             instance,
-            adapter,
+            _adapter: adapter,
             device,
             queue,
             surface_config,
@@ -73,7 +74,7 @@ impl Renderer {
         &self.queue
     }
 
-    pub fn resize(&mut self, surface: &Surface, width: u32, height: u32) {
+    pub fn resize(&mut self, surface: &Surface<'_>, width: u32, height: u32) {
         self.surface_config.width = width;
         self.surface_config.height = height;
         surface.configure(&self.device, &self.surface_config);
