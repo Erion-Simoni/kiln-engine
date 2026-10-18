@@ -2,7 +2,6 @@ use wgpu::{Instance, Adapter, Device, Queue, Surface, SurfaceConfiguration};
 
 /// Minimal renderer for M0/M1
 pub struct Renderer {
-    instance: Instance,
     _adapter: Adapter,
     device: Device,
     queue: Queue,
@@ -10,12 +9,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub async fn new(surface: &Surface<'_>, width: u32, height: u32) -> Self {
-        let instance = Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
-            ..Default::default()
-        });
-
+    pub async fn new(instance: &Instance, surface: &Surface<'_>, width: u32, height: u32) -> Self {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
@@ -58,7 +52,6 @@ impl Renderer {
         surface.configure(&device, &surface_config);
 
         Self {
-            instance,
             _adapter: adapter,
             device,
             queue,
@@ -82,9 +75,5 @@ impl Renderer {
 
     pub fn format(&self) -> wgpu::TextureFormat {
         self.surface_config.format
-    }
-
-    pub fn instance(&self) -> &Instance {
-        &self.instance
     }
 }

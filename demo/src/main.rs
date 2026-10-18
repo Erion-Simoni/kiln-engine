@@ -89,7 +89,7 @@ impl App {
             .create_surface(window.clone())
             .expect("create surface");
 
-        let renderer = Renderer::new(&surface, size.width, size.height).await;
+        let renderer = Renderer::new(&instance, &surface, size.width, size.height).await;
         let sprite_renderer = SpriteRenderer::new(renderer.device(), renderer.format());
         sprite_renderer.upload_quad(renderer.queue());
 
