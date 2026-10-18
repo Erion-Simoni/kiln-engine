@@ -7,5 +7,5 @@ pub mod vm;
 
 pub use opcode::Opcode;
 pub use value::Value;
-pub use program::{Program, Label};
-pub use vm::{Vm, HostContext};
+pub use program::{Program, Label, Instruction};
+pub use vm::{Vm, HostContext, VmError};

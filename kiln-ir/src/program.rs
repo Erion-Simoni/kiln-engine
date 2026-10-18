@@ -60,28 +60,6 @@ pub enum Instruction {
     /// Call a host function by ID.
     HostCall(u32),
 }
-    PushConst(Value),
-    Pop,
-    Dup,
-    Swap,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Neg,
-    Eq,
-    Ne,
-    Lt,
-    Le,
-    Gt,
-    Ge,
-    Jump(Label),
-    JumpIf(Label),
-    JumpIfNot(Label),
-    Call(Label),
-    Return,
-    HostCall(u32),
-}
 
 /// Bytecode program.
 ///
@@ -122,5 +100,11 @@ impl Program {
 
     pub fn is_empty(&self) -> bool {
         self.instructions.is_empty()
+    }
+
+    pub fn set_instruction(&mut self, index: usize, instr: Instruction) {
+        if index < self.instructions.len() {
+            self.instructions[index] = instr;
+        }
     }
 }

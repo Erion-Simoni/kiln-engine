@@ -1,0 +1,8 @@
+[package]
+name = "kiln-script"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+kiln-ir = { workspace = true }
+thiserror = { workspace = true }

@@ -6,6 +6,7 @@ members = [
     "kiln-assets",
     "kiln-cli",
     "kiln-ir",
+    "kiln-script",
     "kiln-web",
     "demo",
     "samples/tilemap",
@@ -41,3 +42,4 @@ kiln-render  = { path = "kiln-render" }
 kiln-runtime = { path = "kiln-runtime" }
 kiln-assets  = { path = "kiln-assets" }
 kiln-ir      = { path = "kiln-ir" }
+kiln-script  = { path = "kiln-script" }

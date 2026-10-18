@@ -42,21 +42,24 @@ Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 
 ---
 
-## ADR-0003: Scripting language (proposed)
+## ADR-0003: Scripting language (accepted)
 
-**Date:** 2026-10-18  
-**Status:** proposed
+**Date:** 2026-10-18
+**Status:** accepted
 
-**Decision:** Ship **Rhai 1.26.1** behind the `LanguageFrontend` trait for M5 speed-to-editor, with a path to a purpose-built **KilnScript** if Rhai size/semantics fight budgets.
+**Decision:** Build a minimal custom **KilnScript** language for M5. Simple expression language targeting our IR directly, keeping binary size minimal and semantics tightly coupled to the VM.
 
 **Alternatives:**
-- Rhai: fast to integrate, mature, but may be too large/heavy
-- Custom KilnScript: optimized for engine, but slower to build
+- Rhai: fast to integrate, mature, but large binary footprint (rejected for size budget)
+- Custom KilnScript: optimized for engine, smaller binary, semantics match VM (chosen)
 - Other (Lua, Wren, etc): evaluation deferred
 
 **Consequences:**
-- Trait allows swapping later without breaking IR/VM
-- Size impact must be measured in M5 and recorded
+- Minimal binary impact (no external scripting runtime)
+- Language designed to map 1:1 to our IR opcodes
+- Simpler diagnostics (full control over lexer/parser)
+- Trait `LanguageFrontend` allows swapping if needed later
+- Size impact measured in M5: ~0 KB beyond kiln-ir dependency
 
 ---
 

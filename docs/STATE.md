@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M4 complete
+**Current milestone:** M5 complete
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -40,14 +40,24 @@
   - vm.rs: Stack-based VM with HostContext trait for external functions
   - Hot path documented as allocation-free when stack stays within capacity
   - Tests: arith (5), branch (3), host call (1), comparison (2) — all pass
-- Workspace: added kiln-ir
-- All 28 tests pass (2 kiln-core, 5 kiln-render, 10 kiln-assets, 11 kiln-ir)
+- M5: kiln-script — KilnScript frontend with diagnostics
+  - ADR-0003 accepted: custom KilnScript language (no Rhai for size budget)
+  - diagnostic.rs: Span and Diagnostic types for error reporting
+  - lexer.rs: Token types (literals, keywords, operators, punctuation) with span tracking
+  - parser.rs: Recursive descent parser with AST (Expr, Stmt) with span info
+  - compiler.rs: AST → IR bytecode compiler with jump label fix-up for if statements
+  - lib.rs: LanguageFrontend trait and KilnScriptFrontend implementation
+  - Tests: lexer (6), parser (4), compiler (3), frontend (3) — all pass
+  - Sample script test: if statement with arithmetic and host call compiles and runs
+  - Parse/type errors return spanned diagnostics for editor squiggles
+- Workspace: added kiln-script
+- All 44 tests pass (2 kiln-core, 5 kiln-render, 10 kiln-assets, 11 kiln-ir, 16 kiln-script)
 
 **In progress:**
 - None
 
 **Next 3 steps:**
-1. Begin M5 (scripting frontend + diagnostics) if approved
+1. Begin M6 (editor shell) if approved
 2. Consider adding float (f64) to Value type for game math
 3. Consider integrating VM with kiln-runtime for script execution
 
@@ -55,22 +65,26 @@
 - SpriteRenderer render() re-borrows self.gpu after the ECS query (two step borrow)
   — works correctly; clippy may flag it; not a bug
 - Browser build deferred (kiln-web stub remains)
-- No texture support yet (sprite batch is solid colour only); texture atlas planned for M5/M6
+- No texture support yet (sprite batch is solid colour only); texture atlas planned for M6/M7
 - Archive format uses full file paths for keys; may need canonicalization for cross-platform
 - CLI pack command only packs immediate children of source dir (no recursive import)
 - VM has no float type yet (only i64 and bool)
 - VM has no string type yet
 - VM has no arrays or collections yet
+- KilnScript has no variable support yet (identifiers are only for function calls)
+- KilnScript has no while/for loops yet
+- KilnScript has no function definitions yet
 
 **Last commands run:**
-- cargo test -p kiln-core -p kiln-render -p kiln-runtime -p kiln-assets -p kiln-ir (28/28 passed)
-- git commit -m "M4: bytecode VM with host call interface"
+- cargo test -p kiln-core -p kiln-render -p kiln-runtime -p kiln-assets -p kiln-ir -p kiln-script (44/44 passed)
+- git commit -m "M5: KilnScript frontend with diagnostics"
 
-**Files touched (M4):**
-- kiln-ir/Cargo.toml (new crate with thiserror)
-- kiln-ir/src/lib.rs (module exports)
-- kiln-ir/src/opcode.rs (21 opcodes with documentation)
-- kiln-ir/src/value.rs (Value enum with I64/Bool)
-- kiln-ir/src/program.rs (Program with labels, Instruction enum with docs)
-- kiln-ir/src/vm.rs (VM with HostContext trait, step dispatch, 11 tests)
-- Cargo.toml (add kiln-ir to workspace)
+**Files touched (M5):**
+- kiln-script/Cargo.toml (new crate with kiln-ir, thiserror)
+- kiln-script/src/lib.rs (LanguageFrontend trait, KilnScriptFrontend, 3 integration tests)
+- kiln-script/src/diagnostic.rs (Span and Diagnostic types)
+- kiln-script/src/lexer.rs (Token types, Lexer with span tracking, 6 tests)
+- kiln-script/src/parser.rs (Parser with AST Expr/Stmt with spans, 4 tests)
+- kiln-script/src/compiler.rs (Compiler with jump fix-up, 3 tests)
+- kiln-ir/src/program.rs (added set_instruction method for compiler)
+- docs/DECISIONS.md (ADR-0003 accepted for KilnScript)
