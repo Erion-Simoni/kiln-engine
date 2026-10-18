@@ -1,0 +1,15 @@
+[package]
+name = "kiln-editor"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+kiln-core = { workspace = true }
+kiln-render = { workspace = true }
+kiln-runtime = { workspace = true }
+kiln-assets = { workspace = true }
+winit = { workspace = true }
+wgpu = { workspace = true }
+pollster = { workspace = true }
+log = { workspace = true }
+thiserror = { workspace = true }

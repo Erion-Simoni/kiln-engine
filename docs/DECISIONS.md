@@ -4,10 +4,10 @@ Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 
 ---
 
-## ADR-0001: Editor UI framework (proposed)
+## ADR-0001: Editor UI framework (accepted)
 
-**Date:** 2026-10-18  
-**Status:** proposed
+**Date:** 2026-10-18
+**Status:** accepted
 
 **Decision:** Use pure-Rust native (`winit` + `wgpu` + `egui`) for the editor. Do not use Electron. Tauri only if justified by a future ADR.
 
@@ -20,6 +20,7 @@ Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 - Editor installer stays under 40 MB target
 - Native UI may have less polish than mature web frameworks initially
 - Need to evaluate node-graph UI (egui-snarl vs custom) in M8
+- Size impact measured in M6: egui + egui-dock minimal overhead
 
 ---
 
@@ -63,10 +64,10 @@ Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 
 ---
 
-## ADR-0004: egui version pin for node graph (proposed)
+## ADR-0004: egui version pin for node graph (accepted)
 
-**Date:** 2026-10-18  
-**Status:** proposed
+**Date:** 2026-10-18
+**Status:** accepted
 
 **Decision:** Pin **egui 0.36.x** for M6–M8 to use `egui-snarl 0.12.0` and `egui_dock 0.21.1`, which require egui ^0.36. Upgrade to 0.37+ when node-graph ecosystem catches up.
 

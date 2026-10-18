@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M5 complete
+**Current milestone:** M6 in progress
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -54,12 +54,17 @@
 - All 44 tests pass (2 kiln-core, 5 kiln-render, 10 kiln-assets, 11 kiln-ir, 16 kiln-script)
 
 **In progress:**
-- None
+- M6: kiln-editor — stub crate created
+  - ADR-0001 accepted: pure-Rust native (winit + wgpu + egui)
+  - ADR-0004 accepted: egui 0.36.x pinned for egui-dock compatibility
+  - Basic EditorApp struct with window reference
+  - wgpu version conflict resolved (stayed at 22.1 for workspace consistency)
+  - Need to: implement full event loop, egui integration, docking panels
 
 **Next 3 steps:**
-1. Begin M6 (editor shell) if approved
-2. Consider adding float (f64) to Value type for game math
-3. Consider integrating VM with kiln-runtime for script execution
+1. Complete M6: implement basic app window and event loop with egui
+2. Add docking panels using egui-dock
+3. Implement scene view (framebuffer rendering)
 
 **Known issues:**
 - SpriteRenderer render() re-borrows self.gpu after the ECS query (two step borrow)
@@ -76,15 +81,12 @@
 - KilnScript has no function definitions yet
 
 **Last commands run:**
-- cargo test -p kiln-core -p kiln-render -p kiln-runtime -p kiln-assets -p kiln-ir -p kiln-script (44/44 passed)
-- git commit -m "M5: KilnScript frontend with diagnostics"
+- cargo check -p kiln-editor (compiles with stub implementation)
+- No commit yet (M6 in progress)
 
-**Files touched (M5):**
-- kiln-script/Cargo.toml (new crate with kiln-ir, thiserror)
-- kiln-script/src/lib.rs (LanguageFrontend trait, KilnScriptFrontend, 3 integration tests)
-- kiln-script/src/diagnostic.rs (Span and Diagnostic types)
-- kiln-script/src/lexer.rs (Token types, Lexer with span tracking, 6 tests)
-- kiln-script/src/parser.rs (Parser with AST Expr/Stmt with spans, 4 tests)
-- kiln-script/src/compiler.rs (Compiler with jump fix-up, 3 tests)
-- kiln-ir/src/program.rs (added set_instruction method for compiler)
-- docs/DECISIONS.md (ADR-0003 accepted for KilnScript)
+**Files touched (M6 so far):**
+- kiln-editor/Cargo.toml (new crate with kiln-core/render/runtime/assets)
+- kiln-editor/src/lib.rs (module exports)
+- kiln-editor/src/app.rs (EditorApp stub with window reference)
+- kiln-editor/src/panels.rs (stub for editor panels)
+- docs/DECISIONS.md (ADR-0001 and ADR-0004 accepted)
