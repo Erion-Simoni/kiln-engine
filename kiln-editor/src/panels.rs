@@ -1,3 +1,3 @@
 //! Editor panels (scene view, inspector, etc.).
-
-pub struct SceneViewPanel;
+//!
+//! Panels are implemented directly in app.rs for this milestone.

@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M6 complete
+**Current milestone:** M7 in progress
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -61,18 +61,30 @@
   - egui-dock for tabbed panel layout (SceneView, Inspector, Assets, Console)
   - Basic UI rendering with CentralPanel
   - Compile passes with only dead code warnings (unused Tab variants)
+- M7: kiln-editor — scene view with entity rendering and inspector
+  - SceneView panel displays ECS entities as colored rectangles using egui painter
+  - Entity list below canvas for selection
+  - Inspector panel shows Transform (X, Y) and Sprite (R, G, B) for selected entity
+  - Demo scene with 5 entities created on startup
+  - All 44 tests pass
 
 **In progress:**
-- None
+- Camera controls (pan/zoom) for scene view canvas (deferred to later)
 
 **Next 3 steps:**
-1. M7: Scene view panel with actual game rendering (framebuffer → texture)
-2. M7: Integrate SpriteRenderer into editor scene view
-3. M7: Implement inspector panel for entity properties
+1. M7: Add camera controls (pan/zoom) to scene view
+2. M7: Implement undo/redo for inspector edits
+3. M7: Add play-in-editor (PIE) mode
 
 **Known issues:**
-- SpriteRenderer render() re-borrows self.gpu after the ECS query (two step borrow)
-  — works correctly; clippy may flag it; not a bug
+- Scene view uses egui painter for rendering (not actual GPU SpriteRenderer)
+  — Simpler implementation for M7; full GPU rendering can be added later with framebuffer
+- Inspector shows read-only values (edits don't persist to ECS)
+  — Need mutable access pattern or separate editing state
+- No camera controls (pan/zoom) in scene view
+- No undo/redo for edits
+- No play-in-editor (PIE) mode
+- No hot reload for scripts/assets
 - Browser build deferred (kiln-web stub remains)
 - No texture support yet (sprite batch is solid colour only); texture atlas planned for M6/M7
 - Archive format uses full file paths for keys; may need canonicalization for cross-platform
@@ -83,17 +95,12 @@
 - KilnScript has no variable support yet (identifiers are only for function calls)
 - KilnScript has no while/for loops yet
 - KilnScript has no function definitions yet
-- Editor scene view panel is a placeholder; needs actual game rendering integration
 
 **Last commands run:**
-- cargo check (workspace builds successfully)
-- No commit yet (M6 complete)
+- cargo check --workspace (builds successfully with 1 warning)
+- cargo test --workspace (all 44 tests pass)
 
-**Files touched (M6):**
-- kiln-editor/Cargo.toml (new crate with kiln-core/render/runtime/assets + egui deps)
-- kiln-editor/src/lib.rs (module exports)
-- kiln-editor/src/app.rs (EditorApp with event loop, egui integration, docking)
-- kiln-editor/src/panels.rs (stub for editor panels — placeholder)
-- kiln-editor/src/main.rs (entry point)
-- docs/DECISIONS.md (ADR-0001 and ADR-0004 accepted)
-- Cargo.toml (added egui 0.29, egui_dock 0.14, env_logger 0.11)
+**Files touched (M7):**
+- kiln-editor/src/app.rs (SceneView with egui painter rendering, Inspector panel)
+- kiln-editor/Cargo.toml (added hecs dependency)
+- docs/STATE.md (updated progress)
