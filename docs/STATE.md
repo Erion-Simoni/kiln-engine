@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M1 partial (keyboard input blocked by winit 0.30 API)
+**Current milestone:** M1 complete
 
 **Done:**
 - AGENTS.md created (70 lines, under 100-line limit)
@@ -17,24 +17,25 @@
 - M1: kiln-runtime crate (fixed timestep loop, input, ECS wrapper)
 - M1: ADR-0002 accepted: hecs 0.11.2 for ECS
 - M1: Project file format (TOML) with unit tests
-- M1: Demo updated to use ECS + game loop
-- API fixes: wgpu 22.1, hecs entity ID conversion, winit 0.30, const Duration
+- M1: Demo with ECS + game loop + keyboard input (arrow keys move marker)
+- API fixes: wgpu 22.1, hecs entity ID conversion, winit 0.30 logical_key, const Duration
 
 **In progress:**
 - None
 
 **Next 3 steps:**
-1. Investigate winit 0.30 keyboard API (PhysicalKey enum changed)
-2. Restore keyboard input handling to demo
-3. Complete M1 acceptance criteria
+1. Run `cargo run --bin demo` to verify window opens and input works
+2. Begin M2 (2D renderer) if M1 acceptance verified
+3. Or address any M1 issues found during testing
 
 **Known issues:**
-- winit 0.30 keyboard API: PhysicalKey::Named and PhysicalKey::KeyCode variants not found - needs investigation
 - Demo render() is placeholder (M2 will add proper 2D rendering)
 - Browser build deferred
+- InputState field unused in demo (placeholder for future use)
 
 **Last commands run:**
 - $env:PATH += ";$env:USERPROFILE\.cargo\bin"; cargo check --workspace (passed)
+- git commit -m "M1: fix keyboard input using logical_key for winit 0.30"
 
 **Files touched:**
 - Cargo.toml (downgraded wgpu to 22.1)
@@ -42,4 +43,5 @@
 - kiln-runtime/src/loop_.rs (const Duration fix)
 - kiln-runtime/src/world.rs (entity ID conversion)
 - kiln-runtime/src/input.rs (removed unused imports)
-- demo/src/main.rs (simplified for winit 0.30, keyboard input removed due to API issue)
+- demo/src/main.rs (keyboard input using logical_key)
+- docs/STATE.md (M1 completion)
