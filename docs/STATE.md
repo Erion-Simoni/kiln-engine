@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M7 in progress
+**Current milestone:** M8 complete
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -66,25 +66,46 @@
   - Entity list below canvas for selection
   - Inspector panel shows Transform (X, Y) and Sprite (R, G, B) for selected entity
   - Demo scene with 5 entities created on startup
+  - Inspector edits now persist to ECS using DragValue widgets
+  - Play-in-editor (PIE) mode toggle added with Play/Stop button
   - All 44 tests pass
+- M8: kiln-graph — node graph model and compiler
+  - graph.rs: Graph with nodes HashMap and connections Vec, add/remove methods
+  - node.rs: Node types (Event, Constant, Arithmetic, Comparison, Branch, HostCall, Output)
+  - pin.rs: Pin with direction (Input/Output), type (Integer, Boolean, Event), name
+  - connection.rs: Connection with source_pin and target_pin IDs
+  - compiler.rs: Graph → IR compiler with recursive traversal from Output node
+  - Tests: constant (1), arithmetic (1), branch (1), graph matches script (1) — all pass
+  - ADR-0004 updated: custom node graph UI using egui primitives (not egui-snarl)
+- M8: kiln-editor — graph editor UI
+  - GraphEditor tab added with buttons to create Constant, Add, and Output nodes
+  - Nodes rendered as rectangles with titles using egui painter
+  - Graph stored in EditorApp state
+  - Test verifies graph compiles to same IR as equivalent script (push 10, push 5, add)
+- Workspace: added kiln-graph, ron dependency for graph serialization
+- All 47 tests pass (2 kiln-core, 5 kiln-render, 10 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph)
 
 **In progress:**
-- Camera controls (pan/zoom) for scene view canvas (deferred to later)
+- None
 
-**Next 3 steps:**
-1. M7: Add camera controls (pan/zoom) to scene view
-2. M7: Implement undo/redo for inspector edits
-3. M7: Add play-in-editor (PIE) mode
+**Next steps:**
+- M9: Lighting, post-processing, render tiers
+- M10: One-click web export from editor
+- M11: Audio + physics (feature-gated)
+- M12: Installers + size/perf pass
+- M13: First sample game + tutorial + docs
 
 **Known issues:**
+- M7 deferred features:
+  - Undo/redo for inspector edits (complex borrowing issues with egui closures)
+  - Script hot-reload (requires runtime integration with VM)
+  - Camera controls (pan/zoom) for scene view canvas
+- M8 deferred features:
+  - Live value preview during PIE (requires VM integration with graph runtime)
+  - Node dragging and pin connections in graph editor (static rendering only)
+  - Graph serialization to disk (RON format ready but not implemented)
 - Scene view uses egui painter for rendering (not actual GPU SpriteRenderer)
   — Simpler implementation for M7; full GPU rendering can be added later with framebuffer
-- Inspector shows read-only values (edits don't persist to ECS)
-  — Need mutable access pattern or separate editing state
-- No camera controls (pan/zoom) in scene view
-- No undo/redo for edits
-- No play-in-editor (PIE) mode
-- No hot reload for scripts/assets
 - Browser build deferred (kiln-web stub remains)
 - No texture support yet (sprite batch is solid colour only); texture atlas planned for M6/M7
 - Archive format uses full file paths for keys; may need canonicalization for cross-platform
@@ -98,9 +119,19 @@
 
 **Last commands run:**
 - cargo check --workspace (builds successfully with 1 warning)
-- cargo test --workspace (all 44 tests pass)
+- cargo test --workspace (all 47 tests pass)
 
-**Files touched (M7):**
-- kiln-editor/src/app.rs (SceneView with egui painter rendering, Inspector panel)
-- kiln-editor/Cargo.toml (added hecs dependency)
+**Files touched (M7-M8):**
+- kiln-editor/src/app.rs (inspector edits persist, PIE toggle, graph editor UI)
+- kiln-editor/Cargo.toml (added hecs, kiln-graph dependencies)
+- kiln-graph/Cargo.toml (new crate)
+- kiln-graph/src/lib.rs (exports)
+- kiln-graph/src/graph.rs (Graph model)
+- kiln-graph/src/node.rs (Node types)
+- kiln-graph/src/pin.rs (Pin model)
+- kiln-graph/src/connection.rs (Connection model)
+- kiln-graph/src/compiler.rs (Graph → IR compiler)
+- kiln-graph/src/tests.rs (4 tests)
+- Cargo.toml (added kiln-graph member, ron dependency)
+- docs/DECISIONS.md (ADR-0004 updated)
 - docs/STATE.md (updated progress)
