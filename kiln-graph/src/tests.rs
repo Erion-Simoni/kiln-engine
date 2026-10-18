@@ -153,3 +153,77 @@ fn test_branch_graph() {
     // Should compile without error
     assert!(!program.instructions().is_empty());
 }
+
+#[test]
+fn test_graph_matches_script_arithmetic() {
+    use kiln_ir::{Program, Instruction, Value};
+
+    let mut graph = Graph::new();
+
+    // Constant 10
+    let const_a = Node::new(
+        NodeType::Constant {
+            value: ConstantValue::Integer(10),
+        },
+        (0.0, 0.0),
+    );
+    let id_a = graph.add_node(const_a);
+
+    // Constant 5
+    let const_b = Node::new(
+        NodeType::Constant {
+            value: ConstantValue::Integer(5),
+        },
+        (100.0, 0.0),
+    );
+    let id_b = graph.add_node(const_b);
+
+    // Add node
+    let add_node = Node::new(
+        NodeType::Arithmetic {
+            op: ArithmeticOp::Add,
+        },
+        (200.0, 0.0),
+    );
+    let id_add = graph.add_node(add_node);
+
+    // Output node
+    let output_node = Node::new(NodeType::Output, (300.0, 0.0));
+    let id_output = graph.add_node(output_node);
+
+    // Connect: const_a -> add.a, const_b -> add.b, add.result -> output.in
+    let pin_a_out = graph.get_node(id_a).unwrap().pins.iter().find(|p| p.name == "value").unwrap().id;
+    let pin_b_out = graph.get_node(id_b).unwrap().pins.iter().find(|p| p.name == "value").unwrap().id;
+    let pin_add_a = graph.get_node(id_add).unwrap().pins.iter().find(|p| p.name == "a").unwrap().id;
+    let pin_add_b = graph.get_node(id_add).unwrap().pins.iter().find(|p| p.name == "b").unwrap().id;
+    let pin_add_out = graph.get_node(id_add).unwrap().pins.iter().find(|p| p.name == "result").unwrap().id;
+    let pin_output_in = graph.get_node(id_output).unwrap().pins.iter().find(|p| p.name == "in").unwrap().id;
+
+    graph.add_connection(Connection::new(pin_a_out, pin_add_a));
+    graph.add_connection(Connection::new(pin_b_out, pin_add_b));
+    graph.add_connection(Connection::new(pin_add_out, pin_output_in));
+
+    let graph_program = compile_graph(&graph).unwrap();
+
+    // Create equivalent program manually (like script would produce)
+    let mut manual_program = Program::new();
+    manual_program.add_instruction(Instruction::PushConst(Value::I64(10)));
+    manual_program.add_instruction(Instruction::PushConst(Value::I64(5)));
+    manual_program.add_instruction(Instruction::Add);
+
+    // Graph should produce at least the same arithmetic instructions
+    // (may have extra labels, but should have push 10, push 5, add)
+    let graph_instrs = graph_program.instructions();
+
+    // Check that we have at least 3 instructions
+    assert!(graph_instrs.len() >= 3);
+
+    // Check that we have the key arithmetic instructions
+    let has_push_10 = graph_instrs.iter().any(|i| matches!(i, Instruction::PushConst(Value::I64(10))));
+    let has_push_5 = graph_instrs.iter().any(|i| matches!(i, Instruction::PushConst(Value::I64(5))));
+    let has_add = graph_instrs.iter().any(|i| matches!(i, Instruction::Add));
+
+    assert!(has_push_10, "Graph should push 10");
+    assert!(has_push_5, "Graph should push 5");
+    assert!(has_add, "Graph should add");
+}

@@ -8,6 +8,7 @@ kiln-core = { workspace = true }
 kiln-render = { workspace = true }
 kiln-runtime = { workspace = true }
 kiln-assets = { workspace = true }
+kiln-graph = { workspace = true }
 winit = { workspace = true }
 wgpu = { workspace = true }
 pollster = { workspace = true }

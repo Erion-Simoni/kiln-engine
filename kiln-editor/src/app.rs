@@ -8,6 +8,7 @@ use winit::{
 use thiserror::Error;
 use kiln_core::Transform;
 use kiln_runtime::{GameWorld, Sprite};
+use kiln_graph::{Graph, Node, NodeType, ConstantValue, ArithmeticOp};
 use hecs;
 
 #[derive(Error, Debug)]
@@ -25,12 +26,14 @@ pub struct EditorApp {
     world: GameWorld,
     selected_entity: Option<hecs::Entity>,
     is_playing: bool,
+    graph: Graph,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Tab {
     SceneView,
     Inspector,
+    GraphEditor,
     Assets,
     Console,
 }
@@ -75,6 +78,7 @@ impl EditorApp {
             world,
             selected_entity: None,
             is_playing: false,
+            graph: Graph::new(),
         })
     }
 
@@ -187,6 +191,7 @@ impl winit::application::ApplicationHandler for EditorApp {
                 world: &mut self.world,
                 selected_entity: &mut self.selected_entity,
                 is_playing: &mut self.is_playing,
+                graph: &mut self.graph,
             };
             tree.show(ctx, &mut tab_viewer);
         });
@@ -257,6 +262,7 @@ struct TabViewer<'a> {
     world: &'a mut GameWorld,
     selected_entity: &'a mut Option<hecs::Entity>,
     is_playing: &'a mut bool,
+    graph: &'a mut Graph,
 }
 
 impl<'a> egui_dock::TabViewer for TabViewer<'a> {
@@ -395,6 +401,64 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     ui.label("No entity selected.");
                 }
             }
+            Tab::GraphEditor => {
+                ui.heading("Graph Editor");
+
+                // Add node buttons
+                ui.horizontal(|ui| {
+                    if ui.button("Add Constant").clicked() {
+                        let node = Node::new(
+                            NodeType::Constant {
+                                value: ConstantValue::Integer(0),
+                            },
+                            (100.0, 100.0),
+                        );
+                        self.graph.add_node(node);
+                    }
+                    if ui.button("Add Add").clicked() {
+                        let node = Node::new(
+                            NodeType::Arithmetic {
+                                op: ArithmeticOp::Add,
+                            },
+                            (200.0, 100.0),
+                        );
+                        self.graph.add_node(node);
+                    }
+                    if ui.button("Add Output").clicked() {
+                        let node = Node::new(NodeType::Output, (300.0, 100.0));
+                        self.graph.add_node(node);
+                    }
+                });
+
+                ui.separator();
+
+                // Draw nodes
+                let painter = ui.painter();
+                for node in self.graph.nodes.values() {
+                    let pos = egui::pos2(node.position.0, node.position.1);
+                    let size = egui::vec2(120.0, 60.0);
+                    let rect = egui::Rect::from_min_size(pos, size);
+
+                    // Draw node background
+                    painter.rect_filled(rect, 5.0, egui::Color32::from_rgb(60, 60, 70));
+                    painter.rect_stroke(rect, 5.0, egui::Stroke::new(2.0_f32, egui::Color32::from_rgb(100, 100, 120)));
+
+                    // Draw node title
+                    let title = match &node.node_type {
+                        NodeType::Constant { .. } => "Constant",
+                        NodeType::Arithmetic { .. } => "Add",
+                        NodeType::Output => "Output",
+                        _ => "Node",
+                    };
+                    painter.text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        title,
+                        egui::FontId::default(),
+                        egui::Color32::WHITE,
+                    );
+                }
+            }
             Tab::Assets => {
                 ui.heading("Assets");
                 ui.label("Asset browser will appear here.");
@@ -410,6 +474,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
         match tab {
             Tab::SceneView => "Scene View".into(),
             Tab::Inspector => "Inspector".into(),
+            Tab::GraphEditor => "Graph Editor".into(),
             Tab::Assets => "Assets".into(),
             Tab::Console => "Console".into(),
         }
