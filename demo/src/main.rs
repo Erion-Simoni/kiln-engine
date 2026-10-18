@@ -1,7 +1,11 @@
 use kiln_core::Vec2;
 use kiln_runtime::{GameLoop, GameWorld, InputState};
 use kiln_render::Renderer;
-use winit::event_loop::EventLoop;
+use winit::{
+    event::KeyEvent,
+    event_loop::EventLoop,
+    keyboard::NamedKey,
+};
 
 #[derive(Clone, Copy)]
 struct Position {
@@ -59,6 +63,24 @@ impl App {
         self.renderer = Some(renderer);
     }
 
+    fn handle_key(&mut self, event: KeyEvent) {
+        match event.logical_key {
+            winit::keyboard::Key::Named(NamedKey::ArrowUp) => {
+                self.marker_pos.y += 10.0;
+            }
+            winit::keyboard::Key::Named(NamedKey::ArrowDown) => {
+                self.marker_pos.y -= 10.0;
+            }
+            winit::keyboard::Key::Named(NamedKey::ArrowLeft) => {
+                self.marker_pos.x -= 10.0;
+            }
+            winit::keyboard::Key::Named(NamedKey::ArrowRight) => {
+                self.marker_pos.x += 10.0;
+            }
+            _ => {}
+        }
+    }
+
     fn update(&mut self) {
         self.game_loop.tick(|_dt| {
             for pos in self.world.world().query_mut::<&mut Position>() {
@@ -91,6 +113,9 @@ impl winit::application::ApplicationHandler for App {
         match event {
             winit::event::WindowEvent::CloseRequested => {
                 event_loop.exit();
+            }
+            winit::event::WindowEvent::KeyboardInput { event, .. } => {
+                self.handle_key(event);
             }
             _ => {}
         }
