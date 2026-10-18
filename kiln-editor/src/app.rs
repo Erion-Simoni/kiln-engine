@@ -24,6 +24,7 @@ pub struct EditorApp {
     dock_state: egui_dock::DockState<Tab>,
     world: GameWorld,
     selected_entity: Option<hecs::Entity>,
+    is_playing: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,6 +74,7 @@ impl EditorApp {
             dock_state,
             world,
             selected_entity: None,
+            is_playing: false,
         })
     }
 
@@ -184,6 +186,7 @@ impl winit::application::ApplicationHandler for EditorApp {
             let mut tab_viewer = TabViewer {
                 world: &mut self.world,
                 selected_entity: &mut self.selected_entity,
+                is_playing: &mut self.is_playing,
             };
             tree.show(ctx, &mut tab_viewer);
         });
@@ -253,6 +256,7 @@ impl winit::application::ApplicationHandler for EditorApp {
 struct TabViewer<'a> {
     world: &'a mut GameWorld,
     selected_entity: &'a mut Option<hecs::Entity>,
+    is_playing: &'a mut bool,
 }
 
 impl<'a> egui_dock::TabViewer for TabViewer<'a> {
@@ -262,6 +266,16 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
         match tab {
             Tab::SceneView => {
                 ui.heading("Scene View");
+
+                // Play/Stop button
+                ui.horizontal(|ui| {
+                    if ui.button(if *self.is_playing { "Stop" } else { "Play" }).clicked() {
+                        *self.is_playing = !*self.is_playing;
+                    }
+                    if *self.is_playing {
+                        ui.label("(Running)");
+                    }
+                });
 
                 // Game view canvas
                 let desired_size = egui::vec2(ui.available_width(), ui.available_height() * 0.6);
