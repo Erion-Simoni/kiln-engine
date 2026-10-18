@@ -1,6 +1,8 @@
 [workspace]
 members = [
+    "kiln-core",
     "kiln-render",
+    "kiln-runtime",
     "kiln-web",
     "demo",
 ]
@@ -16,3 +18,8 @@ license = "MIT OR Apache-2.0"
 wgpu = { version = "30.0.1" }
 winit = { version = "0.30.13" }
 pollster = "0.4"
+glam = "0.34.1"
+hecs = "0.11.2"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+uuid = { version = "1.0", features = ["v4", "serde"] }

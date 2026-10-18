@@ -1,0 +1,12 @@
+[package]
+name = "kiln-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+kiln-core = { path = "../kiln-core" }
+kiln-render = { path = "../kiln-render" }
+hecs = { workspace = true }
+winit = { workspace = true }

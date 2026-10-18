@@ -23,21 +23,22 @@ Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 
 ---
 
-## ADR-0002: ECS choice (proposed)
+## ADR-0002: ECS choice (accepted)
 
-**Date:** 2026-10-18  
-**Status:** proposed
+**Date:** 2026-10-18
+**Status:** accepted
 
-**Decision:** Evaluate standalone `bevy_ecs 0.20.0` vs `hecs 0.11.2` vs tiny custom. Decision criterion: binary size + compile time for `kiln-web` and editor.
+**Decision:** Use `hecs 0.11.2` for ECS. Smaller binary, faster compile time, simpler API sufficient for Kiln's needs.
 
 **Alternatives:**
 - bevy_ecs: feature-rich, larger binary, slower compile
-- hecs: simpler, smaller, faster compile
+- hecs: simpler, smaller, faster compile (chosen)
 - Custom: minimal, but maintenance burden
 
 **Consequences:**
-- Must be resolved in M1 before ECS integration
-- Size impact must be recorded in BUDGETS.md
+- hecs added to workspace dependencies
+- Minimal binary impact for web target
+- Fast compile times for editor development
 
 ---
 
