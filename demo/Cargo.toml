@@ -10,9 +10,11 @@ name = "demo"
 path = "src/main.rs"
 
 [dependencies]
-kiln-core = { path = "../kiln-core" }
-kiln-render = { path = "../kiln-render" }
-kiln-runtime = { path = "../kiln-runtime" }
-wgpu = { workspace = true }
-winit = { workspace = true }
-pollster = { workspace = true }
+kiln-core    = { workspace = true }
+kiln-render  = { workspace = true }
+kiln-runtime = { workspace = true }
+wgpu         = { workspace = true }
+winit        = { workspace = true }
+pollster     = { workspace = true }
+log          = { workspace = true }
+env_logger   = { workspace = true }

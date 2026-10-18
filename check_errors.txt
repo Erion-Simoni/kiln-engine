@@ -1,0 +1,31 @@
+﻿cargo :     Checking 
+kiln-render v0.1.0 (C:\Users\
+C.S.T\Projects\kiln\kiln-rend
+er)
+At line:1 char:46
++ ...  ";$env:USERPROFILE\.ca
+rgo\bin"; cargo check 
+--workspace 2>&1 | Out-F ...
++                            
+          
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo           
+   : NotSpecified: (    Che  
+  cking ki...ln\kiln-rende   
+ r):String) [], RemoteExc    
+eption
+    + FullyQualifiedErrorId  
+   : NativeCommandError
+ 
+    Checking kiln-runtime 
+v0.1.0 (C:\Users\C.S.T\Projec
+ts\kiln\kiln-runtime)
+    Checking demo v0.1.0 (C:\
+Users\C.S.T\Projects\kiln\dem
+o)
+    Checking tilemap v0.1.0 (
+C:\Users\C.S.T\Projects\kiln\
+samples\tilemap)
+    Finished `dev` profile 
+[unoptimized + debuginfo] 
+target(s) in 1.87s

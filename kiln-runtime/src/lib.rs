@@ -4,7 +4,9 @@
 pub mod loop_;
 pub mod input;
 pub mod world;
+pub mod sprite;
 
 pub use loop_::*;
 pub use input::*;
 pub use world::*;
+pub use sprite::*;

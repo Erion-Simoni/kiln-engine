@@ -3,8 +3,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[cfg(test)]
-mod tests;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
@@ -58,3 +56,25 @@ impl Default for Project {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn round_trip_toml() {
+        let mut proj = Project::default();
+        proj.name = "TestGame".to_string();
+        let toml = proj.to_toml().expect("serialize");
+        let loaded = Project::from_toml(&toml).expect("deserialize");
+        assert_eq!(loaded.name, "TestGame");
+        assert_eq!(loaded.version, "0.1.0");
+    }
+
+    #[test]
+    fn default_has_no_scenes() {
+        let proj = Project::default();
+        assert!(proj.scenes.is_empty());
+    }
+}
+

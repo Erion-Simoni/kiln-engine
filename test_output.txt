@@ -1,0 +1,80 @@
+﻿cargo :    Compiling 
+kiln-render v0.1.0 (C:\Users\
+C.S.T\Projects\kiln\kiln-rend
+er)
+At line:1 char:46
++ ... cargo\bin"; cargo test 
+-p kiln-core -p kiln-render 
+-p kiln-runtime 2> ...
++                 ~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
+    + CategoryInfo           
+   : NotSpecified: (   Comp  
+  iling ki...ln\kiln-rende   
+ r):String) [], RemoteExc    
+eption
+    + FullyQualifiedErrorId  
+   : NativeCommandError
+ 
+   Compiling kiln-core 
+v0.1.0 (C:\Users\C.S.T\Projec
+ts\kiln\kiln-core)
+   Compiling kiln-runtime 
+v0.1.0 (C:\Users\C.S.T\Projec
+ts\kiln\kiln-runtime)
+    Finished `test` profile 
+[unoptimized + debuginfo] 
+target(s) in 6.22s
+     Running unittests 
+src\lib.rs (target\debug\deps
+\kiln_core-4e1e08ed36ff5f3b.e
+xe)
+
+running 2 tests
+test project::tests::default_has_no_scenes ... ok
+test project::tests::round_trip_toml ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests 
+src\lib.rs (target\debug\deps
+\kiln_render-f458de3116af886b
+.exe)
+
+running 5 tests
+test camera::tests::centre_maps_to_ndc_origin ... ok
+test camera::tests::origin_maps_to_bottom_left_ndc ... ok
+test camera::tests::zoom_clamps_to_bounds ... ok
+test sprite_renderer::tests::sprite_instance_size ... ok
+test sprite_renderer::tests::max_sprites_cap ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests 
+src\lib.rs (target\debug\deps
+\kiln_runtime-b54f9e5630a9ac8
+2.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests kiln_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests kiln_render
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests kiln_runtime
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
