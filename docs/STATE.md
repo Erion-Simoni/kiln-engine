@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M3 complete
+**Current milestone:** M4 complete
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -33,40 +33,44 @@
   - Verified: import skips unchanged files, pack creates archive, verify lists contents
 - M3: justfile assets recipe updated to use kiln-cli
 - Workspace: added sha2, hex, serde_json, thiserror, walkdir, clap, anyhow
-- All 17 tests pass (2 kiln-core, 5 kiln-render, 10 kiln-assets)
+- M4: kiln-ir — bytecode VM with host call interface
+  - opcode.rs: 21 opcodes (stack, arith, comparison, control flow, host calls)
+  - value.rs: Value enum (I64, Bool) with type-safe accessors
+  - program.rs: Program with named labels and instruction sequence
+  - vm.rs: Stack-based VM with HostContext trait for external functions
+  - Hot path documented as allocation-free when stack stays within capacity
+  - Tests: arith (5), branch (3), host call (1), comparison (2) — all pass
+- Workspace: added kiln-ir
+- All 28 tests pass (2 kiln-core, 5 kiln-render, 10 kiln-assets, 11 kiln-ir)
 
 **In progress:**
 - None
 
 **Next 3 steps:**
-1. Verify texture atlas can be integrated with sprite batch (M4 prep)
-2. Begin M4 (IR + VM) if approved
-3. Consider texture loading from archive for M2 samples
+1. Begin M5 (scripting frontend + diagnostics) if approved
+2. Consider adding float (f64) to Value type for game math
+3. Consider integrating VM with kiln-runtime for script execution
 
 **Known issues:**
 - SpriteRenderer render() re-borrows self.gpu after the ECS query (two step borrow)
   — works correctly; clippy may flag it; not a bug
 - Browser build deferred (kiln-web stub remains)
-- No texture support yet (sprite batch is solid colour only); texture atlas planned for M4
+- No texture support yet (sprite batch is solid colour only); texture atlas planned for M5/M6
 - Archive format uses full file paths for keys; may need canonicalization for cross-platform
 - CLI pack command only packs immediate children of source dir (no recursive import)
+- VM has no float type yet (only i64 and bool)
+- VM has no string type yet
+- VM has no arrays or collections yet
 
 **Last commands run:**
-- cargo test -p kiln-core -p kiln-render -p kiln-runtime -p kiln-assets (17/17 passed)
-- cargo run --bin kiln-cli -- import/pack/verify (all commands verified)
-- git commit -m "Fix wgpu surface/instance ownership error"
-- git commit -m "M3: asset pipeline, content-hash cache, packed archive, CLI"
+- cargo test -p kiln-core -p kiln-render -p kiln-runtime -p kiln-assets -p kiln-ir (28/28 passed)
+- git commit -m "M4: bytecode VM with host call interface"
 
-**Files touched (M3):**
-- kiln-assets/Cargo.toml (new crate with sha2, hex, serde_json, thiserror, walkdir)
-- kiln-assets/src/lib.rs (module exports)
-- kiln-assets/src/hash.rs (SHA-256 hashing + 3 tests)
-- kiln-assets/src/cache.rs (AssetCache with JSON persistence + 4 tests)
-- kiln-assets/src/archive.rs (Binary archive format KILNARV1 + 3 tests)
-- kiln-cli/Cargo.toml (new CLI binary with clap, anyhow)
-- kiln-cli/src/main.rs (import/pack/verify commands)
-- justfile (assets recipe updated)
-- Cargo.toml (add kiln-assets, kiln-cli; add workspace deps)
-- assets/test.txt (test asset file)
-- .kiln-cache/kiln-cache.json (generated cache)
-- assets.kar (generated archive)
+**Files touched (M4):**
+- kiln-ir/Cargo.toml (new crate with thiserror)
+- kiln-ir/src/lib.rs (module exports)
+- kiln-ir/src/opcode.rs (21 opcodes with documentation)
+- kiln-ir/src/value.rs (Value enum with I64/Bool)
+- kiln-ir/src/program.rs (Program with labels, Instruction enum with docs)
+- kiln-ir/src/vm.rs (VM with HostContext trait, step dispatch, 11 tests)
+- Cargo.toml (add kiln-ir to workspace)
