@@ -9,6 +9,7 @@ use thiserror::Error;
 use kiln_core::Transform;
 use kiln_runtime::{GameWorld, Sprite};
 use kiln_graph::{Graph, Node, NodeType, ConstantValue, ArithmeticOp};
+use kiln_render::RenderTier;
 use hecs;
 
 #[derive(Error, Debug)]
@@ -27,6 +28,7 @@ pub struct EditorApp {
     selected_entity: Option<hecs::Entity>,
     is_playing: bool,
     graph: Graph,
+    render_tier: RenderTier,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,6 +38,7 @@ enum Tab {
     GraphEditor,
     Assets,
     Console,
+    Settings,
 }
 
 struct GpuState {
@@ -79,6 +82,7 @@ impl EditorApp {
             selected_entity: None,
             is_playing: false,
             graph: Graph::new(),
+            render_tier: RenderTier::default(),
         })
     }
 
@@ -93,6 +97,9 @@ impl EditorApp {
             .expect("create surface");
 
         let renderer = kiln_render::Renderer::new(&instance, &surface, size.width, size.height).await;
+
+        // Capture auto-selected tier
+        self.render_tier = renderer.tier();
 
         let egui_renderer = egui_wgpu::Renderer::new(
             renderer.device(),
@@ -158,6 +165,12 @@ impl winit::application::ApplicationHandler for EditorApp {
             return;
         }
 
+        // Apply tier change if needed
+        let tier = self.render_tier;
+        if gpu.renderer.tier() != tier {
+            gpu.renderer.set_tier(tier);
+        }
+
         let frame = match gpu.surface.get_current_texture() {
             Ok(f) => f,
             Err(e) => {
@@ -192,6 +205,7 @@ impl winit::application::ApplicationHandler for EditorApp {
                 selected_entity: &mut self.selected_entity,
                 is_playing: &mut self.is_playing,
                 graph: &mut self.graph,
+                render_tier: &mut self.render_tier,
             };
             tree.show(ctx, &mut tab_viewer);
         });
@@ -263,6 +277,7 @@ struct TabViewer<'a> {
     selected_entity: &'a mut Option<hecs::Entity>,
     is_playing: &'a mut bool,
     graph: &'a mut Graph,
+    render_tier: &'a mut RenderTier,
 }
 
 impl<'a> egui_dock::TabViewer for TabViewer<'a> {
@@ -467,6 +482,39 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 ui.heading("Console");
                 ui.label("Logs and messages will appear here.");
             }
+            Tab::Settings => {
+                ui.heading("Settings");
+
+                ui.separator();
+                ui.heading("Render Quality");
+
+                ui.label("Current tier:");
+                ui.label(format!("{:?}", self.render_tier));
+
+                ui.separator();
+
+                ui.label("Force tier (takes effect on next frame):");
+                ui.horizontal(|ui| {
+                    if ui.button("Low").clicked() {
+                        *self.render_tier = RenderTier::Low;
+                    }
+                    if ui.button("Medium").clicked() {
+                        *self.render_tier = RenderTier::Medium;
+                    }
+                    if ui.button("High").clicked() {
+                        *self.render_tier = RenderTier::High;
+                    }
+                });
+
+                ui.separator();
+
+                // Show tier capabilities
+                ui.label("Enabled effects:");
+                ui.label(format!("Bloom passes: {}", self.render_tier.max_bloom_passes()));
+                ui.label(format!("LUT color grading: {}", self.render_tier.enable_lut()));
+                ui.label(format!("Screen-space fog: {}", self.render_tier.enable_fog()));
+                ui.label(format!("Outline effect: {}", self.render_tier.enable_outline()));
+            }
         }
     }
 
@@ -477,6 +525,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::GraphEditor => "Graph Editor".into(),
             Tab::Assets => "Assets".into(),
             Tab::Console => "Console".into(),
+            Tab::Settings => "Settings".into(),
         }
     }
 }

@@ -158,3 +158,29 @@ Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 - Small binary impact
 - Demo uses blocking async for simplicity
 - M1 will evaluate proper async runtime for engine
+
+---
+
+## ADR-0009: Render tier system and post-processing (accepted)
+
+**Date:** 2026-10-18
+**Status:** accepted
+
+**Decision:** Implement a three-tier render quality system (Low, Medium, High) with auto-selection based on GPU capabilities. Post-processing effects (bloom, LUT, fog, outline) are tier-gated and degrade gracefully on lower-end hardware.
+
+**Alternatives:**
+- Single quality tier: fails on low-end hardware, poor user experience
+- Many granular settings: complex UI, hard to test, user confusion
+- Three-tier system: simple, testable, auto-selects, manual override available
+
+**Consequences:**
+- Auto-selection heuristic: integrated GPUs → Low, discrete GPUs → Medium/High
+- Editor UI provides tier override in Settings panel
+- Post-processing framebuffer structure supports bloom mip chain, depth buffer
+- Effect cost metadata guides tier-based degradation
+- Shader implementation deferred to future milestone (tier system complete)
+
+**Effect breakdown by tier:**
+- Low: No post-processing, baked lighting, minimal effects
+- Medium: Bloom (3 passes), screen-space fog, soft shadows
+- High: Bloom (5 passes), LUT color grading, fog, outline, real-time lighting

@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M8 complete
+**Current milestone:** M9 complete
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -84,12 +84,21 @@
   - Test verifies graph compiles to same IR as equivalent script (push 10, push 5, add)
 - Workspace: added kiln-graph, ron dependency for graph serialization
 - All 47 tests pass (2 kiln-core, 5 kiln-render, 10 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph)
+- M9: kiln-render — render tier system and post-processing structure
+  - ADR-0009 accepted: three-tier system (Low, Medium, High) with auto-selection
+  - tier.rs: RenderTier enum with GPU-based auto-selection (integrated → Low, discrete → Medium/High)
+  - post.rs: PostConfig with per-tier presets, PostFramebuffer with bloom mip chain and depth buffer
+  - post.rs: PostPipeline structure for effect passes (stubbed, shader impl deferred)
+  - renderer.rs: Integrated tier into Renderer with set_tier() method for runtime switching
+  - kiln-editor: Added Settings tab with tier override UI (Low/Medium/High buttons)
+  - kiln-editor: EditorApp tracks render_tier and applies changes at runtime
+  - Tests: tier defaults (1), tier effects (3), post config (3) — all pass
+- All 51 tests pass (2 kiln-core, 5 kiln-render, 10 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-render tier/post)
 
 **In progress:**
 - None
 
 **Next steps:**
-- M9: Lighting, post-processing, render tiers
 - M10: One-click web export from editor
 - M11: Audio + physics (feature-gated)
 - M12: Installers + size/perf pass
@@ -104,6 +113,10 @@
   - Live value preview during PIE (requires VM integration with graph runtime)
   - Node dragging and pin connections in graph editor (static rendering only)
   - Graph serialization to disk (RON format ready but not implemented)
+- M9 deferred features:
+  - Actual shader implementation for post-processing effects (bloom, LUT, fog, outline)
+  - Tier system and framebuffer structure complete; shader passes stubbed for future milestone
+  - Frame budget measurement on reference hardware (deferred to M12)
 - Scene view uses egui painter for rendering (not actual GPU SpriteRenderer)
   — Simpler implementation for M7; full GPU rendering can be added later with framebuffer
 - Browser build deferred (kiln-web stub remains)
@@ -119,19 +132,13 @@
 
 **Last commands run:**
 - cargo check --workspace (builds successfully with 1 warning)
-- cargo test --workspace (all 47 tests pass)
+- cargo test --workspace (all 51 tests pass)
 
-**Files touched (M7-M8):**
-- kiln-editor/src/app.rs (inspector edits persist, PIE toggle, graph editor UI)
-- kiln-editor/Cargo.toml (added hecs, kiln-graph dependencies)
-- kiln-graph/Cargo.toml (new crate)
-- kiln-graph/src/lib.rs (exports)
-- kiln-graph/src/graph.rs (Graph model)
-- kiln-graph/src/node.rs (Node types)
-- kiln-graph/src/pin.rs (Pin model)
-- kiln-graph/src/connection.rs (Connection model)
-- kiln-graph/src/compiler.rs (Graph → IR compiler)
-- kiln-graph/src/tests.rs (4 tests)
-- Cargo.toml (added kiln-graph member, ron dependency)
-- docs/DECISIONS.md (ADR-0004 updated)
+**Files touched (M9):**
+- kiln-render/src/tier.rs (new file - RenderTier enum with auto-selection)
+- kiln-render/src/post.rs (new file - PostConfig, PostFramebuffer, PostPipeline)
+- kiln-render/src/lib.rs (added tier, post module exports)
+- kiln-render/src/renderer.rs (integrated tier system, added set_tier method)
+- kiln-editor/src/app.rs (added Settings tab, render_tier tracking, tier override UI)
+- docs/DECISIONS.md (ADR-0009 added)
 - docs/STATE.md (updated progress)
