@@ -64,21 +64,23 @@ Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 
 ---
 
-## ADR-0004: egui version pin for node graph (accepted)
+## ADR-0004: egui version and node-graph UI (accepted)
 
 **Date:** 2026-10-18
 **Status:** accepted
 
-**Decision:** Pin **egui 0.36.x** for M6–M8 to use `egui-snarl 0.12.0` and `egui_dock 0.21.1`, which require egui ^0.36. Upgrade to 0.37+ when node-graph ecosystem catches up.
+**Decision:** Use **egui 0.29** with **egui-dock 0.14** for M6–M7. For M8 node-graph, build a **simple custom node graph UI** using egui primitives rather than egui-snarl (which requires egui 0.36+). This keeps the editor on a stable egui version while we build minimal node-graph functionality.
 
 **Alternatives:**
-- Pin 0.36: stable node-graph UI, but miss latest egui features
-- Custom node graph: more control, but more code to maintain
-- Wait for 0.37 support: delays M8
+- egui-snarl 0.12.0: requires egui 0.36+, would force version upgrade
+- Custom node graph: more code, but full control and no version lock
+- Upgrade to egui 0.36: risks breaking other UI, delays M6/M7
 
 **Consequences:**
-- Temporary version pin until ecosystem matures
-- Document upgrade path in STATE.md when ready
+- Custom node graph for M8: simple nodes, wires, pins using egui painting
+- Keep egui 0.29 for now; evaluate upgrade for advanced features later
+- Node graph model decoupled from UI for easy UI replacement
+- Graph data model (nodes, connections, pins) serializable to RON
 
 ---
 

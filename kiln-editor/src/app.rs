@@ -316,37 +316,65 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 if let Some(entity) = self.selected_entity {
                     ui.label(format!("Selected: {:?}", entity));
 
+                    // Read current values once
                     let world = self.world.world();
-                    let transform = world.get::<&Transform>(*entity).ok();
-                    let sprite = world.get::<&Sprite>(*entity).ok();
+                    let transform = world.get::<&Transform>(*entity).ok().map(|t| *t);
+                    let sprite = world.get::<&Sprite>(*entity).ok().map(|s| *s);
 
-                    if let Some(transform) = transform {
+                    // Transform component
+                    if let Some(mut transform) = transform {
                         ui.separator();
                         ui.heading("Transform");
                         ui.horizontal(|ui| {
                             ui.label("X:");
-                            ui.label(format!("{:.1}", transform.position.x));
+                            if ui.add(egui::DragValue::new(&mut transform.position.x).speed(1.0)).changed() {
+                                let world = self.world.world_mut();
+                                if let Ok(mut t) = world.get::<&mut Transform>(*entity) {
+                                    t.position.x = transform.position.x;
+                                }
+                            }
                         });
                         ui.horizontal(|ui| {
                             ui.label("Y:");
-                            ui.label(format!("{:.1}", transform.position.y));
+                            if ui.add(egui::DragValue::new(&mut transform.position.y).speed(1.0)).changed() {
+                                let world = self.world.world_mut();
+                                if let Ok(mut t) = world.get::<&mut Transform>(*entity) {
+                                    t.position.y = transform.position.y;
+                                }
+                            }
                         });
                     }
 
-                    if let Some(sprite) = sprite {
+                    // Sprite component
+                    if let Some(mut sprite) = sprite {
                         ui.separator();
                         ui.heading("Sprite");
                         ui.horizontal(|ui| {
                             ui.label("R:");
-                            ui.label(format!("{:.2}", sprite.color[0]));
+                            if ui.add(egui::DragValue::new(&mut sprite.color[0]).speed(0.01).range(0.0..=1.0)).changed() {
+                                let world = self.world.world_mut();
+                                if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
+                                    s.color[0] = sprite.color[0];
+                                }
+                            }
                         });
                         ui.horizontal(|ui| {
                             ui.label("G:");
-                            ui.label(format!("{:.2}", sprite.color[1]));
+                            if ui.add(egui::DragValue::new(&mut sprite.color[1]).speed(0.01).range(0.0..=1.0)).changed() {
+                                let world = self.world.world_mut();
+                                if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
+                                    s.color[1] = sprite.color[1];
+                                }
+                            }
                         });
                         ui.horizontal(|ui| {
                             ui.label("B:");
-                            ui.label(format!("{:.2}", sprite.color[2]));
+                            if ui.add(egui::DragValue::new(&mut sprite.color[2]).speed(0.01).range(0.0..=1.0)).changed() {
+                                let world = self.world.world_mut();
+                                if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
+                                    s.color[2] = sprite.color[2];
+                                }
+                            }
                         });
                     }
                 } else {

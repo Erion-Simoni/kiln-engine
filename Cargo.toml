@@ -7,6 +7,7 @@ members = [
     "kiln-cli",
     "kiln-ir",
     "kiln-script",
+    "kiln-graph",
     "kiln-editor",
     "kiln-web",
     "demo",
@@ -28,6 +29,7 @@ glam         = "0.34.1"
 hecs         = "0.11.2"
 serde        = { version = "1.0", features = ["derive"] }
 toml         = "0.8"
+ron          = "0.8"
 uuid         = { version = "1.0", features = ["v4", "serde"] }
 bytemuck     = { version = "1.0", features = ["derive"] }
 log          = "0.4"
@@ -46,4 +48,5 @@ kiln-runtime = { path = "kiln-runtime" }
 kiln-assets  = { path = "kiln-assets" }
 kiln-ir      = { path = "kiln-ir" }
 kiln-script  = { path = "kiln-script" }
+kiln-graph   = { path = "kiln-graph" }
 kiln-editor  = { path = "kiln-editor" }
