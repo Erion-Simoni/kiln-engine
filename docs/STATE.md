@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M1 complete (code compiles successfully)
+**Current milestone:** M1 partial (keyboard input blocked by winit 0.30 API)
 
 **Done:**
 - AGENTS.md created (70 lines, under 100-line limit)
@@ -24,19 +24,17 @@
 - None
 
 **Next 3 steps:**
-1. Run `cargo run --bin demo` to verify window opens
-2. Add keyboard input handling back to demo (simplified in API fix)
-3. Begin M2 (2D renderer) if M1 acceptance criteria met
+1. Investigate winit 0.30 keyboard API (PhysicalKey enum changed)
+2. Restore keyboard input handling to demo
+3. Complete M1 acceptance criteria
 
 **Known issues:**
-- Demo keyboard input simplified during API fix; needs restoration
+- winit 0.30 keyboard API: PhysicalKey::Named and PhysicalKey::KeyCode variants not found - needs investigation
 - Demo render() is placeholder (M2 will add proper 2D rendering)
 - Browser build deferred
 
 **Last commands run:**
 - $env:PATH += ";$env:USERPROFILE\.cargo\bin"; cargo check --workspace (passed)
-- git add .
-- git commit -m "Fix API compatibility: wgpu 22.1, hecs, winit 0.30"
 
 **Files touched:**
 - Cargo.toml (downgraded wgpu to 22.1)
@@ -44,4 +42,4 @@
 - kiln-runtime/src/loop_.rs (const Duration fix)
 - kiln-runtime/src/world.rs (entity ID conversion)
 - kiln-runtime/src/input.rs (removed unused imports)
-- demo/src/main.rs (simplified for winit 0.30, removed keyboard input)
+- demo/src/main.rs (simplified for winit 0.30, keyboard input removed due to API issue)
