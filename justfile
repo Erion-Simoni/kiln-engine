@@ -21,16 +21,22 @@ web:
 
 # wasm/native size budgets
 size:
-    @echo "Web WASM size check (after M0):"
-    @echo "cargo build --release --target wasm32-unknown-unknown"
-    @echo "wasm-bindgen --out-dir web --target web"
-    @echo "wasm-opt -Oz -o web/pkg/kiln_bg.wasm web/pkg/kiln_bg.wasm"
-    @echo "brotli web/pkg/kiln_bg.wasm -o web/pkg/kiln_bg.wasm.br"
-    @echo "ls -l web/pkg/kiln_bg.wasm.br"
+    @echo "=== Web WASM size check ==="
+    cargo build --release --target wasm32-unknown-unknown -p kiln-web
+    @echo "Uncompressed WASM:"
+    @ls -lh target/wasm32-unknown-unknown/release/kiln_web.wasm
     @echo ""
-    @echo "Editor installer size (after M12):"
-    @echo "cargo-dist build"
-    @echo "ls -lh dist/"
+    @echo "Note: wasm-opt and brotli tools required for full size check"
+    @echo "Install with: cargo install wasm-opt; cargo install brotli"
+    @echo ""
+    @echo "=== Editor installer size check ==="
+    @echo "Note: cargo-dist requires GitHub Actions CI for full installer builds"
+    @echo "Local build can estimate binary size:"
+    cargo build --release --bin kiln-editor
+    @echo "Editor binary:"
+    @ls -lh target/release/kiln-editor.exe 2>/dev/null || ls -lh target/release/kiln-editor 2>/dev/null || echo "Binary not found"
+    @echo ""
+    @echo "Budgets: WASM <1.5 MB brotli, Editor <40 MB installer"
 
 # import / pack assets
 assets:

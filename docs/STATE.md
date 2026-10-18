@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M11 complete
+**Current milestone:** M12 complete
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -114,12 +114,24 @@
   - Web build (kiln-web) excludes physics/audio by default (44 KB WASM, no rodio/rapier2d)
   - Workspace updated to include samples/audio and samples/physics
   - All 56 tests pass (2 kiln-core, 5 kiln-render, 10 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-render tier/post, 5 kiln-runtime audio/physics)
+- M12: Installers + size/perf pass
+  - cargo-dist.toml: Added cargo-dist configuration for installer generation
+  - kiln-editor/Cargo.toml: Added binary definition, metadata (homepage, repository, description)
+  - Cargo.toml: Added release profile with opt-level="z", lto="fat", codegen-units=1, panic="abort", strip=true
+  - Cargo.toml: Added [profile.release.package."*"] for package-specific optimization
+  - justfile: Updated size recipe to check WASM and editor binary sizes
+  - Size measurements:
+    - Web WASM (release): 36 KB uncompressed (well under 1.5 MB budget)
+    - Editor binary (release): 5.7 MB (well under 40 MB budget)
+  - Note: wasm-opt and brotli not installed, full compression check deferred
+  - Note: cargo-dist requires GitHub Actions CI for full installer builds (msi, dmg, appimage)
+  - Note: Frame budget measurement on reference hardware deferred (requires specific hardware)
+  - All 56 tests pass
 
 **In progress:**
 - None
 
 **Next steps:**
-- M12: Installers + size/perf pass
 - M13: First sample game + tutorial + docs
 
 **Known issues:**
@@ -146,6 +158,11 @@
   - Physics sample demonstrates collision but lacks visualization (console output only)
   - Binary size impact not measured with features enabled (deferred to M12 size pass)
   - kiln-editor integration not added (audio/physics controls in editor deferred)
+- M12 deferred features:
+  - wasm-opt and brotli not installed locally; full WASM compression check deferred
+  - cargo-dist full installer builds require GitHub Actions CI (not tested locally)
+  - Frame budget measurement on reference hardware deferred (requires 2015 laptop with integrated GPU)
+  - RAM usage measurement not performed (deferred to when editor has more features)
 - Scene view uses egui painter for rendering (not actual GPU SpriteRenderer)
   — Simpler implementation for M7; full GPU rendering can be added later with framebuffer
 - Browser build deferred (kiln-web stub remains)
@@ -160,23 +177,16 @@
 - KilnScript has no function definitions yet
 
 **Last commands run:**
+- cargo build --release --target wasm32-unknown-unknown -p kiln-web (36 KB WASM)
+- ls -lh target/wasm32-unknown-unknown/release/kiln_web.wasm (36 KB)
+- cargo build --release --bin kiln-editor (5.7 MB binary)
+- ls -lh target/release/kiln-editor.exe (5.7 MB)
 - cargo test --workspace (all 56 tests pass)
-- cargo build --bin audio-sample (builds successfully)
-- cargo run --bin audio-sample (audio engine initializes successfully)
-- cargo build --bin physics-sample (builds successfully)
-- cargo run --bin physics-sample (physics simulation runs, ball falls 10 steps)
-- cargo build --package kiln-web --target wasm32-unknown-unknown --release (44 KB WASM)
 - cargo check --workspace (builds successfully with 1 warning)
 
-**Files touched (M11):**
-- kiln-runtime/Cargo.toml (added audio and physics features with rodio and rapier2d dependencies)
-- kiln-runtime/src/lib.rs (added feature-gated module exports)
-- kiln-runtime/src/audio.rs (new: AudioEngine with rodio/symphonia, stub when disabled, 2 tests)
-- kiln-runtime/src/physics.rs (new: PhysicsWorld with rapier2d wrapper, stub when disabled, 3 tests)
-- samples/audio/Cargo.toml (new: audio sample with audio feature)
-- samples/audio/src/main.rs (new: audio sample demonstrating engine initialization)
-- samples/physics/Cargo.toml (new: physics sample with physics feature and rapier2d dependency)
-- samples/physics/src/main.rs (new: physics sample with falling ball and floor collision)
-- Cargo.toml (added samples/audio and samples/physics to workspace members)
-- docs/DECISIONS.md (added ADR-0010 and ADR-0011 for audio and physics crate choices)
+**Files touched (M12):**
+- cargo-dist.toml (new: cargo-dist configuration for installer generation)
+- kiln-editor/Cargo.toml (added binary definition, metadata)
+- Cargo.toml (added release profile with optimization settings)
+- justfile (updated size recipe for WASM and editor binary checks)
 - docs/STATE.md (updated progress)
