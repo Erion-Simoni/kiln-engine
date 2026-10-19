@@ -47,6 +47,33 @@ pub struct Scene {
     pub id: String,
     pub name: String,
     pub entities: Vec<Entity>,
+    #[serde(default)]
+    pub nested_scenes: Vec<NestedScene>,
+}
+
+/// Reference to another scene that is loaded as part of this scene
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NestedScene {
+    pub scene_id: String,
+    #[serde(default)]
+    pub additive: bool,
+    #[serde(default)]
+    pub offset: SceneOffset,
+}
+
+/// Offset for nested scene loading
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SceneOffset {
+    #[serde(default)]
+    pub x: f32,
+    #[serde(default)]
+    pub y: f32,
+}
+
+impl Default for SceneOffset {
+    fn default() -> Self {
+        Self { x: 0.0, y: 0.0 }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,6 +179,42 @@ mod tests {
 
         assert_eq!(loaded.publisher, "MyStudio");
         assert_eq!(loaded.icon, "icon.png");
+    }
+
+    #[test]
+    fn nested_scene_round_trip() {
+        let scene = Scene {
+            id: "scene1".to_string(),
+            name: "MainScene".to_string(),
+            entities: vec![],
+            nested_scenes: vec![
+                NestedScene {
+                    scene_id: "scene2".to_string(),
+                    additive: true,
+                    offset: SceneOffset { x: 100.0, y: 200.0 },
+                },
+            ],
+        };
+
+        let mut proj = Project::default();
+        proj.scenes.insert("scene1".to_string(), scene);
+
+        let toml = proj.to_toml().expect("serialize");
+        let loaded = Project::from_toml(&toml).expect("deserialize");
+
+        let loaded_scene = loaded.scenes.get("scene1").unwrap();
+        assert_eq!(loaded_scene.nested_scenes.len(), 1);
+        assert_eq!(loaded_scene.nested_scenes[0].scene_id, "scene2");
+        assert_eq!(loaded_scene.nested_scenes[0].additive, true);
+        assert_eq!(loaded_scene.nested_scenes[0].offset.x, 100.0);
+        assert_eq!(loaded_scene.nested_scenes[0].offset.y, 200.0);
+    }
+
+    #[test]
+    fn scene_offset_default() {
+        let offset = SceneOffset::default();
+        assert_eq!(offset.x, 0.0);
+        assert_eq!(offset.y, 0.0);
     }
 }
 

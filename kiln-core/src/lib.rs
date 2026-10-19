@@ -7,10 +7,12 @@ pub mod id;
 pub mod project;
 pub mod transform;
 pub mod paths;
+pub mod prefab;
 
 pub use math::*;
 pub use time::*;
 pub use id::*;
-pub use project::{Project, Scene, Entity, Component, WindowSettings};
+pub use project::{Project, Scene, Entity, Component, WindowSettings, NestedScene, SceneOffset};
 pub use transform::*;
 pub use paths::{save_dir, settings_dir, cache_dir};
+pub use prefab::{Prefab, PrefabOverride, ComponentOverride, PrefabInstance};

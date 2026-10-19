@@ -14,6 +14,8 @@ use winit::{
     window::Window,
 };
 
+use crate::prefab_editor::PrefabEditorState;
+
 #[derive(Error, Debug)]
 pub enum EditorError {
     #[error("Window error: {0}")]
@@ -35,6 +37,7 @@ pub struct EditorApp {
     fps: f32,
     frame_count: u32,
     ui_designer: UIDesignerState,
+    prefab_editor: PrefabEditorState,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,6 +50,7 @@ enum Tab {
     Console,
     Settings,
     UIDesigner,
+    PrefabEditor,
 }
 
 struct GpuState {
@@ -241,6 +245,7 @@ impl EditorApp {
             fps: 60.0,
             frame_count: 0,
             ui_designer: UIDesignerState::new(),
+            prefab_editor: PrefabEditorState::new(),
         })
     }
 
@@ -426,6 +431,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                         self.dock_state.add_window(vec![Tab::UIDesigner]);
                         ui.close_menu();
                     }
+                    if ui.button("Prefab Editor").clicked() {
+                        self.dock_state.add_window(vec![Tab::PrefabEditor]);
+                        ui.close_menu();
+                    }
                 });
 
                 ui.menu_button("Project", |ui| {
@@ -520,6 +529,7 @@ impl winit::application::ApplicationHandler for EditorApp {
                     graph: &mut self.graph,
                     render_tier: &mut self.render_tier,
                     ui_designer: &mut self.ui_designer,
+                    prefab_editor: &mut self.prefab_editor,
                 };
                 tree.show(ctx, &mut tab_viewer);
             });
@@ -628,6 +638,7 @@ struct TabViewer<'a> {
     graph: &'a mut Graph,
     render_tier: &'a mut RenderTier,
     ui_designer: &'a mut UIDesignerState,
+    prefab_editor: &'a mut PrefabEditorState,
 }
 
 impl<'a> egui_dock::TabViewer for TabViewer<'a> {
@@ -1346,6 +1357,75 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     }
                 });
             }
+            Tab::PrefabEditor => {
+                ui.vertical(|ui| {
+                    ui.heading("Prefab Editor");
+                    ui.add_space(8.0);
+
+                    // Toolbar
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = egui::vec2(8.0, 0.0);
+
+                        if ui.button("Create Prefab from Selection").clicked() {
+                            // TODO: Create prefab from selected entity
+                        }
+
+                        ui.separator();
+
+                        if ui.button("Instantiate Prefab").clicked() {
+                            // TODO: Instantiate selected prefab
+                        }
+
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label(format!("Prefabs: {}", self.prefab_editor.prefab_list().len()));
+                        });
+                    });
+
+                    ui.add_space(8.0);
+
+                    // Prefab list
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_rgb(35, 35, 40))
+                        .rounding(4.0)
+                        .inner_margin(12.0)
+                        .show(ui, |ui| {
+                            ui.strong("Prefabs");
+                            ui.add_space(8.0);
+
+                            egui::ScrollArea::vertical()
+                                .max_height(ui.available_height())
+                                .show(ui, |ui| {
+                                    let prefab_ids: Vec<(String, String)> = self.prefab_editor
+                                        .prefab_list()
+                                        .iter()
+                                        .map(|p| (p.id.clone(), p.name.clone()))
+                                        .collect();
+
+                                    let is_empty = prefab_ids.is_empty();
+
+                                    for (prefab_id, prefab_name) in prefab_ids {
+                                        ui.horizontal(|ui| {
+                                            ui.label(&prefab_name);
+                                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                if ui.button("Edit").clicked() {
+                                                    // TODO: Edit prefab
+                                                }
+                                                if ui.button("Delete").clicked() {
+                                                    self.prefab_editor.remove_prefab(&prefab_id);
+                                                }
+                                            });
+                                        });
+                                        ui.add_space(4.0);
+                                    }
+
+                                    if is_empty {
+                                        ui.label("No prefabs created yet");
+                                        ui.label("Select an entity and click 'Create Prefab from Selection'");
+                                    }
+                                });
+                        });
+                });
+            }
         }
     }
 
@@ -1358,6 +1438,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::Console => "Console".into(),
             Tab::Settings => "Settings".into(),
             Tab::UIDesigner => "UI Designer".into(),
+            Tab::PrefabEditor => "Prefab Editor".into(),
         }
     }
 }
