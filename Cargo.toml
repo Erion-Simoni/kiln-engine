@@ -31,6 +31,8 @@ members = [
     "samples/input_save",
     "samples/ai",
     "samples/gameplay",
+    "samples/threads",
+    "samples/render_graph",
 ]
 resolver = "2"
 

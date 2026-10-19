@@ -1,9 +1,11 @@
-use wgpu::{Instance, Adapter, Device, Queue, Surface, SurfaceConfiguration};
+use wgpu::{Adapter, Device, Instance, Queue, Surface, SurfaceConfiguration};
 
+use crate::pass_config::PassEnableConfig;
+use crate::post::{PostFramebuffer, PostPipeline};
+use crate::profiler::{requested_profiler_features, GpuProfiler, PassTiming};
 use crate::tier::RenderTier;
-use crate::post::{PostPipeline, PostFramebuffer};
 
-/// Renderer with tier support and post-processing.
+/// Renderer with tier support, post-processing, and optional GPU profiling.
 pub struct Renderer {
     _adapter: Adapter,
     device: Device,
@@ -12,6 +14,8 @@ pub struct Renderer {
     tier: RenderTier,
     post_pipeline: Option<PostPipeline>,
     post_framebuffer: Option<PostFramebuffer>,
+    profiler: GpuProfiler,
+    pass_config: PassEnableConfig,
 }
 
 impl Renderer {
@@ -26,12 +30,13 @@ impl Renderer {
             .expect("Failed to find GPU adapter");
 
         let tier = RenderTier::auto_select(&adapter);
+        let required_features = requested_profiler_features(&adapter);
 
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: Some("Kiln Device"),
-                    required_features: wgpu::Features::empty(),
+                    required_features,
                     required_limits: wgpu::Limits::default(),
                     memory_hints: wgpu::MemoryHints::default(),
                 },
@@ -59,7 +64,6 @@ impl Renderer {
 
         surface.configure(&device, &surface_config);
 
-        // Initialize post-processing if not Low tier
         let post_pipeline = if tier != RenderTier::Low {
             Some(PostPipeline::new(&device, tier))
         } else {
@@ -72,6 +76,8 @@ impl Renderer {
             None
         };
 
+        let profiler = GpuProfiler::new(&device, &queue, 32);
+
         Self {
             _adapter: adapter,
             device,
@@ -80,6 +86,8 @@ impl Renderer {
             tier,
             post_pipeline,
             post_framebuffer,
+            profiler,
+            pass_config: PassEnableConfig::default_2d(),
         }
     }
 
@@ -96,7 +104,6 @@ impl Renderer {
         self.surface_config.height = height;
         surface.configure(&self.device, &self.surface_config);
 
-        // Resize post framebuffer if enabled
         if let Some(ref mut framebuffer) = self.post_framebuffer {
             framebuffer.resize(&self.device, width, height, self.tier);
         }
@@ -104,6 +111,10 @@ impl Renderer {
 
     pub fn format(&self) -> wgpu::TextureFormat {
         self.surface_config.format
+    }
+
+    pub fn size(&self) -> (u32, u32) {
+        (self.surface_config.width, self.surface_config.height)
     }
 
     /// Get current render tier.
@@ -133,13 +144,41 @@ impl Renderer {
         }
     }
 
-    /// Get post-processing pipeline (if enabled).
     pub fn post_pipeline(&self) -> Option<&PostPipeline> {
         self.post_pipeline.as_ref()
     }
 
-    /// Get post-processing framebuffer (if enabled).
     pub fn post_framebuffer(&self) -> Option<&PostFramebuffer> {
         self.post_framebuffer.as_ref()
+    }
+
+    pub fn profiler(&self) -> &GpuProfiler {
+        &self.profiler
+    }
+
+    pub fn profiler_mut(&mut self) -> &mut GpuProfiler {
+        &mut self.profiler
+    }
+
+    /// Last resolved per-pass GPU timings (may be one frame behind).
+    pub fn pass_timings(&self) -> &[PassTiming] {
+        self.profiler.timings()
+    }
+
+    pub fn pass_config(&self) -> &PassEnableConfig {
+        &self.pass_config
+    }
+
+    pub fn set_pass_config(&mut self, config: PassEnableConfig) {
+        self.pass_config = config;
+    }
+
+    /// Resolve + poll GPU timings after `queue.submit`.
+    pub fn finish_profiler_frame(&mut self, encoder: &mut wgpu::CommandEncoder) {
+        self.profiler.resolve(encoder);
+    }
+
+    pub fn poll_profiler(&mut self) {
+        self.profiler.poll_timings(&self.device);
     }
 }

@@ -211,23 +211,23 @@ Windows, macOS and Linux containing only the runtime and the game's data.
 **Goal:** Use every core; required by almost everything after this.
 **Crates:** `kiln-core`, `kiln-runtime` (feature `threads`).
 **Acceptance:**
-- [ ] Parallel ECS system scheduling with declared data access; conflicts
+- [x] Parallel ECS system scheduling with declared data access; conflicts
       detected by tests.
-- [ ] Task pool for async asset loading and background jobs.
-- [ ] Measured speedup on 4+ cores recorded in `BUDGETS.md`.
-- [ ] Web: Web Workers path works when the page is cross-origin isolated;
+- [x] Task pool for async asset loading and background jobs.
+- [x] Measured speedup on 4+ cores recorded in `BUDGETS.md`.
+- [x] Web: Web Workers path works when the page is cross-origin isolated;
       automatic single-thread fallback otherwise.
-- [ ] `threads` off: single-threaded build size and behavior unchanged.
+- [x] `threads` off: single-threaded build size and behavior unchanged.
 
 ## M28 — Render graph + GPU profiling
 **Goal:** Replace hand-ordered passes with a frame graph. Prerequisite for 3D.
 **Crates:** `kiln-render`.
 **Acceptance:**
-- [ ] Passes declare inputs/outputs; resource lifetimes and aliasing handled.
-- [ ] Existing 2D features (M2, M9) ported with no visual regression
+- [x] Passes declare inputs/outputs; resource lifetimes and aliasing handled.
+- [x] Existing 2D features (M2, M9) ported with no visual regression
       (screenshot test).
-- [ ] GPU timestamp queries show per-pass cost in the editor.
-- [ ] Passes can be disabled per tier from data, not code.
+- [x] GPU timestamp queries show per-pass cost in the editor.
+- [x] Passes can be disabled per tier from data, not code.
 
 ---
 

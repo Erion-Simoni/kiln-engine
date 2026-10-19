@@ -534,3 +534,85 @@ Full skeletal animation (bones, IK, blend trees) is deferred to M33 (3D skeletal
 - Full skeletal animation (bones, IK, skinning) deferred to M33 (3D)
 - Import support for commercial formats deferred to M51 or later
 - Binary size impact: Minimal (simple data structures, no heavy parsing libraries)
+
+---
+
+## ADR-0023: iOS export approach (accepted)
+
+**Date:** 2026-10-19
+**Status:** accepted
+
+**Decision:** Use **winit's iOS backend** for the UIKit integration. Build `kiln-player` as a **static library** (`staticlib`) that exports a C ABI entry point `start_winit_app()`. Use **Xcode** for packaging, signing, and App Store submission. The iOS build requires macOS, Xcode, and an Apple Developer account. Extend `kiln-cli export` to support iOS platform with `.app` bundle generation and documentation for Xcode project setup.
+
+**Alternatives:**
+- winit + Xcode staticlib: Native iOS approach, follows Rust best practices, uses existing winit (chosen)
+- Tauri: Cross-platform mobile support, but adds WebView overhead and complexity
+- cargo-apk alternative for iOS: No mature cargo-apk equivalent for iOS exists
+- Crossbow: Higher-level tooling, but adds dependency and complexity
+- Custom NDK glue: Full control, but significant maintenance burden
+
+**Consequences:**
+- winit 0.30 has iOS platform support (UIKit integration via winit::platform::ios)
+- kiln-player will have `crate-type = ["staticlib"]` for iOS builds
+- iOS targets: aarch64-apple-ios (device), aarch64-apple-ios-sim (simulator on Apple Silicon)
+- Xcode project required for signing, provisioning profiles, and App Store submission
+- Static library approach: `#[no_mangle] pub extern fn start_winit_app()` called from Objective-C main
+- iOS lifecycle handled via winit's ApplicationHandler (resumed/suspended events)
+- Surface creation on resume, surface cleanup on suspend (per wgpu iOS docs)
+- iOS-specific project settings: permissions, privacy declarations, icons, splash screen, orientation, notch safe areas
+- Device-tier detection: Low/Medium/High based on device capabilities (GPU, memory, CPU)
+- App Store build validation: Info.plist, entitlements, signing, bundle identifier
+- In-app purchases and ads NOT built in; exposed via platform-services trait (M54)
+- iOS size budget: <25 MB (includes player binary + assets, stricter than Android due to App Store)
+- Build requirements: macOS with Xcode 12+, Apple Developer account for device testing and App Store
+- Same kiln-player code runs on desktop, Android, and iOS (platform-specific modules feature-gated)
+- CI/CD: iOS builds require macOS runner in GitHub Actions (deferred to later milestone)
+
+**Implementation notes:**
+- iOS requires Xcode for actual device testing and App Store submission
+- Windows/Linux cannot build iOS binaries directly (requires macOS cross-compilation or macOS runner)
+- M26 will implement the infrastructure and document the Mac-specific requirements
+- Actual device testing deferred to Mac user or CI with macOS runner
+- Build scripts and Xcode project templates will be provided for easy setup
+
+---
+
+## ADR-0024: Job system and multithreading (accepted)
+
+**Date:** 2026-10-19
+**Status:** accepted
+
+**Decision:** Implement a thin custom `TaskPool` on `std::thread` (native) with no rayon. Parallel ECS uses declared `AccessSet` (Read/Write by `TypeId`) in `kiln-core`; `Schedule` in `kiln-runtime` builds conflict-free stages. Feature `threads` enables parallel stage job execution and the worker pool; when off, the same APIs run serially (web size unchanged). Web: use Web Workers only when `crossOriginIsolated` is true (requires COOP/COEP headers); otherwise automatic single-thread fallback.
+
+**Alternatives:**
+- rayon / hecs `parallel`: mature, but heavier binary and forces rayon into the graph
+- bevy_ecs schedule: rich, too large for Kiln budgets (rejected by ADR-0002)
+- Always-on threads: breaks web size and non-isolated pages
+
+**Consequences:**
+- No new crates; `std::thread` + channels only on native
+- `AccessSet` conflict tests run without the `threads` feature
+- kiln-web detects isolation and exercises a Worker ping path or sync fallback
+- Export HTML documents COOP/COEP; writes `_headers` for static hosts
+- Measured 4+ core speedup recorded in BUDGETS.md
+- wasm32 never uses `std::thread`; Workers path is isolation-gated
+
+---
+
+## ADR-0025: Render graph + GPU profiling (accepted)
+
+**Date:** 2026-10-19
+**Status:** accepted
+
+**Decision:** Own a lightweight frame graph in `kiln-render` (no Bevy/rendergraph crate). Passes declare named reads/writes; compile topologically sorts, computes transient lifetimes, and aliases non-overlapping textures into shared physical slots. GPU cost uses wgpu `TIMESTAMP_QUERY` when the adapter supports it; otherwise timings are empty and the editor shows unsupported. Per-tier pass enablement comes from data (`PassEnableConfig`, TOML/RON), not hard-coded `if tier` branches in pass registration.
+
+**Alternatives:**
+- Hand-ordered encoder passes: simple, but blocks 3D (M29+) and aliasing
+- Vendored Bevy render graph: rich, too heavy for Kiln size budgets
+- Always-on GPU timestamps: breaks adapters without the feature; web/GL often lack it
+
+**Consequences:**
+- No new runtime crates; `serde` + `toml` only for pass config deserialize
+- Screenshot regression hashes RGBA readback (sha2); no `image` crate
+- Editor Settings shows per-pass GPU µs when queries resolve
+- Default 2D graph ports M2 (sprites/main) + M9 (tier-gated post stubs) through the graph

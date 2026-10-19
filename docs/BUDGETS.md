@@ -68,6 +68,30 @@ ls -lh target/aarch64-linux-android/release/apk/kiln-player.apk
 
 ---
 
+## iOS App Bundle
+
+**Target:** <25 MB (includes player binary + assets in .app bundle)
+
+**Measurement:**
+```bash
+cargo build --release --target aarch64-apple-ios -p kiln-player
+du -sh target/aarch64-apple-ios/release/libkiln_player.a
+# Or measure .app bundle size after Xcode packaging
+du -sh YourGame.app
+```
+
+**Current status:** Not yet measured (requires macOS for actual build; record after M26)
+
+**Notes:**
+- iOS .app bundle includes player static library and game assets
+- Use feature-gating to exclude unnecessary features (physics, audio, 3D) for 2D mobile games
+- App Store limit is 4 GB (can be increased with approval)
+- Static library approach: `libkiln_player.a` linked into Objective-C app
+- Requires macOS with Xcode for build and signing
+- See docs/IOS.md for complete build instructions
+
+---
+
 ## Editor installer
 
 **Target:** <40 MB
@@ -171,6 +195,48 @@ strip = true
 
 ---
 
+## GPU pass timings (M28)
+
+**Target:** Per-pass GPU cost via timestamp queries (when adapter supports it)
+
+**Measurement:**
+```bash
+cargo run -p render-graph-sample --release
+cargo test -p kiln-render --lib screenshot_low_tier_stable_hash
+```
+
+**Current status (M28, release, Windows desktop, TIMESTAMP_QUERY available):**
+- High-tier stub passes (clear/load): main ~32 µs, bloom/fog/outline/lut/composite ~18 µs each
+- Low-tier screenshot golden sha256 `d17424c3…9478` (64×64 RGBA8, clear 51/102/153/255)
+- Re-run sample on reference Low/Medium GPUs to refresh; editor Settings → GPU Pass Timings
+
+**Notes:**
+- Requires `TIMESTAMP_QUERY | TIMESTAMP_QUERY_INSIDE_ENCODERS`; otherwise timings empty (editor shows unsupported)
+- Transient aliasing reduces physical texture slots when lifetimes do not overlap
+
+---
+
+## Multithreading speedup (M27)
+
+**Target:** Measurable speedup on 4+ cores for chunked CPU work via `TaskPool`
+
+**Measurement:**
+```bash
+cargo run -p threads-sample --release
+```
+
+**Current status (M27, release, Windows desktop, 4 logical cores):**
+- Chunked `sin/cos` over 2M f32 values (`samples/threads`)
+- Serial: 199.52 ms · Parallel: 60.26 ms · **Speedup: 3.31× on 4 cores**
+- Re-run with `cargo run -p threads-sample --release` on reference hardware to refresh
+
+**Notes:**
+- `threads` feature off: pool runs inline (1×, behavior unchanged)
+- Web: Workers only when cross-origin isolated; otherwise single-thread fallback (no SAB)
+- No rayon; custom `std::thread` pool (ADR-0024) keeps binary impact near zero
+
+---
+
 ## Dependency size tracking
 
 Every new dependency must have an ADR entry with:
@@ -185,6 +251,7 @@ Every new dependency must have an ADR entry with:
 
 **Recent additions:**
 - kiln-ui (M21): 830 KB release rlib (includes widgets, layout, navigation, localization, 9-slice support)
+- M27 threads: no new crates (std::thread only); kiln-web adds js-sys + Worker/Blob/Url web-sys features (stub path, size impact expected small)
 
 ---
 
@@ -193,6 +260,8 @@ Every new dependency must have an ADR entry with:
 CI will fail `just size` if:
 - Web WASM >1.5 MB brotli (after M10)
 - Native player binary >15 MB (after M14)
+- Android APK >20 MB (after M18)
+- iOS .app bundle >25 MB (after M26, requires macOS runner)
 - Editor installer >40 MB (after M12)
 - Startup time >2 seconds on reference hardware (after M14)
 - Editor idle RAM >300 MB (after M6)

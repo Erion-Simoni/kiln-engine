@@ -17,6 +17,8 @@ pub struct Project {
     #[serde(default)]
     pub window: WindowSettings,
     #[serde(default)]
+    pub mobile: MobileSettings,
+    #[serde(default)]
     pub scenes: HashMap<String, Scene>,
 }
 
@@ -41,6 +43,74 @@ pub struct WindowSettings {
 fn default_window_width() -> u32 { 1280 }
 fn default_window_height() -> u32 { 720 }
 fn default_high_dpi() -> bool { true }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MobileSettings {
+    #[serde(default)]
+    pub orientation: Orientation,
+    #[serde(default)]
+    pub ios: IosSettings,
+    #[serde(default)]
+    pub android: AndroidSettings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Orientation {
+    Portrait,
+    Landscape,
+    Auto,
+}
+
+impl Default for Orientation {
+    fn default() -> Self {
+        Orientation::Landscape
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IosSettings {
+    #[serde(default)]
+    pub bundle_identifier: String,
+    #[serde(default)]
+    pub permissions: Vec<String>,
+    #[serde(default)]
+    pub privacy_descriptions: PrivacyDescriptions,
+    #[serde(default)]
+    pub launch_screen: LaunchScreen,
+    #[serde(default)]
+    pub supports_notch: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrivacyDescriptions {
+    #[serde(default)]
+    pub camera: String,
+    #[serde(default)]
+    pub microphone: String,
+    #[serde(default)]
+    pub photo_library: String,
+    #[serde(default)]
+    pub location: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LaunchScreen {
+    #[serde(default)]
+    pub image: String,
+    #[serde(default)]
+    pub background_color: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AndroidSettings {
+    #[serde(default)]
+    pub package_name: String,
+    #[serde(default)]
+    pub permissions: Vec<String>,
+    #[serde(default)]
+    pub target_sdk: u32,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Scene {
@@ -110,6 +180,7 @@ impl Default for Project {
             icon: String::new(),
             features: vec![],
             window: WindowSettings::default(),
+            mobile: MobileSettings::default(),
             scenes: HashMap::new(),
         }
     }
@@ -129,6 +200,58 @@ impl Default for WindowSettings {
     }
 }
 
+impl Default for MobileSettings {
+    fn default() -> Self {
+        Self {
+            orientation: Orientation::default(),
+            ios: IosSettings::default(),
+            android: AndroidSettings::default(),
+        }
+    }
+}
+
+impl Default for IosSettings {
+    fn default() -> Self {
+        Self {
+            bundle_identifier: "com.example.game".to_string(),
+            permissions: vec![],
+            privacy_descriptions: PrivacyDescriptions::default(),
+            launch_screen: LaunchScreen::default(),
+            supports_notch: true,
+        }
+    }
+}
+
+impl Default for PrivacyDescriptions {
+    fn default() -> Self {
+        Self {
+            camera: String::new(),
+            microphone: String::new(),
+            photo_library: String::new(),
+            location: String::new(),
+        }
+    }
+}
+
+impl Default for LaunchScreen {
+    fn default() -> Self {
+        Self {
+            image: String::new(),
+            background_color: "#000000".to_string(),
+        }
+    }
+}
+
+impl Default for AndroidSettings {
+    fn default() -> Self {
+        Self {
+            package_name: "com.example.game".to_string(),
+            permissions: vec![],
+            target_sdk: 33, // Android 13
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,6 +266,7 @@ mod tests {
         assert_eq!(loaded.version, "0.1.0");
         assert_eq!(loaded.window.width, 1280);
         assert_eq!(loaded.window.height, 720);
+        assert_eq!(loaded.mobile.orientation, Orientation::Landscape);
     }
 
     #[test]
@@ -236,6 +360,29 @@ mod tests {
                 high_dpi: true,
                 resizable: true,
             ),
+            mobile: (
+                orientation: landscape,
+                ios: (
+                    bundle_identifier: "com.test.game",
+                    permissions: [],
+                    privacy_descriptions: (
+                        camera: "",
+                        microphone: "",
+                        photo_library: "",
+                        location: "",
+                    ),
+                    launch_screen: (
+                        image: "",
+                        background_color: "black",
+                    ),
+                    supports_notch: true,
+                ),
+                android: (
+                    package_name: "com.test.game",
+                    permissions: [],
+                    target_sdk: 33,
+                ),
+            ),
             scenes: {},
         )
         "#;
@@ -243,6 +390,37 @@ mod tests {
         let project: Project = ron::from_str(ron_str).expect("parse RON");
         assert_eq!(project.name, "Test Project");
         assert_eq!(project.window.width, 1280);
+        assert_eq!(project.mobile.orientation, Orientation::Landscape);
+        assert_eq!(project.mobile.ios.bundle_identifier, "com.test.game");
+        assert_eq!(project.mobile.android.package_name, "com.test.game");
+    }
+
+    #[test]
+    fn mobile_settings_round_trip() {
+        let mut proj = Project::default();
+        proj.mobile.orientation = Orientation::Portrait;
+        proj.mobile.ios.bundle_identifier = "com.example.mygame".to_string();
+        proj.mobile.ios.permissions.push("NSCameraUsageDescription".to_string());
+        proj.mobile.android.package_name = "com.example.mygame".to_string();
+        proj.mobile.android.target_sdk = 34;
+
+        let toml = proj.to_toml().expect("serialize");
+        let loaded = Project::from_toml(&toml).expect("deserialize");
+
+        assert_eq!(loaded.mobile.orientation, Orientation::Portrait);
+        assert_eq!(loaded.mobile.ios.bundle_identifier, "com.example.mygame");
+        assert_eq!(loaded.mobile.ios.permissions.len(), 1);
+        assert_eq!(loaded.mobile.android.package_name, "com.example.mygame");
+        assert_eq!(loaded.mobile.android.target_sdk, 34);
+    }
+
+    #[test]
+    fn mobile_settings_defaults() {
+        let mobile = MobileSettings::default();
+        assert_eq!(mobile.orientation, Orientation::Landscape);
+        assert_eq!(mobile.ios.bundle_identifier, "com.example.game");
+        assert_eq!(mobile.android.package_name, "com.example.game");
+        assert_eq!(mobile.android.target_sdk, 33);
     }
 }
 

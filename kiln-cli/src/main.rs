@@ -96,7 +96,7 @@ enum Commands {
     },
     /// Export project for web (WASM build + HTML shell) or native platforms
     Export {
-        /// Target platform: web, windows, macos, or linux
+        /// Target platform: web, windows, macos, linux, android, or ios
         #[arg(short, long, default_value = "web")]
         platform: String,
         /// Output directory for build
@@ -105,6 +105,9 @@ enum Commands {
         /// Create installers (for native platforms only)
         #[arg(long)]
         packaging: bool,
+        /// Create signed build for store (Android AAB, iOS requires Xcode)
+        #[arg(long)]
+        signed: bool,
     },
     /// Publish to storefront (itch.io, Steam)
     Publish {
@@ -135,6 +138,15 @@ enum Commands {
         /// Output archive path
         #[arg(short, long, default_value = "dlc.kar")]
         output: PathBuf,
+    },
+    /// Validate build for store upload (Google Play, App Store)
+    Validate {
+        /// Target store: google_play or app_store
+        #[arg(short, long)]
+        store: String,
+        /// Build directory to validate
+        #[arg(short, long, default_value = "export")]
+        build_dir: PathBuf,
     },
 }
 
@@ -264,6 +276,96 @@ fn main() -> Result<()> {
             println!("DLC pack created: {}", output.display());
             println!("DLC metadata: {}", metadata_path.display());
         }
+        Commands::Validate { store, build_dir } => {
+            match store.as_str() {
+                "google_play" => {
+                    println!("Validating build for Google Play: {}", build_dir.display());
+
+                    // Check for APK
+                    let apk_path = build_dir.join("game.apk");
+                    if !apk_path.exists() {
+                        println!("Warning: APK not found at {}", apk_path.display());
+                        println!("Expected: game.apk in build directory");
+                    } else {
+                        println!("✓ APK found: {}", apk_path.display());
+
+                        // Check APK size (Play Store limit is 150 MB for initial upload)
+                        let apk_size = fs::metadata(&apk_path)?.len();
+                        println!("  APK size: {} MB", apk_size / 1024 / 1024);
+
+                        if apk_size > 150 * 1024 * 1024 {
+                            println!("  Warning: APK exceeds 150 MB Google Play limit");
+                        }
+                    }
+
+                    // Check for AAB (required for Play Store)
+                    let aab_path = build_dir.join("game.aab");
+                    if !aab_path.exists() {
+                        println!("Warning: AAB not found at {}", aab_path.display());
+                        println!("Note: AAB is required for Play Store upload");
+                        println!("See docs/ANDROID.md for AAB creation instructions");
+                    } else {
+                        println!("✓ AAB found: {}", aab_path.display());
+
+                        let aab_size = fs::metadata(&aab_path)?.len();
+                        println!("  AAB size: {} MB", aab_size / 1024 / 1024);
+                    }
+
+                    println!("\nGoogle Play validation checklist:");
+                    println!("1. App signing key configured");
+                    println!("2. Target SDK level is at least 33 (Android 13)");
+                    println!("3. Permissions declared in AndroidManifest.xml");
+                    println!("4. Privacy policy URL provided");
+                    println!("5. Content rating questionnaire completed");
+                    println!("6. Store listing prepared (screenshots, description, icon)");
+                }
+                "app_store" => {
+                    println!("Validating build for App Store: {}", build_dir.display());
+
+                    // iOS builds require Xcode on macOS
+                    println!("Note: App Store validation requires macOS with Xcode");
+                    println!("This CLI command performs basic checks; full validation requires Xcode");
+
+                    // Check for iOS project structure
+                    let ios_project = build_dir.join("ios");
+                    if !ios_project.exists() {
+                        println!("Warning: iOS project not found at {}", ios_project.display());
+                        println!("Run: kiln-cli export --platform ios to create iOS project structure");
+                    } else {
+                        println!("✓ iOS project structure found: {}", ios_project.display());
+
+                        // Check for build script
+                        let build_script = ios_project.join("build.sh");
+                        if build_script.exists() {
+                            println!("✓ Build script found: {}", build_script.display());
+                        }
+                    }
+
+                    println!("\nApp Store validation checklist:");
+                    println!("1. Apple Developer account enrolled");
+                    println!("2. Bundle identifier unique (e.g., com.yourcompany.game)");
+                    println!("3. Provisioning profile configured in Xcode");
+                    println!("4. Code signing certificate installed");
+                    println!("5. App icon and launch screen configured");
+                    println!("6. Privacy descriptions for sensitive permissions");
+                    println!("7. App Store Connect metadata prepared");
+                    println!("8. TestFlight beta testing completed");
+                    println!("9. App Review guidelines compliance verified");
+
+                    println!("\nRequired Info.plist keys:");
+                    println!("  - CFBundleIdentifier: Unique bundle ID");
+                    println!("  - CFBundleVersion: Version number");
+                    println!("  - CFBundleShortVersionString: Display version");
+                    println!("  - UIRequiredDeviceCapabilities: Required capabilities");
+                    println!("  - NSCameraUsageDescription: Camera permission (if used)");
+                    println!("  - NSMicrophoneUsageDescription: Microphone permission (if used)");
+                    println!("  - NSPhotoLibraryUsageDescription: Photo library permission (if used)");
+                }
+                _ => {
+                    anyhow::bail!("Unknown store: {}. Supported: google_play, app_store", store);
+                }
+            }
+        }
         Commands::Publish { storefront, build_dir } => {
             match storefront.as_str() {
                 "itch" => {
@@ -320,7 +422,7 @@ fn main() -> Result<()> {
                 }
             }
         }
-        Commands::Export { platform, output, packaging } => {
+        Commands::Export { platform, output, packaging, signed } => {
             match platform.as_str() {
                 "web" => {
                     println!("Exporting to web build: {}", output.display());
@@ -362,12 +464,23 @@ fn main() -> Result<()> {
                     }
 
                     // Generate HTML shell
+                    // Multithreading (SharedArrayBuffer / Workers with atomics) requires
+                    // cross-origin isolation via COOP+COEP response headers. Meta tags
+                    // cannot set these; serve with a local server that adds them.
                     let html = r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kiln Web Export</title>
+    <!--
+      For Web Workers / threads: serve this directory with headers:
+        Cross-Origin-Opener-Policy: same-origin
+        Cross-Origin-Embedder-Policy: require-corp
+      Example: npx serve -l 8080 --cors  (plus a proxy that injects COOP/COEP)
+      Or use the _headers file written next to this HTML for Netlify-style hosts.
+      Without isolation, kiln-web automatically falls back to single-thread mode.
+    -->
     <style>
         body {
             margin: 0;
@@ -387,9 +500,12 @@ fn main() -> Result<()> {
 <body>
     <canvas id="kiln-canvas"></canvas>
     <script type="module">
-        import init from './kiln_web.js';
+        import init, { run, is_cross_origin_isolated, can_use_web_workers } from './kiln_web.js';
         init().then(() => {
             console.log('Kiln web runtime initialized');
+            console.log('crossOriginIsolated=', is_cross_origin_isolated());
+            console.log('canUseWebWorkers=', can_use_web_workers());
+            run();
         }).catch(err => {
             console.error('Failed to initialize:', err);
         });
@@ -399,8 +515,13 @@ fn main() -> Result<()> {
 
                     fs::write(output.join("index.html"), html)?;
 
+                    // Netlify / Cloudflare Pages style headers for COOP/COEP
+                    let headers = "/*\n  Cross-Origin-Opener-Policy: same-origin\n  Cross-Origin-Embedder-Policy: require-corp\n";
+                    fs::write(output.join("_headers"), headers)?;
+
                     println!("Web export complete: {}", output.display());
                     println!("Open {}/index.html in a browser", output.display());
+                    println!("Note: for threads, serve with COOP/COEP (see _headers); else single-thread fallback.");
                 }
                 "windows" | "macos" | "linux" => {
                     println!("Exporting to {} build: {}", platform, output.display());
@@ -565,8 +686,125 @@ Categories=Game;"#;
                     println!("Player binary: {}", dest_path.display());
                     println!("Note: You must also pack game assets separately and provide them to the player");
                 }
+                "android" => {
+                    println!("Exporting to Android build: {}", output.display());
+
+                    // Create output directory
+                    fs::create_dir_all(&output)?;
+
+                    // Build APK using cargo-apk
+                    println!("Building Android APK...");
+                    let build_status = Command::new("cargo")
+                        .args([
+                            "apk",
+                            "build",
+                            "--release",
+                            "-p",
+                            "kiln-player",
+                        ])
+                        .status()?;
+
+                    if !build_status.success() {
+                        anyhow::bail!("Android APK build failed");
+                    }
+
+                    // Copy APK to output
+                    let apk_source = PathBuf::from("target/android/release/app/build/outputs/apk/release/app-release.apk");
+                    let apk_dest = output.join("game.apk");
+
+                    if apk_source.exists() {
+                        fs::copy(&apk_source, &apk_dest)?;
+                        println!("Android APK created: {}", apk_dest.display());
+                    } else {
+                        anyhow::bail!("APK not found at expected location: {}", apk_source.display());
+                    }
+
+                    // Create signed AAB if requested
+                    if signed {
+                        println!("Note: Signed AAB requires manual keystore configuration");
+                        println!("See docs/ANDROID.md for signing instructions");
+                        println!("AAB creation is a manual process with Android Studio or bundletool");
+                    }
+
+                    println!("Android export complete: {}", output.display());
+                }
+                "ios" => {
+                    println!("Exporting to iOS build: {}", output.display());
+
+                    // iOS requires macOS and Xcode
+                    println!("Note: iOS export requires macOS with Xcode installed");
+                    println!("This CLI command creates the static library and project structure");
+                    println!("You must open the Xcode project on macOS to complete the build and signing");
+
+                    // Create output directory
+                    fs::create_dir_all(&output)?;
+
+                    // Determine target (device or simulator)
+                    let target = "aarch64-apple-ios"; // Default to device
+
+                    // Build static library for iOS
+                    println!("Building iOS static library for {}...", target);
+                    let build_status = Command::new("cargo")
+                        .args([
+                            "build",
+                            "--release",
+                            "--target",
+                            target,
+                            "-p",
+                            "kiln-player",
+                        ])
+                        .status();
+
+                    match build_status {
+                        Ok(status) if status.success() => {
+                            println!("iOS static library built successfully");
+                        }
+                        Ok(_) => {
+                            anyhow::bail!("iOS build failed - this is expected on non-macOS platforms");
+                        }
+                        Err(e) => {
+                            println!("Note: iOS build requires macOS and Xcode");
+                            println!("Error: {}", e);
+                            println!("To build on macOS:");
+                            println!("1. Install Rust iOS targets: rustup target add aarch64-apple-ios aarch64-apple-ios-sim");
+                            println!("2. Build: cargo build --release --target aarch64-apple-ios -p kiln-player");
+                            println!("3. Create Xcode project (see docs/IOS.md for instructions)");
+                        }
+                    }
+
+                    // Create iOS project structure template
+                    let ios_project = output.join("ios");
+                    fs::create_dir_all(&ios_project)?;
+
+                    // Create a simple build script for macOS
+                    let build_script = r#"#!/bin/bash
+# iOS build script for macOS
+# Run this on macOS with Xcode installed
+
+set -e
+
+echo "Building Kiln iOS static library..."
+
+# Build for device
+cargo build --release --target aarch64-apple-ios -p kiln-player
+
+# Build for simulator (Apple Silicon)
+cargo build --release --target aarch64-apple-ios-sim -p kiln-player
+
+echo "Static libraries built"
+echo "Next: Create Xcode project and integrate with UIKit"
+echo "See docs/IOS.md for complete instructions"
+"#;
+
+                    fs::write(ios_project.join("build.sh"), build_script)?;
+
+                    println!("iOS project structure created: {}", ios_project.display());
+                    println!("Build script: {}", ios_project.join("build.sh").display());
+                    println!("On macOS, run: cd {} && ./build.sh", ios_project.display());
+                    println!("Then follow docs/IOS.md to create Xcode project and sign for App Store");
+                }
                 _ => {
-                    anyhow::bail!("Unknown platform: {}. Supported: web, windows, macos, linux", platform);
+                    anyhow::bail!("Unknown platform: {}. Supported: web, windows, macos, linux, android, ios", platform);
                 }
             }
         }

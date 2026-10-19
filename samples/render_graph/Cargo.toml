@@ -1,0 +1,16 @@
+[package]
+name = "render-graph-sample"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "render-graph-sample"
+path = "src/main.rs"
+
+[dependencies]
+kiln-render = { path = "../../kiln-render" }
+wgpu = { workspace = true }
+pollster = { workspace = true }

@@ -3,7 +3,9 @@
 use hecs;
 use kiln_core::Transform;
 use kiln_graph::{ArithmeticOp, ConstantValue, Graph, Node, NodeType};
-use kiln_render::RenderTier;
+use kiln_render::{
+    clear_view, execute_passes, Frame2dGraph, PassTiming, RenderTier,
+};
 use kiln_runtime::{GameWorld, Sprite};
 use kiln_ui::{Button, Label, List, Panel, Widget, WidgetId};
 use kiln_gameplay::{Dialogue, Quest, DataTable};
@@ -366,6 +368,16 @@ impl winit::application::ApplicationHandler for EditorApp {
         let entity_count = self.world.world().len();
         let tier = self.render_tier;
         let is_playing = self.is_playing;
+        let pass_timings: Vec<PassTiming> = self
+            .gpu
+            .as_ref()
+            .map(|g| g.renderer.pass_timings().to_vec())
+            .unwrap_or_default();
+        let profiler_supported = self
+            .gpu
+            .as_ref()
+            .map(|g| g.renderer.profiler().supported())
+            .unwrap_or(false);
 
         let gpu = self.gpu.as_mut().unwrap();
         let size = gpu.window.inner_size();
@@ -576,6 +588,8 @@ impl winit::application::ApplicationHandler for EditorApp {
                     is_playing: &mut self.is_playing,
                     graph: &mut self.graph,
                     render_tier: &mut self.render_tier,
+                    pass_timings: &pass_timings,
+                    profiler_supported,
                     ui_designer: &mut self.ui_designer,
                     prefab_editor: &mut self.prefab_editor,
                     gameplay_editor: &mut self.gameplay_editor,
@@ -616,34 +630,78 @@ impl winit::application::ApplicationHandler for EditorApp {
             &screen_descriptor,
         );
 
-        let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("main_pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.1,
-                        g: 0.1,
-                        b: 0.12,
-                        a: 1.0,
-                    }),
-                    store: wgpu::StoreOp::Store,
+        // M28: default 2D frame graph (tier-filtered) with GPU timestamps, then egui.
+        let (w, h) = gpu.renderer.size();
+        let frame_graph = Frame2dGraph::build(w, h, tier, gpu.renderer.pass_config());
+        let compiled = frame_graph.compile().expect("frame graph");
+        {
+            let profiler = gpu.renderer.profiler_mut();
+            execute_passes(
+                &compiled,
+                &mut encoder,
+                &view,
+                tier,
+                Some(profiler),
+                |ctx| match ctx.name {
+                    "main" => clear_view(
+                        ctx.encoder,
+                        ctx.output_view,
+                        wgpu::Color {
+                            r: 0.1,
+                            g: 0.1,
+                            b: 0.12,
+                            a: 1.0,
+                        },
+                    ),
+                    _ => {
+                        let _ = ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some(ctx.name),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: ctx.output_view,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Load,
+                                    store: wgpu::StoreOp::Store,
+                                },
+                            })],
+                            depth_stencil_attachment: None,
+                            timestamp_writes: None,
+                            occlusion_query_set: None,
+                        });
+                    }
                 },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        });
+            );
+        }
 
-        let mut pass = pass.forget_lifetime();
+        let egui_begin = gpu.renderer.profiler_mut().begin_pass(&mut encoder, "egui");
+        {
+            let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("egui_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
 
-        gpu.egui_renderer
-            .render(&mut pass, &paint_jobs, &screen_descriptor);
-
-        drop(pass);
+            let mut pass = pass.forget_lifetime();
+            gpu.egui_renderer
+                .render(&mut pass, &paint_jobs, &screen_descriptor);
+            drop(pass);
+        }
+        gpu.renderer
+            .profiler_mut()
+            .end_pass(&mut encoder, egui_begin);
+        gpu.renderer.profiler_mut().resolve(&mut encoder);
 
         gpu.renderer.queue().submit([encoder.finish()]);
+        gpu.renderer.poll_profiler();
         frame.present();
         gpu.window.request_redraw();
 
@@ -686,6 +744,8 @@ struct TabViewer<'a> {
     is_playing: &'a mut bool,
     graph: &'a mut Graph,
     render_tier: &'a mut RenderTier,
+    pass_timings: &'a [PassTiming],
+    profiler_supported: bool,
     ui_designer: &'a mut UIDesignerState,
     prefab_editor: &'a mut PrefabEditorState,
     gameplay_editor: &'a mut GameplayEditorState,
@@ -1280,6 +1340,32 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 "  Outline effect: {}",
                                 self.render_tier.enable_outline()
                             ));
+                        });
+
+                    ui.add_space(8.0);
+
+                    // GPU profiling (M28)
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_rgb(35, 35, 40))
+                        .rounding(4.0)
+                        .inner_margin(12.0)
+                        .show(ui, |ui| {
+                            ui.strong("GPU Pass Timings");
+                            ui.add_space(8.0);
+                            if !self.profiler_supported {
+                                ui.label("TIMESTAMP_QUERY not supported on this adapter.");
+                            } else if self.pass_timings.is_empty() {
+                                ui.label("Waiting for first resolved frame…");
+                            } else {
+                                for t in self.pass_timings {
+                                    ui.label(format!(
+                                        "  {}: {:.2} µs ({:.3} ms)",
+                                        t.name,
+                                        t.duration_us(),
+                                        t.duration_ms()
+                                    ));
+                                }
+                            }
                         });
 
                     ui.add_space(8.0);

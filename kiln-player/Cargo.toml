@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+name = "kiln_player"
+crate-type = ["cdylib", "staticlib"]
+
 [dependencies]
 kiln-core = { workspace = true }
 kiln-runtime = { workspace = true }

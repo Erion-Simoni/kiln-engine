@@ -9,6 +9,8 @@ license.workspace = true
 default = []
 audio = ["rodio", "symphonia"]
 physics = ["rapier2d"]
+# Parallel TaskPool + stage job execution (native threads). No extra crates.
+threads = []
 
 [dependencies]
 kiln-core = { path = "../kiln-core" }

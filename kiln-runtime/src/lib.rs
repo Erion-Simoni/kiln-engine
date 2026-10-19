@@ -6,6 +6,8 @@ pub mod input;
 pub mod world;
 pub mod sprite;
 pub mod settings;
+pub mod jobs;
+pub mod schedule;
 
 #[cfg(feature = "audio")]
 pub mod audio;
@@ -18,6 +20,8 @@ pub use input::*;
 pub use world::*;
 pub use sprite::*;
 pub use settings::*;
+pub use jobs::{load_file_async, JobHandle, TaskPool};
+pub use schedule::{build_stages, Schedule, SchedulePlan, SystemEntry};
 
 #[cfg(feature = "audio")]
 pub use audio::*;

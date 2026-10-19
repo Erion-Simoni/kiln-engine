@@ -1,0 +1,17 @@
+[package]
+name = "threads-sample"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "threads-sample"
+path = "src/main.rs"
+
+[dependencies]
+kiln-core = { path = "../../kiln-core" }
+kiln-runtime = { path = "../../kiln-runtime", features = ["threads"] }
+kiln-assets = { path = "../../kiln-assets" }
+hecs = { workspace = true }

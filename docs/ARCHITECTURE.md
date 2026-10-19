@@ -10,20 +10,27 @@ Constraints that shape every design choice: **tiny binaries**, **old-hardware ti
 
 | Crate | Responsibility | Depends on (intended) |
 | --- | --- | --- |
-| `kiln-core` | `glam` math, clocks, IDs, ECS world glue, shared errors | — |
-| `kiln-render` | wgpu device/swapchain, 2D batching → 3D, post, render tiers | core |
+| `kiln-core` | `glam` math, clocks, IDs, ECS access sets, shared errors | — |
+| `kiln-render` | wgpu device/swapchain, frame graph, 2D batching → 3D, post, tiers, GPU timestamps | core |
 | `kiln-assets` | Importers, content-hash cache, KTX2/meshopt/audio, pack | core |
 | `kiln-ir` | IR AST, bytecode, VM, host call table | core |
 | `kiln-script` | Lexer/parser/typecheck/codegen → IR (`LanguageFrontend` trait) | ir, core |
 | `kiln-graph` | Graph model, live preview bindings, compile → IR | ir, core |
-| `kiln-runtime` | Frame loop, scene, input, optional audio/physics features | core, render, assets, ir |
+| `kiln-runtime` | Frame loop, scene, input, schedule/jobs, optional audio/physics/threads | core, render, assets, ir |
 | `kiln-editor` | winit + egui shell, panels, PIE, undo | runtime, graph, script, assets |
 | `kiln-cli` | `build` / `export` / `pack` / CI entrypoints | runtime, assets, ir |
 | `kiln-web` | wasm-bindgen shell, canvas, WebGPU/WebGL2 | runtime |
 | `kiln-plugin-api` | Stable ABI + host imports for sandboxed WASM plugins | core (thin) |
 | `samples/` | Vertical-slice games and tutorial project | (consumers) |
 
-**Rule:** crates talk only through documented public APIs. No `pub use` of another crate's internals. Optional Cargo features: `3d`, `physics`, `audio`, `networking` (default features stay minimal for web size).
+**Rule:** crates talk only through documented public APIs. No `pub use` of another crate's internals. Optional Cargo features: `3d`, `physics`, `audio`, `networking`, `threads` (default features stay minimal for web size).
+
+### Job system (M27)
+
+- **`AccessSet`** (`kiln-core`): systems declare component Read/Write by `TypeId`; `conflicts_with` detects unsafe pairs.
+- **`Schedule`** (`kiln-runtime`): packs non-conflicting systems into stages; World systems run with exclusive `&mut hecs::World`.
+- **`TaskPool`**: background jobs and chunked parallel work; `threads` feature uses native workers, otherwise inline.
+- **Web:** `kiln-web` enables a Workers path only when `crossOriginIsolated`; otherwise single-thread fallback. COOP/COEP required (see export `_headers`).
 
 ## Data flow
 
@@ -142,6 +149,13 @@ Runtime GPU detection selects **Low / Medium / High**. Every effect declares cos
 
 Start **2D / 2.5D** lit sprites + tilemaps; add **3D** after the 2D vertical slice (M14+).
 
+### Render graph + GPU profiling (M28)
+
+- **`RenderGraph`**: passes declare named Read/Write resources; compile topologically sorts, computes lifetimes, and aliases non-overlapping transients into shared physical slots.
+- **`PassEnableConfig`**: TOML/RON (or built-in defaults) lists which tiers enable each pass name — not hard-coded `if tier` in registration.
+- **`Frame2dGraph`**: default 2D path (M2 main/sprites + M9 post stubs) filtered by config.
+- **`GpuProfiler`**: wgpu `TIMESTAMP_QUERY` + `TIMESTAMP_QUERY_INSIDE_ENCODERS` when available; editor Settings shows per-pass µs.
+
 ## Asset pipeline
 
 1. Source files → importers → **content-hash** cache entries.
@@ -173,6 +187,6 @@ my_game/
 - Extension kinds: custom graph nodes, importers, editor panels, host calls (capability-gated).
 - No native `cdylib` in default product path (size + safety).
 
-## ECS choice (open)
+## ECS choice
 
-Evaluate standalone **`bevy_ecs` 0.20.0** vs **`hecs` 0.11.2** vs tiny custom. Decision criterion: **binary size + compile time** for `kiln-web` and editor. See ADR-0002.
+**`hecs` 0.11.2** (ADR-0002). Parallel scheduling is Kiln-owned (`AccessSet` + `Schedule`), not bevy_ecs.
