@@ -1,0 +1,11 @@
+[package]
+name = "ui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+kiln-core = { workspace = true }
+kiln-ui = { workspace = true }

@@ -15,6 +15,7 @@ members = [
     "kiln-updater",
     "kiln-anim",
     "kiln-vfx",
+    "kiln-ui",
     "demo",
     "samples/tilemap",
     "samples/audio",
@@ -22,6 +23,7 @@ members = [
     "samples/collector",
     "samples/animation",
     "samples/particles",
+    "samples/ui",
 ]
 resolver = "2"
 
@@ -71,6 +73,7 @@ kiln-platform = { path = "kiln-platform" }
 kiln-updater = { path = "kiln-updater" }
 kiln-anim    = { path = "kiln-anim" }
 kiln-vfx     = { path = "kiln-vfx" }
+kiln-ui      = { path = "kiln-ui" }
 
 [profile.release]
 opt-level = "z"

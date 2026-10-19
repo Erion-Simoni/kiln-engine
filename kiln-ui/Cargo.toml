@@ -1,0 +1,13 @@
+[package]
+name = "kiln-ui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+kiln-core = { workspace = true }
+kiln-render = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+rand = { workspace = true }

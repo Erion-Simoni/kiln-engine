@@ -47,6 +47,27 @@ ls -lh target/release/kiln-player
 
 ---
 
+## Android APK
+
+**Target:** <20 MB (includes player binary + assets)
+
+**Measurement:**
+```bash
+cargo apk build --release -p kiln-player
+ls -lh target/aarch64-linux-android/release/apk/kiln-player.apk
+```
+
+**Current status:** Not yet measured (record after M18)
+
+**Notes:**
+- APK includes player binary (same runtime as desktop) and game assets
+- Use feature-gating to exclude unnecessary features (physics, audio, 3D) for 2D web/mobile games
+- Signed AAB for Play Store will be similar size
+- cargo-apk handles APK generation with Gradle project
+- Install via ADB or manually on device
+
+---
+
 ## Editor installer
 
 **Target:** <40 MB
@@ -161,6 +182,9 @@ Every new dependency must have an ADR entry with:
 - `cargo-bloat`: identify largest functions
 - `twiggy`: WASM size analysis
 - `cargo-size`: binary size per crate
+
+**Recent additions:**
+- kiln-ui (M21): 830 KB release rlib (includes widgets, layout, navigation, localization, 9-slice support)
 
 ---
 
