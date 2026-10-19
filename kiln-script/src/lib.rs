@@ -1,14 +1,19 @@
 //! KilnScript — minimal scripting language for Kiln.
 
-pub mod lexer;
-pub mod parser;
 pub mod compiler;
 pub mod diagnostic;
+pub mod lexer;
+pub mod parser;
 
-pub use diagnostic::{Diagnostic, Span};
 pub use compiler::Compiler;
+pub use diagnostic::{Diagnostic, Span};
 
 use kiln_ir::Program;
+
+/// Note: Tween functions are deferred until float support is added to the VM.
+/// The VM currently only supports I64 and Bool values; tween operations require
+/// floating-point interpolation. Script integration of tweens will be added in
+/// a future milestone when Value::F64 is implemented.
 
 /// Trait for language frontends that compile to Kiln IR.
 pub trait LanguageFrontend {
@@ -56,10 +61,16 @@ mod tests {
     struct TestHost;
 
     impl kiln_ir::HostContext for TestHost {
-        fn call_host(&mut self, func_id: u32, args: &[kiln_ir::Value]) -> Result<kiln_ir::Value, kiln_ir::VmError> {
+        fn call_host(
+            &mut self,
+            func_id: u32,
+            args: &[kiln_ir::Value],
+        ) -> Result<kiln_ir::Value, kiln_ir::VmError> {
             match func_id {
                 0 => Ok(kiln_ir::Value::I64(args.len() as i64)),
-                _ => Err(kiln_ir::VmError::HostCallError("Unknown function".to_string())),
+                _ => Err(kiln_ir::VmError::HostCallError(
+                    "Unknown function".to_string(),
+                )),
             }
         }
     }

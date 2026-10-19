@@ -467,3 +467,70 @@ Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 - DLC packs are separate archives with `requires_version` field in metadata
 - Crash-report hook added as opt-in stub (full implementation deferred to M56)
 - Binary size impact: ~200-300 KB for qbsdiff + updater code (feature-gated)
+
+---
+
+## ADR-0021: Android export approach (accepted, implemented)
+
+**Date:** 2026-10-19
+**Status:** accepted, implemented
+
+**Decision:** Use **winit's Android backend** (android-activity 0.6) for the NDK glue layer. Use **cargo-apk** for APK/AAB building. Build `kiln-player` as a `cdylib` for Android to keep the same player binary approach as desktop. Add touch input support via winit's touch events and handle Android lifecycle (suspend/resume, rotation) through winit's ApplicationHandler.
+
+**Alternatives:**
+- winit + cargo-apk: Native Android approach, minimal dependencies, uses existing winit (chosen)
+- Tauri: Cross-platform mobile support, but adds WebView overhead and complexity
+- Custom NDK glue: Full control, but significant maintenance burden
+- Crossbow: Higher-level tooling, but adds dependency and complexity
+
+**Consequences:**
+- winit 0.30 already has android-activity 0.6 as a dependency
+- kiln-player will have `crate-type = ["cdylib"]` for Android builds
+- Android targets: aarch64-linux-android (arm64), armv7-linux-androideabi (32-bit ARM)
+- cargo-apk will handle APK/AAB generation with Gradle project
+- Touch input exposed through winit's WindowEvent::Touch events
+- Surface creation on resume, surface cleanup on suspend (per wgpu Android docs)
+- Android lifecycle handled via ApplicationHandler::resumed/suspended
+- APK size budget: <20 MB (includes player binary + assets)
+- AAB (Android App Bundle) for Play Store release with CI signing
+- Same kiln-player code runs on desktop and Android (feature-gated Android code)
+
+**Implementation (M18):**
+- Added cargo-apk configuration to kiln-player/Cargo.toml
+- Implemented full Android player in kiln-player/src/android.rs with wgpu, game loop, and demo scene
+- Touch input integrated via kiln-runtime InputState (already had touch support)
+- Added `just android` recipe for APK building
+- Extended kiln-cli export command to support Android platform
+- Created docs/ANDROID.md with comprehensive build and deployment guide
+- APK builds successfully; signed AAB process documented (manual keystore configuration required)
+
+---
+
+## ADR-0022: 2D skeletal animation approach (accepted)
+
+**Date:** 2026-10-19
+**Status:** accepted
+
+**Decision:** Use a **custom simple format for spritesheet clips** and basic 2D animation. Do not implement full skeletal animation in M19. The format will store:
+- Spritesheet texture reference
+- Frame rectangles (x, y, width, height) with origin pivot
+- Frame duration per frame
+- Frame events (optional, e.g., "footstep", "hit")
+- Looping flag
+
+Full skeletal animation (bones, IK, blend trees) is deferred to M33 (3D skeletal animation) or a future M19-b milestone. Import support for Spine/DragonBones is deferred to M51 (asset pipeline v2) or later if needed.
+
+**Alternatives:**
+- Custom spritesheet format: Simple, minimal dependencies, full control (chosen for M19)
+- Spine import: Powerful, but requires Spine runtime license, complex to parse
+- DragonBones import: Open source, but complex JSON format, heavy parsing
+- Full skeletal animation in M19: Too complex for single milestone, deferred
+
+**Consequences:**
+- M19 implements simple spritesheet clips with frame events
+- Format is text-based (RON or JSON) for easy editing and version control
+- Animation state machine (ASM) can drive clip selection via graph nodes
+- Tween library (ease curves) works for property interpolation in scripts and graphs
+- Full skeletal animation (bones, IK, skinning) deferred to M33 (3D)
+- Import support for commercial formats deferred to M51 or later
+- Binary size impact: Minimal (simple data structures, no heavy parsing libraries)

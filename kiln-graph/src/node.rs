@@ -1,35 +1,31 @@
 //! Node types for node graph.
 
-use serde::{Deserialize, Serialize};
 use crate::pin::{Pin, PinDirection, PinType};
+use serde::{Deserialize, Serialize};
 
 /// Type of node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NodeType {
     /// Event input node (e.g., "On Start", "On Collision").
-    Event {
-        name: String,
-    },
+    Event { name: String },
     /// Constant value node.
-    Constant {
-        value: ConstantValue,
-    },
+    Constant { value: ConstantValue },
     /// Arithmetic operation.
-    Arithmetic {
-        op: ArithmeticOp,
-    },
+    Arithmetic { op: ArithmeticOp },
     /// Comparison operation.
-    Comparison {
-        op: ComparisonOp,
-    },
+    Comparison { op: ComparisonOp },
     /// Branch/conditional.
     Branch,
     /// Host function call.
-    HostCall {
-        name: String,
-    },
+    HostCall { name: String },
     /// Graph output (entry point to actual game logic).
     Output,
+    /// Animation clip reference (plays a spritesheet clip).
+    AnimationClip { clip_name: String },
+    /// Animation state (state in animation state machine).
+    AnimationState { state_name: String },
+    /// Animation transition (condition-based transition between states).
+    AnimationTransition,
 }
 
 /// Constant value types.
@@ -113,6 +109,27 @@ impl Node {
             }
             NodeType::Output => {
                 vec![Pin::new(PinDirection::Input, PinType::Event, "in")]
+            }
+            NodeType::AnimationClip { .. } => {
+                vec![
+                    Pin::new(PinDirection::Input, PinType::Event, "play"),
+                    Pin::new(PinDirection::Input, PinType::Boolean, "loop"),
+                    Pin::new(PinDirection::Output, PinType::Event, "on_frame"),
+                    Pin::new(PinDirection::Output, PinType::Event, "on_complete"),
+                ]
+            }
+            NodeType::AnimationState { .. } => {
+                vec![
+                    Pin::new(PinDirection::Input, PinType::Event, "enter"),
+                    Pin::new(PinDirection::Output, PinType::Event, "exit"),
+                ]
+            }
+            NodeType::AnimationTransition => {
+                vec![
+                    Pin::new(PinDirection::Input, PinType::Boolean, "condition"),
+                    Pin::new(PinDirection::Input, PinType::Event, "trigger"),
+                    Pin::new(PinDirection::Output, PinType::Event, "transition"),
+                ]
             }
         }
     }

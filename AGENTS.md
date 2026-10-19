@@ -49,8 +49,9 @@ just package  # installers via cargo-dist
 ## Session protocol
 
 1. Read `/AGENTS.md` and `/docs/STATE.md` first.
-2. Confirm current milestone; do only that milestone.
-3. Update `STATE.md` before finishing (Done / Next / Known issues).
+2. Read `/ROADMAP_FULL_M14_PLUS.md` for the detailed milestone plan.
+3. Confirm current milestone; do only that milestone.
+4. Update `STATE.md` before finishing (Done / Next / Known issues).
 
 ## Do not
 

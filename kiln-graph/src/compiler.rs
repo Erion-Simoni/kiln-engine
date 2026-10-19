@@ -1,10 +1,10 @@
 //! Compile node graph to IR bytecode.
 
-use crate::{Graph, NodeType, ArithmeticOp, ComparisonOp};
-use kiln_ir::{Program, Instruction, Value};
+use crate::{ArithmeticOp, ComparisonOp, Graph, NodeType};
+use kiln_ir::{Instruction, Program, Value};
 use std::collections::{HashMap, HashSet};
-use uuid::Uuid;
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Error, Debug)]
 pub enum CompilerError {
@@ -28,9 +28,11 @@ pub fn compile_graph(graph: &Graph) -> Result<Program, CompilerError> {
     let mut visited: HashSet<Uuid> = HashSet::new();
 
     // Find output node (should be unique)
-    let output_node = graph.nodes.values()
+    let output_node = graph
+        .nodes
+        .values()
         .find(|n| matches!(n.node_type, NodeType::Output))
-        .ok_or_else(|| CompilerError::NodeNotFound(Uuid::nil()))?;
+        .ok_or(CompilerError::NodeNotFound(Uuid::nil()))?;
 
     // Traverse from output backwards
     compile_node_recursive(
@@ -58,15 +60,18 @@ fn compile_node_recursive(
     }
     visited.insert(node_id);
 
-    let node = graph.get_node(node_id)
-        .ok_or_else(|| CompilerError::NodeNotFound(node_id))?;
+    let node = graph
+        .get_node(node_id)
+        .ok_or(CompilerError::NodeNotFound(node_id))?;
 
     match &node.node_type {
         NodeType::Event { name: _ } => {
             // Event nodes are entry points, compile their successors
-            let trigger_pin = node.pins.iter()
+            let trigger_pin = node
+                .pins
+                .iter()
                 .find(|p| p.name == "trigger" && p.direction == crate::pin::PinDirection::Output)
-                .ok_or_else(|| CompilerError::PinNotFound(Uuid::nil()))?;
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
 
             if let Some(conn) = find_output_connection(graph, trigger_pin.id) {
                 compile_node_recursive(
@@ -95,19 +100,25 @@ fn compile_node_recursive(
             }
 
             // Register output pin as providing this value
-            let output_pin = node.pins.iter()
+            let output_pin = node
+                .pins
+                .iter()
                 .find(|p| p.direction == crate::pin::PinDirection::Output)
-                .ok_or_else(|| CompilerError::PinNotFound(Uuid::nil()))?;
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
             pin_value_labels.insert(output_pin.id, label);
         }
         NodeType::Arithmetic { op } => {
             // Compile inputs first
-            let input_a_pin = node.pins.iter()
+            let input_a_pin = node
+                .pins
+                .iter()
                 .find(|p| p.name == "a" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or_else(|| CompilerError::PinNotFound(Uuid::nil()))?;
-            let input_b_pin = node.pins.iter()
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
+            let input_b_pin = node
+                .pins
+                .iter()
                 .find(|p| p.name == "b" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or_else(|| CompilerError::PinNotFound(Uuid::nil()))?;
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
 
             if let Some(conn_a) = find_input_connection(graph, input_a_pin.id) {
                 compile_node_recursive(
@@ -145,19 +156,25 @@ fn compile_node_recursive(
             program.add_instruction(instr);
 
             // Register output pin
-            let output_pin = node.pins.iter()
+            let output_pin = node
+                .pins
+                .iter()
                 .find(|p| p.name == "result" && p.direction == crate::pin::PinDirection::Output)
-                .ok_or_else(|| CompilerError::PinNotFound(Uuid::nil()))?;
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
             pin_value_labels.insert(output_pin.id, label);
         }
         NodeType::Comparison { op } => {
             // Similar to arithmetic
-            let input_a_pin = node.pins.iter()
+            let input_a_pin = node
+                .pins
+                .iter()
                 .find(|p| p.name == "a" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or_else(|| CompilerError::PinNotFound(Uuid::nil()))?;
-            let input_b_pin = node.pins.iter()
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
+            let input_b_pin = node
+                .pins
+                .iter()
                 .find(|p| p.name == "b" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or_else(|| CompilerError::PinNotFound(Uuid::nil()))?;
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
 
             if let Some(conn_a) = find_input_connection(graph, input_a_pin.id) {
                 compile_node_recursive(
@@ -191,16 +208,20 @@ fn compile_node_recursive(
             };
             program.add_instruction(instr);
 
-            let output_pin = node.pins.iter()
+            let output_pin = node
+                .pins
+                .iter()
                 .find(|p| p.name == "result" && p.direction == crate::pin::PinDirection::Output)
-                .ok_or_else(|| CompilerError::PinNotFound(Uuid::nil()))?;
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
             pin_value_labels.insert(output_pin.id, label);
         }
         NodeType::Branch => {
             // Compile condition, then true/false branches
-            let cond_pin = node.pins.iter()
+            let cond_pin = node
+                .pins
+                .iter()
                 .find(|p| p.name == "condition" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or_else(|| CompilerError::PinNotFound(Uuid::nil()))?;
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
 
             if let Some(conn) = find_input_connection(graph, cond_pin.id) {
                 compile_node_recursive(
@@ -220,12 +241,16 @@ fn compile_node_recursive(
             // Jump if false to false branch
             let false_label = format!("{}_false", label);
             program.define_label(&false_label);
-            program.add_instruction(Instruction::JumpIfNot(program.get_label(&false_label).unwrap()));
+            program.add_instruction(Instruction::JumpIfNot(
+                program.get_label(&false_label).unwrap(),
+            ));
 
             // True branch
-            let true_pin = node.pins.iter()
+            let true_pin = node
+                .pins
+                .iter()
                 .find(|p| p.name == "true" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or_else(|| CompilerError::PinNotFound(Uuid::nil()))?;
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
             if let Some(conn) = find_input_connection(graph, true_pin.id) {
                 compile_node_recursive(
                     graph,
@@ -243,9 +268,11 @@ fn compile_node_recursive(
             program.add_instruction(Instruction::Jump(program.get_label(&end_label).unwrap()));
 
             // False branch
-            let false_pin = node.pins.iter()
+            let false_pin = node
+                .pins
+                .iter()
                 .find(|p| p.name == "false" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or_else(|| CompilerError::PinNotFound(Uuid::nil()))?;
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
             if let Some(conn) = find_input_connection(graph, false_pin.id) {
                 compile_node_recursive(
                     graph,
@@ -268,11 +295,98 @@ fn compile_node_recursive(
         }
         NodeType::Output => {
             // Compile the input (trigger event)
-            let input_pin = node.pins.iter()
+            let input_pin = node
+                .pins
+                .iter()
                 .find(|p| p.name == "in" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or_else(|| CompilerError::PinNotFound(Uuid::nil()))?;
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
 
             if let Some(conn) = find_input_connection(graph, input_pin.id) {
+                compile_node_recursive(
+                    graph,
+                    get_source_node_id(graph, conn.source_pin)?,
+                    program,
+                    label_map,
+                    pin_value_labels,
+                    visited,
+                )?;
+            }
+        }
+        NodeType::AnimationClip { clip_name } => {
+            // Emit a host call to play the animation clip
+            let label = format!("anim_clip_{}", node_id);
+            program.define_label(&label);
+            label_map.insert(node_id, label);
+
+            // Push clip name as string (simplified: use hash as placeholder)
+            let id = simple_hash(clip_name);
+            program.add_instruction(Instruction::HostCall(id));
+
+            // Handle loop input if connected
+            let loop_pin = node
+                .pins
+                .iter()
+                .find(|p| p.name == "loop" && p.direction == crate::pin::PinDirection::Input)
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
+
+            if let Some(conn) = find_input_connection(graph, loop_pin.id) {
+                compile_node_recursive(
+                    graph,
+                    get_source_node_id(graph, conn.source_pin)?,
+                    program,
+                    label_map,
+                    pin_value_labels,
+                    visited,
+                )?;
+            }
+        }
+        NodeType::AnimationState { state_name } => {
+            // Emit a host call to enter the animation state
+            let label = format!("anim_state_{}", node_id);
+            program.define_label(&label);
+            label_map.insert(node_id, label);
+
+            let id = simple_hash(state_name);
+            program.add_instruction(Instruction::HostCall(id));
+        }
+        NodeType::AnimationTransition => {
+            // Compile condition and trigger
+            let cond_pin = node
+                .pins
+                .iter()
+                .find(|p| p.name == "condition" && p.direction == crate::pin::PinDirection::Input)
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
+
+            if let Some(conn) = find_input_connection(graph, cond_pin.id) {
+                compile_node_recursive(
+                    graph,
+                    get_source_node_id(graph, conn.source_pin)?,
+                    program,
+                    label_map,
+                    pin_value_labels,
+                    visited,
+                )?;
+            }
+
+            let label = format!("anim_trans_{}", node_id);
+            program.define_label(&label);
+            label_map.insert(node_id, label.clone());
+
+            // Jump if false to skip transition
+            let skip_label = format!("{}_skip", label);
+            program.define_label(&skip_label);
+            program.add_instruction(Instruction::JumpIfNot(
+                program.get_label(&skip_label).unwrap(),
+            ));
+
+            // Trigger transition
+            let trigger_pin = node
+                .pins
+                .iter()
+                .find(|p| p.name == "trigger" && p.direction == crate::pin::PinDirection::Input)
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
+
+            if let Some(conn) = find_input_connection(graph, trigger_pin.id) {
                 compile_node_recursive(
                     graph,
                     get_source_node_id(graph, conn.source_pin)?,
@@ -297,15 +411,17 @@ fn find_output_connection(graph: &Graph, pin_id: Uuid) -> Option<&crate::Connect
 }
 
 fn get_source_node_id(graph: &Graph, pin_id: Uuid) -> Result<Uuid, CompilerError> {
-    graph.get_pin_node(pin_id)
+    graph
+        .get_pin_node(pin_id)
         .map(|n| n.id)
-        .ok_or_else(|| CompilerError::PinNotFound(pin_id))
+        .ok_or(CompilerError::PinNotFound(pin_id))
 }
 
 fn get_target_node_id(graph: &Graph, pin_id: Uuid) -> Result<Uuid, CompilerError> {
-    graph.get_pin_node(pin_id)
+    graph
+        .get_pin_node(pin_id)
         .map(|n| n.id)
-        .ok_or_else(|| CompilerError::PinNotFound(pin_id))
+        .ok_or(CompilerError::PinNotFound(pin_id))
 }
 
 fn simple_hash(s: &str) -> u32 {

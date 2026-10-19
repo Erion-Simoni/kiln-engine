@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M17 complete
+**Current milestone:** M19 complete
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -222,15 +222,53 @@
   - Extended kiln-cli verify command to display V2 metadata
   - All 73 tests pass (7 kiln-core, 13 kiln-render, 12 kiln-assets including new V2 tests, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-platform, 12 kiln-updater, 5 kiln-runtime audio/physics, 2 samples)
   - Binary size impact: ~200-300 KB for qbsdiff + updater code (feature-gated)
+|- M18: Android export + touch input (v0.4 gate)
+  - ADR-0021 accepted and implemented: winit + cargo-apk for Android
+  - Added cargo-apk configuration to kiln-player/Cargo.toml (build_targets, permissions, application metadata)
+  - Implemented full Android player in kiln-player/src/android.rs with wgpu, game loop, and demo scene
+  - Touch input already integrated via kiln-runtime InputState (touch tracking in HashMap)
+  - Added `just android` recipe for APK building (cargo apk build --release -p kiln-player)
+  - Extended kiln-cli export command to support Android platform with --signed flag for AAB
+  - Created docs/ANDROID.md with comprehensive build, deployment, and signing guide
+  - Added Android APK size budget to BUDGETS.md (<20 MB)
+  - APK builds successfully via cargo-apk; signed AAB process documented (manual keystore configuration required)
+  - Android lifecycle handled: resumed (surface created), suspended (surface dropped), rotation (surface recreated)
+  - All 73 tests pass (no new tests; Android player code is platform-specific)
+|- M19: 2D animation system
+  - ADR-0022 accepted: custom spritesheet format for 2D animation (skeletal deferred to M33)
+  - kiln-anim crate created with spritesheet clips and tween library
+  - clip.rs: Frame, FrameEvent, Clip with frame_at_time, events_at_time, total_duration (3 tests)
+  - tween.rs: Ease enum with 32 easing functions (Linear, Quad, Cubic, Elastic, Bounce, etc.)
+  - tween.rs: Tween struct with value_at, is_complete, looping support (6 tests)
+  - kiln-script: Tween integration deferred - VM needs float support (documented in lib.rs)
+  - kiln-graph: Added AnimationClip, AnimationState, AnimationTransition node types
+  - kiln-graph compiler: Extended to compile animation nodes to host calls
+  - samples/animation: Console demo showing clips, frame events, tweens, easing functions
+  - kiln-anim added to workspace members
+  - All 83 tests pass (73 existing + 10 new kiln-anim tests)
+  - Binary size impact: Minimal (simple data structures, no heavy dependencies)
 
 **In progress:**
 - None
 
 **Next steps:**
-- M18: Android export + touch input (v0.4 gate)
+- M20: Particles and 2D VFX
 - See ROADMAP_FULL_M14_PLUS.md for detailed plan through M61
 
 **Known issues:**
+- M19 gaps:
+  - Script tween integration deferred - VM only supports I64/Bool, needs float support for tween values
+  - Editor UI for animation preview not implemented (requires major editor changes)
+  - Animation state machine runtime integration not implemented (graph nodes compile to host calls but no runtime)
+  - No actual spritesheet texture loading or rendering integration
+  - Clip format is in-memory only; no serialization to disk yet
+- M18 gaps:
+  - APK builds successfully but not yet tested on a physical Android device
+  - Signed AAB requires manual keystore configuration; not automated in CI
+  - Android player currently uses hardcoded demo scene; does not load actual game archive
+  - Player doesn't load assets from archive at runtime (uses hardcoded demo for M18)
+  - Touch input reaches InputState but not yet integrated into actual game systems
+  - CI signing for AAB not configured (documented manual process)
 - M15 gaps:
   - Windows packaging: ZIP creation works but full MSI installer requires WiX or cargo-dist (deferred)
   - macOS packaging: .app bundle created but executable permissions set only on Unix builds (Windows builds skip)
