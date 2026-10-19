@@ -82,7 +82,7 @@ impl TilemapApp {
     async fn init_gpu(&mut self, window: Arc<Window>) {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
+            backends: wgpu::Backends::all(),
             ..Default::default()
         });
         let surface: wgpu::Surface<'static> = instance

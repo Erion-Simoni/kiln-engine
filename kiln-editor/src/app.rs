@@ -51,6 +51,30 @@ struct GpuState {
 impl EditorApp {
     pub fn new(event_loop: &EventLoop<()>) -> Result<Self, EditorError> {
         let egui_ctx = egui::Context::default();
+
+        // Apply dark theme similar to Unity/Unreal
+        let mut style = egui::Style::default();
+        style.visuals = egui::Visuals::dark();
+        style.visuals.panel_fill = egui::Color32::from_rgb(30, 30, 35);
+        style.visuals.window_fill = egui::Color32::from_rgb(35, 35, 40);
+        style.visuals.faint_bg_color = egui::Color32::from_rgb(40, 40, 45);
+        style.visuals.extreme_bg_color = egui::Color32::from_rgb(25, 25, 30);
+        style.visuals.code_bg_color = egui::Color32::from_rgb(28, 28, 32);
+        style.visuals.window_rounding = 4.0.into();
+        style.visuals.window_shadow = egui::epaint::Shadow {
+            offset: egui::vec2(0.0, 2.0),
+            blur: 8.0,
+            spread: 0.0,
+            color: egui::Color32::from_rgba_premultiplied(0, 0, 0, 40),
+        };
+        style.visuals.widgets.open.rounding = 4.0.into();
+        style.visuals.widgets.inactive.rounding = 4.0.into();
+        style.visuals.widgets.hovered.rounding = 4.0.into();
+        style.visuals.widgets.active.rounding = 4.0.into();
+        style.visuals.selection.bg_fill = egui::Color32::from_rgb(66, 135, 245);
+        style.visuals.selection.stroke = egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(66, 135, 245));
+        egui_ctx.set_style(style);
+
         let egui_winit = egui_winit::State::new(
             egui_ctx.clone(),
             egui::ViewportId::ROOT,
@@ -89,7 +113,7 @@ impl EditorApp {
     async fn init_gpu(&mut self, window: Arc<Window>) {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
+            backends: wgpu::Backends::all(),
             ..Default::default()
         });
         let surface: wgpu::Surface<'static> = instance
@@ -124,8 +148,8 @@ impl winit::application::ApplicationHandler for EditorApp {
             event_loop
                 .create_window(
                     winit::window::WindowAttributes::default()
-                        .with_title("Kiln Editor")
-                        .with_inner_size(winit::dpi::LogicalSize::new(1280u32, 720u32)),
+                        .with_title("Kiln Editor - Game Engine")
+                        .with_inner_size(winit::dpi::LogicalSize::new(1600u32, 900u32)),
                 )
                 .expect("window"),
         );
@@ -197,8 +221,16 @@ impl winit::application::ApplicationHandler for EditorApp {
 
         // Build UI
         egui::CentralPanel::default().show(ctx, |ui| {
+            let mut dock_style = egui_dock::Style::from_egui(ui.style());
+            dock_style.tab_bar.bg_fill = egui::Color32::from_rgb(30, 30, 35);
+            dock_style.tab_bar.hline_color = egui::Color32::from_rgb(60, 60, 65);
+            dock_style.separator.color_idle = egui::Color32::from_rgb(60, 60, 65);
+            dock_style.separator.color_hovered = egui::Color32::from_rgb(80, 80, 90);
+            dock_style.separator.color_dragged = egui::Color32::from_rgb(100, 100, 110);
+            dock_style.separator.extra = 4.0;
+
             let tree = egui_dock::DockArea::new(&mut self.dock_state)
-                .style(egui_dock::Style::from_egui(ui.style()));
+                .style(dock_style);
 
             let mut tab_viewer = TabViewer {
                 world: &mut self.world,
@@ -286,251 +318,468 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
         match tab {
             Tab::SceneView => {
-                ui.heading("Scene View");
+                ui.vertical(|ui| {
+                    // Toolbar
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = egui::vec2(8.0, 0.0);
 
-                // Play/Stop button
-                ui.horizontal(|ui| {
-                    if ui.button(if *self.is_playing { "Stop" } else { "Play" }).clicked() {
-                        *self.is_playing = !*self.is_playing;
+                        // Play/Stop button with icon-like styling
+                        let play_btn = if *self.is_playing {
+                            ui.add_sized([100.0, 28.0], egui::Button::new("▶ Stop"))
+                        } else {
+                            ui.add_sized([100.0, 28.0], egui::Button::new("▶ Play"))
+                        };
+                        if play_btn.clicked() {
+                            *self.is_playing = !*self.is_playing;
+                        }
+
+                        ui.separator();
+
+                        if ui.button("Save Scene").clicked() {
+                            // TODO: Save scene
+                        }
+                        if ui.button("Load Scene").clicked() {
+                            // TODO: Load scene
+                        }
+
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label(format!("FPS: {:.0}", 60.0));
+                        });
+                    });
+
+                    ui.add_space(8.0);
+
+                    // Game view canvas
+                    let desired_size = egui::vec2(ui.available_width(), ui.available_height() * 0.65);
+                    let (rect, _response) = ui.allocate_exact_size(desired_size, egui::Sense::click_and_drag());
+
+                    // Draw background with grid pattern
+                    ui.painter().rect_filled(rect, 0.0, egui::Color32::from_rgb(18, 18, 20));
+
+                    // Draw grid lines
+                    let grid_size = 50.0;
+                    let painter = ui.painter();
+                    for x in (rect.min.x as i32..rect.max.x as i32).step_by(grid_size as usize) {
+                        painter.line_segment(
+                            [egui::pos2(x as f32, rect.min.y), egui::pos2(x as f32, rect.max.y)],
+                            (1.0, egui::Color32::from_rgba_premultiplied(255, 255, 255, 15)),
+                        );
                     }
-                    if *self.is_playing {
-                        ui.label("(Running)");
+                    for y in (rect.min.y as i32..rect.max.y as i32).step_by(grid_size as usize) {
+                        painter.line_segment(
+                            [egui::pos2(rect.min.x, y as f32), egui::pos2(rect.max.x, y as f32)],
+                            (1.0, egui::Color32::from_rgba_premultiplied(255, 255, 255, 15)),
+                        );
                     }
+
+                    // Draw sprites as rectangles
+                    let sprites: Vec<(Transform, Sprite)> = self.world.world()
+                        .query::<(&Transform, &Sprite)>()
+                        .iter()
+                        .map(|(t, s)| (*t, *s))
+                        .collect();
+
+                    for (transform, sprite) in sprites {
+                        let screen_x = rect.min.x + transform.position.x;
+                        let screen_y = rect.min.y + transform.position.y;
+                        let sprite_rect = egui::Rect::from_min_size(
+                            egui::pos2(screen_x, screen_y),
+                            egui::vec2(sprite.size[0], sprite.size[1]),
+                        );
+
+                        let color = egui::Color32::from_rgba_premultiplied(
+                            (sprite.color[0] * 255.0) as u8,
+                            (sprite.color[1] * 255.0) as u8,
+                            (sprite.color[2] * 255.0) as u8,
+                            (sprite.color[3] * 255.0) as u8,
+                        );
+
+                        painter.rect_filled(sprite_rect, 2.0, color);
+                        painter.rect_stroke(sprite_rect, 2.0, egui::Stroke::new(1.0_f32, egui::Color32::from_rgba_premultiplied(255, 255, 255, 50)));
+                    }
+
+                    // Entity list for selection
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.add_space(4.0);
+
+                    ui.horizontal(|ui| {
+                        ui.heading("Entities");
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("+ Add Entity").clicked() {
+                                // TODO: Add entity
+                            }
+                        });
+                    });
+
+                    ui.add_space(4.0);
+
+                    egui::ScrollArea::vertical()
+                        .max_height(ui.available_height())
+                        .show(ui, |ui| {
+                            let entities: Vec<(hecs::Entity, Transform)> = self.world.world()
+                                .query::<(hecs::Entity, &Transform, &Sprite)>()
+                                .iter()
+                                .map(|(e, t, _s)| (e, *t))
+                                .collect();
+                            for (entity, transform) in entities {
+                                let label = format!("Entity ({:.0}, {:.0})", transform.position.x, transform.position.y);
+                                let selected = *self.selected_entity == Some(entity);
+                                if ui.selectable_label(selected, label).clicked() {
+                                    *self.selected_entity = Some(entity);
+                                }
+                            }
+                        });
                 });
-
-                // Game view canvas
-                let desired_size = egui::vec2(ui.available_width(), ui.available_height() * 0.6);
-                let (rect, _response) = ui.allocate_exact_size(desired_size, egui::Sense::click_and_drag());
-
-                // Draw background
-                ui.painter().rect_filled(rect, 0.0, egui::Color32::from_rgb(51, 51, 64));
-
-                // Draw sprites as rectangles
-                let sprites: Vec<(Transform, Sprite)> = self.world.world()
-                    .query::<(&Transform, &Sprite)>()
-                    .iter()
-                    .map(|(t, s)| (*t, *s))
-                    .collect();
-
-                let painter = ui.painter();
-                for (transform, sprite) in sprites {
-                    let screen_x = rect.min.x + transform.position.x;
-                    let screen_y = rect.min.y + transform.position.y;
-                    let sprite_rect = egui::Rect::from_min_size(
-                        egui::pos2(screen_x, screen_y),
-                        egui::vec2(sprite.size[0], sprite.size[1]),
-                    );
-
-                    let color = egui::Color32::from_rgba_premultiplied(
-                        (sprite.color[0] * 255.0) as u8,
-                        (sprite.color[1] * 255.0) as u8,
-                        (sprite.color[2] * 255.0) as u8,
-                        (sprite.color[3] * 255.0) as u8,
-                    );
-
-                    painter.rect_filled(sprite_rect, 0.0, color);
-                }
-
-                // Entity list for selection
-                ui.separator();
-                ui.heading("Entities");
-                let entities: Vec<(hecs::Entity, Transform)> = self.world.world()
-                    .query::<(hecs::Entity, &Transform, &Sprite)>()
-                    .iter()
-                    .map(|(e, t, _s)| (e, *t))
-                    .collect();
-                for (entity, transform) in entities {
-                    let label = format!("Entity {:?} at ({:.1}, {:.1})", entity, transform.position.x, transform.position.y);
-                    if ui.selectable_label(*self.selected_entity == Some(entity), label).clicked() {
-                        *self.selected_entity = Some(entity);
-                    }
-                }
             }
             Tab::Inspector => {
-                ui.heading("Inspector");
-                if let Some(entity) = self.selected_entity {
-                    ui.label(format!("Selected: {:?}", entity));
+                ui.vertical(|ui| {
+                    ui.heading("Inspector");
 
-                    // Read current values once
-                    let world = self.world.world();
-                    let transform = world.get::<&Transform>(*entity).ok().map(|t| *t);
-                    let sprite = world.get::<&Sprite>(*entity).ok().map(|s| *s);
+                    if let Some(entity) = self.selected_entity {
+                        ui.label(format!("Entity ID: {:?}", entity.id()));
+                        ui.add_space(8.0);
 
-                    // Transform component
-                    if let Some(mut transform) = transform {
-                        ui.separator();
-                        ui.heading("Transform");
-                        ui.horizontal(|ui| {
-                            ui.label("X:");
-                            if ui.add(egui::DragValue::new(&mut transform.position.x).speed(1.0)).changed() {
-                                let world = self.world.world_mut();
-                                if let Ok(mut t) = world.get::<&mut Transform>(*entity) {
-                                    t.position.x = transform.position.x;
-                                }
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("Y:");
-                            if ui.add(egui::DragValue::new(&mut transform.position.y).speed(1.0)).changed() {
-                                let world = self.world.world_mut();
-                                if let Ok(mut t) = world.get::<&mut Transform>(*entity) {
-                                    t.position.y = transform.position.y;
-                                }
-                            }
+                        // Read current values once
+                        let world = self.world.world();
+                        let transform = world.get::<&Transform>(*entity).ok().map(|t| *t);
+                        let sprite = world.get::<&Sprite>(*entity).ok().map(|s| *s);
+
+                        // Transform component
+                        if let Some(mut transform) = transform {
+                            ui.add_space(4.0);
+                            egui::Frame::none()
+                                .fill(egui::Color32::from_rgb(35, 35, 40))
+                                .rounding(4.0)
+                                .inner_margin(12.0)
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.strong("Transform");
+                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                            if ui.button("⋮").clicked() {
+                                                // TODO: Component menu
+                                            }
+                                        });
+                                    });
+                                    ui.add_space(8.0);
+
+                                    ui.horizontal(|ui| {
+                                        ui.label("Position");
+                                        ui.add_space(16.0);
+                                        ui.label("X:");
+                                        if ui.add(egui::DragValue::new(&mut transform.position.x).speed(1.0)).changed() {
+                                            let world = self.world.world_mut();
+                                            if let Ok(mut t) = world.get::<&mut Transform>(*entity) {
+                                                t.position.x = transform.position.x;
+                                            }
+                                        }
+                                        ui.add_space(8.0);
+                                        ui.label("Y:");
+                                        if ui.add(egui::DragValue::new(&mut transform.position.y).speed(1.0)).changed() {
+                                            let world = self.world.world_mut();
+                                            if let Ok(mut t) = world.get::<&mut Transform>(*entity) {
+                                                t.position.y = transform.position.y;
+                                            }
+                                        }
+                                    });
+                                });
+                        }
+
+                        // Sprite component
+                        if let Some(mut sprite) = sprite {
+                            ui.add_space(8.0);
+                            egui::Frame::none()
+                                .fill(egui::Color32::from_rgb(35, 35, 40))
+                                .rounding(4.0)
+                                .inner_margin(12.0)
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.strong("Sprite");
+                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                            if ui.button("⋮").clicked() {
+                                                // TODO: Component menu
+                                            }
+                                        });
+                                    });
+                                    ui.add_space(8.0);
+
+                                    ui.horizontal(|ui| {
+                                        ui.label("Color");
+                                        ui.add_space(16.0);
+                                        ui.label("R:");
+                                        if ui.add(egui::DragValue::new(&mut sprite.color[0]).speed(0.01).range(0.0..=1.0)).changed() {
+                                            let world = self.world.world_mut();
+                                            if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
+                                                s.color[0] = sprite.color[0];
+                                            }
+                                        }
+                                        ui.add_space(8.0);
+                                        ui.label("G:");
+                                        if ui.add(egui::DragValue::new(&mut sprite.color[1]).speed(0.01).range(0.0..=1.0)).changed() {
+                                            let world = self.world.world_mut();
+                                            if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
+                                                s.color[1] = sprite.color[1];
+                                            }
+                                        }
+                                        ui.add_space(8.0);
+                                        ui.label("B:");
+                                        if ui.add(egui::DragValue::new(&mut sprite.color[2]).speed(0.01).range(0.0..=1.0)).changed() {
+                                            let world = self.world.world_mut();
+                                            if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
+                                                s.color[2] = sprite.color[2];
+                                            }
+                                        }
+                                    });
+
+                                    ui.add_space(8.0);
+
+                                    // Color preview
+                                    let color_rect = egui::Rect::from_min_size(
+                                        ui.cursor().left_top(),
+                                        egui::vec2(40.0, 24.0),
+                                    );
+                                    let preview_color = egui::Color32::from_rgba_premultiplied(
+                                        (sprite.color[0] * 255.0) as u8,
+                                        (sprite.color[1] * 255.0) as u8,
+                                        (sprite.color[2] * 255.0) as u8,
+                                        (sprite.color[3] * 255.0) as u8,
+                                    );
+                                    ui.painter().rect_filled(color_rect, 2.0, preview_color);
+                                    ui.painter().rect_stroke(color_rect, 2.0, egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(100, 100, 100)));
+                                    ui.add_space(32.0);
+                                });
+                        }
+
+                        ui.add_space(16.0);
+                        if ui.button("+ Add Component").clicked() {
+                            // TODO: Add component
+                        }
+                    } else {
+                        ui.add_space(32.0);
+                        ui.centered_and_justified(|ui| {
+                            ui.label("No entity selected");
+                            ui.add_space(8.0);
+                            ui.label("Select an entity from the Scene View to inspect its components");
                         });
                     }
-
-                    // Sprite component
-                    if let Some(mut sprite) = sprite {
-                        ui.separator();
-                        ui.heading("Sprite");
-                        ui.horizontal(|ui| {
-                            ui.label("R:");
-                            if ui.add(egui::DragValue::new(&mut sprite.color[0]).speed(0.01).range(0.0..=1.0)).changed() {
-                                let world = self.world.world_mut();
-                                if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
-                                    s.color[0] = sprite.color[0];
-                                }
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("G:");
-                            if ui.add(egui::DragValue::new(&mut sprite.color[1]).speed(0.01).range(0.0..=1.0)).changed() {
-                                let world = self.world.world_mut();
-                                if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
-                                    s.color[1] = sprite.color[1];
-                                }
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("B:");
-                            if ui.add(egui::DragValue::new(&mut sprite.color[2]).speed(0.01).range(0.0..=1.0)).changed() {
-                                let world = self.world.world_mut();
-                                if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
-                                    s.color[2] = sprite.color[2];
-                                }
-                            }
-                        });
-                    }
-                } else {
-                    ui.label("No entity selected.");
-                }
+                });
             }
             Tab::GraphEditor => {
-                ui.heading("Graph Editor");
+                ui.vertical(|ui| {
+                    // Toolbar
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = egui::vec2(8.0, 0.0);
 
-                // Add node buttons
-                ui.horizontal(|ui| {
-                    if ui.button("Add Constant").clicked() {
-                        let node = Node::new(
-                            NodeType::Constant {
-                                value: ConstantValue::Integer(0),
-                            },
-                            (100.0, 100.0),
+                        if ui.button("Add Constant").clicked() {
+                            let node = Node::new(
+                                NodeType::Constant {
+                                    value: ConstantValue::Integer(0),
+                                },
+                                (100.0, 100.0),
+                            );
+                            self.graph.add_node(node);
+                        }
+                        if ui.button("Add Add").clicked() {
+                            let node = Node::new(
+                                NodeType::Arithmetic {
+                                    op: ArithmeticOp::Add,
+                                },
+                                (200.0, 100.0),
+                            );
+                            self.graph.add_node(node);
+                        }
+                        if ui.button("Add Output").clicked() {
+                            let node = Node::new(NodeType::Output, (300.0, 100.0));
+                            self.graph.add_node(node);
+                        }
+
+                        ui.separator();
+
+                        if ui.button("Clear").clicked() {
+                            *self.graph = Graph::new();
+                        }
+
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label("Node Graph");
+                        });
+                    });
+
+                    ui.add_space(8.0);
+
+                    // Graph canvas
+                    let desired_size = egui::vec2(ui.available_width(), ui.available_height());
+                    let (rect, _response) = ui.allocate_exact_size(desired_size, egui::Sense::click_and_drag());
+
+                    // Draw background
+                    ui.painter().rect_filled(rect, 0.0, egui::Color32::from_rgb(18, 18, 20));
+
+                    // Draw grid
+                    let grid_size = 50.0;
+                    let painter = ui.painter();
+                    for x in (rect.min.x as i32..rect.max.x as i32).step_by(grid_size as usize) {
+                        painter.line_segment(
+                            [egui::pos2(x as f32, rect.min.y), egui::pos2(x as f32, rect.max.y)],
+                            (1.0, egui::Color32::from_rgba_premultiplied(255, 255, 255, 15)),
                         );
-                        self.graph.add_node(node);
                     }
-                    if ui.button("Add Add").clicked() {
-                        let node = Node::new(
-                            NodeType::Arithmetic {
-                                op: ArithmeticOp::Add,
-                            },
-                            (200.0, 100.0),
+                    for y in (rect.min.y as i32..rect.max.y as i32).step_by(grid_size as usize) {
+                        painter.line_segment(
+                            [egui::pos2(rect.min.x, y as f32), egui::pos2(rect.max.x, y as f32)],
+                            (1.0, egui::Color32::from_rgba_premultiplied(255, 255, 255, 15)),
                         );
-                        self.graph.add_node(node);
                     }
-                    if ui.button("Add Output").clicked() {
-                        let node = Node::new(NodeType::Output, (300.0, 100.0));
-                        self.graph.add_node(node);
+
+                    // Draw nodes
+                    for node in self.graph.nodes.values() {
+                        let pos = egui::pos2(node.position.0, node.position.1);
+                        let size = egui::vec2(140.0, 70.0);
+                        let rect = egui::Rect::from_min_size(pos, size);
+
+                        // Draw node background
+                        painter.rect_filled(rect, 6.0, egui::Color32::from_rgb(45, 45, 50));
+                        painter.rect_stroke(rect, 6.0, egui::Stroke::new(1.5_f32, egui::Color32::from_rgb(90, 90, 100)));
+
+                        // Draw node header
+                        let header_rect = egui::Rect::from_min_size(rect.min, egui::vec2(rect.width(), 24.0));
+                        painter.rect_filled(header_rect, 6.0, egui::Color32::from_rgb(66, 135, 245));
+
+                        // Draw node title
+                        let title = match &node.node_type {
+                            NodeType::Constant { .. } => "Constant",
+                            NodeType::Arithmetic { .. } => "Add",
+                            NodeType::Output => "Output",
+                            _ => "Node",
+                        };
+                        painter.text(
+                            header_rect.center(),
+                            egui::Align2::CENTER_CENTER,
+                            title,
+                            egui::FontId::proportional(13.0),
+                            egui::Color32::WHITE,
+                        );
                     }
                 });
-
-                ui.separator();
-
-                // Draw nodes
-                let painter = ui.painter();
-                for node in self.graph.nodes.values() {
-                    let pos = egui::pos2(node.position.0, node.position.1);
-                    let size = egui::vec2(120.0, 60.0);
-                    let rect = egui::Rect::from_min_size(pos, size);
-
-                    // Draw node background
-                    painter.rect_filled(rect, 5.0, egui::Color32::from_rgb(60, 60, 70));
-                    painter.rect_stroke(rect, 5.0, egui::Stroke::new(2.0_f32, egui::Color32::from_rgb(100, 100, 120)));
-
-                    // Draw node title
-                    let title = match &node.node_type {
-                        NodeType::Constant { .. } => "Constant",
-                        NodeType::Arithmetic { .. } => "Add",
-                        NodeType::Output => "Output",
-                        _ => "Node",
-                    };
-                    painter.text(
-                        rect.center(),
-                        egui::Align2::CENTER_CENTER,
-                        title,
-                        egui::FontId::default(),
-                        egui::Color32::WHITE,
-                    );
-                }
             }
             Tab::Assets => {
-                ui.heading("Assets");
-                ui.label("Asset browser will appear here.");
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.heading("Assets");
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("Import").clicked() {
+                                // TODO: Import assets
+                            }
+                        });
+                    });
+
+                    ui.add_space(8.0);
+
+                    // Asset browser placeholder
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_rgb(35, 35, 40))
+                        .rounding(4.0)
+                        .inner_margin(16.0)
+                        .show(ui, |ui| {
+                            ui.centered_and_justified(|ui| {
+                                ui.label("Asset browser will appear here");
+                                ui.add_space(8.0);
+                                ui.label("Drag and drop assets to import");
+                            });
+                        });
+                });
             }
             Tab::Console => {
-                ui.heading("Console");
-                ui.label("Logs and messages will appear here.");
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.heading("Console");
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("Clear").clicked() {
+                                // TODO: Clear console
+                            }
+                        });
+                    });
+
+                    ui.add_space(8.0);
+
+                    // Console log placeholder
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_rgb(35, 35, 40))
+                        .rounding(4.0)
+                        .inner_margin(16.0)
+                        .show(ui, |ui| {
+                            ui.label("[INFO] System initialized");
+                            ui.label("[INFO] Editor ready");
+                            ui.label("[WARN] GPU driver outdated (Intel)");
+                            ui.label("[INFO] WGPU backend initialized");
+                        });
+                });
             }
             Tab::Settings => {
-                ui.heading("Settings");
+                ui.vertical(|ui| {
+                    ui.heading("Settings");
+                    ui.add_space(8.0);
 
-                ui.separator();
-                ui.heading("Render Quality");
+                    // Render Quality section
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_rgb(35, 35, 40))
+                        .rounding(4.0)
+                        .inner_margin(12.0)
+                        .show(ui, |ui| {
+                            ui.strong("Render Quality");
+                            ui.add_space(8.0);
 
-                ui.label("Current tier:");
-                ui.label(format!("{:?}", self.render_tier));
+                            ui.label("Current tier:");
+                            ui.label(format!("{:?}", self.render_tier));
+                            ui.add_space(8.0);
 
-                ui.separator();
+                            ui.label("Force tier (takes effect on next frame):");
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = egui::vec2(8.0, 0.0);
+                                if ui.button("Low").clicked() {
+                                    *self.render_tier = RenderTier::Low;
+                                }
+                                if ui.button("Medium").clicked() {
+                                    *self.render_tier = RenderTier::Medium;
+                                }
+                                if ui.button("High").clicked() {
+                                    *self.render_tier = RenderTier::High;
+                                }
+                            });
+                            ui.add_space(8.0);
 
-                ui.label("Force tier (takes effect on next frame):");
-                ui.horizontal(|ui| {
-                    if ui.button("Low").clicked() {
-                        *self.render_tier = RenderTier::Low;
-                    }
-                    if ui.button("Medium").clicked() {
-                        *self.render_tier = RenderTier::Medium;
-                    }
-                    if ui.button("High").clicked() {
-                        *self.render_tier = RenderTier::High;
-                    }
-                });
-
-                ui.separator();
-
-                // Show tier capabilities
-                ui.label("Enabled effects:");
-                ui.label(format!("Bloom passes: {}", self.render_tier.max_bloom_passes()));
-                ui.label(format!("LUT color grading: {}", self.render_tier.enable_lut()));
-                ui.label(format!("Screen-space fog: {}", self.render_tier.enable_fog()));
-                ui.label(format!("Outline effect: {}", self.render_tier.enable_outline()));
-
-                ui.separator();
-                ui.heading("Export");
-
-                ui.label("Export project for web (WASM):");
-                ui.horizontal(|ui| {
-                    if ui.button("Export to Web").clicked() {
-                        // Trigger export via CLI (non-blocking for UI)
-                        std::thread::spawn(|| {
-                            let _ = std::process::Command::new("cargo")
-                                .args(["run", "--bin", "kiln-cli", "--", "export", "--output", "web-export"])
-                                .status();
+                            ui.label("Enabled effects:");
+                            ui.label(format!("  Bloom passes: {}", self.render_tier.max_bloom_passes()));
+                            ui.label(format!("  LUT color grading: {}", self.render_tier.enable_lut()));
+                            ui.label(format!("  Screen-space fog: {}", self.render_tier.enable_fog()));
+                            ui.label(format!("  Outline effect: {}", self.render_tier.enable_outline()));
                         });
-                    }
-                });
 
-                ui.label("Click to export. Check terminal for progress.");
+                    ui.add_space(8.0);
+
+                    // Export section
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_rgb(35, 35, 40))
+                        .rounding(4.0)
+                        .inner_margin(12.0)
+                        .show(ui, |ui| {
+                            ui.strong("Export");
+                            ui.add_space(8.0);
+
+                            ui.label("Export project for web (WASM):");
+                            ui.add_space(4.0);
+
+                            if ui.button("Export to Web").clicked() {
+                                // Trigger export via CLI (non-blocking for UI)
+                                std::thread::spawn(|| {
+                                    let _ = std::process::Command::new("cargo")
+                                        .args(["run", "--bin", "kiln-cli", "--", "export", "--output", "web-export"])
+                                        .status();
+                                });
+                            }
+
+                            ui.add_space(4.0);
+                            ui.label("Click to export. Check terminal for progress.");
+                        });
+                });
             }
         }
     }

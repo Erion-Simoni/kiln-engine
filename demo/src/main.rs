@@ -81,7 +81,7 @@ impl App {
     async fn init_gpu(&mut self, window: Arc<Window>) {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
+            backends: wgpu::Backends::all(),
             ..Default::default()
         });
         // The surface is 'static because the window is kept alive in `GpuState`.

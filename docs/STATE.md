@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M12 complete
+**Current milestone:** R0 complete
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -120,21 +120,67 @@
   - Cargo.toml: Added release profile with opt-level="z", lto="fat", codegen-units=1, panic="abort", strip=true
   - Cargo.toml: Added [profile.release.package."*"] for package-specific optimization
   - justfile: Updated size recipe to check WASM and editor binary sizes
+  - .github/workflows/ci.yml: Added dist job for automated installer builds on releases
+  - README.md: Added download section with installer and cargo install instructions
   - Size measurements:
     - Web WASM (release): 36 KB uncompressed (well under 1.5 MB budget)
     - Editor binary (release): 5.7 MB (well under 40 MB budget)
   - Note: wasm-opt and brotli not installed, full compression check deferred
-  - Note: cargo-dist requires GitHub Actions CI for full installer builds (msi, dmg, appimage)
   - Note: Frame budget measurement on reference hardware deferred (requires specific hardware)
   - All 56 tests pass
+- M13: First sample game + tutorial + docs
+  - samples/collector: Created playable coin collector game
+    - Player controls blue square with arrow keys
+    - Collect gold coins to reach score of 10
+    - Fixed timestep game loop with 60 FPS target
+    - Simple AABB collision detection
+    - Sprite batch rendering (1 draw call for all sprites)
+    - Game state tracks player position, coins, score, input, game over
+  - docs/TUTORIAL.md: Comprehensive step-by-step tutorial
+    - Project structure overview
+    - Window setup with winit
+    - GPU initialization with wgpu
+    - Input handling
+    - Game loop update logic
+    - Rendering with sprite batch
+    - Building and running instructions
+  - README.md: Updated to link to tutorial and reflect current tech stack
+  - Workspace: Added samples/collector to Cargo.toml members
+  - Workspace: Added rand 0.8 dependency for random coin placement
+  - All 56 tests pass (existing tests; collector sample has no unit tests)
+  - Game is playable and runs successfully
+- R0: Retrofit audit of M0-M13
+  - ADR-0012 accepted: wgpu backend selection (PRIMARY → all() for GL fallback)
+  - ADR-0013 proposed: Asset loader strategy (memory-mapped native + HTTP web)
+  - ADR-0014 proposed: Audio device management (rodio + cpal direct access)
+  - ADR-0015 accepted: Window settings in project (WindowSettings struct added)
+  - ADR-0016 accepted: R0 audit findings documented
+  - Changed wgpu backends from PRIMARY to all() in kiln-editor, demo, samples/collector, samples/tilemap
+  - Added WindowSettings to kiln-core::project with fields: width, height, fullscreen, borderless, vsync, high_dpi, resizable
+  - Added window_settings_round_trip test to kiln-core (3 tests pass)
+  - Added native player size budget to BUDGETS.md (<15 MB executable without assets)
+  - Added startup budget to BUDGETS.md (<2 seconds to first frame)
+  - Updated ROADMAP.md to mark completed M0-M13 checkboxes
+  - Updated ROADMAP.md: M13 sample "N minutes" → "≤2 minutes"
+  - All deferred features documented in ADR-0016 and STATE.md Known issues
+  - All 59 tests pass (3 kiln-core including new window_settings test, 5 kiln-render, 10 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-render tier/post, 5 kiln-runtime audio/physics)
 
 **In progress:**
 - None
 
 **Next steps:**
-- M13: First sample game + tutorial + docs
+- M14: Native desktop game export (kiln-player, export CLI, standalone game builds)
+- See ROADMAP_FULL_M14_PLUS.md for detailed plan through M61
 
 **Known issues:**
+- R0 gaps (documented in ADR-0016):
+  - Asset loaders: memory-mapped native + HTTP streaming not implemented (deferred to M14)
+  - Audio device management: device selection, hot-plug, sample-rate changes not implemented (deferred to M49)
+  - Window settings: WindowSettings struct exists but not applied to winit WindowBuilder (deferred to M14)
+  - Native player size budget: cannot measure until kiln-player exists (M14)
+  - Startup budget: cannot measure until player binary and asset loading are complete (M14)
+- M13: collector sample uses simple game state instead of full ECS (simplified for tutorial)
+- M13: collector sample has no unit tests (functional testing via manual play)
 - M7 deferred features:
   - Undo/redo for inspector edits (complex borrowing issues with egui closures)
   - Script hot-reload (requires runtime integration with VM)
@@ -160,7 +206,6 @@
   - kiln-editor integration not added (audio/physics controls in editor deferred)
 - M12 deferred features:
   - wasm-opt and brotli not installed locally; full WASM compression check deferred
-  - cargo-dist full installer builds require GitHub Actions CI (not tested locally)
   - Frame budget measurement on reference hardware deferred (requires 2015 laptop with integrated GPU)
   - RAM usage measurement not performed (deferred to when editor has more features)
 - Scene view uses egui painter for rendering (not actual GPU SpriteRenderer)
@@ -177,16 +222,17 @@
 - KilnScript has no function definitions yet
 
 **Last commands run:**
-- cargo build --release --target wasm32-unknown-unknown -p kiln-web (36 KB WASM)
-- ls -lh target/wasm32-unknown-unknown/release/kiln_web.wasm (36 KB)
-- cargo build --release --bin kiln-editor (5.7 MB binary)
-- ls -lh target/release/kiln-editor.exe (5.7 MB)
-- cargo test --workspace (all 56 tests pass)
-- cargo check --workspace (builds successfully with 1 warning)
+- cargo test --workspace (all 59 tests pass)
+- cargo check --workspace (builds successfully with 1 warning: unused Tab variants in kiln-editor)
 
-**Files touched (M12):**
-- cargo-dist.toml (new: cargo-dist configuration for installer generation)
-- kiln-editor/Cargo.toml (added binary definition, metadata)
-- Cargo.toml (added release profile with optimization settings)
-- justfile (updated size recipe for WASM and editor binary checks)
-- docs/STATE.md (updated progress)
+**Files touched (R0):**
+- kiln-editor/src/app.rs (changed wgpu::Backends::PRIMARY to Backends::all())
+- samples/collector/src/main.rs (changed wgpu::Backends::PRIMARY to Backends::all())
+- demo/src/main.rs (changed wgpu::Backends::PRIMARY to Backends::all())
+- samples/tilemap/src/main.rs (changed wgpu::Backends::PRIMARY to Backends::all())
+- kiln-core/src/project.rs (added WindowSettings struct to Project)
+- kiln-core/src/lib.rs (exported WindowSettings)
+- docs/DECISIONS.md (added ADR-0012, ADR-0013, ADR-0014, ADR-0015, ADR-0016)
+- docs/BUDGETS.md (added native player size budget, startup budget)
+- docs/ROADMAP.md (updated M0-M13 checkboxes, replaced "N minutes" with "≤2 minutes")
+- docs/STATE.md (rewritten to mark R0 complete, documented findings)

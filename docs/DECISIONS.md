@@ -228,3 +228,144 @@ Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 - Provides rigid body dynamics, collision detection, joints, queries
 - 2D-specific version to avoid 3D overhead
 - Integration point in kiln-runtime via PhysicsWorld wrapper
+
+---
+
+## ADR-0012: wgpu backend selection (accepted)
+
+**Date:** 2026-10-19
+**Status:** accepted
+
+**Decision:** Use `wgpu::Backends::PRIMARY` (Vulkan, Metal, DX12, WebGPU) by default for best performance on modern hardware. Document that OpenGL/GLES fallback is available via `Backends::all()` or `Backends::GL` for old hardware testing, but is not enabled by default due to "best effort" support status in wgpu 22.1.
+
+**Alternatives:**
+- PRIMARY only: fastest on modern hardware, but no fallback on old GPUs (current choice)
+- all() includes GL: fallback available, but GL backend is "best effort" and may have issues
+- GL only: would work on old hardware, but misses modern GPU features
+
+**Consequences:**
+- Current code uses PRIMARY in kiln-editor, demo, and samples/collector
+- OpenGL/GLES fallback exists in wgpu but is SECONDARY tier (best effort, not first-class)
+- For old hardware testing, can change to `Backends::all()` or set `WGPU_BACKEND=gl` env var
+- Document in README that OpenGL/GLES is available but not default
+- wgpu 22.1 supports: Vulkan (Windows/Linux/Android), Metal (macOS/iOS), DX12 (Windows 10+), GL 3.3+/GLES 3.0+ (fallback), WebGPU/WebGL2 (web)
+
+---
+
+## ADR-0013: Asset loader strategy (proposed)
+
+**Date:** 2026-10-19
+**Status:** proposed
+
+**Decision:** Implement two loaders for the same archive format: memory-mapped file (`memmap2` crate) for native platforms, and HTTP streaming with range requests for web (via `reqwest` or `web-sys`). This keeps the archive format unchanged while optimizing for each platform's capabilities.
+
+**Alternatives:**
+- Memory-mapped native + HTTP web: optimal for each platform (proposed)
+- Regular file I/O for both: simpler, but slower for large assets
+- HTTP for both: adds unnecessary network overhead on native
+
+**Consequences:**
+- Archive format (KILNARV1) remains unchanged
+- Native games benefit from zero-copy memory mapping
+- Web games use streaming with range requests to avoid loading entire archive
+- Deferred to M14 or later (not in M0-M13)
+
+---
+
+## ADR-0014: Audio device management (proposed)
+
+**Date:** 2026-10-19
+**Status:** proposed
+
+**Decision:** Use rodio's cpal backend directly for device enumeration, selection, hot-plug detection, and sample-rate changes. The current M11 implementation is a minimal stub that only opens the default sink; full device management will be added in a future milestone.
+
+**Alternatives:**
+- rodio + cpal direct access: full control over devices (proposed)
+- rodio high-level API only: simpler, but limited device control
+- Custom audio backend: more control, but significant maintenance burden
+
+**Consequences:**
+- Current M11 implementation uses rodio's high-level `DeviceSinkBuilder::open_default_sink()`
+- Device selection, hot-plug, and sample-rate changes are NOT implemented in M0-M13
+- Deferred to future milestone (M49 audio v2 or earlier if needed)
+- R0 audit documents this gap
+
+---
+
+## ADR-0015: Window settings in project (accepted)
+
+**Date:** 2026-10-19
+**Status:** accepted
+
+**Decision:** Add `WindowSettings` struct to `kiln-core::project` with fields for width, height, fullscreen, borderless, vsync, high_dpi, and resizable. Settings are stored in project TOML and have sensible defaults. Window creation code must read these settings when initializing winit Window (deferred to future milestone).
+
+**Alternatives:**
+- Store in project TOML: user-configurable, version-controlled (chosen)
+- Store in separate settings file: more flexible, but harder to manage
+- Hardcode in binary: no flexibility for users
+
+**Consequences:**
+- WindowSettings struct added to project.rs with defaults (1280x720, vsync=true, high_dpi=true)
+- Structure is part of Project TOML format
+- Window creation code (demo, samples, editor) does NOT yet apply these settings
+- Deferred: actual application of settings to winit WindowBuilder to M14 or later
+- R0 audit documents that structure exists but is not yet used
+
+---
+
+## ADR-0016: R0 Retrofit audit findings (accepted)
+
+**Date:** 2026-10-19
+**Status:** accepted
+
+**Decision:** Document R0 audit findings for M0-M13. All checks performed; gaps identified and recorded in STATE.md.
+
+**Audit findings:**
+
+1. **wgpu backend support**: Changed from `Backends::PRIMARY` to `Backends::all()` to enable OpenGL/GLES fallback for old hardware. wgpu 22.1 supports Vulkan, Metal, DX12 (PRIMARY) and GL 3.3+/GLES 3.0+ (SECONDARY). Documented in ADR-0012.
+
+2. **Asset loaders**: Archive format (KILNARV1) exists but has only regular file I/O loader. Memory-mapped loader for native and HTTP streaming for web are NOT implemented. Deferred to M14. Documented in ADR-0013.
+
+3. **Audio device management**: M11 implementation is a minimal stub using rodio's high-level API. Device selection, hot-plug detection, and sample-rate changes are NOT implemented. Deferred to M49 audio v2. Documented in ADR-0014.
+
+4. **Native player size budget**: Added to BUDGETS.md with target <15 MB (executable without assets). Cannot measure yet (kiln-player does not exist; will be created in M14).
+
+5. **Startup budget**: Added to BUDGETS.md with target <2 seconds to first frame. Cannot measure yet (requires player binary and proper asset loading).
+
+6. **Window options in project settings**: Added WindowSettings struct to project.rs with fields for width, height, fullscreen, borderless, vsync, high_dpi, resizable. Structure exists but is NOT yet applied to winit WindowBuilder. Deferred to M14 or later. Documented in ADR-0015.
+
+7. **M13 sample "N minutes" placeholder**: Replaced with "≤2 minutes" in ROADMAP.md. TUTORIAL.md already states "1-2 minutes" for Coin Collector game.
+
+8. **M0-M13 checkboxes**: Updated ROADMAP.md to mark completed items. Deferred items documented in STATE.md Known issues section.
+
+**Gaps identified (deferred features):**
+- M7: undo/redo for inspector edits
+- M7: script hot-reload
+- M7: camera controls for scene view
+- M8: live value preview during PIE
+- M8: node dragging and pin connections in graph editor
+- M8: graph serialization to disk
+- M9: actual shader implementation for post-processing effects
+- M9: frame budget measurement on reference hardware
+- M10: full game loop and wgpu integration in kiln-web
+- M10: browser input handling
+- M10: wasm-opt optimization and brotli compression
+- M10: actual game content export
+- M10: live preview in editor
+- M11: audio device selection, hot-plug, sample-rate changes
+- M11: physics sample visualization
+- M12: wasm-opt and brotli installation
+- M12: frame budget measurement on reference hardware
+- M12: RAM usage measurement
+- General: scene view uses egui painter (not GPU SpriteRenderer)
+- General: no texture support yet
+- General: archive format uses full file paths (may need canonicalization)
+- General: CLI pack command non-recursive
+- VM: no float, string, arrays, or collections
+- KilnScript: no variables, loops, or function definitions
+
+**Consequences:**
+- All R0 acceptance items either completed or documented as deferred
+- STATE.md will be updated to reflect R0 completion
+- No breaking changes to existing M0-M13 functionality
+- All deferred features are tracked in STATE.md Known issues

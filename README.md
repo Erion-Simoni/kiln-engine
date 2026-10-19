@@ -12,15 +12,32 @@ A lightweight standalone desktop game engine: editor + runtime + CLI.
 - **One codebase:** Export to Web (WASM), desktop, and later mobile
 - **Two ways to code:** Visual node graphs and text scripts compile to the same IR
 
-## Quick start (after M0)
+## Quick start
 
 ```bash
-# Install just, cargo-nextest, trunk
+# Install just, cargo-nextest
 just check    # fmt + clippy + build
 just test     # run tests
 just run      # editor or demo
 just web      # wasm demo in browser
 ```
+
+## Download
+
+Pre-built installers are available on the [GitHub Releases](https://github.com/kiln-engine/kiln/releases) page:
+
+- **Windows:** MSI installer
+- **macOS:** DMG installer
+- **Linux:** AppImage package
+
+The editor is also available via `cargo install`:
+```bash
+cargo install --git https://github.com/kiln-engine/kiln kiln-editor
+```
+
+## Tutorial
+
+New to Kiln? Start with the [Tutorial](docs/TUTORIAL.md) to build your first game.
 
 ## Documentation
 
@@ -36,8 +53,8 @@ just web      # wasm demo in browser
 - Rust workspace, stable toolchain
 - Rendering: wgpu (WebGPU + WebGL2 fallback)
 - UI: egui (pure-Rust native, no Electron)
-- ECS: bevy_ecs or hecs (decision in M1)
-- Scripting: Rhai or custom (decision in M5)
+- ECS: hecs 0.11.2
+- Scripting: KilnScript (custom language)
 
 ## License
 

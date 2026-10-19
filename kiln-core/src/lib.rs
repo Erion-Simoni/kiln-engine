@@ -10,5 +10,5 @@ pub mod transform;
 pub use math::*;
 pub use time::*;
 pub use id::*;
-pub use project::*;
+pub use project::{Project, Scene, Entity, Component, WindowSettings};
 pub use transform::*;

@@ -1,0 +1,21 @@
+[package]
+name = "collector"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "collector"
+path = "src/main.rs"
+
+[dependencies]
+kiln-core    = { workspace = true }
+kiln-render  = { workspace = true }
+kiln-runtime = { workspace = true }
+wgpu         = { workspace = true }
+winit        = { workspace = true }
+pollster     = { workspace = true }
+log          = { workspace = true }
+env_logger   = { workspace = true }
+rand         = "0.8"

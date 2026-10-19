@@ -15,13 +15,33 @@ brotli output.wasm -o output.wasm.br
 ls -l output.wasm.br
 ```
 
-**Current status:** Not yet measured (record after M0)
+**Current status:** 36 KB uncompressed (measured in M12, release build); brotli compression not yet measured (wasm-opt not installed locally)
 
 **Notes:**
 - Measure with `wasm-opt -Oz` and brotli
 - Include only runtime dependencies (no editor)
 - Feature-gate physics/audio to stay under budget
-- Record real numbers in STATE.md after M0
+- Current 36 KB is well under 1.5 MB budget
+
+---
+
+## Native player binary
+
+**Target:** <15 MB (executable without assets)
+
+**Measurement:**
+```bash
+cargo build --release --bin kiln-player
+ls -lh target/release/kiln-player
+```
+
+**Current status:** Not yet measured (kiln-player does not exist yet; will be created in M14)
+
+**Notes:**
+- Player binary contains only runtime, not editor
+- Assets shipped separately in packed archive format
+- Target is for stripped release build (LTO, panic=abort, strip=true)
+- Measure separately from editor installer
 
 ---
 
@@ -35,12 +55,32 @@ cargo-dist build
 ls -lh dist/kiln-*.msi  # or .dmg, .AppImage
 ```
 
-**Current status:** Not yet measured (record after M12)
+**Current status:** 5.7 MB editor binary (measured in M12); installer not yet built
 
 **Notes:**
 - Use cargo-dist for packaging
 - Strip symbols, use LTO, panic=abort
 - Exclude debug symbols and large assets from installer
+
+---
+
+## Startup time to first frame
+
+**Target:** <2 seconds on desktop reference hardware
+
+**Measurement:**
+```bash
+# Instrument application with startup timing logs
+# Measure from process launch to first rendered frame
+```
+
+**Current status:** Not yet measured (record after M14 or when player binary exists)
+
+**Notes:**
+- Measure on desktop reference hardware (similar to frame budget reference)
+- Exclude time spent loading large game assets (measure with minimal sample)
+- Archive loading should be fast; defer to M14 when streaming loaders are implemented
+- Critical for perceived performance
 
 ---
 
@@ -126,7 +166,9 @@ Every new dependency must have an ADR entry with:
 
 CI will fail `just size` if:
 - Web WASM >1.5 MB brotli (after M10)
+- Native player binary >15 MB (after M14)
 - Editor installer >40 MB (after M12)
+- Startup time >2 seconds on reference hardware (after M14)
 - Editor idle RAM >300 MB (after M6)
 - Frame time >16.6 ms on reference device (after M12)
 

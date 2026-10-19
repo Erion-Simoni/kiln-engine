@@ -11,8 +11,32 @@ pub struct Project {
     pub version: String,
     pub features: Vec<String>,
     #[serde(default)]
+    pub window: WindowSettings,
+    #[serde(default)]
     pub scenes: HashMap<String, Scene>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowSettings {
+    #[serde(default = "default_window_width")]
+    pub width: u32,
+    #[serde(default = "default_window_height")]
+    pub height: u32,
+    #[serde(default)]
+    pub fullscreen: bool,
+    #[serde(default)]
+    pub borderless: bool,
+    #[serde(default)]
+    pub vsync: bool,
+    #[serde(default = "default_high_dpi")]
+    pub high_dpi: bool,
+    #[serde(default)]
+    pub resizable: bool,
+}
+
+fn default_window_width() -> u32 { 1280 }
+fn default_window_height() -> u32 { 720 }
+fn default_high_dpi() -> bool { true }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Scene {
@@ -52,7 +76,22 @@ impl Default for Project {
             name: "Untitled Project".to_string(),
             version: "0.1.0".to_string(),
             features: vec![],
+            window: WindowSettings::default(),
             scenes: HashMap::new(),
+        }
+    }
+}
+
+impl Default for WindowSettings {
+    fn default() -> Self {
+        Self {
+            width: default_window_width(),
+            height: default_window_height(),
+            fullscreen: false,
+            borderless: false,
+            vsync: true,
+            high_dpi: default_high_dpi(),
+            resizable: true,
         }
     }
 }
@@ -69,12 +108,31 @@ mod tests {
         let loaded = Project::from_toml(&toml).expect("deserialize");
         assert_eq!(loaded.name, "TestGame");
         assert_eq!(loaded.version, "0.1.0");
+        assert_eq!(loaded.window.width, 1280);
+        assert_eq!(loaded.window.height, 720);
     }
 
     #[test]
     fn default_has_no_scenes() {
         let proj = Project::default();
         assert!(proj.scenes.is_empty());
+    }
+
+    #[test]
+    fn window_settings_round_trip() {
+        let mut proj = Project::default();
+        proj.window.width = 1920;
+        proj.window.height = 1080;
+        proj.window.fullscreen = true;
+        proj.window.vsync = false;
+
+        let toml = proj.to_toml().expect("serialize");
+        let loaded = Project::from_toml(&toml).expect("deserialize");
+
+        assert_eq!(loaded.window.width, 1920);
+        assert_eq!(loaded.window.height, 1080);
+        assert_eq!(loaded.window.fullscreen, true);
+        assert_eq!(loaded.window.vsync, false);
     }
 }
 
