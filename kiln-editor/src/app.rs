@@ -6,6 +6,7 @@ use kiln_graph::{ArithmeticOp, ConstantValue, Graph, Node, NodeType};
 use kiln_render::RenderTier;
 use kiln_runtime::{GameWorld, Sprite};
 use kiln_ui::{Button, Label, List, Panel, Widget, WidgetId};
+use kiln_gameplay::{Dialogue, Quest, DataTable};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -38,6 +39,7 @@ pub struct EditorApp {
     frame_count: u32,
     ui_designer: UIDesignerState,
     prefab_editor: PrefabEditorState,
+    gameplay_editor: GameplayEditorState,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,6 +54,7 @@ enum Tab {
     UIDesigner,
     PrefabEditor,
     SceneEditor,
+    GameplayEditor,
 }
 
 struct GpuState {
@@ -105,6 +108,41 @@ struct UiNode {
     widget: UiWidget,
     children: Vec<WidgetId>,
     parent: Option<WidgetId>,
+}
+
+/// Gameplay editor state for dialogue, quests, and data tables.
+struct GameplayEditorState {
+    dialogues: HashMap<String, Dialogue>,
+    quests: HashMap<String, Quest>,
+    data_tables: HashMap<String, DataTable>,
+    selected_dialogue: Option<String>,
+    selected_quest: Option<String>,
+    selected_table: Option<String>,
+}
+
+impl GameplayEditorState {
+    fn new() -> Self {
+        Self {
+            dialogues: HashMap::new(),
+            quests: HashMap::new(),
+            data_tables: HashMap::new(),
+            selected_dialogue: None,
+            selected_quest: None,
+            selected_table: None,
+        }
+    }
+
+    fn add_dialogue(&mut self, dialogue: Dialogue) {
+        self.dialogues.insert(dialogue.id.clone(), dialogue);
+    }
+
+    fn add_quest(&mut self, quest: Quest) {
+        self.quests.insert(quest.id.clone(), quest);
+    }
+
+    fn add_data_table(&mut self, table: DataTable) {
+        self.data_tables.insert(table.id.clone(), table);
+    }
 }
 
 struct UIDesignerState {
@@ -247,6 +285,7 @@ impl EditorApp {
             frame_count: 0,
             ui_designer: UIDesignerState::new(),
             prefab_editor: PrefabEditorState::new(),
+            gameplay_editor: GameplayEditorState::new(),
         })
     }
 
@@ -440,6 +479,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                         self.dock_state.add_window(vec![Tab::SceneEditor]);
                         ui.close_menu();
                     }
+                    if ui.button("Gameplay Editor").clicked() {
+                        self.dock_state.add_window(vec![Tab::GameplayEditor]);
+                        ui.close_menu();
+                    }
                 });
 
                 ui.menu_button("Project", |ui| {
@@ -535,6 +578,7 @@ impl winit::application::ApplicationHandler for EditorApp {
                     render_tier: &mut self.render_tier,
                     ui_designer: &mut self.ui_designer,
                     prefab_editor: &mut self.prefab_editor,
+                    gameplay_editor: &mut self.gameplay_editor,
                 };
                 tree.show(ctx, &mut tab_viewer);
             });
@@ -644,6 +688,7 @@ struct TabViewer<'a> {
     render_tier: &'a mut RenderTier,
     ui_designer: &'a mut UIDesignerState,
     prefab_editor: &'a mut PrefabEditorState,
+    gameplay_editor: &'a mut GameplayEditorState,
 }
 
 impl<'a> egui_dock::TabViewer for TabViewer<'a> {
@@ -1518,6 +1563,101 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         });
                 });
             }
+            Tab::GameplayEditor => {
+                ui.vertical(|ui| {
+                    ui.heading("Gameplay Editor");
+                    ui.add_space(8.0);
+
+                    // Toolbar
+                    ui.horizontal(|ui| {
+                        if ui.button("New Dialogue").clicked() {
+                            let dialogue = Dialogue::new("new_dialogue".to_string(), "start".to_string());
+                            self.gameplay_editor.add_dialogue(dialogue);
+                        }
+                        if ui.button("New Quest").clicked() {
+                            let quest = Quest::new("new_quest".to_string(), "quest_name".to_string(), "quest_desc".to_string());
+                            self.gameplay_editor.add_quest(quest);
+                        }
+                        if ui.button("New Data Table").clicked() {
+                            let table = DataTable::new("new_table".to_string());
+                            self.gameplay_editor.add_data_table(table);
+                        }
+                    });
+
+                    ui.add_space(8.0);
+
+                    // Split view: list panel and detail panel
+                    ui.horizontal(|ui| {
+                        // Left panel: list of all gameplay content
+                        ui.vertical(|ui| {
+                            ui.label("Dialogues");
+                            for (id, _) in &self.gameplay_editor.dialogues {
+                                let is_selected = self.gameplay_editor.selected_dialogue.as_ref() == Some(id);
+                                if ui.selectable_label(is_selected, id).clicked() {
+                                    self.gameplay_editor.selected_dialogue = Some(id.clone());
+                                }
+                            }
+
+                            ui.add_space(8.0);
+                            ui.label("Quests");
+                            for (id, _) in &self.gameplay_editor.quests {
+                                let is_selected = self.gameplay_editor.selected_quest.as_ref() == Some(id);
+                                if ui.selectable_label(is_selected, id).clicked() {
+                                    self.gameplay_editor.selected_quest = Some(id.clone());
+                                }
+                            }
+
+                            ui.add_space(8.0);
+                            ui.label("Data Tables");
+                            for (id, _) in &self.gameplay_editor.data_tables {
+                                let is_selected = self.gameplay_editor.selected_table.as_ref() == Some(id);
+                                if ui.selectable_label(is_selected, id).clicked() {
+                                    self.gameplay_editor.selected_table = Some(id.clone());
+                                }
+                            }
+                        });
+
+                        ui.add_space(8.0);
+
+                        // Right panel: detail view
+                        egui::ScrollArea::vertical().show(ui, |ui| {
+                            if let Some(id) = &self.gameplay_editor.selected_dialogue {
+                                if let Some(dialogue) = self.gameplay_editor.dialogues.get(id) {
+                                    ui.heading(format!("Dialogue: {}", dialogue.id));
+                                    ui.label(format!("Start node: {}", dialogue.start_node));
+                                    ui.label(format!("Nodes: {}", dialogue.nodes.len()));
+                                    ui.add_space(8.0);
+                                    ui.label("Dialogue nodes are edited in the Graph Editor");
+                                    ui.label("with Dialogue, DialogueChoice, and variable nodes.");
+                                }
+                            } else if let Some(id) = &self.gameplay_editor.selected_quest {
+                                if let Some(quest) = self.gameplay_editor.quests.get(id) {
+                                    ui.heading(format!("Quest: {}", quest.id));
+                                    ui.label(format!("Name key: {}", quest.name_key));
+                                    ui.label(format!("Objectives: {}", quest.objectives.len()));
+                                    ui.label(format!("Prerequisites: {:?}", quest.prerequisites));
+                                    ui.add_space(8.0);
+                                    ui.label("Quest objectives are managed via graph nodes");
+                                    ui.label("(QuestStart, QuestComplete, QuestObjectiveUpdate).");
+                                }
+                            } else if let Some(id) = &self.gameplay_editor.selected_table {
+                                if let Some(table) = self.gameplay_editor.data_tables.get(id) {
+                                    ui.heading(format!("Data Table: {}", table.id));
+                                    ui.label(format!("Columns: {}", table.columns.len()));
+                                    ui.label(format!("Rows: {}", table.rows.len()));
+                                    ui.add_space(8.0);
+                                    ui.label("Import CSV format:");
+                                    ui.label("Row 1: Column names");
+                                    ui.label("Row 2: Data types (Integer, Float, String, Boolean)");
+                                    ui.label("Row 3+: Data values");
+                                }
+                            } else {
+                                ui.label("Select a dialogue, quest, or data table to view details.");
+                            }
+                        });
+                    });
+                });
+            }
         }
     }
 
@@ -1532,6 +1672,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::UIDesigner => "UI Designer".into(),
             Tab::PrefabEditor => "Prefab Editor".into(),
             Tab::SceneEditor => "Scene Editor".into(),
+            Tab::GameplayEditor => "Gameplay Editor".into(),
         }
     }
 }

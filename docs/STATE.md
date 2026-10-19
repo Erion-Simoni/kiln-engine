@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M24 complete (2D AI and navigation)
+**Current milestone:** M25 complete (Gameplay content tools)
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -342,15 +342,50 @@
   - samples/ai: Console demo showing grid pathfinding, navmesh pathfinding, dynamic obstacles, debug state
   - All 162 tests pass (16 kiln-core, 3 kiln-editor prefab, 13 kiln-render, 12 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-platform, 12 kiln-updater, 10 kiln-anim, 20 kiln-vfx, 33 kiln-ui, 13 kiln-input, 7 kiln-save, 8 kiln-runtime settings, 32 kiln-ai, 2 samples)
   - Binary size impact: Minimal (simple data structures, no heavy dependencies)
+- M25: Gameplay content tools
+  - kiln-gameplay crate created with dialogue, quest, and data table systems
+  - dialogue.rs: Dialogue trees with nodes, choices, conditions, and variables (8 tests)
+  - dialogue.rs: Condition types (VariableEquals, VariableGreaterThan, VariableLessThan, QuestStatus, QuestObjectiveComplete, AllOf, AnyOf, Not)
+  - dialogue.rs: Variable operations (Set, Add, Subtract, Multiply) for dialogue side effects
+  - quest.rs: Quest system with objectives, prerequisites, and state persistence (10 tests)
+  - quest.rs: QuestManager for tracking multiple quests with auto-start support
+  - quest.rs: Objective types (KillEnemies, CollectItems, TalkToNpc, ReachLocation, Custom)
+  - datatable.rs: Data tables with CSV import/export (9 tests)
+  - datatable.rs: Data types (Integer, Float, String, Boolean) with type-safe conversions
+  - datatable.rs: Find rows by column value, get specific row/column data
+  - kiln-graph: Added gameplay node types (Dialogue, DialogueChoice, QuestStart, QuestComplete, QuestObjectiveUpdate, DataTableLookup, DataTableRowGet)
+  - kiln-graph: Added String pin type for localization keys and data table lookups
+  - kiln-graph: Added String constant value type to ConstantValue enum
+  - kiln-graph: Compiler emits host calls for gameplay nodes (3 new tests)
+  - kiln-editor: Added GameplayEditor tab with dialogue, quest, and data table management
+  - kiln-editor: GameplayEditor UI shows list of content and detail view for selected items
+  - kiln-editor: Added kiln-gameplay dependency
+  - samples/gameplay: Console demo showing dialogue, quests, data tables, and inventory/stat system
+  - samples/gameplay: Inventory/stat system driven entirely by data tables (items CSV with stats)
+  - samples/gameplay: Demo shows condition evaluation, quest progress tracking, CSV import/export
+  - Workspace: added kiln-gameplay, csv 1.4 dependency
+  - All 195 tests pass (16 kiln-core, 3 kiln-editor prefab, 13 kiln-render, 12 kiln-assets, 11 kiln-ir, 16 kiln-script, 7 kiln-graph, 3 kiln-platform, 12 kiln-updater, 10 kiln-anim, 20 kiln-vfx, 33 kiln-ui, 13 kiln-input, 7 kiln-save, 8 kiln-runtime settings, 32 kiln-ai, 26 kiln-gameplay, 3 samples)
+  - Binary size impact: Minimal (csv 1.4 adds ~50 KB, gameplay systems are lightweight data structures)
 
 **In progress:**
 - None
 
 **Next steps:**
-- M25: Gameplay content tools
+- M26: iOS export + mobile store release (v0.5 gate)
 - See ROADMAP_FULL_M14_PLUS.md for detailed plan through M61
 
 **Known issues:**
+- M25 gaps:
+  - Dialogue runtime integration not implemented (graph nodes compile to host calls but no actual dialogue execution)
+  - Quest runtime integration not implemented (graph nodes compile to host calls but no actual quest execution)
+  - Data table lookup not integrated with actual game data (API designed but not connected to runtime)
+  - Dialogue editor UI is informational only (no actual node/graph editing for dialogue trees)
+  - Quest editor UI is informational only (no objective editing or prerequisite management)
+  - Data table editor UI is informational only (no actual CSV editing or spreadsheet-style interface)
+  - Localization keys are not resolved to actual text (strings are passed through as-is)
+  - Dialogue variables are not persisted to save files (in-memory only)
+  - Quest state is not integrated with kiln-save (serializes but not used by actual save system)
+  - Graph nodes for gameplay are not connectable in editor UI (buttons exist but no pin connection logic)
 - M24 gaps:
   - Behavior tree runtime integration not implemented (graph nodes compile to host calls but no actual behavior tree execution)
   - AI state machine runtime integration not implemented (graph nodes compile to host calls but no actual state machine execution)

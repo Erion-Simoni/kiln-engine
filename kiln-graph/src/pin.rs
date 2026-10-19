@@ -18,6 +18,8 @@ pub enum PinType {
     Boolean,
     /// Event/trigger (no data, just signal).
     Event,
+    /// String value (for localization keys, data table lookups).
+    String,
 }
 
 /// A pin on a node (connection point).

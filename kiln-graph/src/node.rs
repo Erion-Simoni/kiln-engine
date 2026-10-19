@@ -38,6 +38,20 @@ pub enum NodeType {
     AIState { state_name: String },
     /// AI transition (condition-based transition between AI states).
     AITransition,
+    /// Dialogue node (plays a dialogue line).
+    Dialogue { dialogue_id: String },
+    /// Dialogue choice (player choice in dialogue).
+    DialogueChoice,
+    /// Quest start (starts a quest).
+    QuestStart { quest_id: String },
+    /// Quest complete (completes a quest).
+    QuestComplete { quest_id: String },
+    /// Quest objective update (updates quest objective progress).
+    QuestObjectiveUpdate { quest_id: String, objective_index: usize },
+    /// Data table lookup (retrieves a value from a data table).
+    DataTableLookup { table_id: String, column_name: String },
+    /// Data table row get (retrieves a row by ID).
+    DataTableRowGet { table_id: String },
 }
 
 /// Constant value types.
@@ -45,6 +59,7 @@ pub enum NodeType {
 pub enum ConstantValue {
     Integer(i64),
     Boolean(bool),
+    String(String),
 }
 
 /// Arithmetic operations.
@@ -88,8 +103,13 @@ impl Node {
             NodeType::Event { .. } => {
                 vec![Pin::new(PinDirection::Output, PinType::Event, "trigger")]
             }
-            NodeType::Constant { .. } => {
-                vec![Pin::new(PinDirection::Output, PinType::Integer, "value")]
+            NodeType::Constant { value } => {
+                let pin_type = match value {
+                    ConstantValue::Integer(_) => PinType::Integer,
+                    ConstantValue::Boolean(_) => PinType::Boolean,
+                    ConstantValue::String(_) => PinType::String,
+                };
+                vec![Pin::new(PinDirection::Output, pin_type, "value")]
             }
             NodeType::Arithmetic { op: _ } => {
                 vec![
@@ -180,6 +200,52 @@ impl Node {
                     Pin::new(PinDirection::Input, PinType::Boolean, "condition"),
                     Pin::new(PinDirection::Input, PinType::Event, "trigger"),
                     Pin::new(PinDirection::Output, PinType::Event, "transition"),
+                ]
+            }
+            NodeType::Dialogue { .. } => {
+                vec![
+                    Pin::new(PinDirection::Input, PinType::Event, "show"),
+                    Pin::new(PinDirection::Output, PinType::Event, "on_choice"),
+                    Pin::new(PinDirection::Output, PinType::Event, "on_complete"),
+                ]
+            }
+            NodeType::DialogueChoice => {
+                vec![
+                    Pin::new(PinDirection::Input, PinType::String, "choice_key"),
+                    Pin::new(PinDirection::Input, PinType::Event, "select"),
+                    Pin::new(PinDirection::Output, PinType::Event, "on_selected"),
+                ]
+            }
+            NodeType::QuestStart { .. } => {
+                vec![
+                    Pin::new(PinDirection::Input, PinType::Event, "start"),
+                    Pin::new(PinDirection::Output, PinType::Event, "on_started"),
+                ]
+            }
+            NodeType::QuestComplete { .. } => {
+                vec![
+                    Pin::new(PinDirection::Input, PinType::Event, "complete"),
+                    Pin::new(PinDirection::Output, PinType::Event, "on_completed"),
+                ]
+            }
+            NodeType::QuestObjectiveUpdate { .. } => {
+                vec![
+                    Pin::new(PinDirection::Input, PinType::Event, "update"),
+                    Pin::new(PinDirection::Input, PinType::Integer, "progress"),
+                    Pin::new(PinDirection::Output, PinType::Event, "on_updated"),
+                ]
+            }
+            NodeType::DataTableLookup { .. } => {
+                vec![
+                    Pin::new(PinDirection::Input, PinType::String, "row_id"),
+                    Pin::new(PinDirection::Output, PinType::Integer, "value_int"),
+                    Pin::new(PinDirection::Output, PinType::String, "value_str"),
+                ]
+            }
+            NodeType::DataTableRowGet { .. } => {
+                vec![
+                    Pin::new(PinDirection::Input, PinType::String, "row_id"),
+                    Pin::new(PinDirection::Output, PinType::Event, "on_found"),
                 ]
             }
         }

@@ -1,0 +1,7 @@
+[package]
+name = "gameplay"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+kiln-gameplay = { workspace = true }

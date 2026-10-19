@@ -227,3 +227,118 @@ fn test_graph_matches_script_arithmetic() {
     assert!(has_push_5, "Graph should push 5");
     assert!(has_add, "Graph should add");
 }
+
+#[test]
+fn test_dialogue_node() {
+    let mut graph = Graph::new();
+
+    // Event node
+    let event_node = Node::new(
+        NodeType::Event {
+            name: "OnInteract".to_string(),
+        },
+        (0.0, 0.0),
+    );
+    let id_event = graph.add_node(event_node);
+
+    // Dialogue node
+    let dialogue_node = Node::new(
+        NodeType::Dialogue {
+            dialogue_id: "npc_intro".to_string(),
+        },
+        (100.0, 0.0),
+    );
+    let _id_dialogue = graph.add_node(dialogue_node);
+
+    // Output node
+    let output_node = Node::new(NodeType::Output, (200.0, 0.0));
+    let id_output = graph.add_node(output_node);
+
+    // Connect event -> output
+    let node_event = graph.get_node(id_event).unwrap();
+    let node_output = graph.get_node(id_output).unwrap();
+    let pin_event_trigger_id = node_event.pins.iter().find(|p| p.name == "trigger").unwrap().id;
+    let pin_output_in_id = node_output.pins.iter().find(|p| p.name == "in").unwrap().id;
+    graph.add_connection(Connection::new(pin_event_trigger_id, pin_output_in_id));
+
+    // Compilation should succeed
+    let program = compile_graph(&graph);
+    assert!(program.is_ok());
+}
+
+#[test]
+fn test_quest_node() {
+    let mut graph = Graph::new();
+
+    // Event node
+    let event_node = Node::new(
+        NodeType::Event {
+            name: "OnKill".to_string(),
+        },
+        (0.0, 0.0),
+    );
+    let id_event = graph.add_node(event_node);
+
+    // Quest start node
+    let quest_node = Node::new(
+        NodeType::QuestStart {
+            quest_id: "main_quest".to_string(),
+        },
+        (100.0, 0.0),
+    );
+    let _id_quest = graph.add_node(quest_node);
+
+    // Output node
+    let output_node = Node::new(NodeType::Output, (200.0, 0.0));
+    let id_output = graph.add_node(output_node);
+
+    // Connect event -> output
+    let node_event = graph.get_node(id_event).unwrap();
+    let node_output = graph.get_node(id_output).unwrap();
+    let pin_event_trigger_id = node_event.pins.iter().find(|p| p.name == "trigger").unwrap().id;
+    let pin_output_in_id = node_output.pins.iter().find(|p| p.name == "in").unwrap().id;
+    graph.add_connection(Connection::new(pin_event_trigger_id, pin_output_in_id));
+
+    // Compilation should succeed
+    let program = compile_graph(&graph);
+    assert!(program.is_ok());
+}
+
+#[test]
+fn test_datatable_node() {
+    let mut graph = Graph::new();
+
+    // Event node
+    let event_node = Node::new(
+        NodeType::Event {
+            name: "OnStart".to_string(),
+        },
+        (0.0, 0.0),
+    );
+    let id_event = graph.add_node(event_node);
+
+    // Data table lookup node
+    let datatable_node = Node::new(
+        NodeType::DataTableLookup {
+            table_id: "items".to_string(),
+            column_name: "damage".to_string(),
+        },
+        (100.0, 0.0),
+    );
+    let _id_datatable = graph.add_node(datatable_node);
+
+    // Output node
+    let output_node = Node::new(NodeType::Output, (200.0, 0.0));
+    let id_output = graph.add_node(output_node);
+
+    // Connect event -> output
+    let node_event = graph.get_node(id_event).unwrap();
+    let node_output = graph.get_node(id_output).unwrap();
+    let pin_event_trigger_id = node_event.pins.iter().find(|p| p.name == "trigger").unwrap().id;
+    let pin_output_in_id = node_output.pins.iter().find(|p| p.name == "in").unwrap().id;
+    graph.add_connection(Connection::new(pin_event_trigger_id, pin_output_in_id));
+
+    // Compilation should succeed
+    let program = compile_graph(&graph);
+    assert!(program.is_ok());
+}
