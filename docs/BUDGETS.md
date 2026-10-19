@@ -35,13 +35,15 @@ cargo build --release --bin kiln-player
 ls -lh target/release/kiln-player
 ```
 
-**Current status:** Not yet measured (kiln-player does not exist yet; will be created in M14)
+**Current status:** 930 KB (measured in M14, release build with LTO, panic=abort, strip=true)
 
 **Notes:**
 - Player binary contains only runtime, not editor
 - Assets shipped separately in packed archive format
 - Target is for stripped release build (LTO, panic=abort, strip=true)
 - Measure separately from editor installer
+- No editor crates in dependency tree (verified via cargo tree)
+- Archive format (KILNARV1) size varies with content; sample: 68 bytes for 1 text file
 
 ---
 

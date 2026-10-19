@@ -369,3 +369,101 @@ Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 - STATE.md will be updated to reflect R0 completion
 - No breaking changes to existing M0-M13 functionality
 - All deferred features are tracked in STATE.md Known issues
+
+---
+
+## ADR-0017: Native player and export (accepted)
+
+**Date:** 2026-10-19
+**Status:** accepted
+
+**Decision:** Create `kiln-player` crate as a thin launcher that loads games from packed archives and runs them. Use `dirs` crate for cross-platform save/settings/cache directories. Extend `kiln-cli export` to support native platforms (windows, macos, linux) in addition to web.
+
+**Alternatives:**
+- Separate player binary: minimal size, no editor code (chosen)
+- Reuse editor binary: simpler, but includes unnecessary editor code
+- Self-contained single binary: complex asset embedding
+
+**Consequences:**
+- kiln-player depends on kiln-core, kiln-runtime, kiln-assets, kiln-render (no editor crates)
+- kiln-player uses dirs crate for platform-specific paths (AppData, Application Support, XDG)
+- kiln-cli export command now accepts --platform flag (web, windows, macos, linux)
+- Player binary size: 930 KB (well under 15 MB budget)
+- Archive format (KILNARV1) used for game data
+- Player is currently a stub (loads archive, creates directories, but doesn't run game loop)
+- Full game loop implementation deferred to future milestone
+
+---
+
+## ADR-0018: Linux packaging format (accepted)
+
+**Date:** 2026-10-19
+**Status:** accepted
+
+**Decision:** Use **AppImage** as the primary Linux packaging format for games. Provide **tar.gz** as a fallback for users who prefer manual extraction. Do not use Flatpak initially (deferred to later milestone if needed). AppImage is a single-file, distro-agnostic format that runs on most Linux distributions without requiring root or complex dependencies.
+
+**Alternatives:**
+- AppImage + tar.gz: simple, distro-agnostic, no root required (chosen)
+- Flatpak: good sandboxing and centralized distribution, but requires Flathub setup and runtime installation
+- Snap: requires Snap daemon and Ubuntu/Canonical infrastructure, not distro-agnostic
+- deb/rpm: distro-specific, requires package management integration, more complex build process
+- tar.gz only: simplest, but no desktop integration or icon handling
+
+**Consequences:**
+- AppImage is the primary format for Linux game exports
+- tar.gz provided as fallback for manual installation
+- Flatpak deferred to future milestone if community demand or store distribution requires it
+- AppImage packaging uses `appimage-builder` or manual tools (cargo-dist may add support)
+- Desktop integration (desktop file, icon) embedded in AppImage
+- No Flatpak runtime overhead in initial implementation
+- Simpler build process for early M15 milestone
+
+---
+
+## ADR-0019: Storefront distribution strategy (accepted)
+
+**Date:** 2026-10-19
+**Status:** accepted
+
+**Decision:** Support **itch.io as the primary storefront** for initial distribution. Provide **Steam integration behind a Cargo feature flag** (`steam`) for developers who want Steamworks features (achievements, cloud saves, overlay). Use a **platform-services trait** to abstract storefront-specific functionality so games are not locked to a single store.
+
+**Alternatives:**
+- itch.io only: simpler, but misses Steam's large audience and features
+- Steam only: $100 fee and complex approval process, not suitable for early indie projects
+- Both platforms: chosen - itch.io for quick publishing, Steam for production features
+- GOG/Epic: deferred to later milestone (requires separate approval processes)
+
+**Consequences:**
+- itch.io: Free to publish, uses butler CLI for uploads, 10% revenue share, no code signing required
+- Steam: $100 one-time fee, Steamworks SDK integration, 30% revenue share, requires code signing
+- Platform-services trait: Achievements, leaderboards, cloud saves, IAP abstracted behind trait
+- Steamworks behind `steam` feature: Stub backend when feature is off, real Steamworks when on
+- itch.io upload via `kiln-cli publish itch` (butler CLI integration or documented manual flow)
+- Steam depot/build script generation via `kiln-cli publish steam`
+- Documentation will cover fees, review requirements, and account setup for both platforms
+
+---
+
+## ADR-0020: Update strategy and delta patching (accepted)
+
+**Date:** 2026-10-19
+**Status:** accepted
+
+**Decision:** Use **qbsdiff 1.4** for delta patch generation. Create `kiln-updater` crate behind an `updater` Cargo feature flag for in-game updates. Store builds rely on storefront updaters (itch.io butler, Steam) and compile out the in-game updater. Version data archives and support DLC packs as additional archives with version dependencies.
+
+**Alternatives:**
+- qbsdiff 1.4: fast, memory-saving, bsdiff 4.x compatible, MIT license (chosen)
+- bsdiff: simpler API, BSD-2-Clause, but less efficient (rejected)
+- bidiff: file-backed mmap, parallel, but more complex (rejected)
+- bsdiff6: 20% smaller patches, but newer and less tested (rejected)
+- Full re-download: simplest, but wastes bandwidth for small changes (rejected)
+
+**Consequences:**
+- kiln-updater crate created with `updater` feature flag (optional for size)
+- Delta patches generated via `kiln-cli patch --old <old.kilnar> --new <new.kilnar> --output <patch.qbsdiff>`
+- In-game updater: check for updates via HTTP, download patch, verify SHA-256 hash, apply patch, rollback on failure
+- Store builds (itch.io, Steam) use storefront updaters; in-game updater compiles out with `updater` feature disabled
+- Archive format upgraded to KILNARV2 with version field in header
+- DLC packs are separate archives with `requires_version` field in metadata
+- Crash-report hook added as opt-in stub (full implementation deferred to M56)
+- Binary size impact: ~200-300 KB for qbsdiff + updater code (feature-gated)

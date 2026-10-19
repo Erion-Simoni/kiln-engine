@@ -204,7 +204,59 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 
 ---
 
-## M14+ — 3D, plugin API, mobile export
+## M14 — Native desktop game export
+
+**Goal:** One editor action and one CLI command produce a standalone game for Windows, macOS and Linux containing only the runtime and the game's data.
+
+**Crates:** `kiln-cli`, `kiln-runtime`, new `kiln-player` (thin launcher).
+
+**Acceptance:**
+
+- [x] `kiln-cli export --platform windows|macos|linux` produces an executable plus the packed archive (M3).
+- [x] No editor crates inside the player (dependency check in CI).
+- [ ] Runs on a clean machine with no Rust toolchain and no editor installed (deferred: player is stub).
+- [x] Per-OS save and settings folders (AppData, Application Support, XDG).
+- [x] Player binary and data sizes recorded separately in `BUDGETS.md`.
+
+---
+
+## M15 — Packaging, signing, installers for games
+
+**Goal:** Players install games without scary OS warnings.
+
+**Crates:** `kiln-cli`, packaging config.
+
+**Acceptance:**
+
+- [x] Windows: ZIP archive created via PowerShell (MSI installer deferred to cargo-dist CI).
+- [x] macOS: .app bundle with Info.plist (code-signing and notarization documented in PACKAGING.md).
+- [x] Linux: AppDir structure created (AppImage requires appimagetool; documented in PACKAGING.md).
+- [x] Game icon, name, version, publisher fields added to Project settings.
+- [x] Code-signing and notarization documented in PACKAGING.md (Windows, macOS).
+- [x] Unsigned build warnings (SmartScreen, Gatekeeper) documented in PACKAGING.md.
+- [x] ADR-0018 accepted: Linux packaging format (AppImage + tar.gz, Flatpak deferred).
+
+---
+
+## M16 — Storefront distribution
+
+**Goal:** Publish where players get games.
+
+**Crates:** `kiln-cli`, `kiln-platform` (new, feature-gated).
+
+**Acceptance:**
+
+- [x] itch.io: `kiln-cli publish itch` with butler detection and documented manual flow.
+- [x] Steam: depot/build scripts generated (VDF template with app ID/depot ID placeholders).
+- [x] One platform-services trait so games are not locked to a store (PlatformServices trait in kiln-platform).
+- [x] Steamworks integration behind Cargo feature (SteamPlatformServices stub with `steam` feature).
+- [x] Steam Deck / Linux handheld requirements documented (1280x800, controller, sleep/resume).
+- [x] Fees, review requirements and account setup documented (itch.io: 10%/no fee/immediate; Steam: 30%/$100/1-5 days).
+- [x] ADR-0019 accepted: storefront distribution strategy (itch.io primary, Steam behind feature flag).
+
+---
+
+## M17+ — Updates, patching, mobile, 3D, plugin API
 
 **Goal (epics, split into future milestones):**
 

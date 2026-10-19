@@ -1,0 +1,10 @@
+[package]
+name = "kiln-platform"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+steam = []  # Enable Steamworks integration (requires Steam SDK)
+
+[dependencies]

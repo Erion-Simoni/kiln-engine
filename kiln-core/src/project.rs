@@ -9,6 +9,10 @@ pub struct Project {
     pub id: String,
     pub name: String,
     pub version: String,
+    #[serde(default)]
+    pub publisher: String,
+    #[serde(default)]
+    pub icon: String,
     pub features: Vec<String>,
     #[serde(default)]
     pub window: WindowSettings,
@@ -75,6 +79,8 @@ impl Default for Project {
             id: uuid::Uuid::new_v4().to_string(),
             name: "Untitled Project".to_string(),
             version: "0.1.0".to_string(),
+            publisher: String::new(),
+            icon: String::new(),
             features: vec![],
             window: WindowSettings::default(),
             scenes: HashMap::new(),
@@ -133,6 +139,19 @@ mod tests {
         assert_eq!(loaded.window.height, 1080);
         assert_eq!(loaded.window.fullscreen, true);
         assert_eq!(loaded.window.vsync, false);
+    }
+
+    #[test]
+    fn packaging_fields_round_trip() {
+        let mut proj = Project::default();
+        proj.publisher = "MyStudio".to_string();
+        proj.icon = "icon.png".to_string();
+
+        let toml = proj.to_toml().expect("serialize");
+        let loaded = Project::from_toml(&toml).expect("deserialize");
+
+        assert_eq!(loaded.publisher, "MyStudio");
+        assert_eq!(loaded.icon, "icon.png");
     }
 }
 

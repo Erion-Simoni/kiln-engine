@@ -1,0 +1,21 @@
+[package]
+name = "kiln-updater"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = []
+updater = ["reqwest"]
+
+[dependencies]
+kiln-core = { workspace = true }
+kiln-assets = { workspace = true }
+qbsdiff = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+reqwest = { version = "0.12", features = ["json"], optional = true }

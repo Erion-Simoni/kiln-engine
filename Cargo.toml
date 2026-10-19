@@ -10,6 +10,9 @@ members = [
     "kiln-graph",
     "kiln-editor",
     "kiln-web",
+    "kiln-player",
+    "kiln-platform",
+    "kiln-updater",
     "demo",
     "samples/tilemap",
     "samples/audio",
@@ -31,6 +34,7 @@ pollster     = "0.4"
 glam         = "0.34.1"
 hecs         = "0.11.2"
 serde        = { version = "1.0", features = ["derive"] }
+serde_json   = "1.0"
 toml         = "0.8"
 ron          = "0.8"
 uuid         = { version = "1.0", features = ["v4", "serde"] }
@@ -43,8 +47,10 @@ thiserror    = "2.0"
 walkdir      = "2.5"
 clap         = { version = "4.5", features = ["derive"] }
 anyhow       = "1.0"
+dirs         = "5.0"
 egui         = "0.29"
 egui_dock    = "0.14"
+qbsdiff      = "1.4"
 kiln-core    = { path = "kiln-core" }
 kiln-render  = { path = "kiln-render" }
 kiln-runtime = { path = "kiln-runtime" }
@@ -54,6 +60,9 @@ kiln-script  = { path = "kiln-script" }
 kiln-graph   = { path = "kiln-graph" }
 kiln-editor  = { path = "kiln-editor" }
 kiln-web     = { path = "kiln-web" }
+kiln-player  = { path = "kiln-player" }
+kiln-platform = { path = "kiln-platform" }
+kiln-updater = { path = "kiln-updater" }
 
 [profile.release]
 opt-level = "z"

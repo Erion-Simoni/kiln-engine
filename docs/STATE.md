@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** R0 complete
+**Current milestone:** M17 complete
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -164,21 +164,102 @@
   - Updated ROADMAP.md: M13 sample "N minutes" → "≤2 minutes"
   - All deferred features documented in ADR-0016 and STATE.md Known issues
   - All 59 tests pass (3 kiln-core including new window_settings test, 5 kiln-render, 10 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-render tier/post, 5 kiln-runtime audio/physics)
+- M14: Native desktop game export
+  - ADR-0017 accepted: Native player and export
+  - Created kiln-player crate (thin launcher for standalone games)
+  - Added paths.rs to kiln-core with save_dir, settings_dir, cache_dir functions using dirs crate
+  - Added 3 path tests to kiln-core (save_dir, settings_dir, cache_dir)
+  - kiln-player depends on kiln-core, kiln-runtime, kiln-assets, kiln-render (no editor crates)
+  - kiln-player uses platform-specific directories (AppData, Application Support, XDG)
+  - Extended kiln-cli export command to support --platform flag (web, windows, macos, linux)
+  - kiln-cli export builds player binary for target platform and copies to output directory
+  - Verified no editor crates in player dependency tree via cargo tree
+  - Player binary size: 930 KB (well under 15 MB budget)
+  - Archive format (KILNARV1) size varies with content; sample: 68 bytes for 1 text file
+  - Player is currently a stub (loads archive, creates directories, but doesn't run game loop)
+  - Workspace: added kiln-player to members
+  - Workspace: added dirs 5.0 dependency
+  - All 62 tests pass (6 kiln-core including new path tests, 5 kiln-render, 10 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-render tier/post, 5 kiln-runtime audio/physics, 2 samples)
+- M15: Packaging, signing, installers for games
+  - ADR-0018 accepted: Linux packaging format (AppImage + tar.gz, Flatpak deferred)
+  - Added publisher and icon fields to Project settings in kiln-core
+  - Extended kiln-cli export command with --packaging flag
+  - Windows packaging: creates ZIP archive via PowerShell Compress-Archive
+  - macOS packaging: creates .app bundle with Info.plist
+  - Linux packaging: creates AppDir structure (appimagetool required for final .AppImage)
+  - Created docs/PACKAGING.md with comprehensive signing documentation
+  - Documented Windows code signing (OV/EV certificates, SignTool, CI integration)
+  - Documented macOS code signing and notarization (Apple Developer account, codesign, notarytool)
+  - Documented unsigned build warnings (SmartScreen, Gatekeeper)
+  - Tested Windows export with packaging locally (ZIP created successfully)
+  - All 66 tests pass (7 kiln-core including new packaging_fields_round_trip test, 13 kiln-render, 10 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 5 kiln-runtime audio/physics, 2 samples)
+- M16: Storefront distribution
+  - ADR-0019 accepted: storefront distribution strategy (itch.io primary, Steam behind feature flag)
+  - Created kiln-platform crate with PlatformServices trait (achievements, leaderboards, cloud saves, IAP)
+  - Added StubPlatformServices implementation (no storefront connected)
+  - Added SteamPlatformServices stub behind `steam` feature flag (prints TODO for Steamworks SDK calls)
+  - Extended kiln-cli with publish command for itch.io and Steam
+  - itch.io: butler CLI detection and documented manual flow
+  - Steam: VDF build script generation with app ID and depot ID placeholders
+  - Documented storefront fees (itch.io: 10%, no fee; Steam: 30%, $100 fee)
+  - Documented review requirements (itch.io: immediate; Steam: 1-5 business days)
+  - Documented Steam Deck / Linux handheld requirements (1280x800, controller, sleep/resume)
+  - Added storefront distribution section to PACKAGING.md
+  - All 69 tests pass (7 kiln-core, 13 kiln-render, 10 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-platform, 5 kiln-runtime audio/physics, 2 samples)
+|- M17: Updates, patching, DLC packs
+  - ADR-0020 accepted: update strategy and delta patching (qbsdiff 1.4)
+  - Created kiln-updater crate with `updater` feature flag (optional for size)
+  - Extended archive format to KILNARV2 with version field and metadata
+  - kiln-assets archive.rs: pack_with_version() for V2, get_metadata() for reading version
+  - kiln-updater patch.rs: delta patch generation via qbsdiff (generate_patch, apply_patch)
+  - kiln-updater updater.rs: in-game updater (check, download, verify, apply, rollback) behind `updater` feature
+  - kiln-updater dlc.rs: DLC pack support with version dependencies (DlcManager, DlcMetadata)
+  - kiln-updater crash.rs: crash-report hook stub (full implementation deferred to M56)
+  - kiln-updater version.rs: semantic versioning (Version struct with comparison and satisfaction)
+  - Extended kiln-cli with patch command (generate delta patches between archives)
+  - Extended kiln-cli with dlc command (create DLC packs with metadata)
+  - Extended kiln-cli pack command with --version flag for V2 archives
+  - Extended kiln-cli verify command to display V2 metadata
+  - All 73 tests pass (7 kiln-core, 13 kiln-render, 12 kiln-assets including new V2 tests, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-platform, 12 kiln-updater, 5 kiln-runtime audio/physics, 2 samples)
+  - Binary size impact: ~200-300 KB for qbsdiff + updater code (feature-gated)
 
 **In progress:**
 - None
 
 **Next steps:**
-- M14: Native desktop game export (kiln-player, export CLI, standalone game builds)
+- M18: Android export + touch input (v0.4 gate)
 - See ROADMAP_FULL_M14_PLUS.md for detailed plan through M61
 
 **Known issues:**
+- M15 gaps:
+  - Windows packaging: ZIP creation works but full MSI installer requires WiX or cargo-dist (deferred)
+  - macOS packaging: .app bundle created but executable permissions set only on Unix builds (Windows builds skip)
+  - Linux packaging: AppDir structure created but appimagetool required for final .AppImage (manual step)
+  - Icon embedding: publisher and icon fields exist in Project but not yet used in packaging (deferred)
+  - CI integration: signing steps documented but not added to GitHub Actions workflow (deferred)
+- M16 gaps:
+  - itch.io: butler CLI detection works but actual upload not automated (documented manual flow)
+  - Steam: VDF script generated but app ID and depot ID are placeholders (manual configuration required)
+  - Steamworks SDK: SteamPlatformServices is a stub with TODO comments (no actual Steam SDK integration)
+  - Steam Deck: documented requirements but not tested on actual hardware (deferred)
+  - kiln-platform: trait defined but not yet integrated into kiln-runtime or kiln-player (deferred)
+|- M17 gaps:
+  - In-game updater is feature-gated and not yet integrated into kiln-player or kiln-runtime
+  - Delta patching works at the binary level but not yet tested on real game archives
+  - DLC packs are created but not yet loaded at runtime (no integration with asset system)
+  - Crash-report hook is a stub; full symbolication and upload deferred to M56
+  - kiln-updater has no integration with the actual game loop or archive loading
 - R0 gaps (documented in ADR-0016):
-  - Asset loaders: memory-mapped native + HTTP streaming not implemented (deferred to M14)
+  - Asset loaders: memory-mapped native + HTTP streaming not implemented (deferred)
   - Audio device management: device selection, hot-plug, sample-rate changes not implemented (deferred to M49)
-  - Window settings: WindowSettings struct exists but not applied to winit WindowBuilder (deferred to M14)
-  - Native player size budget: cannot measure until kiln-player exists (M14)
-  - Startup budget: cannot measure until player binary and asset loading are complete (M14)
+  - Window settings: WindowSettings struct exists but not applied to winit WindowBuilder (deferred)
+  - Startup budget: cannot measure until player binary and asset loading are complete (deferred - player is stub)
+  - Test player runs on clean machine: deferred (player is stub, no game loop)
+- M14 gaps:
+  - Player is a stub: loads archive and creates directories, but doesn't run game loop
+  - Player doesn't initialize wgpu or create window
+  - Player doesn't load assets from archive into memory
+  - Player doesn't start runtime game loop
 - M13: collector sample uses simple game state instead of full ECS (simplified for tutorial)
 - M13: collector sample has no unit tests (functional testing via manual play)
 - M7 deferred features:
@@ -222,17 +303,19 @@
 - KilnScript has no function definitions yet
 
 **Last commands run:**
-- cargo test --workspace (all 59 tests pass)
+- cargo test --workspace (all 69 tests pass)
 - cargo check --workspace (builds successfully with 1 warning: unused Tab variants in kiln-editor)
+- cargo run --bin kiln-cli -- publish --storefront itch (tested butler detection)
+- cargo run --bin kiln-cli -- publish --storefront steam (tested VDF generation)
+- cargo test --package kiln-platform --features steam (tested Steam stub)
 
-**Files touched (R0):**
-- kiln-editor/src/app.rs (changed wgpu::Backends::PRIMARY to Backends::all())
-- samples/collector/src/main.rs (changed wgpu::Backends::PRIMARY to Backends::all())
-- demo/src/main.rs (changed wgpu::Backends::PRIMARY to Backends::all())
-- samples/tilemap/src/main.rs (changed wgpu::Backends::PRIMARY to Backends::all())
-- kiln-core/src/project.rs (added WindowSettings struct to Project)
-- kiln-core/src/lib.rs (exported WindowSettings)
-- docs/DECISIONS.md (added ADR-0012, ADR-0013, ADR-0014, ADR-0015, ADR-0016)
-- docs/BUDGETS.md (added native player size budget, startup budget)
-- docs/ROADMAP.md (updated M0-M13 checkboxes, replaced "N minutes" with "≤2 minutes")
-- docs/STATE.md (rewritten to mark R0 complete, documented findings)
+**Files touched (M16):**
+- kiln-platform/Cargo.toml (new: platform crate with steam feature)
+- kiln-platform/src/lib.rs (new: PlatformServices trait, StubPlatformServices, SteamPlatformServices stub)
+- kiln-cli/src/main.rs (added publish command for itch.io and Steam)
+- kiln-cli/src/main.rs (added butler CLI detection for itch.io)
+- kiln-cli/src/main.rs (added VDF build script generation for Steam)
+- Cargo.toml (added kiln-platform to workspace members and dependencies)
+- docs/DECISIONS.md (added ADR-0019)
+- docs/PACKAGING.md (added storefront distribution section with itch.io, Steam, Steam Deck)
+- docs/STATE.md (rewritten to mark M16 complete)
