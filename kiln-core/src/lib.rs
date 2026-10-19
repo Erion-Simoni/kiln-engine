@@ -1,23 +1,27 @@
 //! Kiln core crate
 //! Math, time, shared types, ECS glue
 
-pub mod math;
-pub mod time;
+pub mod access;
+pub mod device_tier;
 pub mod id;
-pub mod project;
-pub mod transform;
+pub mod math;
 pub mod paths;
 pub mod prefab;
-pub mod device_tier;
-pub mod access;
+pub mod project;
+pub mod time;
+pub mod transform;
 
-pub use math::*;
-pub use time::*;
+pub use access::{any_conflicts, AccessKind, AccessSet, ComponentAccess};
+pub use device_tier::{
+    detect_device_tier, get_device_capabilities, DeviceCapabilities, DeviceTier,
+};
 pub use id::*;
-pub use project::{Project, Scene, Entity, Component, WindowSettings, NestedScene, SceneOffset};
-pub use project::{MobileSettings, Orientation, IosSettings, PrivacyDescriptions, LaunchScreen, AndroidSettings};
+pub use math::*;
+pub use paths::{cache_dir, save_dir, settings_dir};
+pub use prefab::{ComponentOverride, Prefab, PrefabInstance, PrefabOverride};
+pub use project::{
+    AndroidSettings, IosSettings, LaunchScreen, MobileSettings, Orientation, PrivacyDescriptions,
+};
+pub use project::{Component, Entity, NestedScene, Project, Scene, SceneOffset, WindowSettings};
+pub use time::*;
 pub use transform::*;
-pub use paths::{save_dir, settings_dir, cache_dir};
-pub use prefab::{Prefab, PrefabOverride, ComponentOverride, PrefabInstance};
-pub use device_tier::{DeviceTier, DeviceCapabilities, detect_device_tier, get_device_capabilities};
-pub use access::{AccessKind, AccessSet, ComponentAccess, any_conflicts};

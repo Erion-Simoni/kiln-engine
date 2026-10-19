@@ -1,6 +1,8 @@
 //! AI pathfinding demo
 
-use kiln_ai::{Grid, GridNode, NavMesh, Point, DynamicObstacleManager, format_grid_path, AIDebugState};
+use kiln_ai::{
+    format_grid_path, AIDebugState, DynamicObstacleManager, Grid, GridNode, NavMesh, Point,
+};
 
 fn main() {
     println!("=== Kiln AI Pathfinding Demo ===\n");
@@ -120,7 +122,10 @@ fn demo_dynamic_obstacles() {
     // Add dynamic obstacle
     let obstacle_node = GridNode::new(5, 5);
     let obstacle_id = manager.add_obstacle(obstacle_node);
-    println!("\nAdded dynamic obstacle at ({}, {}) with ID {}", obstacle_node.x, obstacle_node.y, obstacle_id);
+    println!(
+        "\nAdded dynamic obstacle at ({}, {}) with ID {}",
+        obstacle_node.x, obstacle_node.y, obstacle_id
+    );
 
     // Apply obstacles to grid
     manager.apply_to_grid(&mut grid);

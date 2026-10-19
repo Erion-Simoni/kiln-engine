@@ -33,6 +33,62 @@ pub trait HostContext {
     fn call_host(&mut self, func_id: u32, args: &[Value]) -> Result<Value, VmError>;
 }
 
+/// Numeric/comparison binary operations handled uniformly by [`binop`].
+#[derive(Clone, Copy)]
+enum BinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+}
+
+/// Applies `op` to two values.
+///
+/// If either operand is `F64`, both are evaluated as floats (`I64` is
+/// promoted); otherwise integer arithmetic is used. Integer division by zero
+/// is an error; float division by zero follows IEEE-754 (±inf / NaN).
+fn binop(op: BinOp, a: Value, b: Value) -> Result<Value, VmError> {
+    let type_err = |got: Value| VmError::TypeError {
+        expected: "number",
+        got,
+    };
+    if matches!(a, Value::F64(_)) || matches!(b, Value::F64(_)) {
+        let x = a.to_f64().ok_or_else(|| type_err(a))?;
+        let y = b.to_f64().ok_or_else(|| type_err(b))?;
+        return Ok(match op {
+            BinOp::Add => Value::F64(x + y),
+            BinOp::Sub => Value::F64(x - y),
+            BinOp::Mul => Value::F64(x * y),
+            BinOp::Div => Value::F64(x / y),
+            BinOp::Lt => Value::Bool(x < y),
+            BinOp::Le => Value::Bool(x <= y),
+            BinOp::Gt => Value::Bool(x > y),
+            BinOp::Ge => Value::Bool(x >= y),
+        });
+    }
+    let x = a.as_i64().ok_or_else(|| type_err(a))?;
+    let y = b.as_i64().ok_or_else(|| type_err(b))?;
+    Ok(match op {
+        BinOp::Add => Value::I64(x + y),
+        BinOp::Sub => Value::I64(x - y),
+        BinOp::Mul => Value::I64(x * y),
+        BinOp::Div => {
+            if y == 0 {
+                return Err(VmError::DivisionByZero);
+            }
+            Value::I64(x / y)
+        }
+        BinOp::Lt => Value::Bool(x < y),
+        BinOp::Le => Value::Bool(x <= y),
+        BinOp::Gt => Value::Bool(x > y),
+        BinOp::Ge => Value::Bool(x >= y),
+    })
+}
+
 /// Bytecode VM.
 ///
 /// The VM uses a pre-allocated stack and does not allocate during instruction
@@ -68,21 +124,29 @@ impl<H: HostContext> Vm<H> {
 
     /// Execute a bytecode program.
     ///
-    /// The VM will run instructions sequentially until the program ends or an
-    /// error occurs. The stack is cleared before execution.
+    /// The VM will run instructions sequentially until the program ends, a
+    /// `Return` instruction is reached, or an error occurs. The stack is
+    /// cleared before execution.
     pub fn execute(&mut self, program: &Program) -> Result<(), VmError> {
         self.ip = 0;
         self.stack.clear();
 
         while self.ip < program.len() {
-            self.step(program)?;
+            if !self.step(program)? {
+                break;
+            }
         }
 
         Ok(())
     }
 
-    fn step(&mut self, program: &Program) -> Result<(), VmError> {
-        let instr = program.instructions()
+    /// Executes a single instruction.
+    ///
+    /// Returns `true` to continue execution, `false` when the program should
+    /// halt (a `Return` instruction).
+    fn step(&mut self, program: &Program) -> Result<bool, VmError> {
+        let instr = program
+            .instructions()
             .get(self.ip)
             .ok_or(VmError::InvalidOpcode(0xFF))?;
 
@@ -105,86 +169,94 @@ impl<H: HostContext> Vm<H> {
                 self.push(a)?;
             }
             Instruction::Add => {
-                let b = self.pop_as_i64()?;
-                let a = self.pop_as_i64()?;
-                self.push(Value::I64(a + b))?;
+                let b = self.pop()?;
+                let a = self.pop()?;
+                self.push(binop(BinOp::Add, a, b)?)?;
             }
             Instruction::Sub => {
-                let b = self.pop_as_i64()?;
-                let a = self.pop_as_i64()?;
-                self.push(Value::I64(a - b))?;
+                let b = self.pop()?;
+                let a = self.pop()?;
+                self.push(binop(BinOp::Sub, a, b)?)?;
             }
             Instruction::Mul => {
-                let b = self.pop_as_i64()?;
-                let a = self.pop_as_i64()?;
-                self.push(Value::I64(a * b))?;
+                let b = self.pop()?;
+                let a = self.pop()?;
+                self.push(binop(BinOp::Mul, a, b)?)?;
             }
             Instruction::Div => {
-                let b = self.pop_as_i64()?;
-                let a = self.pop_as_i64()?;
-                if b == 0 {
-                    return Err(VmError::DivisionByZero);
-                }
-                self.push(Value::I64(a / b))?;
+                let b = self.pop()?;
+                let a = self.pop()?;
+                self.push(binop(BinOp::Div, a, b)?)?;
             }
             Instruction::Neg => {
-                let a = self.pop_as_i64()?;
-                self.push(Value::I64(-a))?;
+                let a = self.pop()?;
+                let negated = match a {
+                    Value::I64(v) => Value::I64(-v),
+                    Value::F64(v) => Value::F64(-v),
+                    other => {
+                        return Err(VmError::TypeError {
+                            expected: "number",
+                            got: other,
+                        })
+                    }
+                };
+                self.push(negated)?;
             }
             Instruction::Eq => {
                 let b = self.pop()?;
                 let a = self.pop()?;
-                self.push(Value::Bool(a == b))?;
+                self.push(Value::Bool(Value::values_equal(a, b)))?;
             }
             Instruction::Ne => {
                 let b = self.pop()?;
                 let a = self.pop()?;
-                self.push(Value::Bool(a != b))?;
+                self.push(Value::Bool(!Value::values_equal(a, b)))?;
             }
             Instruction::Lt => {
-                let b = self.pop_as_i64()?;
-                let a = self.pop_as_i64()?;
-                self.push(Value::Bool(a < b))?;
+                let b = self.pop()?;
+                let a = self.pop()?;
+                self.push(binop(BinOp::Lt, a, b)?)?;
             }
             Instruction::Le => {
-                let b = self.pop_as_i64()?;
-                let a = self.pop_as_i64()?;
-                self.push(Value::Bool(a <= b))?;
+                let b = self.pop()?;
+                let a = self.pop()?;
+                self.push(binop(BinOp::Le, a, b)?)?;
             }
             Instruction::Gt => {
-                let b = self.pop_as_i64()?;
-                let a = self.pop_as_i64()?;
-                self.push(Value::Bool(a > b))?;
+                let b = self.pop()?;
+                let a = self.pop()?;
+                self.push(binop(BinOp::Gt, a, b)?)?;
             }
             Instruction::Ge => {
-                let b = self.pop_as_i64()?;
-                let a = self.pop_as_i64()?;
-                self.push(Value::Bool(a >= b))?;
+                let b = self.pop()?;
+                let a = self.pop()?;
+                self.push(binop(BinOp::Ge, a, b)?)?;
             }
             Instruction::Jump(label) => {
                 self.ip = label.0;
-                return Ok(());
+                return Ok(true);
             }
             Instruction::JumpIf(label) => {
                 let cond = self.pop_as_bool()?;
                 if cond {
                     self.ip = label.0;
-                    return Ok(());
+                    return Ok(true);
                 }
             }
             Instruction::JumpIfNot(label) => {
                 let cond = self.pop_as_bool()?;
                 if !cond {
                     self.ip = label.0;
-                    return Ok(());
+                    return Ok(true);
                 }
             }
             Instruction::Call(label) => {
                 self.ip = label.0;
-                return Ok(());
+                return Ok(true);
             }
             Instruction::Return => {
-                return Ok(());
+                // Halt execution; the return value stays on the stack.
+                return Ok(false);
             }
             Instruction::HostCall(func_id) => {
                 let result = self.host.call_host(*func_id, &self.stack)?;
@@ -194,7 +266,7 @@ impl<H: HostContext> Vm<H> {
         }
 
         self.ip += 1;
-        Ok(())
+        Ok(true)
     }
 
     fn push(&mut self, value: Value) -> Result<(), VmError> {
@@ -209,17 +281,11 @@ impl<H: HostContext> Vm<H> {
         self.stack.pop().ok_or(VmError::StackUnderflow)
     }
 
-    fn pop_as_i64(&mut self) -> Result<i64, VmError> {
-        self.pop()?.as_i64().ok_or(VmError::TypeError {
-            expected: "i64",
-            got: Value::Bool(false),
-        })
-    }
-
     fn pop_as_bool(&mut self) -> Result<bool, VmError> {
-        self.pop()?.as_bool().ok_or(VmError::TypeError {
+        let v = self.pop()?;
+        v.as_bool().ok_or(VmError::TypeError {
             expected: "bool",
-            got: Value::I64(0),
+            got: v,
         })
     }
 
@@ -367,6 +433,112 @@ mod tests {
         let mut vm = Vm::new(TestHost);
         vm.execute(&program).unwrap();
         assert_eq!(vm.stack(), &[Value::Bool(true)]);
+    }
+
+    #[test]
+    fn arith_float_add() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::F64(1.5)));
+        program.add_instruction(Instruction::PushConst(Value::F64(2.0)));
+        program.add_instruction(Instruction::Add);
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[Value::F64(3.5)]);
+    }
+
+    #[test]
+    fn arith_mixed_int_float_promotes() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::I64(1)));
+        program.add_instruction(Instruction::PushConst(Value::F64(2.5)));
+        program.add_instruction(Instruction::Add);
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[Value::F64(3.5)]);
+    }
+
+    #[test]
+    fn arith_float_div_by_zero_is_infinite() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::F64(1.0)));
+        program.add_instruction(Instruction::PushConst(Value::F64(0.0)));
+        program.add_instruction(Instruction::Div);
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[Value::F64(f64::INFINITY)]);
+    }
+
+    #[test]
+    fn arith_neg_float() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::F64(2.5)));
+        program.add_instruction(Instruction::Neg);
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[Value::F64(-2.5)]);
+    }
+
+    #[test]
+    fn comparison_float_lt() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::F64(1.5)));
+        program.add_instruction(Instruction::PushConst(Value::F64(2.5)));
+        program.add_instruction(Instruction::Lt);
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[Value::Bool(true)]);
+    }
+
+    #[test]
+    fn equality_is_numeric_across_int_and_float() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::I64(1)));
+        program.add_instruction(Instruction::PushConst(Value::F64(1.0)));
+        program.add_instruction(Instruction::Eq);
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[Value::Bool(true)]);
+    }
+
+    #[test]
+    fn return_halts_execution_and_keeps_value() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::I64(7)));
+        program.add_instruction(Instruction::Return);
+        // Would loop forever if `Return` did not halt the VM.
+        program.add_instruction(Instruction::PushConst(Value::I64(99)));
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[Value::I64(7)]);
+    }
+
+    #[test]
+    fn type_error_reports_actual_value() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::Bool(true)));
+        program.add_instruction(Instruction::PushConst(Value::I64(1)));
+        program.add_instruction(Instruction::Add);
+
+        let mut vm = Vm::new(TestHost);
+        let err = vm.execute(&program).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                VmError::TypeError {
+                    expected: "number",
+                    got: Value::Bool(true)
+                }
+            ),
+            "got {:?}",
+            err
+        );
     }
 
     #[test]

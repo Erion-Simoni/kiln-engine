@@ -9,8 +9,7 @@ pub fn format_grid_path(grid: &Grid, path: &[GridNode]) -> String {
     let width = grid.width();
     let height = grid.height();
 
-    let path_set: std::collections::HashSet<(i32, i32)> =
-        path.iter().map(|n| (n.x, n.y)).collect();
+    let path_set: std::collections::HashSet<(i32, i32)> = path.iter().map(|n| (n.x, n.y)).collect();
 
     for y in (0..height).rev() {
         for x in 0..width {

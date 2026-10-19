@@ -2,13 +2,11 @@
 
 use hecs;
 use kiln_core::Transform;
+use kiln_gameplay::{DataTable, Dialogue, Quest};
 use kiln_graph::{ArithmeticOp, ConstantValue, Graph, Node, NodeType};
-use kiln_render::{
-    clear_view, execute_passes, Frame2dGraph, PassTiming, RenderTier,
-};
+use kiln_render::{clear_view, execute_passes, Frame2dGraph, PassTiming, RenderTier};
 use kiln_runtime::{GameWorld, Sprite};
 use kiln_ui::{Button, Label, List, Panel, Widget, WidgetId};
-use kiln_gameplay::{Dialogue, Quest, DataTable};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -548,11 +546,17 @@ impl winit::application::ApplicationHandler for EditorApp {
                                 ui.add_space(24.0);
 
                                 ui.horizontal(|ui| {
-                                    if ui.add_sized([200.0, 40.0], egui::Button::new("New Project")).clicked() {
+                                    if ui
+                                        .add_sized([200.0, 40.0], egui::Button::new("New Project"))
+                                        .clicked()
+                                    {
                                         self.show_welcome = false;
                                     }
                                     ui.add_space(16.0);
-                                    if ui.add_sized([200.0, 40.0], egui::Button::new("Open Project")).clicked() {
+                                    if ui
+                                        .add_sized([200.0, 40.0], egui::Button::new("Open Project"))
+                                        .clicked()
+                                    {
                                         self.show_welcome = false;
                                     }
                                 });
@@ -712,7 +716,13 @@ impl winit::application::ApplicationHandler for EditorApp {
 }
 
 // Standalone function for status bar (no self borrow issues)
-fn show_status_bar(ctx: &egui::Context, fps: f32, entity_count: u32, tier: kiln_render::RenderTier, is_playing: bool) {
+fn show_status_bar(
+    ctx: &egui::Context,
+    fps: f32,
+    entity_count: u32,
+    tier: kiln_render::RenderTier,
+    is_playing: bool,
+) {
     egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing = egui::vec2(16.0, 0.0);
@@ -1447,11 +1457,14 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.vertical(|ui| {
                             ui.horizontal(|ui| {
                                 ui.strong("Hierarchy");
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    if ui.button("Refresh").clicked() {
-                                        // Refresh hierarchy
-                                    }
-                                });
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui.button("Refresh").clicked() {
+                                            // Refresh hierarchy
+                                        }
+                                    },
+                                );
                             });
 
                             ui.add_space(4.0);
@@ -1459,7 +1472,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             egui::ScrollArea::vertical()
                                 .max_height(ui.available_height())
                                 .show(ui, |ui| {
-                                    let root_ids: Vec<WidgetId> = self.ui_designer.root_nodes.clone();
+                                    let root_ids: Vec<WidgetId> =
+                                        self.ui_designer.root_nodes.clone();
                                     for root_id in root_ids {
                                         self.show_widget_tree(ui, root_id, 0);
                                     }
@@ -1473,18 +1487,24 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             ui.strong("Canvas");
                             ui.add_space(4.0);
 
-                            let desired_size = egui::vec2(ui.available_width(), ui.available_height());
+                            let desired_size =
+                                egui::vec2(ui.available_width(), ui.available_height());
                             let (rect, _response) =
                                 ui.allocate_exact_size(desired_size, egui::Sense::click_and_drag());
 
                             // Draw canvas background
-                            ui.painter()
-                                .rect_filled(rect, 0.0, egui::Color32::from_rgb(18, 18, 20));
+                            ui.painter().rect_filled(
+                                rect,
+                                0.0,
+                                egui::Color32::from_rgb(18, 18, 20),
+                            );
 
                             // Draw grid
                             let grid_size = 50.0;
                             let painter = ui.painter();
-                            for x in (rect.min.x as i32..rect.max.x as i32).step_by(grid_size as usize) {
+                            for x in
+                                (rect.min.x as i32..rect.max.x as i32).step_by(grid_size as usize)
+                            {
                                 painter.line_segment(
                                     [
                                         egui::pos2(x as f32, rect.min.y),
@@ -1496,7 +1516,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     ),
                                 );
                             }
-                            for y in (rect.min.y as i32..rect.max.y as i32).step_by(grid_size as usize) {
+                            for y in
+                                (rect.min.y as i32..rect.max.y as i32).step_by(grid_size as usize)
+                            {
                                 painter.line_segment(
                                     [
                                         egui::pos2(rect.min.x, y as f32),
@@ -1657,11 +1679,16 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     // Toolbar
                     ui.horizontal(|ui| {
                         if ui.button("New Dialogue").clicked() {
-                            let dialogue = Dialogue::new("new_dialogue".to_string(), "start".to_string());
+                            let dialogue =
+                                Dialogue::new("new_dialogue".to_string(), "start".to_string());
                             self.gameplay_editor.add_dialogue(dialogue);
                         }
                         if ui.button("New Quest").clicked() {
-                            let quest = Quest::new("new_quest".to_string(), "quest_name".to_string(), "quest_desc".to_string());
+                            let quest = Quest::new(
+                                "new_quest".to_string(),
+                                "quest_name".to_string(),
+                                "quest_desc".to_string(),
+                            );
                             self.gameplay_editor.add_quest(quest);
                         }
                         if ui.button("New Data Table").clicked() {
@@ -1677,8 +1704,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         // Left panel: list of all gameplay content
                         ui.vertical(|ui| {
                             ui.label("Dialogues");
-                            for (id, _) in &self.gameplay_editor.dialogues {
-                                let is_selected = self.gameplay_editor.selected_dialogue.as_ref() == Some(id);
+                            for id in self.gameplay_editor.dialogues.keys() {
+                                let is_selected =
+                                    self.gameplay_editor.selected_dialogue.as_ref() == Some(id);
                                 if ui.selectable_label(is_selected, id).clicked() {
                                     self.gameplay_editor.selected_dialogue = Some(id.clone());
                                 }
@@ -1686,8 +1714,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                             ui.add_space(8.0);
                             ui.label("Quests");
-                            for (id, _) in &self.gameplay_editor.quests {
-                                let is_selected = self.gameplay_editor.selected_quest.as_ref() == Some(id);
+                            for id in self.gameplay_editor.quests.keys() {
+                                let is_selected =
+                                    self.gameplay_editor.selected_quest.as_ref() == Some(id);
                                 if ui.selectable_label(is_selected, id).clicked() {
                                     self.gameplay_editor.selected_quest = Some(id.clone());
                                 }
@@ -1695,8 +1724,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                             ui.add_space(8.0);
                             ui.label("Data Tables");
-                            for (id, _) in &self.gameplay_editor.data_tables {
-                                let is_selected = self.gameplay_editor.selected_table.as_ref() == Some(id);
+                            for id in self.gameplay_editor.data_tables.keys() {
+                                let is_selected =
+                                    self.gameplay_editor.selected_table.as_ref() == Some(id);
                                 if ui.selectable_label(is_selected, id).clicked() {
                                     self.gameplay_editor.selected_table = Some(id.clone());
                                 }
@@ -1738,7 +1768,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     ui.label("Row 3+: Data values");
                                 }
                             } else {
-                                ui.label("Select a dialogue, quest, or data table to view details.");
+                                ui.label(
+                                    "Select a dialogue, quest, or data table to view details.",
+                                );
                             }
                         });
                     });
@@ -1791,10 +1823,7 @@ impl<'a> TabViewer<'a> {
             let bounds = widget.as_widget().bounds();
 
             // Offset widget to canvas
-            let screen_pos = egui::pos2(
-                canvas_rect.min.x + bounds.x,
-                canvas_rect.min.y + bounds.y,
-            );
+            let screen_pos = egui::pos2(canvas_rect.min.x + bounds.x, canvas_rect.min.y + bounds.y);
             let size = egui::vec2(bounds.width, bounds.height);
             let rect = egui::Rect::from_min_size(screen_pos, size);
 

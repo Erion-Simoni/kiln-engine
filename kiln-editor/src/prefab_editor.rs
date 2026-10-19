@@ -1,6 +1,6 @@
 //! Prefab editor panel for creating and managing prefabs
 
-use kiln_core::{Prefab, PrefabOverride, Entity};
+use kiln_core::{Entity, Prefab, PrefabOverride};
 use std::collections::HashMap;
 
 /// Prefab editor state
@@ -37,7 +37,11 @@ impl PrefabEditorState {
         }
     }
 
-    pub fn instantiate_prefab(&self, prefab_id: &str, overrides: Option<PrefabOverride>) -> Option<Entity> {
+    pub fn instantiate_prefab(
+        &self,
+        prefab_id: &str,
+        overrides: Option<PrefabOverride>,
+    ) -> Option<Entity> {
         let prefab = self.prefabs.get(prefab_id)?;
         Some(prefab.instantiate(overrides))
     }

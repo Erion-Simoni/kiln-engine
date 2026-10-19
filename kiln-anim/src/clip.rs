@@ -69,11 +69,7 @@ impl Clip {
             return Ok((0, 0.0));
         }
 
-        let mut time = if self.loops {
-            t % total
-        } else {
-            t.min(total)
-        };
+        let mut time = if self.loops { t % total } else { t.min(total) };
 
         for (i, frame) in self.frames.iter().enumerate() {
             if time < frame.duration {

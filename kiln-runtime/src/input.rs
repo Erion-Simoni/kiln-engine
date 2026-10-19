@@ -31,7 +31,9 @@ impl InputState {
     }
 
     pub fn is_key_pressed(&self, key: winit::keyboard::KeyCode) -> bool {
-        self.keys.iter().any(|k| matches!(k, Key::KeyCode(kc) if kc == &key))
+        self.keys
+            .iter()
+            .any(|k| matches!(k, Key::KeyCode(kc) if kc == &key))
     }
 
     pub fn is_mouse_pressed(&self, button: MouseButton) -> bool {

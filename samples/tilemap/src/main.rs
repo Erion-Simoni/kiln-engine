@@ -7,14 +7,9 @@
 
 use kiln_core::Transform;
 use kiln_render::{camera::Camera, sprite_renderer::SpriteInstance, Renderer, SpriteRenderer};
-use kiln_runtime::{GameWorld, GameLoop, Sprite};
+use kiln_runtime::{GameLoop, GameWorld, Sprite};
 use std::sync::Arc;
-use winit::{
-    event::KeyEvent,
-    event_loop::EventLoop,
-    keyboard::NamedKey,
-    window::Window,
-};
+use winit::{event::KeyEvent, event_loop::EventLoop, keyboard::NamedKey, window::Window};
 
 const TILE_W: f32 = 64.0;
 const TILE_H: f32 = 64.0;
@@ -85,26 +80,31 @@ impl TilemapApp {
             backends: wgpu::Backends::all(),
             ..Default::default()
         });
-        let surface: wgpu::Surface<'static> = instance
-            .create_surface(window.clone())
-            .expect("surface");
+        let surface: wgpu::Surface<'static> =
+            instance.create_surface(window.clone()).expect("surface");
 
         let renderer = Renderer::new(&instance, &surface, size.width, size.height).await;
-        let sprite_renderer = SpriteRenderer::new(renderer.device(), renderer.format());
+        let sprite_renderer =
+            SpriteRenderer::new(renderer.device(), renderer.queue(), renderer.format());
         sprite_renderer.upload_quad(renderer.queue());
 
-        self.gpu = Some(GpuState { window, surface, renderer, sprite_renderer });
+        self.gpu = Some(GpuState {
+            window,
+            surface,
+            renderer,
+            sprite_renderer,
+        });
     }
 
     fn handle_key(&mut self, event: KeyEvent) {
         use winit::keyboard::Key::Named;
         match event.logical_key {
-            Named(NamedKey::ArrowUp)    => self.camera.pan(0.0, 10.0),
-            Named(NamedKey::ArrowDown)  => self.camera.pan(0.0, -10.0),
-            Named(NamedKey::ArrowLeft)  => self.camera.pan(-10.0, 0.0),
+            Named(NamedKey::ArrowUp) => self.camera.pan(0.0, 10.0),
+            Named(NamedKey::ArrowDown) => self.camera.pan(0.0, -10.0),
+            Named(NamedKey::ArrowLeft) => self.camera.pan(-10.0, 0.0),
             Named(NamedKey::ArrowRight) => self.camera.pan(10.0, 0.0),
-            Named(NamedKey::Space)      => self.camera.zoom(1.1),
-            Named(NamedKey::Shift)      => self.camera.zoom(0.9),
+            Named(NamedKey::Space) => self.camera.zoom(1.1),
+            Named(NamedKey::Shift) => self.camera.zoom(0.9),
             _ => {}
         }
     }
@@ -112,29 +112,43 @@ impl TilemapApp {
     fn render(&mut self) {
         let Some(gpu) = self.gpu.as_mut() else { return };
         let size = gpu.window.inner_size();
-        if size.width == 0 || size.height == 0 { return; }
+        if size.width == 0 || size.height == 0 {
+            return;
+        }
 
         gpu.renderer.resize(&gpu.surface, size.width, size.height);
 
         let frame = match gpu.surface.get_current_texture() {
             Ok(f) => f,
-            Err(e) => { log::warn!("{e}"); return; }
+            Err(e) => {
+                log::warn!("{e}");
+                return;
+            }
         };
-        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
         gpu.sprite_renderer.begin_frame();
         for (transform, sprite) in self.world.world_mut().query_mut::<(&Transform, &Sprite)>() {
-            gpu.sprite_renderer.push(SpriteInstance {
-                position: [transform.position.x, transform.position.y],
-                size: sprite.size,
-                color: sprite.color,
-            });
+            gpu.sprite_renderer.push_textured(
+                sprite.texture,
+                SpriteInstance {
+                    position: [transform.position.x, transform.position.y],
+                    size: sprite.size,
+                    color: sprite.color,
+                    uv_rect: sprite.uv_rect,
+                },
+            );
         }
 
         let gpu = self.gpu.as_mut().unwrap();
-        let mut encoder = gpu.renderer.device().create_command_encoder(
-            &wgpu::CommandEncoderDescriptor { label: Some("tilemap_frame") }
-        );
+        let mut encoder =
+            gpu.renderer
+                .device()
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("tilemap_frame"),
+                });
 
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -143,7 +157,12 @@ impl TilemapApp {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.1, g: 0.1, b: 0.1, a: 1.0 }),
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.1,
+                            g: 0.1,
+                            b: 0.1,
+                            a: 1.0,
+                        }),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -151,7 +170,8 @@ impl TilemapApp {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            gpu.sprite_renderer.flush(&mut pass, &self.camera, gpu.renderer.queue());
+            gpu.sprite_renderer
+                .flush(&mut pass, &self.camera, gpu.renderer.queue());
         }
 
         gpu.renderer.queue().submit([encoder.finish()]);
@@ -163,11 +183,13 @@ impl TilemapApp {
 impl winit::application::ApplicationHandler for TilemapApp {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let window = Arc::new(
-            event_loop.create_window(
-                winit::window::WindowAttributes::default()
-                    .with_title("Kiln — Tilemap Sample")
-                    .with_inner_size(winit::dpi::LogicalSize::new(400u32, 400u32)),
-            ).expect("window"),
+            event_loop
+                .create_window(
+                    winit::window::WindowAttributes::default()
+                        .with_title("Kiln — Tilemap Sample")
+                        .with_inner_size(winit::dpi::LogicalSize::new(400u32, 400u32)),
+                )
+                .expect("window"),
         );
         pollster::block_on(self.init_gpu(window));
     }

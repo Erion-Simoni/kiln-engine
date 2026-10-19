@@ -42,7 +42,9 @@ impl DynamicObstacleManager {
 
     /// Remove a dynamic obstacle by ID
     pub fn remove_obstacle(&mut self, id: u64) -> bool {
-        let node_to_remove = self.obstacles.iter()
+        let node_to_remove = self
+            .obstacles
+            .iter()
             .find(|(_, &obstacle_id)| obstacle_id == id)
             .map(|(node, _)| *node);
 

@@ -4,12 +4,13 @@
 use serde::{Deserialize, Serialize};
 
 /// Render quality tier for device-based auto-selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DeviceTier {
     /// Low-end devices (older phones, integrated GPUs)
     Low,
     /// Mid-range devices (most phones, mid-tier GPUs)
+    #[default]
     Medium,
     /// High-end devices (flagship phones, discrete GPUs)
     High,
@@ -25,20 +26,14 @@ impl DeviceTier {
         }
     }
 
-    /// Parse from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    /// Parse from string (case-insensitive)
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "low" => Some(DeviceTier::Low),
             "medium" => Some(DeviceTier::Medium),
             "high" => Some(DeviceTier::High),
             _ => None,
         }
-    }
-}
-
-impl Default for DeviceTier {
-    fn default() -> Self {
-        DeviceTier::Medium
     }
 }
 
@@ -166,10 +161,10 @@ mod tests {
         assert_eq!(DeviceTier::Medium.as_str(), "medium");
         assert_eq!(DeviceTier::High.as_str(), "high");
 
-        assert_eq!(DeviceTier::from_str("low"), Some(DeviceTier::Low));
-        assert_eq!(DeviceTier::from_str("MEDIUM"), Some(DeviceTier::Medium));
-        assert_eq!(DeviceTier::from_str("High"), Some(DeviceTier::High));
-        assert_eq!(DeviceTier::from_str("invalid"), None);
+        assert_eq!(DeviceTier::parse("low"), Some(DeviceTier::Low));
+        assert_eq!(DeviceTier::parse("MEDIUM"), Some(DeviceTier::Medium));
+        assert_eq!(DeviceTier::parse("High"), Some(DeviceTier::High));
+        assert_eq!(DeviceTier::parse("invalid"), None);
     }
 
     #[test]

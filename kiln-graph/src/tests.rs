@@ -29,7 +29,12 @@ fn test_constant_node() {
     // Connect event to output
     let node_event = graph.get_node(id_event).unwrap();
     let node_output = graph.get_node(id_output).unwrap();
-    let pin_event_trigger_id = node_event.pins.iter().find(|p| p.name == "trigger").unwrap().id;
+    let pin_event_trigger_id = node_event
+        .pins
+        .iter()
+        .find(|p| p.name == "trigger")
+        .unwrap()
+        .id;
     let pin_output_in_id = node_output.pins.iter().find(|p| p.name == "in").unwrap().id;
     graph.add_connection(Connection::new(pin_event_trigger_id, pin_output_in_id));
 
@@ -85,7 +90,12 @@ fn test_arithmetic_graph() {
     // Connect event -> output
     let node_event = graph.get_node(id_event).unwrap();
     let node_output = graph.get_node(id_output).unwrap();
-    let pin_event_trigger_id = node_event.pins.iter().find(|p| p.name == "trigger").unwrap().id;
+    let pin_event_trigger_id = node_event
+        .pins
+        .iter()
+        .find(|p| p.name == "trigger")
+        .unwrap()
+        .id;
     let pin_output_in_id = node_output.pins.iter().find(|p| p.name == "in").unwrap().id;
     graph.add_connection(Connection::new(pin_event_trigger_id, pin_output_in_id));
 
@@ -117,10 +127,7 @@ fn test_branch_graph() {
     let _id_const = graph.add_node(const_node);
 
     // Branch node
-    let branch_node = Node::new(
-        NodeType::Branch,
-        (200.0, 0.0),
-    );
+    let branch_node = Node::new(NodeType::Branch, (200.0, 0.0));
     let _id_branch = graph.add_node(branch_node);
 
     // Host call (print)
@@ -141,8 +148,18 @@ fn test_branch_graph() {
     let node_host = graph.get_node(id_host).unwrap();
     let node_output = graph.get_node(id_output).unwrap();
 
-    let pin_event_trigger_id = node_event.pins.iter().find(|p| p.name == "trigger").unwrap().id;
-    let pin_host_trigger_id = node_host.pins.iter().find(|p| p.name == "trigger").unwrap().id;
+    let pin_event_trigger_id = node_event
+        .pins
+        .iter()
+        .find(|p| p.name == "trigger")
+        .unwrap()
+        .id;
+    let pin_host_trigger_id = node_host
+        .pins
+        .iter()
+        .find(|p| p.name == "trigger")
+        .unwrap()
+        .id;
     let pin_host_done_id = node_host.pins.iter().find(|p| p.name == "done").unwrap().id;
     let pin_output_in_id = node_output.pins.iter().find(|p| p.name == "in").unwrap().id;
 
@@ -156,7 +173,7 @@ fn test_branch_graph() {
 
 #[test]
 fn test_graph_matches_script_arithmetic() {
-    use kiln_ir::{Program, Instruction, Value};
+    use kiln_ir::{Instruction, Program, Value};
 
     let mut graph = Graph::new();
 
@@ -192,12 +209,54 @@ fn test_graph_matches_script_arithmetic() {
     let id_output = graph.add_node(output_node);
 
     // Connect: const_a -> add.a, const_b -> add.b, add.result -> output.in
-    let pin_a_out = graph.get_node(id_a).unwrap().pins.iter().find(|p| p.name == "value").unwrap().id;
-    let pin_b_out = graph.get_node(id_b).unwrap().pins.iter().find(|p| p.name == "value").unwrap().id;
-    let pin_add_a = graph.get_node(id_add).unwrap().pins.iter().find(|p| p.name == "a").unwrap().id;
-    let pin_add_b = graph.get_node(id_add).unwrap().pins.iter().find(|p| p.name == "b").unwrap().id;
-    let pin_add_out = graph.get_node(id_add).unwrap().pins.iter().find(|p| p.name == "result").unwrap().id;
-    let pin_output_in = graph.get_node(id_output).unwrap().pins.iter().find(|p| p.name == "in").unwrap().id;
+    let pin_a_out = graph
+        .get_node(id_a)
+        .unwrap()
+        .pins
+        .iter()
+        .find(|p| p.name == "value")
+        .unwrap()
+        .id;
+    let pin_b_out = graph
+        .get_node(id_b)
+        .unwrap()
+        .pins
+        .iter()
+        .find(|p| p.name == "value")
+        .unwrap()
+        .id;
+    let pin_add_a = graph
+        .get_node(id_add)
+        .unwrap()
+        .pins
+        .iter()
+        .find(|p| p.name == "a")
+        .unwrap()
+        .id;
+    let pin_add_b = graph
+        .get_node(id_add)
+        .unwrap()
+        .pins
+        .iter()
+        .find(|p| p.name == "b")
+        .unwrap()
+        .id;
+    let pin_add_out = graph
+        .get_node(id_add)
+        .unwrap()
+        .pins
+        .iter()
+        .find(|p| p.name == "result")
+        .unwrap()
+        .id;
+    let pin_output_in = graph
+        .get_node(id_output)
+        .unwrap()
+        .pins
+        .iter()
+        .find(|p| p.name == "in")
+        .unwrap()
+        .id;
 
     graph.add_connection(Connection::new(pin_a_out, pin_add_a));
     graph.add_connection(Connection::new(pin_b_out, pin_add_b));
@@ -219,8 +278,12 @@ fn test_graph_matches_script_arithmetic() {
     assert!(graph_instrs.len() >= 3);
 
     // Check that we have the key arithmetic instructions
-    let has_push_10 = graph_instrs.iter().any(|i| matches!(i, Instruction::PushConst(Value::I64(10))));
-    let has_push_5 = graph_instrs.iter().any(|i| matches!(i, Instruction::PushConst(Value::I64(5))));
+    let has_push_10 = graph_instrs
+        .iter()
+        .any(|i| matches!(i, Instruction::PushConst(Value::I64(10))));
+    let has_push_5 = graph_instrs
+        .iter()
+        .any(|i| matches!(i, Instruction::PushConst(Value::I64(5))));
     let has_add = graph_instrs.iter().any(|i| matches!(i, Instruction::Add));
 
     assert!(has_push_10, "Graph should push 10");
@@ -257,7 +320,12 @@ fn test_dialogue_node() {
     // Connect event -> output
     let node_event = graph.get_node(id_event).unwrap();
     let node_output = graph.get_node(id_output).unwrap();
-    let pin_event_trigger_id = node_event.pins.iter().find(|p| p.name == "trigger").unwrap().id;
+    let pin_event_trigger_id = node_event
+        .pins
+        .iter()
+        .find(|p| p.name == "trigger")
+        .unwrap()
+        .id;
     let pin_output_in_id = node_output.pins.iter().find(|p| p.name == "in").unwrap().id;
     graph.add_connection(Connection::new(pin_event_trigger_id, pin_output_in_id));
 
@@ -295,7 +363,12 @@ fn test_quest_node() {
     // Connect event -> output
     let node_event = graph.get_node(id_event).unwrap();
     let node_output = graph.get_node(id_output).unwrap();
-    let pin_event_trigger_id = node_event.pins.iter().find(|p| p.name == "trigger").unwrap().id;
+    let pin_event_trigger_id = node_event
+        .pins
+        .iter()
+        .find(|p| p.name == "trigger")
+        .unwrap()
+        .id;
     let pin_output_in_id = node_output.pins.iter().find(|p| p.name == "in").unwrap().id;
     graph.add_connection(Connection::new(pin_event_trigger_id, pin_output_in_id));
 
@@ -334,11 +407,101 @@ fn test_datatable_node() {
     // Connect event -> output
     let node_event = graph.get_node(id_event).unwrap();
     let node_output = graph.get_node(id_output).unwrap();
-    let pin_event_trigger_id = node_event.pins.iter().find(|p| p.name == "trigger").unwrap().id;
+    let pin_event_trigger_id = node_event
+        .pins
+        .iter()
+        .find(|p| p.name == "trigger")
+        .unwrap()
+        .id;
     let pin_output_in_id = node_output.pins.iter().find(|p| p.name == "in").unwrap().id;
     graph.add_connection(Connection::new(pin_event_trigger_id, pin_output_in_id));
 
     // Compilation should succeed
     let program = compile_graph(&graph);
     assert!(program.is_ok());
+}
+
+#[test]
+fn test_float_constant_compiles_to_f64() {
+    use kiln_ir::{Instruction, Value};
+
+    let mut graph = Graph::new();
+
+    let id_a = graph.add_node(Node::new(
+        NodeType::Constant {
+            value: ConstantValue::Float(2.5),
+        },
+        (0.0, 0.0),
+    ));
+    let id_b = graph.add_node(Node::new(
+        NodeType::Constant {
+            value: ConstantValue::Float(4.0),
+        },
+        (100.0, 0.0),
+    ));
+    let id_add = graph.add_node(Node::new(
+        NodeType::Arithmetic {
+            op: ArithmeticOp::Add,
+        },
+        (200.0, 0.0),
+    ));
+    let id_output = graph.add_node(Node::new(NodeType::Output, (300.0, 0.0)));
+
+    let out_pin = |graph: &Graph, id, name: &str| {
+        graph
+            .get_node(id)
+            .unwrap()
+            .pins
+            .iter()
+            .find(|p| p.name == name)
+            .unwrap()
+            .id
+    };
+    let in_pin = |graph: &Graph, id, name: &str| {
+        graph
+            .get_node(id)
+            .unwrap()
+            .pins
+            .iter()
+            .find(|p| p.name == name)
+            .unwrap()
+            .id
+    };
+
+    graph.add_connection(Connection::new(
+        out_pin(&graph, id_a, "value"),
+        in_pin(&graph, id_add, "a"),
+    ));
+    graph.add_connection(Connection::new(
+        out_pin(&graph, id_b, "value"),
+        in_pin(&graph, id_add, "b"),
+    ));
+    graph.add_connection(Connection::new(
+        out_pin(&graph, id_add, "result"),
+        in_pin(&graph, id_output, "in"),
+    ));
+
+    // Float constants expose a Float pin, not Integer
+    let pin = graph
+        .get_node(id_a)
+        .unwrap()
+        .pins
+        .iter()
+        .find(|p| p.name == "value")
+        .unwrap();
+    assert_eq!(pin.pin_type, crate::pin::PinType::Float);
+
+    let program = compile_graph(&graph).unwrap();
+    let has_f64 = |v: f64| {
+        program
+            .instructions()
+            .iter()
+            .any(|i| matches!(i, Instruction::PushConst(Value::F64(x)) if *x == v))
+    };
+    assert!(has_f64(2.5), "Graph should push 2.5");
+    assert!(has_f64(4.0), "Graph should push 4.0");
+    assert!(program
+        .instructions()
+        .iter()
+        .any(|i| matches!(i, Instruction::Add)));
 }

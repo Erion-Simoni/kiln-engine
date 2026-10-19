@@ -3,7 +3,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     pub id: String,
@@ -40,11 +39,17 @@ pub struct WindowSettings {
     pub resizable: bool,
 }
 
-fn default_window_width() -> u32 { 1280 }
-fn default_window_height() -> u32 { 720 }
-fn default_high_dpi() -> bool { true }
+fn default_window_width() -> u32 {
+    1280
+}
+fn default_window_height() -> u32 {
+    720
+}
+fn default_high_dpi() -> bool {
+    true
+}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MobileSettings {
     #[serde(default)]
     pub orientation: Orientation,
@@ -54,18 +59,13 @@ pub struct MobileSettings {
     pub android: AndroidSettings,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Orientation {
     Portrait,
+    #[default]
     Landscape,
     Auto,
-}
-
-impl Default for Orientation {
-    fn default() -> Self {
-        Orientation::Landscape
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,7 +82,7 @@ pub struct IosSettings {
     pub supports_notch: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PrivacyDescriptions {
     #[serde(default)]
     pub camera: String,
@@ -156,8 +156,15 @@ pub struct Entity {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Component {
-    Transform { x: f32, y: f32, rotation: f32, scale: f32 },
-    Sprite { color: [f32; 4] },
+    Transform {
+        x: f32,
+        y: f32,
+        rotation: f32,
+        scale: f32,
+    },
+    Sprite {
+        color: [f32; 4],
+    },
 }
 
 impl Project {
@@ -200,16 +207,6 @@ impl Default for WindowSettings {
     }
 }
 
-impl Default for MobileSettings {
-    fn default() -> Self {
-        Self {
-            orientation: Orientation::default(),
-            ios: IosSettings::default(),
-            android: AndroidSettings::default(),
-        }
-    }
-}
-
 impl Default for IosSettings {
     fn default() -> Self {
         Self {
@@ -218,17 +215,6 @@ impl Default for IosSettings {
             privacy_descriptions: PrivacyDescriptions::default(),
             launch_screen: LaunchScreen::default(),
             supports_notch: true,
-        }
-    }
-}
-
-impl Default for PrivacyDescriptions {
-    fn default() -> Self {
-        Self {
-            camera: String::new(),
-            microphone: String::new(),
-            photo_library: String::new(),
-            location: String::new(),
         }
     }
 }
@@ -258,8 +244,10 @@ mod tests {
 
     #[test]
     fn round_trip_toml() {
-        let mut proj = Project::default();
-        proj.name = "TestGame".to_string();
+        let proj = Project {
+            name: "TestGame".to_string(),
+            ..Project::default()
+        };
         let toml = proj.to_toml().expect("serialize");
         let loaded = Project::from_toml(&toml).expect("deserialize");
         assert_eq!(loaded.name, "TestGame");
@@ -288,16 +276,17 @@ mod tests {
 
         assert_eq!(loaded.window.width, 1920);
         assert_eq!(loaded.window.height, 1080);
-        assert_eq!(loaded.window.fullscreen, true);
-        assert_eq!(loaded.window.vsync, false);
+        assert!(loaded.window.fullscreen);
+        assert!(!loaded.window.vsync);
     }
 
     #[test]
     fn packaging_fields_round_trip() {
-        let mut proj = Project::default();
-        proj.publisher = "MyStudio".to_string();
-        proj.icon = "icon.png".to_string();
-
+        let proj = Project {
+            publisher: "MyStudio".to_string(),
+            icon: "icon.png".to_string(),
+            ..Project::default()
+        };
         let toml = proj.to_toml().expect("serialize");
         let loaded = Project::from_toml(&toml).expect("deserialize");
 
@@ -311,13 +300,11 @@ mod tests {
             id: "scene1".to_string(),
             name: "MainScene".to_string(),
             entities: vec![],
-            nested_scenes: vec![
-                NestedScene {
-                    scene_id: "scene2".to_string(),
-                    additive: true,
-                    offset: SceneOffset { x: 100.0, y: 200.0 },
-                },
-            ],
+            nested_scenes: vec![NestedScene {
+                scene_id: "scene2".to_string(),
+                additive: true,
+                offset: SceneOffset { x: 100.0, y: 200.0 },
+            }],
         };
 
         let mut proj = Project::default();
@@ -329,7 +316,7 @@ mod tests {
         let loaded_scene = loaded.scenes.get("scene1").unwrap();
         assert_eq!(loaded_scene.nested_scenes.len(), 1);
         assert_eq!(loaded_scene.nested_scenes[0].scene_id, "scene2");
-        assert_eq!(loaded_scene.nested_scenes[0].additive, true);
+        assert!(loaded_scene.nested_scenes[0].additive);
         assert_eq!(loaded_scene.nested_scenes[0].offset.x, 100.0);
         assert_eq!(loaded_scene.nested_scenes[0].offset.y, 200.0);
     }
@@ -400,7 +387,10 @@ mod tests {
         let mut proj = Project::default();
         proj.mobile.orientation = Orientation::Portrait;
         proj.mobile.ios.bundle_identifier = "com.example.mygame".to_string();
-        proj.mobile.ios.permissions.push("NSCameraUsageDescription".to_string());
+        proj.mobile
+            .ios
+            .permissions
+            .push("NSCameraUsageDescription".to_string());
         proj.mobile.android.package_name = "com.example.mygame".to_string();
         proj.mobile.android.target_sdk = 34;
 
@@ -423,4 +413,3 @@ mod tests {
         assert_eq!(mobile.android.target_sdk, 33);
     }
 }
-

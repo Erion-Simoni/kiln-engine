@@ -4,20 +4,15 @@ use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 
 /// Emission shape for particle spawning.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub enum EmissionShape {
     /// Single point.
+    #[default]
     Point,
     /// Circle with radius.
     Circle { radius: f32 },
     /// Rectangle with width and height.
     Rectangle { width: f32, height: f32 },
-}
-
-impl Default for EmissionShape {
-    fn default() -> Self {
-        Self::Point
-    }
 }
 
 /// Particle emitter configuration.
@@ -77,7 +72,6 @@ impl Emitter {
             time_since_last_emit: 0.0,
             position: [0.0; 2],
         }
-
     }
 
     /// Get the emitter configuration.

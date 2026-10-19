@@ -616,3 +616,27 @@ Full skeletal animation (bones, IK, blend trees) is deferred to M33 (3D skeletal
 - Screenshot regression hashes RGBA readback (sha2); no `image` crate
 - Editor Settings shows per-pass GPU µs when queries resolve
 - Default 2D graph ports M2 (sprites/main) + M9 (tier-gated post stubs) through the graph
+
+---
+
+## ADR-0026: File length soft limit + AI exception (accepted)
+
+**Date:** 2026-10-19
+**Status:** accepted
+
+**Decision:** Keep **prefer under 400 lines per file** as a soft guideline for
+clarity. **AI agents may exceed 400 lines** when a split would be artificial,
+duplicate glue, or slow a milestone. Prefer a natural module boundary when one
+exists; never refuse needed work only to stay under 400. Humans may still ask
+for a split in review.
+
+**Alternatives:**
+- Hard 400-line cap for everyone: keeps files small, but causes brittle splits
+  and unfinished milestones when a coherent module is larger
+- No guideline: files grow without pressure to modularize
+
+**Consequences:**
+- `AGENTS.md` coding rule 4 updated to match
+- Existing large files (`kiln-editor/src/app.rs`, `kiln-cli/src/main.rs`, etc.)
+  are acceptable until a natural split is warranted
+- Splits still preferred when a clear submodule boundary appears

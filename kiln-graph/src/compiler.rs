@@ -94,6 +94,9 @@ fn compile_node_recursive(
                 crate::node::ConstantValue::Integer(n) => {
                     program.add_instruction(Instruction::PushConst(Value::I64(*n)));
                 }
+                crate::node::ConstantValue::Float(f) => {
+                    program.add_instruction(Instruction::PushConst(Value::F64(*f)));
+                }
                 crate::node::ConstantValue::Boolean(b) => {
                     program.add_instruction(Instruction::PushConst(Value::Bool(*b)));
                 }
@@ -531,7 +534,10 @@ fn compile_node_recursive(
             let id = simple_hash(quest_id);
             program.add_instruction(Instruction::HostCall(id));
         }
-        NodeType::QuestObjectiveUpdate { quest_id, objective_index } => {
+        NodeType::QuestObjectiveUpdate {
+            quest_id,
+            objective_index,
+        } => {
             // Emit host call to update quest objective
             let label = format!("quest_obj_update_{}", node_id);
             program.define_label(&label);
@@ -543,7 +549,10 @@ fn compile_node_recursive(
             let id = simple_hash(quest_id);
             program.add_instruction(Instruction::HostCall(id));
         }
-        NodeType::DataTableLookup { table_id, column_name } => {
+        NodeType::DataTableLookup {
+            table_id,
+            column_name,
+        } => {
             // Emit host call for data table lookup
             let label = format!("datatable_lookup_{}", node_id);
             program.define_label(&label);

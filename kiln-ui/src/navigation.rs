@@ -50,7 +50,8 @@ impl FocusManager {
         if self.focused_widget == Some(widget_id) {
             self.focused_widget = None;
         }
-        self.navigation_map.retain(|(from, _), _| *from != widget_id);
+        self.navigation_map
+            .retain(|(from, _), _| *from != widget_id);
     }
 
     /// Sets a navigation link between two widgets.
@@ -81,14 +82,20 @@ impl FocusManager {
         // Fallback to linear navigation for Next/Previous
         match direction {
             FocusDirection::Next => {
-                let index = self.focusable_widgets.iter().position(|&id| id == current)?;
+                let index = self
+                    .focusable_widgets
+                    .iter()
+                    .position(|&id| id == current)?;
                 let next_index = (index + 1) % self.focusable_widgets.len();
                 let target = self.focusable_widgets[next_index];
                 self.focused_widget = Some(target);
                 Some(target)
             }
             FocusDirection::Previous => {
-                let index = self.focusable_widgets.iter().position(|&id| id == current)?;
+                let index = self
+                    .focusable_widgets
+                    .iter()
+                    .position(|&id| id == current)?;
                 let prev_index = if index == 0 {
                     self.focusable_widgets.len() - 1
                 } else {

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{self, Read, Seek, Write, BufReader, BufWriter};
+use std::io::{self, BufReader, BufWriter, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -56,13 +56,21 @@ impl Archive {
     }
 
     /// Pack files into the archive with optional version (V2 format if version provided).
-    pub fn pack_with_version(&mut self, files: &[PathBuf], version: Option<&str>) -> Result<(), ArchiveError> {
+    pub fn pack_with_version(
+        &mut self,
+        files: &[PathBuf],
+        version: Option<&str>,
+    ) -> Result<(), ArchiveError> {
         let archive_path = &self.base_path;
         let file = File::create(archive_path)?;
         let mut writer = BufWriter::new(file);
 
         // Write magic header (V2 if version provided, else V1)
-        let magic = if version.is_some() { ARCHIVE_MAGIC_V2 } else { ARCHIVE_MAGIC_V1 };
+        let magic = if version.is_some() {
+            ARCHIVE_MAGIC_V2
+        } else {
+            ARCHIVE_MAGIC_V1
+        };
         writer.write_all(magic)?;
 
         // Write placeholder for entry count
@@ -89,12 +97,13 @@ impl Archive {
 
         // Write file data
         for path in files {
-            let file = File::open(&path)?;
+            let file = File::open(path)?;
             let metadata = file.metadata()?;
             let size = metadata.len();
 
             let entry = ArchiveEntry {
-                path: path.file_name()
+                path: path
+                    .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or("unknown")
                     .to_string(),
@@ -186,14 +195,7 @@ impl Archive {
             reader.read_exact(&mut size_bytes)?;
             let size = u64::from_le_bytes(size_bytes);
 
-            entries.insert(
-                path.clone(),
-                ArchiveEntry {
-                    path,
-                    offset,
-                    size,
-                },
-            );
+            entries.insert(path.clone(), ArchiveEntry { path, offset, size });
         }
 
         Ok(Self {
@@ -227,8 +229,8 @@ impl Archive {
         let mut meta_bytes = vec![0u8; meta_len];
         reader.read_exact(&mut meta_bytes)?;
 
-        let metadata: ArchiveMetadata = serde_json::from_slice(&meta_bytes)
-            .map_err(|_| ArchiveError::InvalidFormat)?;
+        let metadata: ArchiveMetadata =
+            serde_json::from_slice(&meta_bytes).map_err(|_| ArchiveError::InvalidFormat)?;
 
         Ok(Some(metadata))
     }
@@ -240,7 +242,9 @@ impl Archive {
 
     /// Extract a file from the archive.
     pub fn extract(&self, path: &str) -> Result<Vec<u8>, ArchiveError> {
-        let entry = self.get_entry(path).ok_or_else(|| ArchiveError::NotFound(path.to_string()))?;
+        let entry = self
+            .get_entry(path)
+            .ok_or_else(|| ArchiveError::NotFound(path.to_string()))?;
 
         let file = File::open(&self.base_path)?;
         let mut reader = BufReader::new(file);

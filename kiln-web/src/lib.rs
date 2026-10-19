@@ -20,10 +20,7 @@ pub fn run() {
     let isolated = is_cross_origin_isolated();
     let workers = can_use_web_workers();
     web_sys::console::log_1(
-        &format!(
-            "Kiln web runtime: crossOriginIsolated={isolated}, workers={workers}"
-        )
-        .into(),
+        &format!("Kiln web runtime: crossOriginIsolated={isolated}, workers={workers}").into(),
     );
     let _ = run_background_job(1000);
 }

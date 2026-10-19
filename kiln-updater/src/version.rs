@@ -14,7 +14,11 @@ pub struct Version {
 
 impl Version {
     pub fn new(major: u32, minor: u32, patch: u32) -> Self {
-        Self { major, minor, patch }
+        Self {
+            major,
+            minor,
+            patch,
+        }
     }
 
     /// Check if this version satisfies a requirement (e.g., ">=1.0.0").
@@ -56,7 +60,11 @@ impl FromStr for Version {
             .parse::<u32>()
             .map_err(|_| VersionParseError::InvalidNumber)?;
 
-        Ok(Version { major, minor, patch })
+        Ok(Version {
+            major,
+            minor,
+            patch,
+        })
     }
 }
 

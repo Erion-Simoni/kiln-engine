@@ -1,7 +1,7 @@
 //! Grid-based A* pathfinding
 
-use std::collections::{BinaryHeap, HashMap};
 use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap};
 
 /// Node in a grid for pathfinding
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -69,7 +69,10 @@ impl Grid {
     }
 
     pub fn is_obstacle(&self, node: &GridNode) -> bool {
-        self.obstacles.get(&(node.x, node.y)).copied().unwrap_or(false)
+        self.obstacles
+            .get(&(node.x, node.y))
+            .copied()
+            .unwrap_or(false)
     }
 
     pub fn set_obstacle(&mut self, node: &GridNode, obstacle: bool) {
@@ -87,7 +90,11 @@ impl Grid {
     }
 
     /// Find path from start to goal using A* algorithm
-    pub fn find_path(&self, start: GridNode, goal: GridNode) -> Result<Vec<GridNode>, PathfindError> {
+    pub fn find_path(
+        &self,
+        start: GridNode,
+        goal: GridNode,
+    ) -> Result<Vec<GridNode>, PathfindError> {
         if !self.is_passable(&start) {
             return Err(PathfindError::InvalidStart);
         }
@@ -129,7 +136,11 @@ impl Grid {
         Err(PathfindError::NoPath)
     }
 
-    fn reconstruct_path(&self, came_from: &HashMap<GridNode, GridNode>, current: GridNode) -> Vec<GridNode> {
+    fn reconstruct_path(
+        &self,
+        came_from: &HashMap<GridNode, GridNode>,
+        current: GridNode,
+    ) -> Vec<GridNode> {
         let mut path = vec![current];
         let mut node = current;
 

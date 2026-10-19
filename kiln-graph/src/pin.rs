@@ -14,6 +14,8 @@ pub enum PinDirection {
 pub enum PinType {
     /// Integer value (i64 in IR).
     Integer,
+    /// Float value (f64 in IR).
+    Float,
     /// Boolean value.
     Boolean,
     /// Event/trigger (no data, just signal).

@@ -1,8 +1,8 @@
 //! Prefab system for reusable entity templates
 
+use crate::project::{Component, Entity};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::project::{Entity, Component};
 
 /// A prefab is a reusable template for entities
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,8 +23,15 @@ pub struct PrefabOverride {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ComponentOverride {
-    Transform { x: Option<f32>, y: Option<f32>, rotation: Option<f32>, scale: Option<f32> },
-    Sprite { color: Option<[f32; 4]> },
+    Transform {
+        x: Option<f32>,
+        y: Option<f32>,
+        rotation: Option<f32>,
+        scale: Option<f32>,
+    },
+    Sprite {
+        color: Option<[f32; 4]>,
+    },
 }
 
 /// Tracks which prefab an entity instance came from
@@ -46,18 +53,40 @@ impl Prefab {
 
     /// Apply overrides to an entity from this prefab
     pub fn apply_overrides(&self, entity: &mut Entity, overrides: &PrefabOverride) {
-        for (_component_type, override_value) in &overrides.overrides {
+        for override_value in overrides.overrides.values() {
             for component in &mut entity.components {
                 match (component, override_value) {
-                    (Component::Transform { x, y, rotation, scale }, ComponentOverride::Transform { x: ox, y: oy, rotation: orot, scale: oscale }) => {
-                        if let Some(val) = ox { *x = *val; }
-                        if let Some(val) = oy { *y = *val; }
-                        if let Some(val) = orot { *rotation = *val; }
-                        if let Some(val) = oscale { *scale = *val; }
+                    (
+                        Component::Transform {
+                            x,
+                            y,
+                            rotation,
+                            scale,
+                        },
+                        ComponentOverride::Transform {
+                            x: ox,
+                            y: oy,
+                            rotation: orot,
+                            scale: oscale,
+                        },
+                    ) => {
+                        if let Some(val) = ox {
+                            *x = *val;
+                        }
+                        if let Some(val) = oy {
+                            *y = *val;
+                        }
+                        if let Some(val) = orot {
+                            *rotation = *val;
+                        }
+                        if let Some(val) = oscale {
+                            *scale = *val;
+                        }
                     }
-                    (Component::Sprite { color }, ComponentOverride::Sprite { color: ocolor }) => {
-                        if let Some(val) = ocolor { *color = *val; }
-                    }
+                    (
+                        Component::Sprite { color },
+                        ComponentOverride::Sprite { color: Some(val) },
+                    ) => *color = *val,
                     _ => {}
                 }
             }
@@ -100,8 +129,15 @@ mod tests {
             id: "entity1".to_string(),
             name: "TestEntity".to_string(),
             components: vec![
-                Component::Transform { x: 0.0, y: 0.0, rotation: 0.0, scale: 1.0 },
-                Component::Sprite { color: [1.0, 0.0, 0.0, 1.0] },
+                Component::Transform {
+                    x: 0.0,
+                    y: 0.0,
+                    rotation: 0.0,
+                    scale: 1.0,
+                },
+                Component::Sprite {
+                    color: [1.0, 0.0, 0.0, 1.0],
+                },
             ],
         };
 
@@ -115,9 +151,12 @@ mod tests {
         let entity = Entity {
             id: "entity1".to_string(),
             name: "TestEntity".to_string(),
-            components: vec![
-                Component::Transform { x: 10.0, y: 20.0, rotation: 0.0, scale: 1.0 },
-            ],
+            components: vec![Component::Transform {
+                x: 10.0,
+                y: 20.0,
+                rotation: 0.0,
+                scale: 1.0,
+            }],
         };
 
         let prefab = Prefab::new("TestPrefab".to_string(), entity);
@@ -133,9 +172,12 @@ mod tests {
         let entity = Entity {
             id: "entity1".to_string(),
             name: "TestEntity".to_string(),
-            components: vec![
-                Component::Transform { x: 0.0, y: 0.0, rotation: 0.0, scale: 1.0 },
-            ],
+            components: vec![Component::Transform {
+                x: 0.0,
+                y: 0.0,
+                rotation: 0.0,
+                scale: 1.0,
+            }],
         };
 
         let prefab = Prefab::new("TestPrefab".to_string(), entity);
@@ -143,7 +185,12 @@ mod tests {
         let mut overrides = PrefabOverride::new("entity1".to_string());
         overrides.add_override(
             "transform".to_string(),
-            ComponentOverride::Transform { x: Some(50.0), y: Some(100.0), rotation: None, scale: None },
+            ComponentOverride::Transform {
+                x: Some(50.0),
+                y: Some(100.0),
+                rotation: None,
+                scale: None,
+            },
         );
 
         let instance = prefab.instantiate(Some(overrides));
@@ -161,9 +208,9 @@ mod tests {
         let entity = Entity {
             id: "entity1".to_string(),
             name: "TestEntity".to_string(),
-            components: vec![
-                Component::Sprite { color: [1.0, 0.0, 0.0, 1.0] },
-            ],
+            components: vec![Component::Sprite {
+                color: [1.0, 0.0, 0.0, 1.0],
+            }],
         };
 
         let prefab = Prefab::new("TestPrefab".to_string(), entity);
@@ -171,7 +218,9 @@ mod tests {
         let mut overrides = PrefabOverride::new("entity1".to_string());
         overrides.add_override(
             "sprite".to_string(),
-            ComponentOverride::Sprite { color: Some([0.0, 1.0, 0.0, 1.0]) },
+            ComponentOverride::Sprite {
+                color: Some([0.0, 1.0, 0.0, 1.0]),
+            },
         );
 
         let instance = prefab.instantiate(Some(overrides));
@@ -188,9 +237,12 @@ mod tests {
         let entity = Entity {
             id: "entity1".to_string(),
             name: "TestEntity".to_string(),
-            components: vec![
-                Component::Transform { x: 0.0, y: 0.0, rotation: 0.0, scale: 1.0 },
-            ],
+            components: vec![Component::Transform {
+                x: 0.0,
+                y: 0.0,
+                rotation: 0.0,
+                scale: 1.0,
+            }],
         };
 
         let prefab = Prefab::new("TestPrefab".to_string(), entity);
@@ -210,8 +262,15 @@ mod tests {
             id: "entity1".to_string(),
             name: "TestEntity".to_string(),
             components: vec![
-                Component::Transform { x: 0.0, y: 0.0, rotation: 0.0, scale: 1.0 },
-                Component::Sprite { color: [1.0, 0.0, 0.0, 1.0] },
+                Component::Transform {
+                    x: 0.0,
+                    y: 0.0,
+                    rotation: 0.0,
+                    scale: 1.0,
+                },
+                Component::Sprite {
+                    color: [1.0, 0.0, 0.0, 1.0],
+                },
             ],
         };
 

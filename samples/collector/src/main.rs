@@ -88,7 +88,8 @@ impl CollectorApp {
             instance.create_surface(window.clone()).expect("surface");
 
         let renderer = Renderer::new(&instance, &surface, size.width, size.height).await;
-        let sprite_renderer = SpriteRenderer::new(renderer.device(), renderer.format());
+        let sprite_renderer =
+            SpriteRenderer::new(renderer.device(), renderer.queue(), renderer.format());
         sprite_renderer.upload_quad(renderer.queue());
 
         self.gpu = Some(GpuState {
@@ -134,20 +135,24 @@ impl CollectorApp {
 
         // Render player
         for (transform, sprite) in self.world.world_mut().query_mut::<(&Transform, &Sprite)>() {
-            gpu.sprite_renderer.push(SpriteInstance {
-                position: [transform.position.x, transform.position.y],
-                size: sprite.size,
-                color: sprite.color,
-            });
+            gpu.sprite_renderer.push_textured(
+                sprite.texture,
+                SpriteInstance {
+                    position: [transform.position.x, transform.position.y],
+                    size: sprite.size,
+                    color: sprite.color,
+                    uv_rect: sprite.uv_rect,
+                },
+            );
         }
 
         // Render coins
         for &(x, y) in &self.state.coins {
-            gpu.sprite_renderer.push(SpriteInstance {
-                position: [x, y],
-                size: [COIN_SIZE, COIN_SIZE],
-                color: [1.0, 0.8, 0.0, 1.0], // Gold
-            });
+            gpu.sprite_renderer.push(SpriteInstance::colored(
+                [x, y],
+                [COIN_SIZE, COIN_SIZE],
+                [1.0, 0.8, 0.0, 1.0],
+            ));
         }
 
         let gpu = self.gpu.as_mut().unwrap();

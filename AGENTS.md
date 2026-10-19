@@ -36,7 +36,10 @@ just package  # installers via cargo-dist
 1. ONE milestone per session. Never start the next unasked.
 2. Plan ≤10 bullets, then implement in small steps.
 3. Tests alongside code; `just check` must pass before every commit.
-4. Files under 400 lines; small functions; clear module boundaries.
+4. Prefer files under 400 lines; small functions; clear module boundaries.
+   **AI exception:** agents may exceed 400 lines per file when splitting would
+   hurt clarity or force awkward module cuts. Prefer split when natural;
+   do not block work solely to stay under 400. Humans may still request splits.
 5. No new dependency without an ADR entry in `docs/DECISIONS.md`.
 6. Targeted search/grep; never re-read or paste whole large files; summarize.
 7. Boring, explicit Rust; no clever macros; document public items.

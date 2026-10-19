@@ -37,6 +37,10 @@ impl Diagnostic {
 
 impl fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}..{}]: {}", self.span.start, self.span.end, self.message)
+        write!(
+            f,
+            "[{}..{}]: {}",
+            self.span.start, self.span.end, self.message
+        )
     }
 }

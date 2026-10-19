@@ -23,7 +23,7 @@ pub struct DlcMetadata {
     pub id: String,
     pub name: String,
     pub version: String,
-    pub requires_version: String, // Minimum game version required
+    pub requires_version: String,  // Minimum game version required
     pub dependencies: Vec<String>, // Other DLC IDs this depends on
 }
 
@@ -54,7 +54,11 @@ impl DlcManager {
     }
 
     /// Check if a DLC is compatible with the current game version.
-    pub fn check_compatibility(&self, dlc_id: &str, game_version: &Version) -> Result<(), DlcError> {
+    pub fn check_compatibility(
+        &self,
+        dlc_id: &str,
+        game_version: &Version,
+    ) -> Result<(), DlcError> {
         let pack = self
             .packs
             .get(dlc_id)

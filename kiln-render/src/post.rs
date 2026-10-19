@@ -6,9 +6,17 @@
 //! - Screen-space fog
 //! - Outline effect
 
-use wgpu::{Device, TextureView, CommandEncoder};
+use wgpu::{Device, TextureView};
 
 use crate::tier::RenderTier;
+
+/// Monotonic counter used to invalidate cached GPU state on reallocation.
+static GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+/// Next unique framebuffer generation.
+fn next_generation() -> u64 {
+    GENERATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
 
 /// Post-processing configuration.
 #[derive(Debug, Clone, Copy)]
@@ -21,10 +29,12 @@ pub struct PostConfig {
     pub fog_density: f32,
     /// Fog color.
     pub fog_color: [f32; 3],
-    /// Outline color.
+    /// Outline color (RGB + alpha as strength).
     pub outline_color: [f32; 4],
-    /// Outline thickness.
+    /// Outline thickness (edge detection strength in pixels).
     pub outline_thickness: f32,
+    /// Luminance delta required before an edge is outlined.
+    pub outline_threshold: f32,
 }
 
 impl Default for PostConfig {
@@ -36,6 +46,7 @@ impl Default for PostConfig {
             fog_color: [0.5, 0.5, 0.5],
             outline_color: [1.0, 1.0, 1.0, 1.0],
             outline_thickness: 1.0,
+            outline_threshold: 0.1,
         }
     }
 }
@@ -51,6 +62,7 @@ impl PostConfig {
                 fog_color: [0.5; 3],
                 outline_color: [1.0; 4],
                 outline_thickness: 0.0,
+                outline_threshold: 0.1,
             },
             RenderTier::Medium => Self {
                 bloom_threshold: 0.8,
@@ -59,6 +71,7 @@ impl PostConfig {
                 fog_color: [0.5; 3],
                 outline_color: [1.0; 4],
                 outline_thickness: 0.0,
+                outline_threshold: 0.1,
             },
             RenderTier::High => Self {
                 bloom_threshold: 0.8,
@@ -67,6 +80,7 @@ impl PostConfig {
                 fog_color: [0.5; 3],
                 outline_color: [1.0, 1.0, 1.0, 1.0],
                 outline_thickness: 1.0,
+                outline_threshold: 0.1,
             },
         }
     }
@@ -79,6 +93,17 @@ pub struct PostFramebuffer {
     color_view: TextureView,
     /// Bloom mip chain (for multi-pass blur).
     _bloom_textures: Vec<wgpu::Texture>,
+    /// Bloom chain target (buffer 0) and blur ping-pong buffer (buffer 1).
+    ///
+    /// Empty on tiers without bloom.
+    bloom_views: Vec<TextureView>,
+    /// Bumped whenever the framebuffer is reallocated, so cached GPU state
+    /// (e.g. bind groups) can be invalidated.
+    generation: u64,
+    /// Framebuffer width in pixels.
+    width: u32,
+    /// Framebuffer height in pixels.
+    height: u32,
     /// Depth texture (for outline edge detection).
     _depth_texture: wgpu::Texture,
     depth_view: TextureView,
@@ -109,6 +134,7 @@ impl PostFramebuffer {
         // Bloom mip chain (only if bloom enabled)
         let bloom_passes = tier.max_bloom_passes();
         let mut bloom_textures = Vec::new();
+        let mut bloom_views = Vec::new();
 
         if bloom_passes > 0 {
             for i in 0..bloom_passes {
@@ -134,7 +160,8 @@ impl PostFramebuffer {
                         | wgpu::TextureUsages::COPY_DST,
                     view_formats: &[],
                 });
-                let _view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                bloom_views.push(view);
                 bloom_textures.push(texture);
             }
         }
@@ -160,6 +187,10 @@ impl PostFramebuffer {
             _color_texture: color_texture,
             color_view,
             _bloom_textures: bloom_textures,
+            bloom_views,
+            generation: next_generation(),
+            width,
+            height,
             _depth_texture: depth_texture,
             depth_view,
         }
@@ -179,64 +210,37 @@ impl PostFramebuffer {
     pub fn depth_view(&self) -> &TextureView {
         &self.depth_view
     }
-}
 
-/// Post-processing pipeline.
-pub struct PostPipeline {
-    config: PostConfig,
-    tier: RenderTier,
-    // Pipelines for each effect
-    // (To be filled in with actual shader modules)
-}
-
-impl PostPipeline {
-    /// Create new post-processing pipeline.
-    pub fn new(_device: &Device, tier: RenderTier) -> Self {
-        let config = PostConfig::for_tier(tier);
-
-        Self { config, tier }
+    /// Views into the bloom chain (empty on tiers without bloom).
+    pub fn bloom_views(&self) -> &[TextureView] {
+        &self.bloom_views
     }
 
-    /// Apply post-processing to the framebuffer.
+    /// Unique id of this framebuffer allocation.
     ///
-    /// Renders to the final output texture view.
-    pub fn apply(
-        &self,
-        _encoder: &mut CommandEncoder,
-        _framebuffer: &PostFramebuffer,
-        _output_view: &TextureView,
-    ) {
-        // TODO: Implement actual post-processing passes
-        // For now, this is a stub - we'll add the shader modules
-        // and actual rendering in subsequent steps
-
-        // Pass structure:
-        // 1. Bloom downsample (if enabled)
-        // 2. Bloom blur (if enabled)
-        // 3. Bloom upsample + blend (if enabled)
-        // 4. Fog pass (if enabled)
-        // 5. Outline pass (if enabled)
-        // 6. LUT color grading (if enabled)
-        // 7. Final composite to output
+    /// Changes whenever the framebuffer is reallocated (e.g. on resize), so
+    /// consumers can invalidate cached GPU state such as bind groups.
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
 
-    /// Update configuration.
-    pub fn set_config(&mut self, config: PostConfig) {
-        self.config = config;
+    /// Framebuffer width in pixels.
+    pub fn width(&self) -> u32 {
+        self.width
     }
 
-    /// Get current configuration.
-    pub fn config(&self) -> &PostConfig {
-        &self.config
-    }
-
-    /// Change render tier (rebuilds internal state).
-    pub fn set_tier(&mut self, _device: &Device, tier: RenderTier) {
-        self.tier = tier;
-        self.config = PostConfig::for_tier(tier);
-        // TODO: Rebuild pipelines for new tier
+    /// Framebuffer height in pixels.
+    pub fn height(&self) -> u32 {
+        self.height
     }
 }
+
+/// Post-processing pipeline (GPU implementation).
+///
+/// The pipeline owns the bloom / outline / fog passes described in
+/// [`crate::post_gpu`]. Use [`PostPipeline::apply`] after rendering the scene
+/// into the [`PostFramebuffer`] colour target.
+pub use crate::post_gpu::PostGpuPipeline as PostPipeline;
 
 #[cfg(test)]
 mod tests {

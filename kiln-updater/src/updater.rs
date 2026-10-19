@@ -133,8 +133,8 @@ impl Updater {
         }
 
         // Apply patch
-        let old_data = fs::read(&archive_path)
-            .map_err(|e| UpdaterError::Patch(PatchError::ReadOld(e)))?;
+        let old_data =
+            fs::read(&archive_path).map_err(|e| UpdaterError::Patch(PatchError::ReadOld(e)))?;
 
         let new_data = apply_patch(&old_data, &patch_data, &manifest.patch_hash)?;
 
@@ -169,8 +169,7 @@ impl Updater {
         fs::copy(&backup_path, &archive_path)
             .map_err(|e| UpdaterError::RollbackFailed(e.to_string()))?;
 
-        fs::remove_file(&backup_path)
-            .map_err(|e| UpdaterError::RollbackFailed(e.to_string()))?;
+        fs::remove_file(&backup_path).map_err(|e| UpdaterError::RollbackFailed(e.to_string()))?;
 
         Ok(())
     }

@@ -50,9 +50,15 @@ pub enum DialogueCondition {
     /// Check if a variable is less than a value
     VariableLessThan { variable: String, value: i64 },
     /// Check if a quest has a specific status
-    QuestStatus { quest_id: String, status: QuestStatusCondition },
+    QuestStatus {
+        quest_id: String,
+        status: QuestStatusCondition,
+    },
     /// Check if a quest objective is complete
-    QuestObjectiveComplete { quest_id: String, objective_index: usize },
+    QuestObjectiveComplete {
+        quest_id: String,
+        objective_index: usize,
+    },
     /// Multiple conditions must all be true (AND)
     AllOf(Vec<DialogueCondition>),
     /// At least one condition must be true (OR)
@@ -140,16 +146,16 @@ impl Dialogue {
     ) -> bool {
         match condition {
             DialogueCondition::VariableEquals { variable, value } => {
-                variables.get(variable).map_or(false, |v| *v == *value)
+                variables.get(variable).is_some_and(|v| *v == *value)
             }
             DialogueCondition::VariableGreaterThan { variable, value } => {
-                variables.get(variable).map_or(false, |v| *v > *value)
+                variables.get(variable).is_some_and(|v| *v > *value)
             }
             DialogueCondition::VariableLessThan { variable, value } => {
-                variables.get(variable).map_or(false, |v| *v < *value)
+                variables.get(variable).is_some_and(|v| *v < *value)
             }
             DialogueCondition::QuestStatus { quest_id, status } => {
-                quest_states.get(quest_id).map_or(false, |s| s == status)
+                quest_states.get(quest_id).is_some_and(|s| s == status)
             }
             DialogueCondition::QuestObjectiveComplete { .. } => {
                 // Quest objective tracking deferred - assume true for now

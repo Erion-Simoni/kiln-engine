@@ -6,13 +6,15 @@ pub mod graph;
 pub mod particle_renderer;
 pub mod pass_config;
 pub mod post;
+pub mod post_gpu;
 pub mod profiler;
 pub mod renderer;
 pub mod screenshot;
 pub mod sprite_renderer;
+pub mod texture;
 pub mod tier;
 
-pub use frame::{execute_passes, clear_view, Frame2dGraph, FrameResources, PassExecContext};
+pub use frame::{clear_view, execute_passes, Frame2dGraph, FrameResources, PassExecContext};
 pub use graph::{
     CompiledGraph, GraphError, PassDecl, PassId, RenderGraph, ResourceDesc, ResourceId,
     ResourceKind, ResourceRef, ResourceUsage, TextureFormatKey,
@@ -20,8 +22,12 @@ pub use graph::{
 pub use particle_renderer::ParticleRenderer;
 pub use pass_config::{PassEnableConfig, PassTierEnable};
 pub use post::{PostConfig, PostFramebuffer, PostPipeline};
+pub use post_gpu::{PostGpuPipeline, PostUniforms};
 pub use profiler::{GpuProfiler, PassTiming};
 pub use renderer::Renderer;
 pub use screenshot::{render_graph_screenshot, GOLDEN_LOW_64_SHA256};
 pub use sprite_renderer::{SpriteInstance, SpriteRenderer, MAX_SPRITES};
+pub use texture::{
+    build_grid_atlas_rgba, create_rgba8_texture, uv_rect_pixels, TextureId, FULL_UV,
+};
 pub use tier::RenderTier;

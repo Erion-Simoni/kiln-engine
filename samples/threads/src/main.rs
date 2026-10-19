@@ -5,9 +5,7 @@
 use hecs::World;
 use kiln_assets::Archive;
 use kiln_core::{AccessSet, Transform};
-use kiln_runtime::{
-    build_stages, load_file_async, Schedule, SystemEntry, TaskPool,
-};
+use kiln_runtime::{build_stages, load_file_async, Schedule, SystemEntry, TaskPool};
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -107,7 +105,10 @@ fn demo_task_pool_speedup() -> Result<f64, Box<dyn std::error::Error>> {
     );
     println!("   serial:   {serial_ms:.2} ms");
     println!("   parallel: {parallel_ms:.2} ms");
-    println!("   speedup:  {speedup:.2}x on {} cores", pool.thread_count());
+    println!(
+        "   speedup:  {speedup:.2}x on {} cores",
+        pool.thread_count()
+    );
     Ok(speedup)
 }
 
@@ -122,7 +123,7 @@ fn demo_async_asset_load() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write(&payload, b"hello from M27")?;
     let archive_path = dir.join("demo.kilnar");
     let mut archive = Archive::new(archive_path.clone());
-    archive.pack(&[payload.clone()])?;
+    archive.pack(std::slice::from_ref(&payload))?;
 
     let archive_path_buf = archive_path.clone();
     let handle = pool.spawn(move || -> Result<Vec<u8>, String> {

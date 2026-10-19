@@ -42,7 +42,8 @@ impl GpuProfiler {
     /// Create profiler; requests no device features (caller must enable TIMESTAMP_QUERY).
     pub fn new(device: &Device, queue: &Queue, max_passes: u32) -> Self {
         let features = device.features();
-        let need = wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS;
+        let need =
+            wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS;
         let supported = features.contains(need);
         let capacity = max_passes.saturating_mul(2).max(2);
 
@@ -190,7 +191,7 @@ impl GpuProfiler {
         let data = slice.get_mapped_range();
         let mut timings = Vec::new();
         for (i, name) in names.iter().enumerate() {
-            let begin_i = (i * 2) as usize;
+            let begin_i = i * 2;
             let end_i = begin_i + 1;
             if end_i >= ts_count as usize {
                 break;

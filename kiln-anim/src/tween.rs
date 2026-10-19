@@ -92,9 +92,7 @@ impl Ease {
             }
             Ease::SineIn => 1.0 - (t * std::f32::consts::PI / 2.0).cos(),
             Ease::SineOut => (t * std::f32::consts::PI / 2.0).sin(),
-            Ease::SineInOut => {
-                -(std::f32::consts::PI).cos() / 2.0 * (t * 2.0).cos() + 0.5
-            }
+            Ease::SineInOut => -(std::f32::consts::PI).cos() / 2.0 * (t * 2.0).cos() + 0.5,
             Ease::ExpoIn => {
                 if t == 0.0 {
                     0.0
@@ -155,23 +153,31 @@ impl Ease {
                 if t == 0.0 || t == 1.0 {
                     t
                 } else {
-                    -(2.0_f32.powf(10.0 * t - 10.0)) * ((t * 10.0 - 10.75) * (2.0 * std::f32::consts::PI / 3.0)).sin()
+                    -(2.0_f32.powf(10.0 * t - 10.0))
+                        * ((t * 10.0 - 10.75) * (2.0 * std::f32::consts::PI / 3.0)).sin()
                 }
             }
             Ease::ElasticOut => {
                 if t == 0.0 || t == 1.0 {
                     t
                 } else {
-                    2.0_f32.powf(-10.0 * t) * ((t * 10.0 - 0.75) * (2.0 * std::f32::consts::PI / 3.0)).sin() + 1.0
+                    2.0_f32.powf(-10.0 * t)
+                        * ((t * 10.0 - 0.75) * (2.0 * std::f32::consts::PI / 3.0)).sin()
+                        + 1.0
                 }
             }
             Ease::ElasticInOut => {
                 if t == 0.0 || t == 1.0 {
                     t
                 } else if t < 0.5 {
-                    -(2.0_f32.powf(20.0 * t - 10.0) * ((t * 20.0 - 11.125) * (2.0 * std::f32::consts::PI / 4.5)).sin()) / 2.0
+                    -(2.0_f32.powf(20.0 * t - 10.0)
+                        * ((t * 20.0 - 11.125) * (2.0 * std::f32::consts::PI / 4.5)).sin())
+                        / 2.0
                 } else {
-                    (2.0_f32.powf(-20.0 * t + 10.0) * ((t * 20.0 - 11.125) * (2.0 * std::f32::consts::PI / 4.5)).sin()) / 2.0 + 1.0
+                    (2.0_f32.powf(-20.0 * t + 10.0)
+                        * ((t * 20.0 - 11.125) * (2.0 * std::f32::consts::PI / 4.5)).sin())
+                        / 2.0
+                        + 1.0
                 }
             }
             Ease::BounceIn => 1.0 - Ease::BounceOut.apply(1.0 - t),

@@ -1,85 +1,110 @@
-//! Sprite batch renderer for 2D.
+//! Sprite batch renderer for 2D (textured, UV rects, batch-by-texture).
 //!
 //! Usage per frame:
 //! 1. Call [`SpriteRenderer::begin_frame`] to clear pending sprites.
-//! 2. Call [`SpriteRenderer::push`] for each visible sprite.
+//! 2. Call [`SpriteRenderer::push`] / [`push_textured`] for each visible sprite.
 //! 3. Call [`SpriteRenderer::flush`] inside a render pass to draw everything.
 //!
-//! All sprites are batched into a single draw call (one per flush).
+//! Sprites sharing a [`TextureId`] are drawn in one instanced call.
 
 use bytemuck::{Pod, Zeroable};
 use wgpu::{Device, Queue};
 
 use crate::camera::Camera;
+use crate::texture::{create_rgba8_texture, TextureId, FULL_UV};
 
-/// Maximum sprites per batch (prevents unbounded allocations).
+/// Maximum sprites per frame (prevents unbounded allocations).
 pub const MAX_SPRITES: usize = 16_384;
 
 /// Per-sprite GPU data (matches `InstanceInput` in `sprite.wgsl`).
 #[repr(C)]
-#[derive(Copy, Clone, Pod, Zeroable)]
+#[derive(Copy, Clone, Debug, Pod, Zeroable)]
 pub struct SpriteInstance {
     /// World-space centre of the sprite.
     pub position: [f32; 2],
     /// Width and height in world units.
     pub size: [f32; 2],
-    /// RGBA colour.
+    /// RGBA colour tint (multiplied with texture).
     pub color: [f32; 4],
+    /// Normalised UV rect: `u0, v0, u1, v1`.
+    pub uv_rect: [f32; 4],
 }
 
 impl SpriteInstance {
     /// Byte stride of the instance layout.
     pub const STRIDE: u64 = std::mem::size_of::<SpriteInstance>() as u64;
 
+    /// Colour-tinted sprite covering the full texture (or white texel).
+    pub fn colored(position: [f32; 2], size: [f32; 2], color: [f32; 4]) -> Self {
+        Self {
+            position,
+            size,
+            color,
+            uv_rect: FULL_UV,
+        }
+    }
+
     /// `wgpu` vertex attributes for the instance step.
-    pub fn vertex_attributes() -> [wgpu::VertexAttribute; 3] {
+    pub fn vertex_attributes() -> [wgpu::VertexAttribute; 4] {
         wgpu::vertex_attr_array![
             1 => Float32x2,   // position
             2 => Float32x2,   // size
             3 => Float32x4,   // color
+            4 => Float32x4,   // uv_rect
         ]
     }
 }
 
-/// Unit-quad corner vertex (just XY; the shader scales/positions per-instance).
 #[repr(C)]
 #[derive(Copy, Clone, Pod, Zeroable)]
 struct QuadVertex {
     corner: [f32; 2],
 }
 
-/// Batching 2D sprite renderer.
+struct TextureSlot {
+    _texture: wgpu::Texture,
+    bind_group: wgpu::BindGroup,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Batching 2D sprite renderer with per-texture draw calls.
 pub struct SpriteRenderer {
     pipeline: wgpu::RenderPipeline,
     uniform_buffer: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
+    uniform_bind_group: wgpu::BindGroup,
+    texture_bgl: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
+    textures: Vec<TextureSlot>,
     quad_vertices: wgpu::Buffer,
     quad_indices: wgpu::Buffer,
     instance_buffer: wgpu::Buffer,
-    /// CPU-side staging list cleared each frame.
-    instances: Vec<SpriteInstance>,
+    pending: Vec<(TextureId, SpriteInstance)>,
+    last_draw_calls: u32,
 }
 
-// Six unit-quad vertices as two triangles (CCW).
-// Corners sit at ±0.5 so the shader can multiply by sprite size.
 const QUAD_VERTS: &[QuadVertex] = &[
-    QuadVertex { corner: [-0.5, -0.5] },
-    QuadVertex { corner: [ 0.5, -0.5] },
-    QuadVertex { corner: [ 0.5,  0.5] },
-    QuadVertex { corner: [-0.5,  0.5] },
+    QuadVertex {
+        corner: [-0.5, -0.5],
+    },
+    QuadVertex {
+        corner: [0.5, -0.5],
+    },
+    QuadVertex { corner: [0.5, 0.5] },
+    QuadVertex {
+        corner: [-0.5, 0.5],
+    },
 ];
 const QUAD_INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 
 impl SpriteRenderer {
-    /// Create a new renderer. Allocates GPU buffers for up to [`MAX_SPRITES`].
-    pub fn new(device: &Device, format: wgpu::TextureFormat) -> Self {
-        // — shader —
+    /// Create a new renderer (includes [`TextureId::WHITE`]).
+    pub fn new(device: &Device, queue: &Queue, format: wgpu::TextureFormat) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("sprite_shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("sprite.wgsl").into()),
         });
 
-        // — uniform buffer (projection matrix = 64 bytes) —
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("sprite_uniform"),
             size: 64,
@@ -87,9 +112,8 @@ impl SpriteRenderer {
             mapped_at_creation: false,
         });
 
-        // — bind group —
-        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("sprite_bgl"),
+        let uniform_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("sprite_uniform_bgl"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::VERTEX,
@@ -102,30 +126,61 @@ impl SpriteRenderer {
             }],
         });
 
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("sprite_bg"),
-            layout: &bgl,
+        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("sprite_uniform_bg"),
+            layout: &uniform_bgl,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: uniform_buffer.as_entire_binding(),
             }],
         });
 
-        // — quad vertex + index buffers (static) —
+        let texture_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("sprite_texture_bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("sprite_sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
         let quad_vertices = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("quad_verts"),
-            size: (std::mem::size_of::<QuadVertex>() * QUAD_VERTS.len()) as u64,
+            size: std::mem::size_of_val(QUAD_VERTS) as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let quad_indices = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("quad_idx"),
-            size: (std::mem::size_of::<u16>() * QUAD_INDICES.len()) as u64,
+            size: std::mem::size_of_val(QUAD_INDICES) as u64,
             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        // — instance buffer (dynamic, written each frame via queue.write_buffer) —
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("sprite_instances"),
             size: SpriteInstance::STRIDE * MAX_SPRITES as u64,
@@ -133,10 +188,9 @@ impl SpriteRenderer {
             mapped_at_creation: false,
         });
 
-        // — pipeline —
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("sprite_pipeline_layout"),
-            bind_group_layouts: &[&bgl],
+            bind_group_layouts: &[&uniform_bgl, &texture_bgl],
             push_constant_ranges: &[],
         });
 
@@ -186,80 +240,151 @@ impl SpriteRenderer {
             cache: None,
         });
 
-        Self {
+        let mut this = Self {
             pipeline,
             uniform_buffer,
-            bind_group,
+            uniform_bind_group,
+            texture_bgl,
+            sampler,
+            textures: Vec::new(),
             quad_vertices,
             quad_indices,
             instance_buffer,
-            instances: Vec::with_capacity(MAX_SPRITES),
-        }
+            pending: Vec::with_capacity(MAX_SPRITES),
+            last_draw_calls: 0,
+        };
+
+        let white = this.create_texture_rgba(device, queue, "white", 1, 1, &[255, 255, 255, 255]);
+        debug_assert_eq!(white, TextureId::WHITE);
+
+        this
     }
 
-    /// Upload the static quad geometry. Call once after construction (needs queue).
+    /// Upload static quad geometry. Call once after construction.
     pub fn upload_quad(&self, queue: &Queue) {
-        queue.write_buffer(
-            &self.quad_vertices,
-            0,
-            bytemuck::cast_slice(QUAD_VERTS),
-        );
-        queue.write_buffer(
-            &self.quad_indices,
-            0,
-            bytemuck::cast_slice(QUAD_INDICES),
-        );
+        queue.write_buffer(&self.quad_vertices, 0, bytemuck::cast_slice(QUAD_VERTS));
+        queue.write_buffer(&self.quad_indices, 0, bytemuck::cast_slice(QUAD_INDICES));
+    }
+
+    /// Create a sampled RGBA8 texture; returns a stable [`TextureId`].
+    pub fn create_texture_rgba(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        label: &str,
+        width: u32,
+        height: u32,
+        rgba: &[u8],
+    ) -> TextureId {
+        let (texture, view) = create_rgba8_texture(device, queue, label, width, height, rgba);
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("sprite_tex_bg"),
+            layout: &self.texture_bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        });
+        let id = TextureId(self.textures.len() as u32);
+        self.textures.push(TextureSlot {
+            _texture: texture,
+            bind_group,
+            width,
+            height,
+        });
+        id
+    }
+
+    /// Texture size for UV helpers.
+    pub fn texture_size(&self, id: TextureId) -> Option<(u32, u32)> {
+        self.textures
+            .get(id.0 as usize)
+            .map(|t| (t.width, t.height))
     }
 
     /// Clear pending sprites. Call at the start of each frame.
     pub fn begin_frame(&mut self) {
-        self.instances.clear();
+        self.pending.clear();
+        self.last_draw_calls = 0;
     }
 
-    /// Queue one sprite for rendering. Ignored if the batch is full.
+    /// Queue a sprite on [`TextureId::WHITE`] (colour-only quad).
     pub fn push(&mut self, instance: SpriteInstance) {
-        if self.instances.len() < MAX_SPRITES {
-            self.instances.push(instance);
-        }
+        self.push_textured(TextureId::WHITE, instance);
     }
 
-    /// Upload instances and issue a single instanced draw call.
-    ///
-    /// Must be called inside an active render pass.
+    /// Queue a sprite sampled from `texture`.
+    pub fn push_textured(&mut self, texture: TextureId, instance: SpriteInstance) {
+        if self.pending.len() >= MAX_SPRITES {
+            return;
+        }
+        let id = if (texture.0 as usize) < self.textures.len() {
+            texture
+        } else {
+            TextureId::WHITE
+        };
+        self.pending.push((id, instance));
+    }
+
+    /// Upload instances and draw one instanced call per distinct texture.
     pub fn flush<'a>(
-        &'a self,
+        &'a mut self,
         render_pass: &mut wgpu::RenderPass<'a>,
         camera: &Camera,
         queue: &Queue,
     ) {
-        if self.instances.is_empty() {
+        self.last_draw_calls = 0;
+        if self.pending.is_empty() {
             return;
         }
 
-        // Upload projection matrix — glam::Mat4 doesn't impl Pod, so cast via array
         let proj: [f32; 16] = camera.projection_matrix().to_cols_array();
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&proj));
 
-        // Upload sprites
-        queue.write_buffer(
-            &self.instance_buffer,
-            0,
-            bytemuck::cast_slice(&self.instances),
-        );
-
-        let count = self.instances.len() as u32;
+        self.pending.sort_unstable_by_key(|(tex, _)| tex.0);
 
         render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_bind_group(0, &self.bind_group, &[]);
+        render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.quad_vertices.slice(..));
-        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
         render_pass.set_index_buffer(self.quad_indices.slice(..), wgpu::IndexFormat::Uint16);
-        render_pass.draw_indexed(0..QUAD_INDICES.len() as u32, 0, 0..count);
+
+        let mut i = 0;
+        while i < self.pending.len() {
+            let tex_id = self.pending[i].0;
+            let start = i;
+            while i < self.pending.len() && self.pending[i].0 == tex_id {
+                i += 1;
+            }
+            let count = i - start;
+            let mut instances = Vec::with_capacity(count);
+            for (_, inst) in &self.pending[start..i] {
+                instances.push(*inst);
+            }
+
+            queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instances));
+
+            let slot = &self.textures[tex_id.0 as usize];
+            render_pass.set_bind_group(1, &slot.bind_group, &[]);
+            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+            render_pass.draw_indexed(0..QUAD_INDICES.len() as u32, 0, 0..count as u32);
+            self.last_draw_calls += 1;
+        }
     }
 
-    /// Number of sprites queued this frame (useful for profiling / logging).
+    /// Sprites queued this frame.
     pub fn queued_count(&self) -> usize {
-        self.instances.len()
+        self.pending.len()
+    }
+
+    /// GPU draw calls issued by the last [`flush`] (batch-by-texture proof).
+    pub fn draw_call_count(&self) -> u32 {
+        self.last_draw_calls
     }
 }
 
@@ -269,36 +394,63 @@ mod tests {
 
     #[test]
     fn sprite_instance_size() {
-        // 2 + 2 + 4 = 8 f32s = 32 bytes
-        assert_eq!(std::mem::size_of::<SpriteInstance>(), 32);
+        assert_eq!(std::mem::size_of::<SpriteInstance>(), 48);
     }
 
     #[test]
     fn max_sprites_cap() {
         let mut sr = SpriteRendererCpu::default();
         for _ in 0..MAX_SPRITES + 10 {
-            sr.push(SpriteInstance {
-                position: [0.0; 2],
-                size: [1.0; 2],
-                color: [1.0; 4],
-            });
+            sr.push(SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]));
         }
         assert_eq!(sr.len(), MAX_SPRITES);
     }
 
-    // Lightweight CPU-only stub for tests (no GPU needed).
+    #[test]
+    fn batch_groups_by_texture() {
+        let mut sr = SpriteRendererCpu::default();
+        sr.push_textured(
+            TextureId(0),
+            SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]),
+        );
+        sr.push_textured(
+            TextureId(1),
+            SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]),
+        );
+        sr.push_textured(
+            TextureId(0),
+            SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]),
+        );
+        assert_eq!(sr.draw_calls_if_flushed(), 2);
+    }
+
+    #[test]
+    fn colored_defaults_full_uv() {
+        let s = SpriteInstance::colored([1.0, 2.0], [3.0, 4.0], [1.0; 4]);
+        assert_eq!(s.uv_rect, FULL_UV);
+    }
+
     #[derive(Default)]
     struct SpriteRendererCpu {
-        instances: Vec<SpriteInstance>,
+        pending: Vec<(TextureId, SpriteInstance)>,
     }
     impl SpriteRendererCpu {
         fn push(&mut self, inst: SpriteInstance) {
-            if self.instances.len() < MAX_SPRITES {
-                self.instances.push(inst);
+            self.push_textured(TextureId::WHITE, inst);
+        }
+        fn push_textured(&mut self, texture: TextureId, inst: SpriteInstance) {
+            if self.pending.len() < MAX_SPRITES {
+                self.pending.push((texture, inst));
             }
         }
         fn len(&self) -> usize {
-            self.instances.len()
+            self.pending.len()
+        }
+        fn draw_calls_if_flushed(&self) -> u32 {
+            let mut ids: Vec<_> = self.pending.iter().map(|(t, _)| t.0).collect();
+            ids.sort_unstable();
+            ids.dedup();
+            ids.len() as u32
         }
     }
 }

@@ -1,6 +1,6 @@
 //! Save slot management with versioned data.
 
-use crate::version::{SaveVersion, VersionMigration, MigrationError};
+use crate::version::{MigrationError, SaveVersion, VersionMigration};
 use dirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -84,7 +84,8 @@ impl SaveSlotManager {
     pub fn load(&self, slot_id: u32) -> Result<SaveSlot, SaveSlotError> {
         let slot_path = self.slot_path(slot_id);
         let json = fs::read_to_string(&slot_path).map_err(SaveSlotError::Io)?;
-        let mut slot: SaveSlot = serde_json::from_str(&json).map_err(SaveSlotError::Serialization)?;
+        let mut slot: SaveSlot =
+            serde_json::from_str(&json).map_err(SaveSlotError::Serialization)?;
 
         // Apply migrations if needed
         let current_version = SaveVersion::current();
@@ -106,7 +107,8 @@ impl SaveSlotManager {
 
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 let json = fs::read_to_string(&path).map_err(SaveSlotError::Io)?;
-                let slot: SaveSlot = serde_json::from_str(&json).map_err(SaveSlotError::Serialization)?;
+                let slot: SaveSlot =
+                    serde_json::from_str(&json).map_err(SaveSlotError::Serialization)?;
                 slots.push(slot.metadata);
             }
         }
@@ -128,7 +130,7 @@ impl SaveSlotManager {
 
     fn apply_migration(&self, slot: &SaveSlot) -> Result<SaveSlot, SaveSlotError> {
         for migration in &self.migrations {
-            if migration.from_version() == slot.metadata.version {
+            if migration.source_version() == slot.metadata.version {
                 let migrated_data = migration.migrate(&slot.data)?;
                 let mut new_slot = slot.clone();
                 new_slot.data = migrated_data;
@@ -165,7 +167,7 @@ mod tests {
     struct TestMigration;
 
     impl VersionMigration for TestMigration {
-        fn from_version(&self) -> SaveVersion {
+        fn source_version(&self) -> SaveVersion {
             SaveVersion::new(1, 0, 0)
         }
 

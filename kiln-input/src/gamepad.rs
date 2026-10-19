@@ -103,9 +103,15 @@ fn detect_controller_type(name: &str) -> ControllerType {
 
     if name_lower.contains("xbox") || name_lower.contains("microsoft") {
         ControllerType::Xbox
-    } else if name_lower.contains("playstation") || name_lower.contains("dualshock") || name_lower.contains("dualsense") {
+    } else if name_lower.contains("playstation")
+        || name_lower.contains("dualshock")
+        || name_lower.contains("dualsense")
+    {
         ControllerType::PlayStation
-    } else if name_lower.contains("nintendo") || name_lower.contains("switch") || name_lower.contains("pro controller") {
+    } else if name_lower.contains("nintendo")
+        || name_lower.contains("switch")
+        || name_lower.contains("pro controller")
+    {
         ControllerType::Nintendo
     } else {
         ControllerType::Generic
@@ -118,9 +124,21 @@ mod tests {
 
     #[test]
     fn test_controller_type_detection() {
-        assert_eq!(detect_controller_type("Xbox Controller"), ControllerType::Xbox);
-        assert_eq!(detect_controller_type("DualSense"), ControllerType::PlayStation);
-        assert_eq!(detect_controller_type("Pro Controller"), ControllerType::Nintendo);
-        assert_eq!(detect_controller_type("Generic Gamepad"), ControllerType::Generic);
+        assert_eq!(
+            detect_controller_type("Xbox Controller"),
+            ControllerType::Xbox
+        );
+        assert_eq!(
+            detect_controller_type("DualSense"),
+            ControllerType::PlayStation
+        );
+        assert_eq!(
+            detect_controller_type("Pro Controller"),
+            ControllerType::Nintendo
+        );
+        assert_eq!(
+            detect_controller_type("Generic Gamepad"),
+            ControllerType::Generic
+        );
     }
 }

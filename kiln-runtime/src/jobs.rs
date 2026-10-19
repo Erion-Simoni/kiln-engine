@@ -64,12 +64,12 @@ impl TaskPool {
                     .expect("failed to spawn kiln job worker");
                 workers.push(handle);
             }
-            return Self {
+            Self {
                 inner: NativePool {
                     sender: Mutex::new(tx),
                     _workers: workers,
                 },
-            };
+            }
         }
 
         #[cfg(not(all(feature = "threads", not(target_arch = "wasm32"))))]
@@ -161,7 +161,6 @@ impl TaskPool {
                     s.spawn(move || f(chunk));
                 }
             });
-            return;
         }
 
         #[cfg(not(all(feature = "threads", not(target_arch = "wasm32"))))]
@@ -180,7 +179,10 @@ impl Default for TaskPool {
 }
 
 /// Load bytes from a path on a background job (async asset loading helper).
-pub fn load_file_async(pool: &TaskPool, path: impl Into<std::path::PathBuf>) -> JobHandle<std::io::Result<Vec<u8>>> {
+pub fn load_file_async(
+    pool: &TaskPool,
+    path: impl Into<std::path::PathBuf>,
+) -> JobHandle<std::io::Result<Vec<u8>>> {
     let path = path.into();
     pool.spawn(move || std::fs::read(path))
 }

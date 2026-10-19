@@ -23,6 +23,6 @@ pub mod patch;
 pub mod updater;
 pub mod version;
 
-pub use patch::{generate_patch, apply_patch};
+pub use patch::{apply_patch, generate_patch};
 pub use updater::Updater;
 pub use version::Version;

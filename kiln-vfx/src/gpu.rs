@@ -164,7 +164,7 @@ impl GpuParticleSystem {
             cpass.set_pipeline(&self.compute_pipeline);
             cpass.set_bind_group(0, &self.bind_group, &[]);
             cpass.dispatch_workgroups(
-                (self.particle_count + 63) / 64, // 64 threads per workgroup
+                self.particle_count.div_ceil(64), // 64 threads per workgroup
                 1,
                 1,
             );

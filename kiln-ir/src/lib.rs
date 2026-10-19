@@ -1,11 +1,11 @@
 //! Kiln IR — bytecode VM with host call interface.
 
 pub mod opcode;
-pub mod value;
 pub mod program;
+pub mod value;
 pub mod vm;
 
 pub use opcode::Opcode;
+pub use program::{Instruction, Label, Program};
 pub use value::Value;
-pub use program::{Program, Label, Instruction};
-pub use vm::{Vm, HostContext, VmError};
+pub use vm::{HostContext, Vm, VmError};

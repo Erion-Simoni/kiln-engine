@@ -158,13 +158,8 @@ impl RenderGraph {
             .collect();
         queue.sort_by_key(|p| p.0);
         let mut order = Vec::with_capacity(n);
-        while let Some(p) = {
-            if queue.is_empty() {
-                None
-            } else {
-                Some(queue.remove(0))
-            }
-        } {
+        while !queue.is_empty() {
+            let p = queue.remove(0);
             order.push(p);
             let mut next: Vec<PassId> = adj[p.0 as usize].clone();
             next.sort_by_key(|x| x.0);

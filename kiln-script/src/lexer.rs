@@ -8,6 +8,7 @@ use std::str::Chars;
 pub enum Token {
     // Literals
     Number(i64),
+    Float(f64),
     Identifier(String),
 
     // Keywords
@@ -65,7 +66,7 @@ impl<'a> Lexer<'a> {
         let start = self.pos;
 
         match self.peek_char() {
-            None => return Ok(TokenWithSpan::new(Token::Eof, Span::new(start, start))),
+            None => Ok(TokenWithSpan::new(Token::Eof, Span::new(start, start))),
             Some(c) => {
                 if c.is_ascii_digit() {
                     return self.read_number(start);
@@ -76,7 +77,7 @@ impl<'a> Lexer<'a> {
                 if let Some(token) = self.read_operator_or_punct() {
                     return Ok(TokenWithSpan::new(token, Span::new(start, self.pos)));
                 }
-                return Err(format!("Unexpected character: {}", c));
+                Err(format!("Unexpected character: {}", c))
             }
         }
     }
@@ -116,10 +117,41 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        let value = num_str.parse::<i64>()
+        // Fractional part: "1.5" → Float. A trailing '.' with no digits
+        // (e.g. "1..2") is left for the caller to reject as punctuation.
+        let is_float = self.input.peek() == Some(&'.')
+            && self
+                .input
+                .clone()
+                .nth(1)
+                .is_some_and(|c| c.is_ascii_digit());
+        if is_float {
+            num_str.push(self.next_char().unwrap()); // '.'
+            while let Some(&c) = self.input.peek() {
+                if c.is_ascii_digit() {
+                    num_str.push(c);
+                    self.next_char();
+                } else {
+                    break;
+                }
+            }
+            let value = num_str
+                .parse::<f64>()
+                .map_err(|_| format!("Invalid number: {}", num_str))?;
+            return Ok(TokenWithSpan::new(
+                Token::Float(value),
+                Span::new(start, self.pos),
+            ));
+        }
+
+        let value = num_str
+            .parse::<i64>()
             .map_err(|_| format!("Invalid number: {}", num_str))?;
 
-        Ok(TokenWithSpan::new(Token::Number(value), Span::new(start, self.pos)))
+        Ok(TokenWithSpan::new(
+            Token::Number(value),
+            Span::new(start, self.pos),
+        ))
     }
 
     fn read_identifier(&mut self, start: usize) -> Result<TokenWithSpan, String> {
@@ -253,5 +285,13 @@ mod tests {
         let mut lexer = Lexer::new("  42  ");
         let t = lexer.next_token().unwrap();
         assert_eq!(t.token, Token::Number(42));
+    }
+
+    #[test]
+    fn lex_float_literal() {
+        let mut lexer = Lexer::new("1.25 2.5 42");
+        assert_eq!(lexer.next_token().unwrap().token, Token::Float(1.25));
+        assert_eq!(lexer.next_token().unwrap().token, Token::Float(2.5));
+        assert_eq!(lexer.next_token().unwrap().token, Token::Number(42));
     }
 }

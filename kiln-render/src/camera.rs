@@ -26,12 +26,24 @@ impl Camera {
         // Manual orthographic matrix construction
         let tx = -(right + left) / (right - left);
         let ty = -(top + bottom) / (top - bottom);
-        
+
         Mat4::from_cols_array(&[
-            2.0 / (right - left), 0.0, 0.0, 0.0,
-            0.0, 2.0 / (top - bottom), 0.0, 0.0,
-            0.0, 0.0, -1.0, 0.0,
-            tx, ty, 0.0, 1.0,
+            2.0 / (right - left),
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            2.0 / (top - bottom),
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            tx,
+            ty,
+            0.0,
+            1.0,
         ])
     }
 
@@ -88,4 +100,3 @@ mod tests {
         assert!(approx_eq(cam.zoom, 0.1));
     }
 }
-

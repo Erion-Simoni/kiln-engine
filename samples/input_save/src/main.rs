@@ -1,9 +1,8 @@
 //! Sample demonstrating input mapping and save system.
 
 use kiln_input::{Action, ActionMap, Binding, BindingType};
-use kiln_save::{SaveSlotManager, SaveVersion, VersionMigration, MigrationError};
 use kiln_runtime::{GraphicsSettings, Resolution};
-use chrono;
+use kiln_save::{MigrationError, SaveSlotManager, SaveVersion, VersionMigration};
 
 fn main() {
     println!("=== Kiln Input Mapping and Save System Demo ===\n");
@@ -87,7 +86,10 @@ fn demo_save_system() {
     let slots = manager.list_slots().unwrap();
     println!("Found {} save slot(s)", slots.len());
     for slot in &slots {
-        println!("  Slot {}: {} ({})", slot.slot_id, slot.description, slot.version);
+        println!(
+            "  Slot {}: {} ({})",
+            slot.slot_id, slot.description, slot.version
+        );
     }
 
     // Load game data
@@ -103,7 +105,7 @@ fn demo_save_system() {
 struct V1ToV2Migration;
 
 impl VersionMigration for V1ToV2Migration {
-    fn from_version(&self) -> SaveVersion {
+    fn source_version(&self) -> SaveVersion {
         SaveVersion::new(1, 0, 0)
     }
 

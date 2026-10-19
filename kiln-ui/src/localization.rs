@@ -60,7 +60,9 @@ impl Localization {
 
     /// Gets a localized string by key, returning the key itself if not found.
     pub fn get_or_key(&self, key: &LocalizationKey) -> String {
-        self.get(key).cloned().unwrap_or_else(|| key.as_str().to_string())
+        self.get(key)
+            .cloned()
+            .unwrap_or_else(|| key.as_str().to_string())
     }
 
     /// Returns the number of localized strings.
@@ -90,8 +92,14 @@ mod tests {
         loc.add("menu.start", "Start Game");
         loc.add("menu.settings", "Settings");
 
-        assert_eq!(loc.get(&LocalizationKey::new("menu.start")), Some(&"Start Game".to_string()));
-        assert_eq!(loc.get(&LocalizationKey::new("menu.settings")), Some(&"Settings".to_string()));
+        assert_eq!(
+            loc.get(&LocalizationKey::new("menu.start")),
+            Some(&"Start Game".to_string())
+        );
+        assert_eq!(
+            loc.get(&LocalizationKey::new("menu.settings")),
+            Some(&"Settings".to_string())
+        );
         assert_eq!(loc.get(&LocalizationKey::new("menu.quit")), None);
     }
 
@@ -100,8 +108,14 @@ mod tests {
         let mut loc = Localization::new("en");
         loc.add("menu.start", "Start Game");
 
-        assert_eq!(loc.get_or_key(&LocalizationKey::new("menu.start")), "Start Game");
-        assert_eq!(loc.get_or_key(&LocalizationKey::new("menu.quit")), "menu.quit");
+        assert_eq!(
+            loc.get_or_key(&LocalizationKey::new("menu.start")),
+            "Start Game"
+        );
+        assert_eq!(
+            loc.get_or_key(&LocalizationKey::new("menu.quit")),
+            "menu.quit"
+        );
     }
 
     #[test]

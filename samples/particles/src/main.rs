@@ -5,7 +5,11 @@
 //! Particles spawn from the center and fall with gravity.
 
 use kiln_render::{camera::Camera, ParticleRenderer, Renderer, SpriteRenderer};
-use kiln_vfx::{emitter::{Emitter, EmitterConfig, EmissionShape}, particle::ParticleData, system::{ParticleSystem, ParticleSystemConfig}};
+use kiln_vfx::{
+    emitter::{EmissionShape, Emitter, EmitterConfig},
+    particle::ParticleData,
+    system::{ParticleSystem, ParticleSystemConfig},
+};
 use std::sync::Arc;
 use winit::{event_loop::EventLoop, window::Window};
 
@@ -51,7 +55,7 @@ impl Default for ParticleApp {
             lifetime_range: [2.0, 3.0],
             size_range: [2.0, 4.0],
             color: [0.5, 0.7, 1.0, 1.0], // Light blue
-            gravity: [0.0, -200.0], // Gravity pulls down
+            gravity: [0.0, -200.0],      // Gravity pulls down
             fade_out: true,
         };
         let mut emitter = Emitter::new(emitter_config);
@@ -78,7 +82,8 @@ impl ParticleApp {
             instance.create_surface(window.clone()).expect("surface");
 
         let renderer = Renderer::new(&instance, &surface, size.width, size.height).await;
-        let sprite_renderer = SpriteRenderer::new(renderer.device(), renderer.format());
+        let sprite_renderer =
+            SpriteRenderer::new(renderer.device(), renderer.queue(), renderer.format());
         sprite_renderer.upload_quad(renderer.queue());
 
         let particle_renderer = ParticleRenderer::new();
@@ -120,7 +125,7 @@ impl ParticleApp {
             .particle_system
             .particles()
             .iter()
-            .map(|p| ParticleData::from_particle(p))
+            .map(ParticleData::from_particle)
             .collect();
         gpu.particle_renderer.push_particles(&particles);
 

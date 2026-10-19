@@ -46,8 +46,8 @@ pub struct QuestState {
     pub quest_id: String,
     pub status: QuestStatus,
     pub objective_progress: HashMap<String, i64>, // objective_id -> progress
-    pub started_at: Option<i64>, // timestamp
-    pub completed_at: Option<i64>, // timestamp
+    pub started_at: Option<i64>,                  // timestamp
+    pub completed_at: Option<i64>,                // timestamp
 }
 
 /// Quest status
@@ -85,15 +85,16 @@ impl Quest {
     }
 
     /// Check if all prerequisites are met (using QuestState)
-    pub fn prerequisites_met_from_states(&self, quest_states: &HashMap<String, QuestState>) -> bool {
-        self.prerequisites
-            .iter()
-            .all(|quest_id| {
-                quest_states
-                    .get(quest_id)
-                    .map(|s| s.status == QuestStatus::Completed)
-                    .unwrap_or(false)
-            })
+    pub fn prerequisites_met_from_states(
+        &self,
+        quest_states: &HashMap<String, QuestState>,
+    ) -> bool {
+        self.prerequisites.iter().all(|quest_id| {
+            quest_states
+                .get(quest_id)
+                .map(|s| s.status == QuestStatus::Completed)
+                .unwrap_or(false)
+        })
     }
 }
 
@@ -146,7 +147,7 @@ impl QuestState {
     pub fn is_objective_complete(&self, objective_id: &str, target_value: i64) -> bool {
         self.objective_progress
             .get(objective_id)
-            .map_or(false, |p| *p >= target_value)
+            .is_some_and(|p| *p >= target_value)
     }
 
     /// Check if all objectives are complete
@@ -168,7 +169,7 @@ impl QuestState {
 /// Quest manager for tracking multiple quests
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuestManager {
-    pub quests: HashMap<String, Quest>, // quest definitions
+    pub quests: HashMap<String, Quest>,            // quest definitions
     pub quest_states: HashMap<String, QuestState>, // runtime states
 }
 
@@ -424,8 +425,16 @@ mod tests {
 
     #[test]
     fn test_prerequisites() {
-        let quest1 = Quest::new("quest1".to_string(), "name1".to_string(), "desc1".to_string());
-        let mut quest2 = Quest::new("quest2".to_string(), "name2".to_string(), "desc2".to_string());
+        let quest1 = Quest::new(
+            "quest1".to_string(),
+            "name1".to_string(),
+            "desc1".to_string(),
+        );
+        let mut quest2 = Quest::new(
+            "quest2".to_string(),
+            "name2".to_string(),
+            "desc2".to_string(),
+        );
         quest2.prerequisites = vec!["quest1".to_string()];
 
         let mut manager = QuestManager::new();
@@ -436,7 +445,10 @@ mod tests {
         manager.initialize_quest("quest2");
 
         let mut states = HashMap::new();
-        states.insert("quest1".to_string(), QuestState::new(&manager.quests["quest1"]));
+        states.insert(
+            "quest1".to_string(),
+            QuestState::new(&manager.quests["quest1"]),
+        );
 
         assert!(!manager.quests["quest2"].prerequisites_met_from_states(&states));
 
@@ -477,7 +489,11 @@ mod tests {
     fn test_get_quests_by_status() {
         let mut manager = QuestManager::new();
 
-        let mut quest1 = Quest::new("quest1".to_string(), "name1".to_string(), "desc1".to_string());
+        let mut quest1 = Quest::new(
+            "quest1".to_string(),
+            "name1".to_string(),
+            "desc1".to_string(),
+        );
         quest1.add_objective(QuestObjective {
             id: "obj1".to_string(),
             description_key: "desc".to_string(),
@@ -488,7 +504,11 @@ mod tests {
             is_optional: false,
         });
 
-        let mut quest2 = Quest::new("quest2".to_string(), "name2".to_string(), "desc2".to_string());
+        let mut quest2 = Quest::new(
+            "quest2".to_string(),
+            "name2".to_string(),
+            "desc2".to_string(),
+        );
         quest2.add_objective(QuestObjective {
             id: "obj2".to_string(),
             description_key: "desc".to_string(),

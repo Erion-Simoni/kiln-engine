@@ -37,7 +37,10 @@ fn main() {
     // Get frame at different times
     for t in [0.0, 0.05, 0.15, 0.25, 0.35] {
         let (frame_idx, local_t) = walk_clip.frame_at_time(t).unwrap();
-        println!("   Time {:.2}s: frame {}, local time {:.2}s", t, frame_idx, local_t);
+        println!(
+            "   Time {:.2}s: frame {}, local time {:.2}s",
+            t, frame_idx, local_t
+        );
     }
 
     // Demonstrate frame events
@@ -68,7 +71,10 @@ fn main() {
     // Demonstrate tween library
     println!("\n3. Tween Library Demo");
     let tween = Tween::new(0.0, 100.0, 1.0, Ease::QuadIn);
-    println!("   Tween: {} -> {} over {:.1}s with QuadIn", tween.from, tween.to, tween.duration);
+    println!(
+        "   Tween: {} -> {} over {:.1}s with QuadIn",
+        tween.from, tween.to, tween.duration
+    );
 
     for t in [0.0, 0.25, 0.5, 0.75, 1.0] {
         let value = tween.value_at(t).unwrap();

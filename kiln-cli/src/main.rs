@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use kiln_assets::{AssetCache, Archive};
-use kiln_updater::{generate_patch, dlc::DlcMetadata};
+use kiln_assets::{Archive, AssetCache};
+use kiln_updater::{dlc::DlcMetadata, generate_patch};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -30,7 +30,8 @@ fn generate_steam_vdf() -> String {
             }
         }
     }
-}"#.to_string()
+}"#
+    .to_string()
 }
 
 #[derive(Parser)]
@@ -154,10 +155,17 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init { name, template, output } => {
+        Commands::Init {
+            name,
+            template,
+            output,
+        } => {
             let output_dir = output.unwrap_or_else(|| PathBuf::from(&name));
 
-            println!("Initializing project '{}' from template '{}'...", name, template);
+            println!(
+                "Initializing project '{}' from template '{}'...",
+                name, template
+            );
             println!("Output directory: {}", output_dir.display());
 
             // Map template name to file
@@ -165,7 +173,10 @@ fn main() -> Result<()> {
                 "empty_2d" => "templates/empty_2d.ron",
                 "platformer" => "templates/platformer.ron",
                 "topdown" => "templates/topdown.ron",
-                _ => anyhow::bail!("Unknown template: {}. Available: empty_2d, platformer, topdown", template),
+                _ => anyhow::bail!(
+                    "Unknown template: {}. Available: empty_2d, platformer, topdown",
+                    template
+                ),
             };
 
             // Read template
@@ -183,7 +194,9 @@ fn main() -> Result<()> {
 
             // Write project file
             let project_file = output_dir.join("kiln.toml");
-            let toml_content = project.to_toml().map_err(|e| anyhow::anyhow!("Failed to serialize project: {}", e))?;
+            let toml_content = project
+                .to_toml()
+                .map_err(|e| anyhow::anyhow!("Failed to serialize project: {}", e))?;
             fs::write(&project_file, toml_content)?;
 
             println!("Project initialized: {}", project_file.display());
@@ -196,13 +209,23 @@ fn main() -> Result<()> {
             println!("Importing from: {}", source.display());
             let results = asset_cache.import_dir(&source)?;
 
-            let imported = results.iter().filter(|r| matches!(r, kiln_assets::ImportResult::Imported { .. })).count();
-            let skipped = results.iter().filter(|r| matches!(r, kiln_assets::ImportResult::Skipped { .. })).count();
+            let imported = results
+                .iter()
+                .filter(|r| matches!(r, kiln_assets::ImportResult::Imported { .. }))
+                .count();
+            let skipped = results
+                .iter()
+                .filter(|r| matches!(r, kiln_assets::ImportResult::Skipped { .. }))
+                .count();
 
             println!("Imported: {}, Skipped: {}", imported, skipped);
             asset_cache.save()?;
         }
-        Commands::Pack { source, output, version } => {
+        Commands::Pack {
+            source,
+            output,
+            version,
+        } => {
             let files: Vec<PathBuf> = std::fs::read_dir(&source)?
                 .filter_map(|e| e.ok())
                 .filter(|e| e.path().is_file())
@@ -237,8 +260,13 @@ fn main() -> Result<()> {
             }
         }
         Commands::Patch { old, new, output } => {
-            println!("Generating patch from {} to {}...", old.display(), new.display());
-            let (patch_data, metadata) = generate_patch(old.to_str().unwrap(), new.to_str().unwrap())?;
+            println!(
+                "Generating patch from {} to {}...",
+                old.display(),
+                new.display()
+            );
+            let (patch_data, metadata) =
+                generate_patch(old.to_str().unwrap(), new.to_str().unwrap())?;
 
             fs::write(&output, patch_data)?;
             println!("Patch created: {}", output.display());
@@ -246,7 +274,14 @@ fn main() -> Result<()> {
             println!("Old hash: {}", metadata.old_hash);
             println!("New hash: {}", metadata.new_hash);
         }
-        Commands::Dlc { source, id, name, version, requires, output } => {
+        Commands::Dlc {
+            source,
+            id,
+            name,
+            version,
+            requires,
+            output,
+        } => {
             let files: Vec<PathBuf> = std::fs::read_dir(&source)?
                 .filter_map(|e| e.ok())
                 .filter(|e| e.path().is_file())
@@ -324,13 +359,20 @@ fn main() -> Result<()> {
 
                     // iOS builds require Xcode on macOS
                     println!("Note: App Store validation requires macOS with Xcode");
-                    println!("This CLI command performs basic checks; full validation requires Xcode");
+                    println!(
+                        "This CLI command performs basic checks; full validation requires Xcode"
+                    );
 
                     // Check for iOS project structure
                     let ios_project = build_dir.join("ios");
                     if !ios_project.exists() {
-                        println!("Warning: iOS project not found at {}", ios_project.display());
-                        println!("Run: kiln-cli export --platform ios to create iOS project structure");
+                        println!(
+                            "Warning: iOS project not found at {}",
+                            ios_project.display()
+                        );
+                        println!(
+                            "Run: kiln-cli export --platform ios to create iOS project structure"
+                        );
                     } else {
                         println!("✓ iOS project structure found: {}", ios_project.display());
 
@@ -359,22 +401,28 @@ fn main() -> Result<()> {
                     println!("  - UIRequiredDeviceCapabilities: Required capabilities");
                     println!("  - NSCameraUsageDescription: Camera permission (if used)");
                     println!("  - NSMicrophoneUsageDescription: Microphone permission (if used)");
-                    println!("  - NSPhotoLibraryUsageDescription: Photo library permission (if used)");
+                    println!(
+                        "  - NSPhotoLibraryUsageDescription: Photo library permission (if used)"
+                    );
                 }
                 _ => {
-                    anyhow::bail!("Unknown store: {}. Supported: google_play, app_store", store);
+                    anyhow::bail!(
+                        "Unknown store: {}. Supported: google_play, app_store",
+                        store
+                    );
                 }
             }
         }
-        Commands::Publish { storefront, build_dir } => {
+        Commands::Publish {
+            storefront,
+            build_dir,
+        } => {
             match storefront.as_str() {
                 "itch" => {
                     println!("Publishing to itch.io from: {}", build_dir.display());
 
                     // Check if butler is available
-                    let butler_check = Command::new("butler")
-                        .arg("--version")
-                        .output();
+                    let butler_check = Command::new("butler").arg("--version").output();
 
                     match butler_check {
                         Ok(_) => {
@@ -384,7 +432,9 @@ fn main() -> Result<()> {
                             println!("To publish manually:");
                             println!("1. Download butler from https://itch.io/docs/butler/");
                             println!("2. Login: butler login");
-                            println!("3. Push build: butler push <build-dir> <user>/<game>:<channel>");
+                            println!(
+                                "3. Push build: butler push <build-dir> <user>/<game>:<channel>"
+                            );
                         }
                         Err(_) => {
                             println!("butler CLI not found");
@@ -392,8 +442,10 @@ fn main() -> Result<()> {
                             println!("1. Download butler from https://itch.io/docs/butler/");
                             println!("2. Install and add to PATH");
                             println!("3. Login: butler login");
-                            println!("4. Push build: butler push <build-dir> <user>/<game>:<channel>");
-                            println!("");
+                            println!(
+                                "4. Push build: butler push <build-dir> <user>/<game>:<channel>"
+                            );
+                            println!();
                             println!("Example:");
                             println!("  butler push export myusername/mygame:windows");
                         }
@@ -411,18 +463,28 @@ fn main() -> Result<()> {
                     let vdf_content = generate_steam_vdf();
                     fs::write(build_dir.join("steam_build.vdf"), vdf_content)?;
 
-                    println!("Steam build script generated: {}", build_dir.join("steam_build.vdf").display());
+                    println!(
+                        "Steam build script generated: {}",
+                        build_dir.join("steam_build.vdf").display()
+                    );
                     println!("To upload to Steam:");
                     println!("1. Install Steamworks SDK from Steamworks partner site");
                     println!("2. Edit steam_build.vdf and replace YOUR_APP_ID and YOUR_DEPOT_ID");
-                    println!("3. Run: steamcmd +login <username> +run_app_build steam_build.vdf +quit");
+                    println!(
+                        "3. Run: steamcmd +login <username> +run_app_build steam_build.vdf +quit"
+                    );
                 }
                 _ => {
                     anyhow::bail!("Unknown storefront: {}. Supported: itch, steam", storefront);
                 }
             }
         }
-        Commands::Export { platform, output, packaging, signed } => {
+        Commands::Export {
+            platform,
+            output,
+            packaging,
+            signed,
+        } => {
             match platform.as_str() {
                 "web" => {
                     println!("Exporting to web build: {}", output.display());
@@ -561,7 +623,8 @@ fn main() -> Result<()> {
                         "kiln-player"
                     };
 
-                    let source_path = PathBuf::from(format!("target/{}/release/{}", target, binary_name));
+                    let source_path =
+                        PathBuf::from(format!("target/{}/release/{}", target, binary_name));
                     let dest_path = output.join(binary_name);
 
                     fs::copy(&source_path, &dest_path)?;
@@ -676,7 +739,11 @@ Categories=Game;"#;
                                 // For now, just create the AppDir structure
                                 println!("Linux AppDir created: {}", appdir.display());
                                 println!("Note: Use appimagetool to create final .AppImage:");
-                                println!("  appimagetool {} {}", appdir.display(), appimage_path.display());
+                                println!(
+                                    "  appimagetool {} {}",
+                                    appdir.display(),
+                                    appimage_path.display()
+                                );
                             }
                             _ => {}
                         }
@@ -695,13 +762,7 @@ Categories=Game;"#;
                     // Build APK using cargo-apk
                     println!("Building Android APK...");
                     let build_status = Command::new("cargo")
-                        .args([
-                            "apk",
-                            "build",
-                            "--release",
-                            "-p",
-                            "kiln-player",
-                        ])
+                        .args(["apk", "build", "--release", "-p", "kiln-player"])
                         .status()?;
 
                     if !build_status.success() {
@@ -709,21 +770,28 @@ Categories=Game;"#;
                     }
 
                     // Copy APK to output
-                    let apk_source = PathBuf::from("target/android/release/app/build/outputs/apk/release/app-release.apk");
+                    let apk_source = PathBuf::from(
+                        "target/android/release/app/build/outputs/apk/release/app-release.apk",
+                    );
                     let apk_dest = output.join("game.apk");
 
                     if apk_source.exists() {
                         fs::copy(&apk_source, &apk_dest)?;
                         println!("Android APK created: {}", apk_dest.display());
                     } else {
-                        anyhow::bail!("APK not found at expected location: {}", apk_source.display());
+                        anyhow::bail!(
+                            "APK not found at expected location: {}",
+                            apk_source.display()
+                        );
                     }
 
                     // Create signed AAB if requested
                     if signed {
                         println!("Note: Signed AAB requires manual keystore configuration");
                         println!("See docs/ANDROID.md for signing instructions");
-                        println!("AAB creation is a manual process with Android Studio or bundletool");
+                        println!(
+                            "AAB creation is a manual process with Android Studio or bundletool"
+                        );
                     }
 
                     println!("Android export complete: {}", output.display());
@@ -760,7 +828,9 @@ Categories=Game;"#;
                             println!("iOS static library built successfully");
                         }
                         Ok(_) => {
-                            anyhow::bail!("iOS build failed - this is expected on non-macOS platforms");
+                            anyhow::bail!(
+                                "iOS build failed - this is expected on non-macOS platforms"
+                            );
                         }
                         Err(e) => {
                             println!("Note: iOS build requires macOS and Xcode");
@@ -801,10 +871,15 @@ echo "See docs/IOS.md for complete instructions"
                     println!("iOS project structure created: {}", ios_project.display());
                     println!("Build script: {}", ios_project.join("build.sh").display());
                     println!("On macOS, run: cd {} && ./build.sh", ios_project.display());
-                    println!("Then follow docs/IOS.md to create Xcode project and sign for App Store");
+                    println!(
+                        "Then follow docs/IOS.md to create Xcode project and sign for App Store"
+                    );
                 }
                 _ => {
-                    anyhow::bail!("Unknown platform: {}. Supported: web, windows, macos, linux, android, ios", platform);
+                    anyhow::bail!(
+                        "Unknown platform: {}. Supported: web, windows, macos, linux, android, ios",
+                        platform
+                    );
                 }
             }
         }

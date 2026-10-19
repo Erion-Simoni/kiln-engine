@@ -65,7 +65,7 @@ impl Renderer {
         surface.configure(&device, &surface_config);
 
         let post_pipeline = if tier != RenderTier::Low {
-            Some(PostPipeline::new(&device, tier))
+            Some(PostPipeline::new(&device, tier, surface_config.format))
         } else {
             None
         };
@@ -100,6 +100,10 @@ impl Renderer {
     }
 
     pub fn resize(&mut self, surface: &Surface<'_>, width: u32, height: u32) {
+        if self.surface_config.width == width && self.surface_config.height == height {
+            return;
+        }
+
         self.surface_config.width = width;
         self.surface_config.height = height;
         surface.configure(&self.device, &self.surface_config);
@@ -111,6 +115,18 @@ impl Renderer {
 
     pub fn format(&self) -> wgpu::TextureFormat {
         self.surface_config.format
+    }
+
+    /// The format the scene must be rendered into.
+    ///
+    /// With post-processing enabled this is the intermediate `Rgba16Float`
+    /// target of the post framebuffer; otherwise it matches the swap-chain
+    /// format. Pipelines that render the scene must use this format.
+    pub fn scene_format(&self) -> wgpu::TextureFormat {
+        match self.post_framebuffer.as_ref() {
+            Some(_) => wgpu::TextureFormat::Rgba16Float,
+            None => self.surface_config.format,
+        }
     }
 
     pub fn size(&self) -> (u32, u32) {
@@ -134,7 +150,11 @@ impl Renderer {
             self.post_pipeline = None;
             self.post_framebuffer = None;
         } else {
-            self.post_pipeline = Some(PostPipeline::new(&self.device, tier));
+            self.post_pipeline = Some(PostPipeline::new(
+                &self.device,
+                tier,
+                self.surface_config.format,
+            ));
             self.post_framebuffer = Some(PostFramebuffer::new(
                 &self.device,
                 self.surface_config.width,
@@ -148,8 +168,48 @@ impl Renderer {
         self.post_pipeline.as_ref()
     }
 
+    pub fn post_pipeline_mut(&mut self) -> Option<&mut PostPipeline> {
+        self.post_pipeline.as_mut()
+    }
+
     pub fn post_framebuffer(&self) -> Option<&PostFramebuffer> {
         self.post_framebuffer.as_ref()
+    }
+
+    pub fn post_framebuffer_mut(&mut self) -> Option<&mut PostFramebuffer> {
+        self.post_framebuffer.as_mut()
+    }
+
+    /// Whether post-processing is active for the current tier.
+    pub fn has_post(&self) -> bool {
+        self.post_pipeline.is_some() && self.post_framebuffer.is_some()
+    }
+
+    /// The texture view the scene must be rendered into.
+    ///
+    /// With post-processing enabled this is the intermediate `Rgba16Float`
+    /// target of the post framebuffer; without it, `None` is returned and the
+    /// caller should render straight to the swap-chain view.
+    pub fn scene_target(&self) -> Option<&wgpu::TextureView> {
+        self.post_framebuffer.as_ref().map(|fb| fb.color_view())
+    }
+
+    /// Run the post-processing chain: reads the scene from the post framebuffer
+    /// and writes the final image to `output_view`.
+    ///
+    /// Does nothing when the current tier has post-processing disabled.
+    pub fn apply_post(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        output_view: &wgpu::TextureView,
+    ) {
+        let Some(pipeline) = self.post_pipeline.as_mut() else {
+            return;
+        };
+        let Some(framebuffer) = self.post_framebuffer.as_ref() else {
+            return;
+        };
+        pipeline.apply(&self.device, &self.queue, encoder, framebuffer, output_view);
     }
 
     pub fn profiler(&self) -> &GpuProfiler {

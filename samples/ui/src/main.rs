@@ -5,8 +5,8 @@
 //! is stubbed.
 
 use kiln_ui::{
-    Button, FocusDirection, FocusManager, Label, Layout, List, Localization,
-    LocalizationKey, Panel, Widget, WidgetId,
+    Button, FocusDirection, FocusManager, Label, Layout, List, Localization, LocalizationKey,
+    Panel, Widget, WidgetId,
 };
 
 fn main() {
@@ -21,10 +21,22 @@ fn main() {
     loc.add("level.name", "Forest Temple");
 
     println!("   English translations:");
-    println!("   - menu.start: {}", loc.get_or_key(&LocalizationKey::new("menu.start")));
-    println!("   - menu.settings: {}", loc.get_or_key(&LocalizationKey::new("menu.settings")));
-    println!("   - level.name: {}", loc.get_or_key(&LocalizationKey::new("level.name")));
-    println!("   - missing.key: {}", loc.get_or_key(&LocalizationKey::new("missing.key")));
+    println!(
+        "   - menu.start: {}",
+        loc.get_or_key(&LocalizationKey::new("menu.start"))
+    );
+    println!(
+        "   - menu.settings: {}",
+        loc.get_or_key(&LocalizationKey::new("menu.settings"))
+    );
+    println!(
+        "   - level.name: {}",
+        loc.get_or_key(&LocalizationKey::new("level.name"))
+    );
+    println!(
+        "   - missing.key: {}",
+        loc.get_or_key(&LocalizationKey::new("missing.key"))
+    );
     println!();
 
     // Demonstrate widgets
@@ -36,8 +48,8 @@ fn main() {
     let label_title_id = WidgetId::new();
     let list_levels_id = WidgetId::new();
 
-    let panel = Panel::new(panel_id)
-        .with_layout(Layout::new().with_anchor(kiln_ui::Anchor::Center));
+    let panel =
+        Panel::new(panel_id).with_layout(Layout::new().with_anchor(kiln_ui::Anchor::Center));
 
     let button_start = Button::new(button_start_id, "menu.start")
         .with_layout(Layout::new().with_anchor(kiln_ui::Anchor::TopCenter));
@@ -54,14 +66,17 @@ fn main() {
     let mut list_levels = List::new(list_levels_id)
         .with_layout(Layout::new().with_anchor(kiln_ui::Anchor::CenterLeft))
         .with_items(vec![
-        LocalizationKey::new("level1"),
-        LocalizationKey::new("level2"),
-        LocalizationKey::new("level3"),
-    ]);
+            LocalizationKey::new("level1"),
+            LocalizationKey::new("level2"),
+            LocalizationKey::new("level3"),
+        ]);
 
     println!("   Created panel, 3 buttons, 1 label, 1 list");
     println!("   Panel ID: {:?}", panel.id());
-    println!("   Button start text key: {}", button_start.text_key().as_str());
+    println!(
+        "   Button start text key: {}",
+        button_start.text_key().as_str()
+    );
     println!("   Label text key: {}", label_title.text_key().as_str());
     println!("   List has {} items", list_levels.items().len());
     println!();
@@ -102,7 +117,10 @@ fn main() {
     println!("4. List Selection");
     println!("   Selected index: {:?}", list_levels.selected_index());
     list_levels.set_selected_index(Some(1));
-    println!("   After set_selected_index(1): {:?}", list_levels.selected_index());
+    println!(
+        "   After set_selected_index(1): {:?}",
+        list_levels.selected_index()
+    );
     println!();
 
     // Demonstrate layout constraints

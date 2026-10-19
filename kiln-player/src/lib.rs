@@ -1,6 +1,9 @@
 //! Kiln Player library
 //! Used by desktop binary, Android cdylib, and iOS staticlib
 
+pub mod loader;
+pub mod spawn;
+
 #[cfg(target_os = "android")]
 pub mod android;
 

@@ -15,6 +15,7 @@ pub enum ParseError {
 #[derive(Debug, Clone)]
 pub enum Expr {
     Number(i64, crate::diagnostic::Span),
+    Float(f64, crate::diagnostic::Span),
     Identifier(String, crate::diagnostic::Span),
     BinaryOp {
         op: BinaryOp,
@@ -203,6 +204,11 @@ impl<'a> Parser<'a> {
                 self.advance();
                 Ok(Expr::Number(n, span))
             }
+            Some(Token::Float(f)) => {
+                let span = self.current.as_ref().map(|t| t.span).unwrap();
+                self.advance();
+                Ok(Expr::Float(f, span))
+            }
             Some(Token::Identifier(name)) => {
                 let span = self.current.as_ref().map(|t| t.span).unwrap();
                 self.advance();
@@ -220,14 +226,21 @@ impl<'a> Parser<'a> {
             }
             Some(token) => {
                 let span = self.current.as_ref().map(|t| t.span).unwrap();
-                self.diagnostics.push(Diagnostic::new(span, format!("Unexpected token: {:?}", token)));
+                self.diagnostics.push(Diagnostic::new(
+                    span,
+                    format!("Unexpected token: {:?}", token),
+                ));
                 Err(ParseError::UnexpectedToken(token))
             }
             None => Err(ParseError::Custom("Unexpected end of input".to_string())),
         }
     }
 
-    fn parse_call(&mut self, func: String, span: crate::diagnostic::Span) -> Result<Expr, ParseError> {
+    fn parse_call(
+        &mut self,
+        func: String,
+        span: crate::diagnostic::Span,
+    ) -> Result<Expr, ParseError> {
         self.consume(Token::LParen)?;
         let mut args = Vec::new();
 
@@ -296,19 +309,29 @@ impl<'a> Parser<'a> {
             self.advance();
             Ok(())
         } else {
-            let span = self.current.as_ref().map(|t| t.span).unwrap_or(Span::new(0, 0));
+            let span = self
+                .current
+                .as_ref()
+                .map(|t| t.span)
+                .unwrap_or(Span::new(0, 0));
             self.diagnostics.push(Diagnostic::new(
                 span,
                 format!(
                     "Expected {:?}, found {:?}",
                     expected,
-                    self.current.as_ref().map(|t| &t.token).unwrap_or(&Token::Eof)
+                    self.current
+                        .as_ref()
+                        .map(|t| &t.token)
+                        .unwrap_or(&Token::Eof)
                 ),
             ));
             Err(ParseError::Custom(format!(
                 "Expected {:?}, found {:?}",
                 expected,
-                self.current.as_ref().map(|t| &t.token).unwrap_or(&Token::Eof)
+                self.current
+                    .as_ref()
+                    .map(|t| &t.token)
+                    .unwrap_or(&Token::Eof)
             )))
         }
     }
@@ -336,6 +359,14 @@ mod tests {
         let stmts = parser.parse().unwrap();
         assert_eq!(stmts.len(), 1);
         assert!(matches!(stmts[0], Stmt::Expr(Expr::Number(42, _))));
+    }
+
+    #[test]
+    fn parse_float() {
+        let mut parser = Parser::new("2.5");
+        let stmts = parser.parse().unwrap();
+        assert_eq!(stmts.len(), 1);
+        assert!(matches!(stmts[0], Stmt::Expr(Expr::Float(f, _)) if f == 2.5));
     }
 
     #[test]

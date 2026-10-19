@@ -1,7 +1,7 @@
 //! 2D navmesh pathfinding
 
+use std::cmp::{Ordering, Reverse};
 use std::collections::{BinaryHeap, HashMap};
-use std::cmp::{Reverse, Ordering};
 
 /// Wrapper for f32 with total ordering for use in BinaryHeap
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -51,7 +51,11 @@ pub struct NavPoly {
 impl NavPoly {
     pub fn new(id: usize, vertices: Vec<Point>) -> Self {
         let center = Self::compute_center(&vertices);
-        Self { id, vertices, center }
+        Self {
+            id,
+            vertices,
+            center,
+        }
     }
 
     fn compute_center(vertices: &[Point]) -> Point {
@@ -125,8 +129,8 @@ impl NavMesh {
     }
 
     pub fn add_connection(&mut self, from: usize, to: usize) {
-        self.connections.entry(from).or_insert_with(Vec::new).push(to);
-        self.connections.entry(to).or_insert_with(Vec::new).push(from);
+        self.connections.entry(from).or_default().push(to);
+        self.connections.entry(to).or_default().push(from);
     }
 
     pub fn get_polygon(&self, id: usize) -> Option<&NavPoly> {
@@ -144,9 +148,11 @@ impl NavMesh {
 
     /// Find path from start point to goal point using A* on navmesh
     pub fn find_path(&self, start: Point, goal: Point) -> Result<Vec<Point>, PathfindError> {
-        let start_poly = self.find_poly_containing(&start)
+        let start_poly = self
+            .find_poly_containing(&start)
             .ok_or(PathfindError::InvalidStart)?;
-        let goal_poly = self.find_poly_containing(&goal)
+        let goal_poly = self
+            .find_poly_containing(&goal)
             .ok_or(PathfindError::InvalidGoal)?;
 
         if start_poly == goal_poly {
@@ -194,7 +200,13 @@ impl NavMesh {
         Err(PathfindError::NoPath)
     }
 
-    fn reconstruct_path(&self, came_from: &HashMap<usize, usize>, current: usize, start: Point, goal: Point) -> Vec<Point> {
+    fn reconstruct_path(
+        &self,
+        came_from: &HashMap<usize, usize>,
+        current: usize,
+        start: Point,
+        goal: Point,
+    ) -> Vec<Point> {
         let mut poly_path = vec![current];
         let mut node = current;
 
@@ -293,8 +305,16 @@ mod tests {
     #[test]
     fn test_navmesh_add_connection() {
         let mut navmesh = NavMesh::new();
-        navmesh.add_polygon(vec![Point::new(0.0, 0.0), Point::new(2.0, 0.0), Point::new(2.0, 2.0)]);
-        navmesh.add_polygon(vec![Point::new(2.0, 0.0), Point::new(4.0, 0.0), Point::new(4.0, 2.0)]);
+        navmesh.add_polygon(vec![
+            Point::new(0.0, 0.0),
+            Point::new(2.0, 0.0),
+            Point::new(2.0, 2.0),
+        ]);
+        navmesh.add_polygon(vec![
+            Point::new(2.0, 0.0),
+            Point::new(4.0, 0.0),
+            Point::new(4.0, 2.0),
+        ]);
         navmesh.add_connection(0, 1);
 
         assert!(navmesh.connections.get(&0).unwrap().contains(&1));
@@ -342,9 +362,24 @@ mod tests {
     #[test]
     fn test_navmesh_find_path_multiple_polys() {
         let mut navmesh = NavMesh::new();
-        let poly0 = vec![Point::new(0.0, 0.0), Point::new(2.0, 0.0), Point::new(2.0, 2.0), Point::new(0.0, 2.0)];
-        let poly1 = vec![Point::new(2.0, 0.0), Point::new(4.0, 0.0), Point::new(4.0, 2.0), Point::new(2.0, 2.0)];
-        let poly2 = vec![Point::new(4.0, 0.0), Point::new(6.0, 0.0), Point::new(6.0, 2.0), Point::new(4.0, 2.0)];
+        let poly0 = vec![
+            Point::new(0.0, 0.0),
+            Point::new(2.0, 0.0),
+            Point::new(2.0, 2.0),
+            Point::new(0.0, 2.0),
+        ];
+        let poly1 = vec![
+            Point::new(2.0, 0.0),
+            Point::new(4.0, 0.0),
+            Point::new(4.0, 2.0),
+            Point::new(2.0, 2.0),
+        ];
+        let poly2 = vec![
+            Point::new(4.0, 0.0),
+            Point::new(6.0, 0.0),
+            Point::new(6.0, 2.0),
+            Point::new(4.0, 2.0),
+        ];
 
         navmesh.add_polygon(poly0);
         navmesh.add_polygon(poly1);
@@ -374,7 +409,11 @@ mod tests {
     #[test]
     fn test_navmesh_find_path_invalid_goal() {
         let mut navmesh = NavMesh::new();
-        navmesh.add_polygon(vec![Point::new(0.0, 0.0), Point::new(2.0, 0.0), Point::new(2.0, 2.0)]);
+        navmesh.add_polygon(vec![
+            Point::new(0.0, 0.0),
+            Point::new(2.0, 0.0),
+            Point::new(2.0, 2.0),
+        ]);
         let start = Point::new(0.5, 0.5);
         let goal = Point::new(5.0, 5.0);
 

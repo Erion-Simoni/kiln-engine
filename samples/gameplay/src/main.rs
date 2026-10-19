@@ -6,7 +6,10 @@
 //! - Data tables with CSV import
 //! - Inventory/stat system driven by data tables
 
-use kiln_gameplay::{DataTable, DataValue, Dialogue, DialogueChoice, DialogueCondition, DialogueNode, Quest, QuestObjective, QuestState, ObjectiveType, VariableSet, VariableOperation};
+use kiln_gameplay::{
+    DataTable, DataValue, Dialogue, DialogueChoice, DialogueCondition, DialogueNode, ObjectiveType,
+    Quest, QuestObjective, QuestState, VariableOperation, VariableSet,
+};
 
 fn main() {
     println!("=== Kiln Gameplay Content Tools Sample ===\n");
@@ -85,11 +88,22 @@ fn demo_dialogue() {
         variable: "friendship".to_string(),
         value: 10,
     };
-    println!("Condition 'friendship == 10': {}", dialogue.check_condition(&Some(condition), &variables, &std::collections::HashMap::new()));
+    println!(
+        "Condition 'friendship == 10': {}",
+        dialogue.check_condition(
+            &Some(condition),
+            &variables,
+            &std::collections::HashMap::new()
+        )
+    );
 }
 
 fn demo_quests() {
-    let mut quest = Quest::new("main_quest".to_string(), "quest_main_name".to_string(), "quest_main_desc".to_string());
+    let mut quest = Quest::new(
+        "main_quest".to_string(),
+        "quest_main_name".to_string(),
+        "quest_main_desc".to_string(),
+    );
 
     // Add objectives
     quest.add_objective(QuestObjective {
@@ -123,14 +137,20 @@ fn demo_quests() {
 
     // Update objective progress
     state.update_objective("obj1", 3);
-    println!("Objective 1 progress: {}", state.get_objective_progress("obj1").unwrap());
+    println!(
+        "Objective 1 progress: {}",
+        state.get_objective_progress("obj1").unwrap()
+    );
 
     state.update_objective("obj1", 5);
     state.update_objective("obj2", 10);
     state.complete(2000);
 
     println!("Quest status after completion: {:?}", state.status);
-    println!("All objectives complete: {}", state.all_objectives_complete(&quest));
+    println!(
+        "All objectives complete: {}",
+        state.all_objectives_complete(&quest)
+    );
 }
 
 fn demo_data_tables() {
@@ -191,12 +211,31 @@ fn demo_inventory_stats() {
 
     for item_id in &inventory {
         if let Some(row) = items_table.get_row(item_id) {
-            let name = row.values.get("name").and_then(|v| v.as_string()).unwrap_or("Unknown");
-            let attack = row.values.get("attack").and_then(|v| v.as_integer()).unwrap_or(0);
-            let defense = row.values.get("defense").and_then(|v| v.as_integer()).unwrap_or(0);
-            let weight = row.values.get("weight").and_then(|v| v.as_integer()).unwrap_or(0);
+            let name = row
+                .values
+                .get("name")
+                .and_then(|v| v.as_string())
+                .unwrap_or("Unknown");
+            let attack = row
+                .values
+                .get("attack")
+                .and_then(|v| v.as_integer())
+                .unwrap_or(0);
+            let defense = row
+                .values
+                .get("defense")
+                .and_then(|v| v.as_integer())
+                .unwrap_or(0);
+            let weight = row
+                .values
+                .get("weight")
+                .and_then(|v| v.as_integer())
+                .unwrap_or(0);
 
-            println!("  - {} (ATK: {}, DEF: {}, WT: {})", name, attack, defense, weight);
+            println!(
+                "  - {} (ATK: {}, DEF: {}, WT: {})",
+                name, attack, defense, weight
+            );
 
             total_attack += attack;
             total_defense += defense;
@@ -216,7 +255,11 @@ fn demo_inventory_stats() {
 
     // Check if player can afford potion
     if let Some(potion_row) = items_table.get_row("potion1") {
-        let potion_value = potion_row.values.get("value").and_then(|v| v.as_integer()).unwrap_or(0);
+        let potion_value = potion_row
+            .values
+            .get("value")
+            .and_then(|v| v.as_integer())
+            .unwrap_or(0);
         let player_gold = player_stats.get("gold").copied().unwrap_or(0);
 
         println!("\nHealth Potion costs {} gold", potion_value);

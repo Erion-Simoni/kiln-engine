@@ -10,10 +10,9 @@ pub use diagnostic::{Diagnostic, Span};
 
 use kiln_ir::Program;
 
-/// Note: Tween functions are deferred until float support is added to the VM.
-/// The VM currently only supports I64 and Bool values; tween operations require
-/// floating-point interpolation. Script integration of tweens will be added in
-/// a future milestone when Value::F64 is implemented.
+// Note: Tween functions are still deferred. The VM now supports `Value::F64`
+// (added with F4), but the tween *language surface* (lerp/ease builtins) has
+// not been wired into the script frontend yet.
 
 /// Trait for language frontends that compile to Kiln IR.
 pub trait LanguageFrontend {
@@ -82,6 +81,26 @@ mod tests {
 
         let mut vm = Vm::new(TestHost);
         vm.execute(&program).unwrap();
+    }
+
+    #[test]
+    fn frontend_float_arith_runs() {
+        let mut frontend = KilnScriptFrontend;
+        let program = frontend.compile("return 2.0 * 2.5;").unwrap();
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[kiln_ir::Value::F64(5.0)]);
+    }
+
+    #[test]
+    fn frontend_mixed_int_float_arith_runs() {
+        let mut frontend = KilnScriptFrontend;
+        let program = frontend.compile("return 1 + 2.5;").unwrap();
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[kiln_ir::Value::F64(3.5)]);
     }
 
     #[test]

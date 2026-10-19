@@ -1,8 +1,7 @@
 //! M28 sample: render graph compile + GPU pass timings + screenshot hash.
 
 use kiln_render::{
-    clear_view, execute_passes, render_graph_screenshot, Frame2dGraph, PassEnableConfig,
-    RenderTier,
+    clear_view, execute_passes, render_graph_screenshot, Frame2dGraph, PassEnableConfig, RenderTier,
 };
 
 fn main() {
@@ -17,7 +16,11 @@ fn main() {
     for tier in [RenderTier::Low, RenderTier::Medium, RenderTier::High] {
         let frame = Frame2dGraph::build(1280, 720, tier, &cfg);
         let compiled = frame.compile().expect("compile");
-        println!("\n{:?} tier pass order: {:?}", tier, compiled.ordered_pass_names());
+        println!(
+            "\n{:?} tier pass order: {:?}",
+            tier,
+            compiled.ordered_pass_names()
+        );
         println!(
             "  transient slots (aliased): {} physical for {} resources",
             compiled.slot_count,
@@ -83,10 +86,7 @@ fn demo_gpu_timings(cfg: &PassEnableConfig) {
     .expect("device");
 
     let mut profiler = kiln_render::GpuProfiler::new(&device, &queue, 16);
-    println!(
-        "\nTIMESTAMP_QUERY supported: {}",
-        profiler.supported()
-    );
+    println!("\nTIMESTAMP_QUERY supported: {}", profiler.supported());
 
     let tex = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("sample_rt"),

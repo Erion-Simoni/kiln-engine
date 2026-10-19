@@ -1,8 +1,8 @@
 //! Graph data model.
 
+use crate::{Connection, Node};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::{Node, Connection};
 use uuid::Uuid;
 
 /// A node graph (collection of nodes and connections).
@@ -30,9 +30,8 @@ impl Graph {
         // Remove connections to/from this node
         if let Some(node) = self.nodes.get(&id) {
             let pin_ids: Vec<Uuid> = node.pins.iter().map(|p| p.id).collect();
-            self.connections.retain(|c| {
-                !pin_ids.contains(&c.source_pin) && !pin_ids.contains(&c.target_pin)
-            });
+            self.connections
+                .retain(|c| !pin_ids.contains(&c.source_pin) && !pin_ids.contains(&c.target_pin));
         }
         self.nodes.remove(&id)
     }
@@ -55,7 +54,9 @@ impl Graph {
     }
 
     pub fn get_pin_node(&self, pin_id: Uuid) -> Option<&Node> {
-        self.nodes.values().find(|n| n.pins.iter().any(|p| p.id == pin_id))
+        self.nodes
+            .values()
+            .find(|n| n.pins.iter().any(|p| p.id == pin_id))
     }
 }
 

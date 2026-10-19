@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// A 2D rectangle.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub struct Rect {
     pub x: f32,
     pub y: f32,
@@ -13,11 +13,12 @@ pub struct Rect {
 
 impl Rect {
     pub fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
-        Self { x, y, width, height }
-    }
-
-    pub fn default() -> Self {
-        Self { x: 0.0, y: 0.0, width: 0.0, height: 0.0 }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     pub fn left(&self) -> f32 {
@@ -58,7 +59,10 @@ impl Size {
     }
 
     pub fn zero() -> Self {
-        Self { width: 0.0, height: 0.0 }
+        Self {
+            width: 0.0,
+            height: 0.0,
+        }
     }
 }
 

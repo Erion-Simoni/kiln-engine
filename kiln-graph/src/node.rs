@@ -47,9 +47,15 @@ pub enum NodeType {
     /// Quest complete (completes a quest).
     QuestComplete { quest_id: String },
     /// Quest objective update (updates quest objective progress).
-    QuestObjectiveUpdate { quest_id: String, objective_index: usize },
+    QuestObjectiveUpdate {
+        quest_id: String,
+        objective_index: usize,
+    },
     /// Data table lookup (retrieves a value from a data table).
-    DataTableLookup { table_id: String, column_name: String },
+    DataTableLookup {
+        table_id: String,
+        column_name: String,
+    },
     /// Data table row get (retrieves a row by ID).
     DataTableRowGet { table_id: String },
 }
@@ -58,6 +64,7 @@ pub enum NodeType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConstantValue {
     Integer(i64),
+    Float(f64),
     Boolean(bool),
     String(String),
 }
@@ -106,6 +113,7 @@ impl Node {
             NodeType::Constant { value } => {
                 let pin_type = match value {
                     ConstantValue::Integer(_) => PinType::Integer,
+                    ConstantValue::Float(_) => PinType::Float,
                     ConstantValue::Boolean(_) => PinType::Boolean,
                     ConstantValue::String(_) => PinType::String,
                 };

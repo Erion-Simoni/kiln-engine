@@ -57,7 +57,8 @@ impl PhysicsWorld {
         collider: ColliderBuilder,
         parent: RigidBodyHandle,
     ) -> ColliderHandle {
-        self.collider_set.insert_with_parent(collider, parent, &mut self.rigid_body_set)
+        self.collider_set
+            .insert_with_parent(collider, parent, &mut self.rigid_body_set)
     }
 
     /// Step the physics simulation
@@ -81,7 +82,9 @@ impl PhysicsWorld {
 
     /// Get rigid body position
     pub fn get_rigid_body_position(&self, handle: RigidBodyHandle) -> Option<Vec2> {
-        self.rigid_body_set.get(handle).map(|body| body.translation())
+        self.rigid_body_set
+            .get(handle)
+            .map(|body| body.translation())
     }
 
     /// Set rigid body velocity

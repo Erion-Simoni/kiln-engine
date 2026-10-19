@@ -21,11 +21,16 @@ pub trait PlatformServices {
     /// Achievement support
     fn unlock_achievement(&self, achievement_id: &str) -> Result<(), PlatformError>;
     fn get_achievement_progress(&self, achievement_id: &str) -> Result<Option<f32>, PlatformError>;
-    fn set_achievement_progress(&self, achievement_id: &str, progress: f32) -> Result<(), PlatformError>;
+    fn set_achievement_progress(
+        &self,
+        achievement_id: &str,
+        progress: f32,
+    ) -> Result<(), PlatformError>;
 
     /// Leaderboard support
     fn submit_score(&self, leaderboard_id: &str, score: i64) -> Result<(), PlatformError>;
-    fn get_leaderboard(&self, leaderboard_id: &str) -> Result<Vec<LeaderboardEntry>, PlatformError>;
+    fn get_leaderboard(&self, leaderboard_id: &str)
+        -> Result<Vec<LeaderboardEntry>, PlatformError>;
 
     /// Cloud save support
     fn save_cloud_data(&self, slot: &str, data: &[u8]) -> Result<(), PlatformError>;
@@ -99,11 +104,18 @@ impl PlatformServices for StubPlatformServices {
         Err(PlatformError::FeatureNotSupported)
     }
 
-    fn get_achievement_progress(&self, _achievement_id: &str) -> Result<Option<f32>, PlatformError> {
+    fn get_achievement_progress(
+        &self,
+        _achievement_id: &str,
+    ) -> Result<Option<f32>, PlatformError> {
         Err(PlatformError::FeatureNotSupported)
     }
 
-    fn set_achievement_progress(&self, _achievement_id: &str, _progress: f32) -> Result<(), PlatformError> {
+    fn set_achievement_progress(
+        &self,
+        _achievement_id: &str,
+        _progress: f32,
+    ) -> Result<(), PlatformError> {
         Err(PlatformError::FeatureNotSupported)
     }
 
@@ -111,7 +123,10 @@ impl PlatformServices for StubPlatformServices {
         Err(PlatformError::FeatureNotSupported)
     }
 
-    fn get_leaderboard(&self, _leaderboard_id: &str) -> Result<Vec<LeaderboardEntry>, PlatformError> {
+    fn get_leaderboard(
+        &self,
+        _leaderboard_id: &str,
+    ) -> Result<Vec<LeaderboardEntry>, PlatformError> {
         Err(PlatformError::FeatureNotSupported)
     }
 
@@ -177,19 +192,32 @@ impl PlatformServices for SteamPlatformServices {
         Ok(None)
     }
 
-    fn set_achievement_progress(&self, achievement_id: &str, progress: f32) -> Result<(), PlatformError> {
+    fn set_achievement_progress(
+        &self,
+        achievement_id: &str,
+        progress: f32,
+    ) -> Result<(), PlatformError> {
         // TODO: Call SteamUserStats::SetAchievement() with progress
-        println!("Steam: Set achievement progress {} to {}", achievement_id, progress);
+        println!(
+            "Steam: Set achievement progress {} to {}",
+            achievement_id, progress
+        );
         Ok(())
     }
 
     fn submit_score(&self, leaderboard_id: &str, score: i64) -> Result<(), PlatformError> {
         // TODO: Call SteamUserStats::UploadLeaderboardScore()
-        println!("Steam: Submit score {} to leaderboard {}", score, leaderboard_id);
+        println!(
+            "Steam: Submit score {} to leaderboard {}",
+            score, leaderboard_id
+        );
         Ok(())
     }
 
-    fn get_leaderboard(&self, leaderboard_id: &str) -> Result<Vec<LeaderboardEntry>, PlatformError> {
+    fn get_leaderboard(
+        &self,
+        leaderboard_id: &str,
+    ) -> Result<Vec<LeaderboardEntry>, PlatformError> {
         // TODO: Call SteamUserStats::DownloadLeaderboardEntries()
         println!("Steam: Get leaderboard {}", leaderboard_id);
         Ok(vec![])
@@ -197,7 +225,11 @@ impl PlatformServices for SteamPlatformServices {
 
     fn save_cloud_data(&self, slot: &str, data: &[u8]) -> Result<(), PlatformError> {
         // TODO: Call SteamRemoteStorage::FileWrite()
-        println!("Steam: Save cloud data to slot {} ({} bytes)", slot, data.len());
+        println!(
+            "Steam: Save cloud data to slot {} ({} bytes)",
+            slot,
+            data.len()
+        );
         Ok(())
     }
 

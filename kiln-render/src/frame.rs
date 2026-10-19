@@ -5,8 +5,8 @@ use std::collections::HashSet;
 use wgpu::{CommandEncoder, TextureView};
 
 use crate::graph::{
-    PassDecl, RenderGraph, ResourceDesc, ResourceId, ResourceKind, ResourceRef, ResourceUsage,
-    TextureFormatKey, CompiledGraph,
+    CompiledGraph, PassDecl, RenderGraph, ResourceDesc, ResourceId, ResourceKind, ResourceRef,
+    ResourceUsage, TextureFormatKey,
 };
 use crate::pass_config::PassEnableConfig;
 use crate::profiler::GpuProfiler;
@@ -202,9 +202,7 @@ pub fn execute_passes(
 
     for pid in &compiled.pass_order {
         let name = compiled.pass_names[pid.0 as usize].as_str();
-        let begin = profiler
-            .as_mut()
-            .and_then(|p| p.begin_pass(encoder, name));
+        let begin = profiler.as_mut().and_then(|p| p.begin_pass(encoder, name));
 
         run_pass(PassExecContext {
             name,

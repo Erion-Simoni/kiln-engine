@@ -91,7 +91,7 @@ impl ParticleSystem {
             particle.position[1] += particle.velocity[1] * dt;
 
             // Fade out if enabled
-            if self.emitters.first().map_or(false, |e| e.fade_out()) {
+            if self.emitters.first().is_some_and(|e| e.fade_out()) {
                 let alpha = 1.0 - particle.normalized_age();
                 particle.color[3] = alpha;
             }
@@ -121,9 +121,7 @@ mod tests {
 
     #[test]
     fn system_creation() {
-        let config = ParticleSystemConfig {
-            max_particles: 100,
-        };
+        let config = ParticleSystemConfig { max_particles: 100 };
         let system = ParticleSystem::new(config);
         assert_eq!(system.particle_count(), 0);
     }
@@ -183,9 +181,7 @@ mod tests {
 
     #[test]
     fn max_particles_cap() {
-        let config = ParticleSystemConfig {
-            max_particles: 5,
-        };
+        let config = ParticleSystemConfig { max_particles: 5 };
         let mut system = ParticleSystem::new(config);
         let emitter_config = EmitterConfig {
             rate: 100.0,

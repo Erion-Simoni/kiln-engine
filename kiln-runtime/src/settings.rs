@@ -109,14 +109,27 @@ mod tests {
     fn test_resolution_dimensions() {
         assert_eq!(Resolution::HD.dimensions(), (1280, 720));
         assert_eq!(Resolution::FullHD.dimensions(), (1920, 1080));
-        assert_eq!(Resolution::Custom { width: 800, height: 600 }.dimensions(), (800, 600));
+        assert_eq!(
+            Resolution::Custom {
+                width: 800,
+                height: 600
+            }
+            .dimensions(),
+            (800, 600)
+        );
     }
 
     #[test]
     fn test_resolution_from_dimensions() {
         assert_eq!(Resolution::from_dimensions(1280, 720), Resolution::HD);
         assert_eq!(Resolution::from_dimensions(1920, 1080), Resolution::FullHD);
-        assert_eq!(Resolution::from_dimensions(800, 600), Resolution::Custom { width: 800, height: 600 });
+        assert_eq!(
+            Resolution::from_dimensions(800, 600),
+            Resolution::Custom {
+                width: 800,
+                height: 600
+            }
+        );
     }
 
     #[test]
@@ -154,7 +167,9 @@ mod tests {
 
     #[test]
     fn test_graphics_settings_serialization() {
-        let settings = GraphicsSettings::new().with_resolution(Resolution::HD).with_vsync(false);
+        let settings = GraphicsSettings::new()
+            .with_resolution(Resolution::HD)
+            .with_vsync(false);
         let json = settings.to_json().unwrap();
         assert!(json.contains("HD"));
 

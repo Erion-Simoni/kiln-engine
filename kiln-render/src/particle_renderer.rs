@@ -31,11 +31,7 @@ impl ParticleRenderer {
                 continue;
             }
 
-            let instance = SpriteInstance {
-                position: p.position,
-                size: [p.size, p.size], // Square particles
-                color: p.color,
-            };
+            let instance = SpriteInstance::colored(p.position, [p.size, p.size], p.color);
             self.sprite_instances.push(instance);
         }
     }

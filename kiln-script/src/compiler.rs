@@ -52,7 +52,8 @@ impl Compiler {
 
                 // Emit JumpIfNot with placeholder; we'll fix it after compiling the then block
                 let jump_if_not_idx = self.program.len();
-                self.program.add_instruction(Instruction::JumpIfNot(Label(0)));
+                self.program
+                    .add_instruction(Instruction::JumpIfNot(Label(0)));
 
                 for stmt in then_block {
                     self.compile_stmt(stmt)?;
@@ -81,11 +82,13 @@ impl Compiler {
 
                 // Now fix up the jumps
                 // Replace the JumpIfNot target with the else index
-                self.program.set_instruction(jump_if_not_idx, Instruction::JumpIfNot(Label(else_idx)));
+                self.program
+                    .set_instruction(jump_if_not_idx, Instruction::JumpIfNot(Label(else_idx)));
 
                 // Replace the Jump over else with the end index
                 if let Some(jump_end_idx) = jump_end_idx {
-                    self.program.set_instruction(jump_end_idx, Instruction::Jump(Label(end_idx)));
+                    self.program
+                        .set_instruction(jump_end_idx, Instruction::Jump(Label(end_idx)));
                 }
             }
         }
@@ -95,7 +98,12 @@ impl Compiler {
     fn compile_expr(&mut self, expr: &Expr) -> Result<(), CompileError> {
         match expr {
             Expr::Number(n, _span) => {
-                self.program.add_instruction(Instruction::PushConst(Value::I64(*n)));
+                self.program
+                    .add_instruction(Instruction::PushConst(Value::I64(*n)));
+            }
+            Expr::Float(f, _span) => {
+                self.program
+                    .add_instruction(Instruction::PushConst(Value::F64(*f)));
             }
             Expr::Identifier(name, span) => {
                 return Err(CompileError::UndefinedVariable(name.clone(), *span));
@@ -149,7 +157,9 @@ mod tests {
         fn call_host(&mut self, func_id: u32, args: &[Value]) -> Result<Value, kiln_ir::VmError> {
             match func_id {
                 0 => Ok(Value::I64(args.len() as i64)),
-                _ => Err(kiln_ir::VmError::HostCallError("Unknown function".to_string())),
+                _ => Err(kiln_ir::VmError::HostCallError(
+                    "Unknown function".to_string(),
+                )),
             }
         }
     }

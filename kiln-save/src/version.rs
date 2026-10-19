@@ -35,7 +35,7 @@ impl fmt::Display for SaveVersion {
 /// Version migration trait for upgrading save data.
 pub trait VersionMigration: Send + Sync {
     /// The source version this migration applies to.
-    fn from_version(&self) -> SaveVersion;
+    fn source_version(&self) -> SaveVersion;
 
     /// The target version after migration.
     fn to_version(&self) -> SaveVersion;

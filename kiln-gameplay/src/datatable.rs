@@ -159,9 +159,12 @@ impl DataTable {
         }
 
         // Read second row for data types
-        let type_record = reader.records().next().ok_or(DataTableError::ValueParseError(
-            "Missing data type row".to_string(),
-        ))??;
+        let type_record = reader
+            .records()
+            .next()
+            .ok_or(DataTableError::ValueParseError(
+                "Missing data type row".to_string(),
+            ))??;
 
         for (i, type_str) in type_record.iter().enumerate() {
             if i < self.columns.len() {
@@ -190,9 +193,7 @@ impl DataTable {
                         DataType::Integer => DataValue::Integer(value_str.parse().unwrap_or(0)),
                         DataType::Float => DataValue::Float(value_str.parse().unwrap_or(0.0)),
                         DataType::String => DataValue::String(value_str.to_string()),
-                        DataType::Boolean => {
-                            DataValue::Boolean(value_str.to_lowercase() == "true")
-                        }
+                        DataType::Boolean => DataValue::Boolean(value_str.to_lowercase() == "true"),
                     };
                     row.values.insert(column.name.clone(), value);
                 }
@@ -230,14 +231,12 @@ impl DataTable {
             let record: Vec<String> = self
                 .columns
                 .iter()
-                .map(|col| {
-                    match row.values.get(&col.name) {
-                        Some(DataValue::Integer(v)) => v.to_string(),
-                        Some(DataValue::Float(v)) => v.to_string(),
-                        Some(DataValue::String(v)) => v.clone(),
-                        Some(DataValue::Boolean(v)) => v.to_string(),
-                        None => String::new(),
-                    }
+                .map(|col| match row.values.get(&col.name) {
+                    Some(DataValue::Integer(v)) => v.to_string(),
+                    Some(DataValue::Float(v)) => v.to_string(),
+                    Some(DataValue::String(v)) => v.clone(),
+                    Some(DataValue::Boolean(v)) => v.to_string(),
+                    None => String::new(),
                 })
                 .collect();
             writer.write_record(&record).unwrap();
@@ -290,10 +289,8 @@ mod tests {
             id: "item1".to_string(),
             values: HashMap::new(),
         };
-        row.values.insert(
-            "name".to_string(),
-            DataValue::String("Sword".to_string()),
-        );
+        row.values
+            .insert("name".to_string(), DataValue::String("Sword".to_string()));
         table.add_row(row);
 
         assert_eq!(table.rows.len(), 1);
@@ -311,10 +308,8 @@ mod tests {
             id: "item1".to_string(),
             values: HashMap::new(),
         };
-        row.values.insert(
-            "name".to_string(),
-            DataValue::String("Sword".to_string()),
-        );
+        row.values
+            .insert("name".to_string(), DataValue::String("Sword".to_string()));
         table.add_row(row);
 
         let retrieved = table.get_row("item1");
@@ -338,11 +333,10 @@ mod tests {
             id: "item1".to_string(),
             values: HashMap::new(),
         };
-        row.values.insert(
-            "name".to_string(),
-            DataValue::String("Sword".to_string()),
-        );
-        row.values.insert("damage".to_string(), DataValue::Integer(10));
+        row.values
+            .insert("name".to_string(), DataValue::String("Sword".to_string()));
+        row.values
+            .insert("damage".to_string(), DataValue::Integer(10));
         table.add_row(row);
 
         let name = table.get_value("item1", "name");
@@ -390,12 +384,12 @@ mod tests {
             id: "item1".to_string(),
             values: HashMap::new(),
         };
-        row.values.insert("id".to_string(), DataValue::String("item1".to_string()));
-        row.values.insert(
-            "name".to_string(),
-            DataValue::String("Sword".to_string()),
-        );
-        row.values.insert("damage".to_string(), DataValue::Integer(10));
+        row.values
+            .insert("id".to_string(), DataValue::String("item1".to_string()));
+        row.values
+            .insert("name".to_string(), DataValue::String("Sword".to_string()));
+        row.values
+            .insert("damage".to_string(), DataValue::Integer(10));
         table.add_row(row);
 
         let csv = table.export_to_csv();
@@ -420,22 +414,28 @@ mod tests {
             id: "item1".to_string(),
             values: HashMap::new(),
         };
-        row1.values.insert("id".to_string(), DataValue::String("item1".to_string()));
-        row1.values.insert("type".to_string(), DataValue::String("Weapon".to_string()));
+        row1.values
+            .insert("id".to_string(), DataValue::String("item1".to_string()));
+        row1.values
+            .insert("type".to_string(), DataValue::String("Weapon".to_string()));
 
         let mut row2 = DataTableRow {
             id: "item2".to_string(),
             values: HashMap::new(),
         };
-        row2.values.insert("id".to_string(), DataValue::String("item2".to_string()));
-        row2.values.insert("type".to_string(), DataValue::String("Weapon".to_string()));
+        row2.values
+            .insert("id".to_string(), DataValue::String("item2".to_string()));
+        row2.values
+            .insert("type".to_string(), DataValue::String("Weapon".to_string()));
 
         let mut row3 = DataTableRow {
             id: "item3".to_string(),
             values: HashMap::new(),
         };
-        row3.values.insert("id".to_string(), DataValue::String("item3".to_string()));
-        row3.values.insert("type".to_string(), DataValue::String("Armor".to_string()));
+        row3.values
+            .insert("id".to_string(), DataValue::String("item3".to_string()));
+        row3.values
+            .insert("type".to_string(), DataValue::String("Armor".to_string()));
 
         table.add_row(row1);
         table.add_row(row2);
@@ -453,9 +453,9 @@ mod tests {
         assert_eq!(int_val.as_string(), None);
         assert_eq!(int_val.as_boolean(), None);
 
-        let float_val = DataValue::Float(3.14);
+        let float_val = DataValue::Float(2.5);
         assert_eq!(float_val.as_integer(), None);
-        assert_eq!(float_val.as_float(), Some(3.14));
+        assert_eq!(float_val.as_float(), Some(2.5));
         assert_eq!(float_val.as_string(), None);
         assert_eq!(float_val.as_boolean(), None);
 

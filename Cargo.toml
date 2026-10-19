@@ -22,6 +22,7 @@ members = [
     "kiln-gameplay",
     "demo",
     "samples/tilemap",
+    "samples/sprites",
     "samples/audio",
     "samples/physics",
     "samples/collector",

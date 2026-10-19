@@ -155,7 +155,7 @@ impl Schedule {
             std::thread::scope(|s| {
                 for slot in slots.iter_mut() {
                     let job = slot.take().expect("job slot");
-                    s.spawn(move || job());
+                    s.spawn(job);
                 }
             });
             return;

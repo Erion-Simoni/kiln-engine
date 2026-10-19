@@ -4,7 +4,7 @@
 use anyhow::Result;
 use clap::Parser;
 use kiln_assets::Archive;
-use kiln_core::{save_dir, settings_dir, cache_dir};
+use kiln_core::{cache_dir, save_dir, settings_dir};
 use log::info;
 use std::path::PathBuf;
 

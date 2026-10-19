@@ -219,7 +219,9 @@ mod tests {
         let golden = std::env::var("KILN_UPDATE_GOLDEN").ok();
         if golden.as_deref() == Some("1") {
             eprintln!("KILN_LOW_GOLDEN={hash}");
-            panic!("re-run without KILN_UPDATE_GOLDEN after pasting hash into GOLDEN_LOW_64_SHA256");
+            panic!(
+                "re-run without KILN_UPDATE_GOLDEN after pasting hash into GOLDEN_LOW_64_SHA256"
+            );
         }
 
         let p = [rgba[0], rgba[1], rgba[2], rgba[3]];

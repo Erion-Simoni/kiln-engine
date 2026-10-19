@@ -104,7 +104,10 @@ mod tests {
         let btn_binding = BindingType::GamepadButton(0);
         assert!(btn_binding.to_string().contains("GamepadBtn"));
 
-        let axis_binding = BindingType::GamepadAxis { axis: 0, threshold: 0.5 };
+        let axis_binding = BindingType::GamepadAxis {
+            axis: 0,
+            threshold: 0.5,
+        };
         assert!(axis_binding.to_string().contains("GamepadAxis"));
     }
 

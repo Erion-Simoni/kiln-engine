@@ -5,7 +5,7 @@ pub mod gpu;
 pub mod particle;
 pub mod system;
 
-pub use emitter::{Emitter, EmitterConfig, EmissionShape};
+pub use emitter::{EmissionShape, Emitter, EmitterConfig};
 pub use gpu::{GpuParticleSystem, GpuParticleSystemConfig, MAX_GPU_PARTICLES};
 pub use particle::{Particle, ParticleData};
 pub use system::{ParticleSystem, ParticleSystemConfig};
