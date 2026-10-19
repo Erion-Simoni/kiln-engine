@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M21 complete
+**Current milestone:** M21 complete (UI Designer integrated)
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -278,6 +278,16 @@
   - Binary size impact: 830 KB release rlib (recorded in BUDGETS.md)
   - Note: SDF/MSDF text rendering deferred (documented in render.rs with TODOs for font loading, atlas, shaders)
   - Note: Full rendering integration with kiln-render is stubbed (API designed but not implemented)
+- M21 integration: kiln-editor UI Designer panel
+  - Added UIDesigner tab to Tab enum and View menu
+  - Created UIDesignerState with widget hierarchy (UiWidget enum for Panel, Button, Label, List)
+  - Implemented UI hierarchy tree view panel with widget selection
+  - Implemented visual UI canvas with widget rendering (colored rectangles with type labels)
+  - Implemented widget property inspector panel (type, ID, visibility, position, size, delete)
+  - Added widget creation toolbar (Panel, Button, Label, List buttons)
+  - Added widget deletion functionality with recursive child removal
+  - Added kiln-ui dependency to kiln-editor
+  - All 108 tests pass
 
 **In progress:**
 - None
@@ -285,6 +295,12 @@
 **Next steps:**
 - M22: Input mapping, saves, settings
 - See ROADMAP_FULL_M14_PLUS.md for detailed plan through M61
+- UI Designer enhancements (not a milestone, could be done incrementally):
+  - Widget drag and drop reordering
+  - Parent-child widget relationship creation
+  - Layout property editing (anchors, constraints, flex)
+  - Undo/redo support
+  - Serialization/deserialization to disk
 
 **Known issues:**
 - M21 gaps:
@@ -292,9 +308,13 @@
   - Full rendering integration with kiln-render not implemented (API stubbed)
   - No actual 9-slice sprite generation (border regions defined but not rendered)
   - UI renderer doesn't generate actual sprite instances (returns empty Vec)
-  - No integration with kiln-editor (no UI designer panel)
   - No gamepad input handling for focus navigation (keyboard only)
   - Localization data not loadable from files (in-memory only)
+  - UI Designer: widget reordering (drag and drop) not implemented
+  - UI Designer: parent-child widget relationship creation not implemented (all widgets are root-level)
+  - UI Designer: layout property editing is read-only (anchors, constraints, flex not editable)
+  - UI Designer: no undo/redo support
+  - UI Designer: no serialization/deserialization to disk
 - M20 gaps:
   - GPU particle system not integrated into actual game loop (compute shader written but not used)
   - GPU particle system not tested with actual GPU tier detection
@@ -393,6 +413,9 @@
 - cargo run -p ui (demo runs successfully)
 - cargo build --release -p kiln-ui (successful, 830 KB rlib)
 - git commit (M21 complete)
+- cargo check -p kiln-editor (UI Designer integration compiles)
+- cargo test (all 108 tests pass)
+- git commit (UI Designer integration)
 
 **Files touched (M21):**
 - kiln-ui/Cargo.toml (new: UI crate with kiln-core, kiln-render, serde, thiserror, rand dependencies)
@@ -408,3 +431,5 @@
 - Cargo.toml (added kiln-ui to workspace members and dependencies)
 - docs/BUDGETS.md (added kiln-ui size impact: 830 KB release rlib)
 - docs/STATE.md (rewritten to mark M21 complete)
+- kiln-editor/Cargo.toml (added kiln-ui dependency)
+- kiln-editor/src/app.rs (added UIDesignerState, UiWidget enum, UI Designer panel implementation - 784 lines added, 89 lines removed)
