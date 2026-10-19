@@ -18,6 +18,7 @@ kiln-render = { workspace = true }
 kiln-runtime = { workspace = true }
 kiln-assets = { workspace = true }
 kiln-graph = { workspace = true }
+kiln-ui = { workspace = true }
 winit = { workspace = true }
 wgpu = { workspace = true }
 pollster = { workspace = true }
