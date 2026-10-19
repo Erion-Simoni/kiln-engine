@@ -14,12 +14,14 @@ members = [
     "kiln-platform",
     "kiln-updater",
     "kiln-anim",
+    "kiln-vfx",
     "demo",
     "samples/tilemap",
     "samples/audio",
     "samples/physics",
     "samples/collector",
     "samples/animation",
+    "samples/particles",
 ]
 resolver = "2"
 
@@ -54,6 +56,7 @@ egui         = "0.29"
 egui_dock    = "0.14"
 qbsdiff      = "1.4"
 android-activity = { version = "0.6", features = ["native-activity"] }
+rand         = "0.8"
 kiln-core    = { path = "kiln-core" }
 kiln-render  = { path = "kiln-render" }
 kiln-runtime = { path = "kiln-runtime" }
@@ -67,6 +70,7 @@ kiln-player  = { path = "kiln-player" }
 kiln-platform = { path = "kiln-platform" }
 kiln-updater = { path = "kiln-updater" }
 kiln-anim    = { path = "kiln-anim" }
+kiln-vfx     = { path = "kiln-vfx" }
 
 [profile.release]
 opt-level = "z"
