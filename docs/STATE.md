@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M20 complete
+**Current milestone:** M21 complete
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -265,15 +265,36 @@
   - All 108 tests pass (83 existing + 20 kiln-vfx + 5 kiln-render particle tests)
   - Demo runs successfully with ~10k particles steady state
   - Binary size impact: Minimal (particle system is feature-gated, compute shader adds ~KB)
+|- M21: In-game UI system
+  - kiln-ui crate created with widget types (Button, Label, Panel, List)
+  - layout.rs: Flex-style layout system with anchors, constraints, flex grow/shrink (4 tests)
+  - localization.rs: Localization system with key-based string lookup (4 tests)
+  - navigation.rs: Focus navigation with directional and linear support (6 tests)
+  - render.rs: 9-slice sprite support and TextRenderer stub (SDF/MSDF deferred) (2 tests)
+  - ui_renderer.rs: UI renderer integration with kiln-render sprite batch (stub) (5 tests)
+  - widget.rs: Widget types with localization key support (11 tests)
+  - samples/ui: Console demo showing widgets, layout, focus, and localization
+  - All 33 tests pass (4 layout + 4 localization + 6 navigation + 2 render + 5 ui_renderer + 11 widget + 1 samples/ui)
+  - Binary size impact: 830 KB release rlib (recorded in BUDGETS.md)
+  - Note: SDF/MSDF text rendering deferred (documented in render.rs with TODOs for font loading, atlas, shaders)
+  - Note: Full rendering integration with kiln-render is stubbed (API designed but not implemented)
 
 **In progress:**
 - None
 
 **Next steps:**
-- M21: In-game UI system
+- M22: Input mapping, saves, settings
 - See ROADMAP_FULL_M14_PLUS.md for detailed plan through M61
 
 **Known issues:**
+- M21 gaps:
+  - SDF/MSDF text rendering not implemented (deferred - requires font loading, atlas generation, shaders)
+  - Full rendering integration with kiln-render not implemented (API stubbed)
+  - No actual 9-slice sprite generation (border regions defined but not rendered)
+  - UI renderer doesn't generate actual sprite instances (returns empty Vec)
+  - No integration with kiln-editor (no UI designer panel)
+  - No gamepad input handling for focus navigation (keyboard only)
+  - Localization data not loadable from files (in-memory only)
 - M20 gaps:
   - GPU particle system not integrated into actual game loop (compute shader written but not used)
   - GPU particle system not tested with actual GPU tier detection
@@ -368,23 +389,22 @@
 - KilnScript has no function definitions yet
 
 **Last commands run:**
-- cargo test --workspace (all 108 tests pass)
-- cargo check --workspace (builds successfully)
-- cargo build --release -p particles (successful)
-- cargo run --release -p particles (demo runs with 10k particles)
+- cargo test -p kiln-ui (all 33 tests pass)
+- cargo run -p ui (demo runs successfully)
+- cargo build --release -p kiln-ui (successful, 830 KB rlib)
+- git commit (M21 complete)
 
-**Files touched (M20):**
-- kiln-vfx/Cargo.toml (new: vfx crate with rand, bytemuck, wgpu dependencies)
-- kiln-vfx/src/lib.rs (new: module exports)
-- kiln-vfx/src/particle.rs (new: Particle and ParticleData structs with tests)
-- kiln-vfx/src/emitter.rs (new: EmitterConfig, EmissionShape, Emitter with tests)
-- kiln-vfx/src/system.rs (new: ParticleSystem for CPU simulation with tests)
-- kiln-vfx/src/gpu.rs (new: GpuParticleSystem with compute shader support)
-- kiln-vfx/src/particle_compute.wgsl (new: WGSL compute shader for GPU particles)
-- kiln-render/Cargo.toml (added kiln-vfx dependency)
-- kiln-render/src/lib.rs (added particle_renderer module)
-- kiln-render/src/particle_renderer.rs (new: ParticleRenderer for rendering particles as sprites)
-- samples/particles/Cargo.toml (new: particle demo sample)
-- samples/particles/src/main.rs (new: demo with 10k particle fountain effect)
-- Cargo.toml (added kiln-vfx to workspace members and dependencies)
-- docs/STATE.md (rewritten to mark M20 complete)
+**Files touched (M21):**
+- kiln-ui/Cargo.toml (new: UI crate with kiln-core, kiln-render, serde, thiserror, rand dependencies)
+- kiln-ui/src/lib.rs (new: module exports)
+- kiln-ui/src/layout.rs (new: Layout system with anchors, constraints, flex - 376 lines, 4 tests)
+- kiln-ui/src/localization.rs (new: Localization system with key-based lookup - 117 lines, 4 tests)
+- kiln-ui/src/navigation.rs (new: Focus navigation with directional and linear support - 229 lines, 6 tests)
+- kiln-ui/src/render.rs (new: 9-slice sprites and TextRenderer stub - 150 lines, 2 tests)
+- kiln-ui/src/ui_renderer.rs (new: UI renderer integration stub - 106 lines, 5 tests)
+- kiln-ui/src/widget.rs (new: Widget types Panel, Button, Label, List - 491 lines, 11 tests)
+- samples/ui/Cargo.toml (new: UI demo sample)
+- samples/ui/src/main.rs (new: console demo showing widgets, layout, focus, localization - 134 lines)
+- Cargo.toml (added kiln-ui to workspace members and dependencies)
+- docs/BUDGETS.md (added kiln-ui size impact: 830 KB release rlib)
+- docs/STATE.md (rewritten to mark M21 complete)
