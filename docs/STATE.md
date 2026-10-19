@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M21 complete (UI Designer integrated)
+**Current milestone:** M22 complete (Input mapping, saves, settings)
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -206,7 +206,7 @@
   - Documented Steam Deck / Linux handheld requirements (1280x800, controller, sleep/resume)
   - Added storefront distribution section to PACKAGING.md
   - All 69 tests pass (7 kiln-core, 13 kiln-render, 10 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-platform, 5 kiln-runtime audio/physics, 2 samples)
-|- M17: Updates, patching, DLC packs
+- M17: Updates, patching, DLC packs
   - ADR-0020 accepted: update strategy and delta patching (qbsdiff 1.4)
   - Created kiln-updater crate with `updater` feature flag (optional for size)
   - Extended archive format to KILNARV2 with version field and metadata
@@ -222,7 +222,7 @@
   - Extended kiln-cli verify command to display V2 metadata
   - All 73 tests pass (7 kiln-core, 13 kiln-render, 12 kiln-assets including new V2 tests, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-platform, 12 kiln-updater, 5 kiln-runtime audio/physics, 2 samples)
   - Binary size impact: ~200-300 KB for qbsdiff + updater code (feature-gated)
-|- M18: Android export + touch input (v0.4 gate)
+- M18: Android export + touch input (v0.4 gate)
   - ADR-0021 accepted and implemented: winit + cargo-apk for Android
   - Added cargo-apk configuration to kiln-player/Cargo.toml (build_targets, permissions, application metadata)
   - Implemented full Android player in kiln-player/src/android.rs with wgpu, game loop, and demo scene
@@ -234,7 +234,7 @@
   - APK builds successfully via cargo-apk; signed AAB process documented (manual keystore configuration required)
   - Android lifecycle handled: resumed (surface created), suspended (surface dropped), rotation (surface recreated)
   - All 73 tests pass (no new tests; Android player code is platform-specific)
-|- M19: 2D animation system
+- M19: 2D animation system
   - ADR-0022 accepted: custom spritesheet format for 2D animation (skeletal deferred to M33)
   - kiln-anim crate created with spritesheet clips and tween library
   - clip.rs: Frame, FrameEvent, Clip with frame_at_time, events_at_time, total_duration (3 tests)
@@ -247,7 +247,7 @@
   - kiln-anim added to workspace members
   - All 83 tests pass (73 existing + 10 new kiln-anim tests)
   - Binary size impact: Minimal (simple data structures, no heavy dependencies)
-|- M20: Particles and 2D VFX
+- M20: Particles and 2D VFX
   - kiln-vfx crate created with CPU and GPU particle systems
   - particle.rs: Particle struct with position, velocity, color, size, lifetime, age (4 tests)
   - particle.rs: ParticleData GPU-compatible struct with bytemuck (2 tests)
@@ -265,7 +265,7 @@
   - All 108 tests pass (83 existing + 20 kiln-vfx + 5 kiln-render particle tests)
   - Demo runs successfully with ~10k particles steady state
   - Binary size impact: Minimal (particle system is feature-gated, compute shader adds ~KB)
-|- M21: In-game UI system
+- M21: In-game UI system
   - kiln-ui crate created with widget types (Button, Label, Panel, List)
   - layout.rs: Flex-style layout system with anchors, constraints, flex grow/shrink (4 tests)
   - localization.rs: Localization system with key-based string lookup (4 tests)
@@ -288,21 +288,45 @@
   - Added widget deletion functionality with recursive child removal
   - Added kiln-ui dependency to kiln-editor
   - All 108 tests pass
+- M22: Input mapping, saves, settings
+  - kiln-input crate created with action maps and gamepad support
+  - action.rs: Action and ActionMap with rebindable bindings (5 tests)
+  - binding.rs: Binding types (Key, GamepadButton, GamepadAxis) with modifiers (4 tests)
+  - controller.rs: ControllerType enum and ControllerGlyph for button display (3 tests)
+  - gamepad.rs: GamepadManager with hot-plug detection via gilrs (feature-gated, 1 test)
+  - Action maps serialize to JSON for persistence
+  - Controller glyphs provide unicode characters per controller type (Xbox, PlayStation, Nintendo, Generic)
+  - kiln-save crate created with versioned save slots
+  - version.rs: SaveVersion with semantic versioning (3 tests)
+  - version.rs: VersionMigration trait for data migration
+  - slot.rs: SaveSlotManager with save/load/delete/list operations (4 tests)
+  - slot.rs: Automatic migration on load when version mismatch
+  - slot.rs: Save slots stored in platform-specific directories via dirs crate
+  - kiln-runtime: Added settings.rs with GraphicsSettings
+  - Resolution enum (HD, FullHD, QHD, UHD, Custom) with dimension lookup
+  - GraphicsSettings with resolution, vsync, frame_cap, tier_override (8 tests)
+  - Settings serialize to JSON for persistence
+  - samples/input_save: Console demo showing action maps, rebinds, graphics settings, save/load, migration
+  - Migration test: v1 save file loads and migrates to v2 (current version 1.1.0)
+  - Workspace: added kiln-input, kiln-save, gilrs 0.10, chrono 0.4
+  - kiln-runtime: added kiln-input, kiln-save, serde, serde_json dependencies
+  - All 121 tests pass (7 kiln-core, 13 kiln-render, 12 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-platform, 12 kiln-updater, 10 kiln-anim, 20 kiln-vfx, 33 kiln-ui, 13 kiln-input, 7 kiln-save, 8 kiln-runtime settings, 2 samples)
 
 **In progress:**
 - None
 
 **Next steps:**
-- M22: Input mapping, saves, settings
+- M23: Prefabs, scene composition, templates
 - See ROADMAP_FULL_M14_PLUS.md for detailed plan through M61
-- UI Designer enhancements (not a milestone, could be done incrementally):
-  - Widget drag and drop reordering
-  - Parent-child widget relationship creation
-  - Layout property editing (anchors, constraints, flex)
-  - Undo/redo support
-  - Serialization/deserialization to disk
 
 **Known issues:**
+- M22 gaps:
+  - Action maps not integrated with kiln-runtime InputState (API designed but not connected)
+  - Gamepad manager not integrated into game loop (gilrs requires update calls)
+  - Controller glyphs not rendered in UI (unicode chars available but no rendering)
+  - Graphics settings not applied to winit WindowBuilder (settings serialize but not used)
+  - Save system not integrated with actual game data (API designed but sample uses JSON strings)
+  - Gamepad hot-plug not tested on actual hardware (gilrs integration verified via tests only)
 - M21 gaps:
   - SDF/MSDF text rendering not implemented (deferred - requires font loading, atlas generation, shaders)
   - Full rendering integration with kiln-render not implemented (API stubbed)
@@ -349,7 +373,7 @@
   - Steamworks SDK: SteamPlatformServices is a stub with TODO comments (no actual Steam SDK integration)
   - Steam Deck: documented requirements but not tested on actual hardware (deferred)
   - kiln-platform: trait defined but not yet integrated into kiln-runtime or kiln-player (deferred)
-|- M17 gaps:
+- M17 gaps:
   - In-game updater is feature-gated and not yet integrated into kiln-player or kiln-runtime
   - Delta patching works at the binary level but not yet tested on real game archives
   - DLC packs are created but not yet loaded at runtime (no integration with asset system)
@@ -409,27 +433,25 @@
 - KilnScript has no function definitions yet
 
 **Last commands run:**
-- cargo test -p kiln-ui (all 33 tests pass)
-- cargo run -p ui (demo runs successfully)
-- cargo build --release -p kiln-ui (successful, 830 KB rlib)
-- git commit (M21 complete)
-- cargo check -p kiln-editor (UI Designer integration compiles)
-- cargo test (all 108 tests pass)
-- git commit (UI Designer integration)
+- cargo test (all 121 tests pass)
+- cargo run --release -p input_save (demo runs successfully)
+- git status (to check changes)
 
-**Files touched (M21):**
-- kiln-ui/Cargo.toml (new: UI crate with kiln-core, kiln-render, serde, thiserror, rand dependencies)
-- kiln-ui/src/lib.rs (new: module exports)
-- kiln-ui/src/layout.rs (new: Layout system with anchors, constraints, flex - 376 lines, 4 tests)
-- kiln-ui/src/localization.rs (new: Localization system with key-based lookup - 117 lines, 4 tests)
-- kiln-ui/src/navigation.rs (new: Focus navigation with directional and linear support - 229 lines, 6 tests)
-- kiln-ui/src/render.rs (new: 9-slice sprites and TextRenderer stub - 150 lines, 2 tests)
-- kiln-ui/src/ui_renderer.rs (new: UI renderer integration stub - 106 lines, 5 tests)
-- kiln-ui/src/widget.rs (new: Widget types Panel, Button, Label, List - 491 lines, 11 tests)
-- samples/ui/Cargo.toml (new: UI demo sample)
-- samples/ui/src/main.rs (new: console demo showing widgets, layout, focus, localization - 134 lines)
-- Cargo.toml (added kiln-ui to workspace members and dependencies)
-- docs/BUDGETS.md (added kiln-ui size impact: 830 KB release rlib)
-- docs/STATE.md (rewritten to mark M21 complete)
-- kiln-editor/Cargo.toml (added kiln-ui dependency)
-- kiln-editor/src/app.rs (added UIDesignerState, UiWidget enum, UI Designer panel implementation - 784 lines added, 89 lines removed)
+**Files touched (M22):**
+- kiln-input/Cargo.toml (new: input crate with gilrs dependency, feature-gated)
+- kiln-input/src/lib.rs (new: module exports)
+- kiln-input/src/action.rs (new: Action and ActionMap with rebindable bindings - 167 lines, 5 tests)
+- kiln-input/src/binding.rs (new: Binding types with modifiers - 119 lines, 4 tests)
+- kiln-input/src/controller.rs (new: ControllerType and ControllerGlyph - 152 lines, 3 tests)
+- kiln-input/src/gamepad.rs (new: GamepadManager with hot-plug detection - 126 lines, 1 test)
+- kiln-save/Cargo.toml (new: save crate with chrono dependency)
+- kiln-save/src/lib.rs (new: module exports, re-export SaveSlotMetadata and MigrationError)
+- kiln-save/src/version.rs (new: SaveVersion and VersionMigration trait - 81 lines, 3 tests)
+- kiln-save/src/slot.rs (new: SaveSlotManager with migration support - 228 lines, 4 tests)
+- kiln-runtime/Cargo.toml (added kiln-input, kiln-save, serde, serde_json dependencies)
+- kiln-runtime/src/lib.rs (added settings module export)
+- kiln-runtime/src/settings.rs (new: GraphicsSettings with Resolution enum - 165 lines, 8 tests)
+- samples/input_save/Cargo.toml (new: input_save sample)
+- samples/input_save/src/main.rs (new: console demo - 156 lines)
+- Cargo.toml (added kiln-input, kiln-save, gilrs, chrono to workspace dependencies; added samples/input_save to members)
+- docs/STATE.md (rewritten to mark M22 complete)

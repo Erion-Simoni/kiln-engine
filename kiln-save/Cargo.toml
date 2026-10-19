@@ -1,0 +1,15 @@
+[package]
+name = "kiln-save"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Kiln save system with versioned slots and migration"
+
+[dependencies]
+kiln-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+dirs = { workspace = true }
+chrono = { workspace = true }
