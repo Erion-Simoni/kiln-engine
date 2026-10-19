@@ -1,7 +1,7 @@
 //! Sample demonstrating input mapping and save system.
 
 use kiln_input::{Action, ActionMap, Binding, BindingType};
-use kiln_save::{SaveSlotManager, SaveSlotMetadata, SaveVersion, VersionMigration, MigrationError};
+use kiln_save::{SaveSlotManager, SaveVersion, VersionMigration, MigrationError};
 use kiln_runtime::{GraphicsSettings, Resolution};
 use chrono;
 
