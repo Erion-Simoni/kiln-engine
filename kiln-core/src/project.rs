@@ -216,5 +216,33 @@ mod tests {
         assert_eq!(offset.x, 0.0);
         assert_eq!(offset.y, 0.0);
     }
+
+    #[test]
+    fn project_from_ron() {
+        let ron_str = r#"
+        (
+            id: "test-project",
+            name: "Test Project",
+            version: "0.1.0",
+            publisher: "",
+            icon: "",
+            features: [],
+            window: (
+                width: 1280,
+                height: 720,
+                fullscreen: false,
+                borderless: false,
+                vsync: true,
+                high_dpi: true,
+                resizable: true,
+            ),
+            scenes: {},
+        )
+        "#;
+
+        let project: Project = ron::from_str(ron_str).expect("parse RON");
+        assert_eq!(project.name, "Test Project");
+        assert_eq!(project.window.width, 1280);
+    }
 }
 

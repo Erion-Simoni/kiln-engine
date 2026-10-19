@@ -1,0 +1,50 @@
+(
+    id: "template-topdown",
+    name: "Top-Down Project",
+    version: "0.1.0",
+    publisher: "",
+    icon: "",
+    features: [],
+    window: (
+        width: 1280,
+        height: 720,
+        fullscreen: false,
+        borderless: false,
+        vsync: true,
+        high_dpi: true,
+        resizable: true,
+    ),
+    scenes: {
+        "main": (
+            id: "main",
+            name: "Main Scene",
+            entities: [
+                (
+                    id: "player",
+                    name: "Player",
+                    components: [
+                        Transform(type: "Transform", x: 640.0, y: 360.0, rotation: 0.0, scale: 1.0),
+                        Sprite(type: "Sprite", color: [0.2, 0.8, 0.2, 1.0]),
+                    ],
+                ),
+                (
+                    id: "enemy1",
+                    name: "Enemy",
+                    components: [
+                        Transform(type: "Transform", x: 200.0, y: 200.0, rotation: 0.0, scale: 1.0),
+                        Sprite(type: "Sprite", color: [0.8, 0.2, 0.2, 1.0]),
+                    ],
+                ),
+                (
+                    id: "enemy2",
+                    name: "Enemy",
+                    components: [
+                        Transform(type: "Transform", x: 1000.0, y: 500.0, rotation: 0.0, scale: 1.0),
+                        Sprite(type: "Sprite", color: [0.8, 0.2, 0.2, 1.0]),
+                    ],
+                ),
+            ],
+            nested_scenes: [],
+        ),
+    },
+)

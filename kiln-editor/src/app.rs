@@ -51,6 +51,7 @@ enum Tab {
     Settings,
     UIDesigner,
     PrefabEditor,
+    SceneEditor,
 }
 
 struct GpuState {
@@ -433,6 +434,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     if ui.button("Prefab Editor").clicked() {
                         self.dock_state.add_window(vec![Tab::PrefabEditor]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Scene Editor").clicked() {
+                        self.dock_state.add_window(vec![Tab::SceneEditor]);
                         ui.close_menu();
                     }
                 });
@@ -1426,6 +1431,57 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         });
                 });
             }
+            Tab::SceneEditor => {
+                ui.vertical(|ui| {
+                    ui.heading("Scene Editor");
+                    ui.add_space(8.0);
+
+                    // Toolbar
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = egui::vec2(8.0, 0.0);
+
+                        if ui.button("Create New Scene").clicked() {
+                            // TODO: Create new scene
+                        }
+
+                        ui.separator();
+
+                        if ui.button("Add Nested Scene").clicked() {
+                            // TODO: Add nested scene
+                        }
+
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label("Scene Composition");
+                        });
+                    });
+
+                    ui.add_space(8.0);
+
+                    // Scene composition info
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_rgb(35, 35, 40))
+                        .rounding(4.0)
+                        .inner_margin(12.0)
+                        .show(ui, |ui| {
+                            ui.strong("Nested Scenes");
+                            ui.add_space(8.0);
+
+                            ui.label("Scenes can be nested with optional additive loading.");
+                            ui.label("Each nested scene can have an offset for positioning.");
+                            ui.add_space(8.0);
+
+                            ui.label("Features:");
+                            ui.label("  • Load multiple scenes into one view");
+                            ui.label("  • Additive loading (merge entities)");
+                            ui.label("  • Scene offset for world positioning");
+                            ui.label("  • Scene hierarchy support");
+                            ui.add_space(8.0);
+
+                            ui.label("Current scene has no nested scenes.");
+                            ui.label("Use 'Add Nested Scene' to compose scenes.");
+                        });
+                });
+            }
         }
     }
 
@@ -1439,6 +1495,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::Settings => "Settings".into(),
             Tab::UIDesigner => "UI Designer".into(),
             Tab::PrefabEditor => "Prefab Editor".into(),
+            Tab::SceneEditor => "Scene Editor".into(),
         }
     }
 }

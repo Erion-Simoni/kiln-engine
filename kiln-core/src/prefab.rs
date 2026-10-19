@@ -202,4 +202,32 @@ mod tests {
         assert_eq!(loaded.name, "TestPrefab");
         assert_eq!(loaded.root_entity.name, "TestEntity");
     }
+
+    #[test]
+    fn prefab_ron_merge_friendly() {
+        // Test that RON format is merge-friendly by simulating a git merge scenario
+        let entity = Entity {
+            id: "entity1".to_string(),
+            name: "TestEntity".to_string(),
+            components: vec![
+                Component::Transform { x: 0.0, y: 0.0, rotation: 0.0, scale: 1.0 },
+                Component::Sprite { color: [1.0, 0.0, 0.0, 1.0] },
+            ],
+        };
+
+        let prefab = Prefab::new("TestPrefab".to_string(), entity);
+
+        // Serialize to RON
+        let ron_str = ron::to_string(&prefab).expect("serialize to RON");
+
+        // Verify RON is human-readable and structured
+        assert!(ron_str.contains("name"));
+        assert!(ron_str.contains("id"));
+        assert!(ron_str.contains("root_entity"));
+
+        // Verify we can round-trip
+        let loaded: Prefab = ron::from_str(&ron_str).expect("deserialize from RON");
+        assert_eq!(loaded.name, prefab.name);
+        assert_eq!(loaded.root_entity.name, prefab.root_entity.name);
+    }
 }

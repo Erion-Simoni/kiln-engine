@@ -1,0 +1,18 @@
+(
+    id: "template-empty-2d",
+    name: "Empty 2D Project",
+    version: "0.1.0",
+    publisher: "",
+    icon: "",
+    features: [],
+    window: (
+        width: 1280,
+        height: 720,
+        fullscreen: false,
+        borderless: false,
+        vsync: true,
+        high_dpi: true,
+        resizable: true,
+    ),
+    scenes: {},
+)

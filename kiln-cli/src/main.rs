@@ -43,6 +43,18 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Initialize a new project from a template
+    Init {
+        /// Project name
+        #[arg(short, long)]
+        name: String,
+        /// Template: empty_2d, platformer, topdown
+        #[arg(short, long, default_value = "empty_2d")]
+        template: String,
+        /// Output directory (default: project name)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
     /// Import files into the asset cache
     Import {
         /// Source directory to import
@@ -130,6 +142,41 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Init { name, template, output } => {
+            let output_dir = output.unwrap_or_else(|| PathBuf::from(&name));
+
+            println!("Initializing project '{}' from template '{}'...", name, template);
+            println!("Output directory: {}", output_dir.display());
+
+            // Map template name to file
+            let template_file = match template.as_str() {
+                "empty_2d" => "templates/empty_2d.ron",
+                "platformer" => "templates/platformer.ron",
+                "topdown" => "templates/topdown.ron",
+                _ => anyhow::bail!("Unknown template: {}. Available: empty_2d, platformer, topdown", template),
+            };
+
+            // Read template
+            let template_content = fs::read_to_string(template_file)?;
+
+            // Parse as RON
+            let mut project: kiln_core::Project = ron::from_str(&template_content)?;
+
+            // Update project name
+            project.name = name.clone();
+            project.id = uuid::Uuid::new_v4().to_string();
+
+            // Create output directory
+            fs::create_dir_all(&output_dir)?;
+
+            // Write project file
+            let project_file = output_dir.join("kiln.toml");
+            let toml_content = project.to_toml().map_err(|e| anyhow::anyhow!("Failed to serialize project: {}", e))?;
+            fs::write(&project_file, toml_content)?;
+
+            println!("Project initialized: {}", project_file.display());
+            println!("Run 'kiln-editor' to open the project");
+        }
         Commands::Import { source, cache } => {
             let mut asset_cache = AssetCache::new(cache);
             asset_cache.load()?;

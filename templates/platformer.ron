@@ -1,0 +1,42 @@
+(
+    id: "template-platformer",
+    name: "Platformer Project",
+    version: "0.1.0",
+    publisher: "",
+    icon: "",
+    features: [],
+    window: (
+        width: 1280,
+        height: 720,
+        fullscreen: false,
+        borderless: false,
+        vsync: true,
+        high_dpi: true,
+        resizable: true,
+    ),
+    scenes: {
+        "main": (
+            id: "main",
+            name: "Main Scene",
+            entities: [
+                (
+                    id: "player",
+                    name: "Player",
+                    components: [
+                        Transform(type: "Transform", x: 100.0, y: 300.0, rotation: 0.0, scale: 1.0),
+                        Sprite(type: "Sprite", color: [0.2, 0.6, 1.0, 1.0]),
+                    ],
+                ),
+                (
+                    id: "ground",
+                    name: "Ground",
+                    components: [
+                        Transform(type: "Transform", x: 0.0, y: 500.0, rotation: 0.0, scale: 1.0),
+                        Sprite(type: "Sprite", color: [0.4, 0.4, 0.4, 1.0]),
+                    ],
+                ),
+            ],
+            nested_scenes: [],
+        ),
+    },
+)

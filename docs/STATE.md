@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M22 complete (Input mapping, saves, settings)
+**Current milestone:** M23 complete (Prefabs, scene composition, templates)
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -311,15 +311,40 @@
   - Workspace: added kiln-input, kiln-save, gilrs 0.10, chrono 0.4
   - kiln-runtime: added kiln-input, kiln-save, serde, serde_json dependencies
   - All 121 tests pass (7 kiln-core, 13 kiln-render, 12 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-platform, 12 kiln-updater, 10 kiln-anim, 20 kiln-vfx, 33 kiln-ui, 13 kiln-input, 7 kiln-save, 8 kiln-runtime settings, 2 samples)
+- M23: Prefabs, scene composition, templates
+  - kiln-core: Added Prefab, PrefabOverride, ComponentOverride types for reusable entity templates
+  - kiln-core: Prefab supports instantiation with optional property overrides (transform position, sprite color)
+  - kiln-core: Prefab serialization via RON format (merge-friendly, human-readable)
+  - kiln-core: Added NestedScene and SceneOffset for scene composition (additive loading, offset positioning)
+  - kiln-core: Scene supports nested scenes with additive loading flag and offset for world positioning
+  - kiln-editor: Added PrefabEditorState for prefab management (add, remove, get, instantiate)
+  - kiln-editor: Added PrefabEditor tab to editor UI with prefab list and delete functionality
+  - kiln-editor: Added SceneEditor tab to editor UI with scene composition information
+  - kiln-editor: Prefab creation from entity selection stubbed (TODO in M24 or later)
+  - templates/: Created empty_2d.ron, platformer.ron, topdown.ron project templates
+  - kiln-cli: Added init command with template selection (empty_2d, platformer, topdown)
+  - kiln-cli: init command creates project directory, generates kiln.toml from template
+  - kiln-cli: Added kiln-core, ron, uuid dependencies
+  - Tests: prefab creation, instantiation (with/without overrides), serialization, RON merge-friendliness
+  - Tests: nested scene round-trip, scene offset default, project RON parsing
+  - All 130 tests pass (16 kiln-core, 3 kiln-editor prefab, 13 kiln-render, 12 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-platform, 12 kiln-updater, 10 kiln-anim, 20 kiln-vfx, 33 kiln-ui, 13 kiln-input, 7 kiln-save, 8 kiln-runtime settings, 2 samples)
 
 **In progress:**
 - None
 
 **Next steps:**
-- M23: Prefabs, scene composition, templates
+- M24: 2D AI and navigation
 - See ROADMAP_FULL_M14_PLUS.md for detailed plan through M61
 
 **Known issues:**
+- M23 gaps:
+  - Prefab creation from entity selection not implemented (UI stubbed, actual creation logic needed)
+  - Prefab instantiation in scene not integrated with ECS (editor UI stubbed)
+  - Prefab override editing UI not implemented (can set overrides programmatically but not in editor)
+  - Nested scene loading not integrated with runtime (data structure exists but no actual loading logic)
+  - Scene composition UI is informational only (no actual add/remove nested scenes functionality)
+  - Project templates are RON files but not loaded by editor or CLI export (manual file copy only)
+  - kiln-cli init creates kiln.toml but doesn't create full project structure (no assets/, src/, etc.)
 - M22 gaps:
   - Action maps not integrated with kiln-runtime InputState (API designed but not connected)
   - Gamepad manager not integrated into game loop (gilrs requires update calls)
