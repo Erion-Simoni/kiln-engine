@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Current milestone:** M23 complete (Prefabs, scene composition, templates)
+**Current milestone:** M24 complete (2D AI and navigation)
 
 **Done:**
 - AGENTS.md, README.md, justfile, .gitignore, IDE pointer files
@@ -328,15 +328,37 @@
   - Tests: prefab creation, instantiation (with/without overrides), serialization, RON merge-friendliness
   - Tests: nested scene round-trip, scene offset default, project RON parsing
   - All 130 tests pass (16 kiln-core, 3 kiln-editor prefab, 13 kiln-render, 12 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-platform, 12 kiln-updater, 10 kiln-anim, 20 kiln-vfx, 33 kiln-ui, 13 kiln-input, 7 kiln-save, 8 kiln-runtime settings, 2 samples)
+- M24: 2D AI and navigation
+  - kiln-ai crate created with grid-based A* pathfinding (9 tests)
+  - grid.rs: Grid with obstacle support, GridNode with neighbors, A* algorithm with error handling
+  - navmesh.rs: 2D navmesh with polygon centers, point-in-polygon detection, A* on polygons (10 tests)
+  - dynamic.rs: DynamicObstacleManager for runtime obstacle management (7 tests)
+  - debug.rs: Debug visualization helpers (format_grid_path, format_navmesh_path, AIDebugState) (3 tests)
+  - kiln-graph: Added behavior tree nodes (Selector, Sequence, BehaviorCondition, BehaviorAction)
+  - kiln-graph: Added AI state machine nodes (AIState, AITransition)
+  - kiln-graph compiler: Extended to compile AI nodes to host calls
+  - kiln-editor: Added AI node buttons to graph editor UI (Selector, Sequence, Behavior, AI State)
+  - kiln-editor: Added kiln-ai dependency
+  - samples/ai: Console demo showing grid pathfinding, navmesh pathfinding, dynamic obstacles, debug state
+  - All 162 tests pass (16 kiln-core, 3 kiln-editor prefab, 13 kiln-render, 12 kiln-assets, 11 kiln-ir, 16 kiln-script, 4 kiln-graph, 3 kiln-platform, 12 kiln-updater, 10 kiln-anim, 20 kiln-vfx, 33 kiln-ui, 13 kiln-input, 7 kiln-save, 8 kiln-runtime settings, 32 kiln-ai, 2 samples)
+  - Binary size impact: Minimal (simple data structures, no heavy dependencies)
 
 **In progress:**
 - None
 
 **Next steps:**
-- M24: 2D AI and navigation
+- M25: Gameplay content tools
 - See ROADMAP_FULL_M14_PLUS.md for detailed plan through M61
 
 **Known issues:**
+- M24 gaps:
+  - Behavior tree runtime integration not implemented (graph nodes compile to host calls but no actual behavior tree execution)
+  - AI state machine runtime integration not implemented (graph nodes compile to host calls but no actual state machine execution)
+  - Pathfinding not integrated with actual game loop (API designed but not connected to runtime)
+  - Debug overlay not rendered in game (debug helpers exist but no in-game visualization)
+  - Navmesh generation from geometry not implemented (navmesh must be created manually with polygons)
+  - Path smoothing not implemented (A* returns raw path nodes, no post-processing for natural movement)
+  - AI nodes in graph editor are not connectable (UI exists but no pin connection logic for AI nodes)
 - M23 gaps:
   - Prefab creation from entity selection not implemented (UI stubbed, actual creation logic needed)
   - Prefab instantiation in scene not integrated with ECS (editor UI stubbed)

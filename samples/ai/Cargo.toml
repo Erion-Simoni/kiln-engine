@@ -1,0 +1,7 @@
+[package]
+name = "ai"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+kiln-ai = { workspace = true }

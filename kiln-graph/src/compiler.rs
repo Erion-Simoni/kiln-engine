@@ -397,6 +397,99 @@ fn compile_node_recursive(
                 )?;
             }
         }
+        NodeType::Selector => {
+            // Emit host call for selector behavior tree node
+            let label = format!("selector_{}", node_id);
+            program.define_label(&label);
+            label_map.insert(node_id, label);
+
+            let id = simple_hash("selector");
+            program.add_instruction(Instruction::HostCall(id));
+        }
+        NodeType::Sequence => {
+            // Emit host call for sequence behavior tree node
+            let label = format!("sequence_{}", node_id);
+            program.define_label(&label);
+            label_map.insert(node_id, label);
+
+            let id = simple_hash("sequence");
+            program.add_instruction(Instruction::HostCall(id));
+        }
+        NodeType::BehaviorCondition => {
+            // Emit host call for behavior condition
+            let label = format!("cond_{}", node_id);
+            program.define_label(&label);
+            label_map.insert(node_id, label);
+
+            let id = simple_hash("behavior_condition");
+            program.add_instruction(Instruction::HostCall(id));
+        }
+        NodeType::BehaviorAction { name } => {
+            // Emit host call for behavior action
+            let label = format!("action_{}", node_id);
+            program.define_label(&label);
+            label_map.insert(node_id, label);
+
+            let id = simple_hash(name);
+            program.add_instruction(Instruction::HostCall(id));
+        }
+        NodeType::AIState { state_name } => {
+            // Emit host call for AI state
+            let label = format!("ai_state_{}", node_id);
+            program.define_label(&label);
+            label_map.insert(node_id, label);
+
+            let id = simple_hash(state_name);
+            program.add_instruction(Instruction::HostCall(id));
+        }
+        NodeType::AITransition => {
+            // Compile condition and trigger (similar to animation transition)
+            let cond_pin = node
+                .pins
+                .iter()
+                .find(|p| p.name == "condition" && p.direction == crate::pin::PinDirection::Input)
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
+
+            if let Some(conn) = find_input_connection(graph, cond_pin.id) {
+                compile_node_recursive(
+                    graph,
+                    get_source_node_id(graph, conn.source_pin)?,
+                    program,
+                    label_map,
+                    pin_value_labels,
+                    visited,
+                )?;
+            }
+
+            let label = format!("ai_trans_{}", node_id);
+            program.define_label(&label);
+            label_map.insert(node_id, label.clone());
+
+            // Jump if false to skip transition
+            let skip_label = format!("{}_skip", label);
+            program.define_label(&skip_label);
+            program.add_instruction(Instruction::JumpIfNot(
+                program.get_label(&skip_label).unwrap(),
+            ));
+
+            // Trigger transition
+            let trigger_pin = node
+                .pins
+                .iter()
+                .find(|p| p.name == "trigger" && p.direction == crate::pin::PinDirection::Input)
+                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
+
+            if let Some(conn) = find_input_connection(graph, trigger_pin.id) {
+                compile_node_recursive(
+                    graph,
+                    get_source_node_id(graph, conn.source_pin)?,
+                    program,
+                    label_map,
+                    pin_value_labels,
+                    visited,
+                )?;
+            }
+        }
     }
 
     Ok(())

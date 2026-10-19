@@ -1008,6 +1008,36 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                         ui.separator();
 
+                        // AI node buttons
+                        if ui.button("Selector").clicked() {
+                            let node = Node::new(NodeType::Selector, (400.0, 100.0));
+                            self.graph.add_node(node);
+                        }
+                        if ui.button("Sequence").clicked() {
+                            let node = Node::new(NodeType::Sequence, (500.0, 100.0));
+                            self.graph.add_node(node);
+                        }
+                        if ui.button("Behavior").clicked() {
+                            let node = Node::new(
+                                NodeType::BehaviorAction {
+                                    name: "idle".to_string(),
+                                },
+                                (600.0, 100.0),
+                            );
+                            self.graph.add_node(node);
+                        }
+                        if ui.button("AI State").clicked() {
+                            let node = Node::new(
+                                NodeType::AIState {
+                                    state_name: "patrol".to_string(),
+                                },
+                                (700.0, 100.0),
+                            );
+                            self.graph.add_node(node);
+                        }
+
+                        ui.separator();
+
                         if ui.button("Clear").clicked() {
                             *self.graph = Graph::new();
                         }
@@ -1084,6 +1114,12 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             NodeType::Constant { .. } => "Constant",
                             NodeType::Arithmetic { .. } => "Add",
                             NodeType::Output => "Output",
+                            NodeType::Selector => "Selector",
+                            NodeType::Sequence => "Sequence",
+                            NodeType::BehaviorAction { .. } => "Behavior",
+                            NodeType::BehaviorCondition => "Condition",
+                            NodeType::AIState { .. } => "AI State",
+                            NodeType::AITransition => "AI Transition",
                             _ => "Node",
                         };
                         painter.text(

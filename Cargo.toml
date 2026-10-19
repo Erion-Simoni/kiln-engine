@@ -18,6 +18,7 @@ members = [
     "kiln-ui",
     "kiln-input",
     "kiln-save",
+    "kiln-ai",
     "demo",
     "samples/tilemap",
     "samples/audio",
@@ -27,6 +28,7 @@ members = [
     "samples/particles",
     "samples/ui",
     "samples/input_save",
+    "samples/ai",
 ]
 resolver = "2"
 
@@ -81,6 +83,7 @@ kiln-vfx     = { path = "kiln-vfx" }
 kiln-ui      = { path = "kiln-ui" }
 kiln-input   = { path = "kiln-input" }
 kiln-save    = { path = "kiln-save" }
+kiln-ai      = { path = "kiln-ai" }
 
 [profile.release]
 opt-level = "z"

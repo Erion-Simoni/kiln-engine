@@ -26,6 +26,18 @@ pub enum NodeType {
     AnimationState { state_name: String },
     /// Animation transition (condition-based transition between states).
     AnimationTransition,
+    /// Behavior tree selector (runs children until one succeeds).
+    Selector,
+    /// Behavior tree sequence (runs children until one fails).
+    Sequence,
+    /// Behavior tree condition (returns success/failure based on condition).
+    BehaviorCondition,
+    /// Behavior tree action (performs an action, returns success/failure).
+    BehaviorAction { name: String },
+    /// AI state (state in AI state machine).
+    AIState { state_name: String },
+    /// AI transition (condition-based transition between AI states).
+    AITransition,
 }
 
 /// Constant value types.
@@ -125,6 +137,45 @@ impl Node {
                 ]
             }
             NodeType::AnimationTransition => {
+                vec![
+                    Pin::new(PinDirection::Input, PinType::Boolean, "condition"),
+                    Pin::new(PinDirection::Input, PinType::Event, "trigger"),
+                    Pin::new(PinDirection::Output, PinType::Event, "transition"),
+                ]
+            }
+            NodeType::Selector => {
+                vec![
+                    Pin::new(PinDirection::Input, PinType::Event, "run"),
+                    Pin::new(PinDirection::Output, PinType::Boolean, "success"),
+                    Pin::new(PinDirection::Output, PinType::Event, "on_child"),
+                ]
+            }
+            NodeType::Sequence => {
+                vec![
+                    Pin::new(PinDirection::Input, PinType::Event, "run"),
+                    Pin::new(PinDirection::Output, PinType::Boolean, "success"),
+                    Pin::new(PinDirection::Output, PinType::Event, "on_child"),
+                ]
+            }
+            NodeType::BehaviorCondition => {
+                vec![
+                    Pin::new(PinDirection::Input, PinType::Event, "check"),
+                    Pin::new(PinDirection::Output, PinType::Boolean, "result"),
+                ]
+            }
+            NodeType::BehaviorAction { .. } => {
+                vec![
+                    Pin::new(PinDirection::Input, PinType::Event, "execute"),
+                    Pin::new(PinDirection::Output, PinType::Boolean, "success"),
+                ]
+            }
+            NodeType::AIState { .. } => {
+                vec![
+                    Pin::new(PinDirection::Input, PinType::Event, "enter"),
+                    Pin::new(PinDirection::Output, PinType::Event, "exit"),
+                ]
+            }
+            NodeType::AITransition => {
                 vec![
                     Pin::new(PinDirection::Input, PinType::Boolean, "condition"),
                     Pin::new(PinDirection::Input, PinType::Event, "trigger"),
