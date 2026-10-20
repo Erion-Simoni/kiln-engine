@@ -78,8 +78,9 @@ impl AssetBrowser {
 
     /// Scan `root` for assets, replacing the current listing.
     ///
-    /// The manifest file itself is skipped. Files are listed relative to
-    /// `root`, so `sprites/hero.png` shows up under that name.
+    /// Project manifest files (`kiln.toml` and friends) are skipped, since
+    /// they are parsed separately and are not assets. Files are listed
+    /// relative to `root`, so `sprites/hero.png` shows up under that name.
     pub fn scan(&mut self, root: &Path) {
         self.root = Some(root.to_path_buf());
         self.entries.clear();
@@ -98,6 +99,9 @@ impl AssetBrowser {
 
         for file in files {
             let relative = relative_path(root, &file);
+            if is_manifest(&relative) {
+                continue;
+            }
             let size = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
             let kind = match extension(&file).as_deref() {
                 Some("png") => AssetKind::Image,
@@ -114,20 +118,36 @@ impl AssetBrowser {
     /// Decode the asset at `path` and keep it as the preview.
     ///
     /// Returns an error message when the asset is missing or cannot be
-    /// decoded; the previous preview is kept in that case.
+    /// decoded; the previous preview is kept in that case. The failure is
+    /// also recorded in [`Self::errors`].
     pub fn select(&mut self, path: &str) -> Result<(), String> {
         let Some(root) = self.root.clone() else {
             return Err("no project directory".to_string());
         };
 
         let full = root.join(path);
-        let bytes = std::fs::read(&full).map_err(|e| e.to_string())?;
-        let image = decode_png(&bytes).map_err(|e| e.to_string())?;
+        let result = (|| {
+            let bytes = std::fs::read(&full).map_err(|e| e.to_string())?;
+            let image = decode_png(&bytes).map_err(|e| e.to_string())?;
+            Ok::<(usize, usize, Vec<u8>), String>((
+                image.width as usize,
+                image.height as usize,
+                image.pixels,
+            ))
+        })();
 
-        self.preview_source = Some(path.to_string());
-        self.preview_size = Some((image.width as usize, image.height as usize));
-        self.preview_pixels = Some(image.pixels);
-        Ok(())
+        match result {
+            Ok((width, height, pixels)) => {
+                self.preview_source = Some(path.to_string());
+                self.preview_size = Some((width, height));
+                self.preview_pixels = Some(pixels);
+                Ok(())
+            }
+            Err(message) => {
+                self.errors.push((path.to_string(), message.clone()));
+                Err(message)
+            }
+        }
     }
 
     /// Clear the current preview.
@@ -188,6 +208,14 @@ fn extension(path: &Path) -> Option<String> {
     path.extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_ascii_lowercase())
+}
+
+/// Whether `relative` is a project manifest file rather than an asset.
+fn is_manifest(relative: &str) -> bool {
+    matches!(
+        relative.rsplit('/').next().unwrap_or(relative),
+        "kiln.toml" | "kiln.ron" | "project.toml" | "project.ron"
+    )
 }
 
 /// Group assets by their top level directory, for a tree-like listing.
@@ -328,5 +356,45 @@ mod tests {
         assert!(browser.preview_source().is_none());
         assert!(browser.preview_color_image().is_none());
         assert!(browser.preview_size().is_none());
+    }
+
+    #[test]
+    fn scan_skips_project_manifests() {
+        let dir = std::env::temp_dir().join("kiln-editor-assets-manifest");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("kiln.toml"), b"id = \"x\"").unwrap();
+        std::fs::write(dir.join("hero.png"), b"not a real png").unwrap();
+
+        let mut browser = AssetBrowser::new();
+        browser.scan(&dir);
+
+        let paths: Vec<&str> = browser.entries().iter().map(|e| e.path.as_str()).collect();
+        assert_eq!(paths, vec!["hero.png"]);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failed_selection_is_recorded_as_an_error() {
+        let dir = std::env::temp_dir().join("kiln-editor-assets-errors");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        write_file(&dir, "bad.png");
+
+        let mut browser = AssetBrowser::new();
+        browser.scan(&dir);
+        assert!(browser.select("bad.png").is_err());
+
+        assert_eq!(browser.errors().len(), 1);
+        assert_eq!(browser.errors()[0].0, "bad.png");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn selecting_without_a_scanned_root_is_an_error() {
+        let mut browser = AssetBrowser::new();
+        assert!(browser.select("hero.png").is_err());
     }
 }

@@ -1639,6 +1639,19 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             }
                         }
                     }
+
+                    // Decode failures are shown in the panel, not only logged.
+                    let errors = self.asset_browser.errors().to_vec();
+                    if !errors.is_empty() {
+                        ui.add_space(8.0);
+                        ui.colored_label(
+                            egui::Color32::LIGHT_RED,
+                            format!("{} asset(s) failed to load", errors.len()),
+                        );
+                        for (path, message) in &errors {
+                            ui.label(format!("{path}: {message}")).on_hover_text(path);
+                        }
+                    }
                 });
             }
             Tab::Console => {
