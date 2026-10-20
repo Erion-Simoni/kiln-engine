@@ -105,6 +105,10 @@ impl Compiler {
                 self.program
                     .add_instruction(Instruction::PushConst(Value::F64(*f)));
             }
+            Expr::String(s, _span) => {
+                self.program
+                    .add_instruction(Instruction::PushConst(Value::Str(s.clone())));
+            }
             Expr::Identifier(name, span) => {
                 return Err(CompileError::UndefinedVariable(name.clone(), *span));
             }
@@ -202,5 +206,31 @@ mod tests {
             }
             _ => panic!("Expected UndefinedVariable error"),
         }
+    }
+
+    #[test]
+    fn compile_and_run_string_return() {
+        let mut parser = crate::parser::Parser::new("return \"hi\";");
+        let stmts = parser.parse().unwrap();
+
+        let mut compiler = Compiler::new();
+        let program = compiler.compile(&stmts).unwrap();
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[Value::Str("hi".to_string())]);
+    }
+
+    #[test]
+    fn compile_and_run_string_equality() {
+        let mut parser = crate::parser::Parser::new("return \"ab\" == \"ab\";");
+        let stmts = parser.parse().unwrap();
+
+        let mut compiler = Compiler::new();
+        let program = compiler.compile(&stmts).unwrap();
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[Value::Bool(true)]);
     }
 }

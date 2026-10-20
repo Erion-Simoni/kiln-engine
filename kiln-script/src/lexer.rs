@@ -9,6 +9,7 @@ pub enum Token {
     // Literals
     Number(i64),
     Float(f64),
+    String(String),
     Identifier(String),
 
     // Keywords
@@ -73,6 +74,9 @@ impl<'a> Lexer<'a> {
                 }
                 if c.is_ascii_alphabetic() || c == '_' {
                     return self.read_identifier(start);
+                }
+                if c == '"' {
+                    return self.read_string(start);
                 }
                 if let Some(token) = self.read_operator_or_punct() {
                     return Ok(TokenWithSpan::new(token, Span::new(start, self.pos)));
@@ -175,6 +179,41 @@ impl<'a> Lexer<'a> {
         };
 
         Ok(TokenWithSpan::new(token, Span::new(start, self.pos)))
+    }
+
+    fn read_string(&mut self, start: usize) -> Result<TokenWithSpan, String> {
+        // Consume the opening quote.
+        self.next_char();
+
+        let mut s = String::new();
+        while let Some(c) = self.peek_char() {
+            if c == '"' {
+                self.next_char(); // consume closing quote
+                return Ok(TokenWithSpan::new(
+                    Token::String(s),
+                    Span::new(start, self.pos),
+                ));
+            }
+            if c == '\\' {
+                self.next_char(); // consume backslash
+                match self.next_char() {
+                    Some('"') => s.push('"'),
+                    Some('\\') => s.push('\\'),
+                    Some('n') => s.push('\n'),
+                    Some('r') => s.push('\r'),
+                    Some('t') => s.push('\t'),
+                    Some(c) => s.push(c),
+                    None => return Err("Unterminated string escape".to_string()),
+                }
+                continue;
+            }
+            if c.is_ascii_control() {
+                return Err("Control character in string".to_string());
+            }
+            s.push(c);
+            self.next_char();
+        }
+        Err("Unterminated string literal".to_string())
     }
 
     fn read_operator_or_punct(&mut self) -> Option<Token> {
@@ -293,5 +332,24 @@ mod tests {
         assert_eq!(lexer.next_token().unwrap().token, Token::Float(1.25));
         assert_eq!(lexer.next_token().unwrap().token, Token::Float(2.5));
         assert_eq!(lexer.next_token().unwrap().token, Token::Number(42));
+    }
+
+    #[test]
+    fn lex_string_literal() {
+        let mut lexer = Lexer::new(r#""hello" "with \"quotes\"""#);
+        assert_eq!(
+            lexer.next_token().unwrap().token,
+            Token::String("hello".to_string())
+        );
+        assert_eq!(
+            lexer.next_token().unwrap().token,
+            Token::String("with \"quotes\"".to_string())
+        );
+    }
+
+    #[test]
+    fn lex_unterminated_string_errors() {
+        let mut lexer = Lexer::new("\"oops");
+        assert!(lexer.next_token().is_err());
     }
 }

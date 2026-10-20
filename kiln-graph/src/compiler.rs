@@ -100,10 +100,8 @@ fn compile_node_recursive(
                 crate::node::ConstantValue::Boolean(b) => {
                     program.add_instruction(Instruction::PushConst(Value::Bool(*b)));
                 }
-                crate::node::ConstantValue::String(_) => {
-                    // String constants not yet supported in IR - use host call as placeholder
-                    let id = simple_hash("string_const");
-                    program.add_instruction(Instruction::HostCall(id));
+                crate::node::ConstantValue::String(s) => {
+                    program.add_instruction(Instruction::PushConst(Value::Str(s.clone())));
                 }
             }
 

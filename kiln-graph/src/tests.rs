@@ -505,3 +505,58 @@ fn test_float_constant_compiles_to_f64() {
         .iter()
         .any(|i| matches!(i, Instruction::Add)));
 }
+
+#[test]
+fn test_string_constant_node_compiles_to_push() {
+    use kiln_ir::{Instruction, Value};
+
+    let mut graph = Graph::new();
+    let const_node = Node::new(
+        NodeType::Constant {
+            value: ConstantValue::String("hello".to_string()),
+        },
+        (0.0, 0.0),
+    );
+    graph.add_node(const_node);
+    // add_node returns the id; find it back to wire it to the output.
+    let id_const = graph
+        .nodes
+        .values()
+        .find(|n| matches!(n.node_type, NodeType::Constant { .. }))
+        .unwrap()
+        .id;
+
+    let output_node = Node::new(NodeType::Output, (100.0, 0.0));
+    let id_output = graph.add_node(output_node);
+
+    // Feed the string constant straight into the output's `in` pin so the
+    // compiler traverses to it.
+    let const_output_id = graph
+        .get_node(id_const)
+        .unwrap()
+        .pins
+        .iter()
+        .find(|p| p.direction == crate::pin::PinDirection::Output)
+        .unwrap()
+        .id;
+    let pin_output_in_id = graph
+        .get_node(id_output)
+        .unwrap()
+        .pins
+        .iter()
+        .find(|p| p.name == "in")
+        .unwrap()
+        .id;
+    graph.add_connection(Connection::new(const_output_id, pin_output_in_id));
+
+    let program = compile_graph(&graph).expect("string graph compiles");
+    let has_str_push = program
+        .instructions()
+        .iter()
+        .any(|instr| matches!(instr, Instruction::PushConst(Value::Str(s)) if s == "hello"));
+    assert!(
+        has_str_push,
+        "expected a PushConst(Str) instruction, got {:?}",
+        program.instructions()
+    );
+}

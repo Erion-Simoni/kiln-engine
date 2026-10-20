@@ -2,7 +2,7 @@
 
 **Current milestone:** M0–M28 claimed complete in prior sessions — **honesty audit
 says Partial overall**. Do **not** start M29 (3D) until the 2D gate below is met.
-**G-1 and G-2 (Asset → GPU and Real tilemap) are now done** — G-3 is next.
+**G-1, G-2 and G-3 (Asset → GPU, Real tilemap, VM maturity) are now done** — G-4 is next.
 
 ---
 
@@ -99,6 +99,23 @@ checkbox optimism in `docs/ROADMAP.md`.
   - `cargo fmt --all`, targeted Clippy clean; all tests pass across
     `kiln-core`/`kiln-render`/`kiln-runtime`/`kiln-player`/`kiln-editor`.
 
+- **G-3: VM maturity** — strings are now first-class in the VM and frontends:
+  - `kiln-ir/src/value.rs`: added `Value::Str(String)` (enum is `Clone`, not
+    `Copy`); accessors now take `&self`; `values_equal` compares strings by
+    content; `From<&str>`/`From<String>` conversions.
+  - `kiln-ir/src/vm.rs`: added a `compare` helper so `Lt/Le/Gt/Ge` compare
+    strings lexicographically (numbers still via `binop`); `Eq`/`Ne` use
+    `values_equal`. `PushConst`/`Dup`/host-call `Ok(v)` now clone.
+  - `kiln-script`: the lexer reads `"…"` string literals (with `\"`, `\\`,
+    `\n`, `\r`, `\t` escapes) into `Token::String`; the parser produces
+    `Expr::String`; the compiler emits `PushConst(Value::Str)`.
+  - `kiln-graph/src/compiler.rs`: `ConstantValue::String` now compiles to a
+    real `PushConst(Value::Str)` instead of the old hash placeholder.
+  - New tests: value accessors/equality, VM string `Eq/Ne/Lt`, host-call string
+    round-trip, lexer string + unterminated-string errors, script string
+    return + equality end-to-end, graph string constant → push. `cargo fmt`,
+    targeted Clippy clean; all tests pass in `kiln-ir`/`kiln-script`/`kiln-graph`.
+
 ---
 
 ## In progress
@@ -113,9 +130,8 @@ These are now tracked as checkboxes in `docs/TODO_LIST.md` **Phase 0.5 (G-1 … 
 Ordered by impact. One item per session; commit after each.
 
 1. **G-1: Asset → GPU** — ✅ done
-2. **G-2: Real tilemap** — ✅ done this session
-3. **G-3: VM maturity** — string values (`Value::Str`), string constants and
-   host-call arguments, script/graph frontends
+2. **G-2: Real tilemap** — ✅ done
+3. **G-3: VM maturity** — ✅ done this session
 4. **G-4: Vertical slice sample** — textured art + script/graph + save + on-screen UI
 5. **G-5: Reconcile ROADMAP checkboxes** with this audit
 6. **G-6: Editor truth** — GPU scene view; inspector + save/load; undo; PIE runs VM

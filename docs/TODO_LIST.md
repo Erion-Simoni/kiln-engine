@@ -62,17 +62,16 @@ tracked checkbox. They are the hard prerequisites for a shippable 2D engine.
 **Status:** Done.
 
 ### G-3: VM maturity
-- [ ] `Value::Str` variant with equality and comparison
-- [ ] String constants in the program encoding
-- [ ] String host-call arguments and results
-- [ ] Script frontend parses string literals into `Value::Str`
-- [ ] Graph nodes expose string constants
-- [ ] VM tests covering strings end to end
+- [x] `Value::Str` variant with equality and comparison
+- [x] String constants in the program encoding
+- [x] String host-call arguments and results
+- [x] Script frontend parses string literals into `Value::Str`
+- [x] Graph nodes expose string constants
+- [x] VM tests covering strings end to end
 **Location:** `kiln-ir/src/value.rs`, `kiln-ir/src/vm.rs`, `kiln-script/src/`,
 `kiln-graph/src/`
 **Milestone:** 2D gate
-**Status:** Not started. Values are `I64`/`F64`/`Bool` only; the audit notes
-gameplay scripting is not usable without strings.
+**Status:** Done.
 
 ### G-4: Vertical slice sample
 - [ ] Sample uses textured art loaded from disk (not generated colours)

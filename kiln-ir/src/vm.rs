@@ -52,13 +52,13 @@ enum BinOp {
 /// promoted); otherwise integer arithmetic is used. Integer division by zero
 /// is an error; float division by zero follows IEEE-754 (±inf / NaN).
 fn binop(op: BinOp, a: Value, b: Value) -> Result<Value, VmError> {
-    let type_err = |got: Value| VmError::TypeError {
+    let type_err = |got: &Value| VmError::TypeError {
         expected: "number",
-        got,
+        got: got.clone(),
     };
     if matches!(a, Value::F64(_)) || matches!(b, Value::F64(_)) {
-        let x = a.to_f64().ok_or_else(|| type_err(a))?;
-        let y = b.to_f64().ok_or_else(|| type_err(b))?;
+        let x = a.to_f64().ok_or_else(|| type_err(&a))?;
+        let y = b.to_f64().ok_or_else(|| type_err(&b))?;
         return Ok(match op {
             BinOp::Add => Value::F64(x + y),
             BinOp::Sub => Value::F64(x - y),
@@ -70,8 +70,8 @@ fn binop(op: BinOp, a: Value, b: Value) -> Result<Value, VmError> {
             BinOp::Ge => Value::Bool(x >= y),
         });
     }
-    let x = a.as_i64().ok_or_else(|| type_err(a))?;
-    let y = b.as_i64().ok_or_else(|| type_err(b))?;
+    let x = a.as_i64().ok_or_else(|| type_err(&a))?;
+    let y = b.as_i64().ok_or_else(|| type_err(&b))?;
     Ok(match op {
         BinOp::Add => Value::I64(x + y),
         BinOp::Sub => Value::I64(x - y),
@@ -87,6 +87,24 @@ fn binop(op: BinOp, a: Value, b: Value) -> Result<Value, VmError> {
         BinOp::Gt => Value::Bool(x > y),
         BinOp::Ge => Value::Bool(x >= y),
     })
+}
+
+/// Compares two values for ordering.
+///
+/// Strings compare lexicographically; numbers delegate to [`binop`]. Any other
+/// combination is a type error. `compare` is only called with ordering ops
+/// (`Lt`, `Le`, `Gt`, `Ge`).
+fn compare(op: BinOp, a: Value, b: Value) -> Result<Value, VmError> {
+    if let (Value::Str(x), Value::Str(y)) = (&a, &b) {
+        return Ok(Value::Bool(match op {
+            BinOp::Lt => x < y,
+            BinOp::Le => x <= y,
+            BinOp::Gt => x > y,
+            BinOp::Ge => x >= y,
+            _ => return binop(op, a, b),
+        }));
+    }
+    binop(op, a, b)
 }
 
 /// Bytecode VM.
@@ -152,14 +170,14 @@ impl<H: HostContext> Vm<H> {
 
         match instr {
             Instruction::PushConst(v) => {
-                self.push(*v)?;
+                self.push(v.clone())?;
             }
             Instruction::Pop => {
                 self.pop()?;
             }
             Instruction::Dup => {
                 let v = self.pop()?;
-                self.push(v)?;
+                self.push(v.clone())?;
                 self.push(v)?;
             }
             Instruction::Swap => {
@@ -215,22 +233,22 @@ impl<H: HostContext> Vm<H> {
             Instruction::Lt => {
                 let b = self.pop()?;
                 let a = self.pop()?;
-                self.push(binop(BinOp::Lt, a, b)?)?;
+                self.push(compare(BinOp::Lt, a, b)?)?;
             }
             Instruction::Le => {
                 let b = self.pop()?;
                 let a = self.pop()?;
-                self.push(binop(BinOp::Le, a, b)?)?;
+                self.push(compare(BinOp::Le, a, b)?)?;
             }
             Instruction::Gt => {
                 let b = self.pop()?;
                 let a = self.pop()?;
-                self.push(binop(BinOp::Gt, a, b)?)?;
+                self.push(compare(BinOp::Gt, a, b)?)?;
             }
             Instruction::Ge => {
                 let b = self.pop()?;
                 let a = self.pop()?;
-                self.push(binop(BinOp::Ge, a, b)?)?;
+                self.push(compare(BinOp::Ge, a, b)?)?;
             }
             Instruction::Jump(label) => {
                 self.ip = label.0;
@@ -307,7 +325,7 @@ mod tests {
                 0 => Ok(Value::I64(args.len() as i64)),
                 1 => {
                     if let Some(v) = args.first() {
-                        Ok(*v)
+                        Ok(v.clone())
                     } else {
                         Ok(Value::I64(0))
                     }
@@ -551,5 +569,65 @@ mod tests {
         let mut vm = Vm::new(TestHost);
         vm.execute(&program).unwrap();
         assert_eq!(vm.stack(), &[Value::Bool(true)]);
+    }
+
+    #[test]
+    fn string_equality() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::Str("abc".into())));
+        program.add_instruction(Instruction::PushConst(Value::Str("abc".into())));
+        program.add_instruction(Instruction::Eq);
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[Value::Bool(true)]);
+    }
+
+    #[test]
+    fn string_inequality() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::Str("abc".into())));
+        program.add_instruction(Instruction::PushConst(Value::Str("abd".into())));
+        program.add_instruction(Instruction::Eq);
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[Value::Bool(false)]);
+    }
+
+    #[test]
+    fn string_less_than() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::Str("ab".into())));
+        program.add_instruction(Instruction::PushConst(Value::Str("ac".into())));
+        program.add_instruction(Instruction::Lt);
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[Value::Bool(true)]);
+    }
+
+    #[test]
+    fn string_not_equal_different_types() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::Str("1".into())));
+        program.add_instruction(Instruction::PushConst(Value::I64(1)));
+        program.add_instruction(Instruction::Eq);
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[Value::Bool(false)]);
+    }
+
+    #[test]
+    fn string_host_call_args_round_trip() {
+        // TestHost host function 1 echoes its first argument back.
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::Str("echo me".into())));
+        program.add_instruction(Instruction::HostCall(1));
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[Value::Str("echo me".to_string())]);
     }
 }

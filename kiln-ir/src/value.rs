@@ -4,7 +4,9 @@
 ///
 /// Numeric operations promote `I64` to `F64` when mixed with floats
 /// (standard arithmetic promotion), so `1 + 2.5` yields `F64(3.5)`.
-#[derive(Debug, Clone, Copy, PartialEq)]
+///
+/// `Str` is heap-allocated, so [`Value`] is `Clone` but not `Copy`.
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     /// 64-bit signed integer.
     I64(i64),
@@ -12,29 +14,39 @@ pub enum Value {
     F64(f64),
     /// Boolean.
     Bool(bool),
+    /// UTF-8 string (heap-allocated).
+    Str(String),
 }
 
 impl Value {
     /// Returns the value as `i64` if it is an integer.
-    pub fn as_i64(self) -> Option<i64> {
+    pub fn as_i64(&self) -> Option<i64> {
         match self {
-            Value::I64(v) => Some(v),
+            Value::I64(v) => Some(*v),
             _ => None,
         }
     }
 
     /// Returns the value as `f64` if it is a float.
-    pub fn as_f64(self) -> Option<f64> {
+    pub fn as_f64(&self) -> Option<f64> {
         match self {
-            Value::F64(v) => Some(v),
+            Value::F64(v) => Some(*v),
             _ => None,
         }
     }
 
     /// Returns the value as `bool` if it is a boolean.
-    pub fn as_bool(self) -> Option<bool> {
+    pub fn as_bool(&self) -> Option<bool> {
         match self {
-            Value::Bool(v) => Some(v),
+            Value::Bool(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Returns the value as `&str` if it is a string.
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Value::Str(v) => Some(v),
             _ => None,
         }
     }
@@ -48,18 +60,18 @@ impl Value {
     ///
     /// Used for arithmetic promotion: `1` becomes `1.0` so mixed integer and
     /// float operations can be evaluated as floats.
-    pub fn to_f64(self) -> Option<f64> {
+    pub fn to_f64(&self) -> Option<f64> {
         match self {
-            Value::I64(v) => Some(v as f64),
-            Value::F64(v) => Some(v),
-            Value::Bool(_) => None,
+            Value::I64(v) => Some(*v as f64),
+            Value::F64(v) => Some(*v),
+            Value::Bool(_) | Value::Str(_) => None,
         }
     }
 
     /// Numeric-aware equality.
     ///
-    /// Integers and floats are compared numerically (`1` equals `1.0`); all
-    /// other values use structural equality.
+    /// Integers and floats are compared numerically (`1` equals `1.0`); strings
+    /// compare by content; all other mismatched types are unequal.
     pub fn values_equal(a: Value, b: Value) -> bool {
         match (a, b) {
             (Value::I64(x), Value::I64(y)) => x == y,
@@ -67,6 +79,7 @@ impl Value {
             (Value::I64(x), Value::F64(y)) => (x as f64) == y,
             (Value::F64(x), Value::I64(y)) => x == (y as f64),
             (Value::Bool(x), Value::Bool(y)) => x == y,
+            (Value::Str(x), Value::Str(y)) => x == y,
             _ => false,
         }
     }
@@ -87,6 +100,18 @@ impl From<f64> for Value {
 impl From<bool> for Value {
     fn from(v: bool) -> Self {
         Value::Bool(v)
+    }
+}
+
+impl From<&str> for Value {
+    fn from(v: &str) -> Self {
+        Value::Str(v.to_string())
+    }
+}
+
+impl From<String> for Value {
+    fn from(v: String) -> Self {
+        Value::Str(v)
     }
 }
 
@@ -125,11 +150,36 @@ mod tests {
     }
 
     #[test]
+    fn str_accessor_and_conversions() {
+        let s = Value::Str("hello".to_string());
+        assert_eq!(s.as_str(), Some("hello"));
+        assert_eq!(Value::I64(1).as_str(), None);
+        assert_eq!(Value::from("world").as_str(), Some("world"));
+        assert_eq!(Value::from(String::from("world")).as_str(), Some("world"));
+    }
+
+    #[test]
     fn values_equal_is_numeric_aware() {
         assert!(Value::values_equal(Value::I64(1), Value::F64(1.0)));
         assert!(Value::values_equal(Value::F64(1.0), Value::I64(1)));
         assert!(!Value::values_equal(Value::I64(1), Value::F64(1.5)));
         assert!(Value::values_equal(Value::Bool(true), Value::Bool(true)));
         assert!(!Value::values_equal(Value::Bool(true), Value::I64(1)));
+    }
+
+    #[test]
+    fn values_equal_strings() {
+        assert!(Value::values_equal(
+            Value::Str("abc".into()),
+            Value::Str("abc".into()),
+        ));
+        assert!(!Value::values_equal(
+            Value::Str("abc".into()),
+            Value::Str("abd".into()),
+        ));
+        assert!(!Value::values_equal(
+            Value::Str("abc".into()),
+            Value::I64(1)
+        ));
     }
 }
