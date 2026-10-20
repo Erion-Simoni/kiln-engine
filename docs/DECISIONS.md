@@ -252,23 +252,27 @@ Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 
 ---
 
-## ADR-0013: Asset loader strategy (proposed)
+## ADR-0013: Asset loader strategy (accepted)
 
 **Date:** 2026-10-19
-**Status:** proposed
+**Status:** accepted
+**Implemented:** 2026-10-20
 
-**Decision:** Implement two loaders for the same archive format: memory-mapped file (`memmap2` crate) for native platforms, and HTTP streaming with range requests for web (via `reqwest` or `web-sys`). This keeps the archive format unchanged while optimizing for each platform's capabilities.
+**Decision:** Implement two loaders for the same archive format: memory-mapped file (`memmap2` crate) for native platforms, and HTTP streaming with range requests for web (via `web-sys`). This keeps the archive format unchanged while optimizing for each platform's capabilities.
 
 **Alternatives:**
-- Memory-mapped native + HTTP web: optimal for each platform (proposed)
+- Memory-mapped native + HTTP web: optimal for each platform (chosen)
 - Regular file I/O for both: simpler, but slower for large assets
 - HTTP for both: adds unnecessary network overhead on native
 
 **Consequences:**
-- Archive format (KILNARV1) remains unchanged
-- Native games benefit from zero-copy memory mapping
-- Web games use streaming with range requests to avoid loading entire archive
-- Deferred to M14 or later (not in M0-M13)
+- Archive format (KILNARV1/V2) remains unchanged
+- Native games benefit from zero-copy memory mapping via `extract_mmap()` and `extract_mmap_slice()`
+- Web games use streaming with range requests via `WebArchiveLoader::extract()` to avoid loading entire archive
+- Added `memmap2` 0.9 dependency to `kiln-assets`
+- Added web-sys features (Request, Response, Headers, ReadableStream) to `kiln-web`
+- Web loader currently fetches full archive for metadata; TODO: optimize with HEAD + Content-Length to fetch only entry table
+- All tests pass (14 tests in kiln-assets)
 
 ---
 

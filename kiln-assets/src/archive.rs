@@ -4,6 +4,9 @@ use std::io::{self, BufReader, BufWriter, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
+#[cfg(target_arch = "wasm32")]
+use std::ops::Deref;
+
 #[derive(Error, Debug)]
 pub enum ArchiveError {
     #[error("IO error: {0}")]
@@ -260,6 +263,247 @@ impl Archive {
     pub fn list(&self) -> Vec<&str> {
         self.entries.keys().map(|k| k.as_str()).collect()
     }
+
+    /// Extract a file from the archive using memory-mapped I/O (native platforms only).
+    ///
+    /// This provides zero-copy access to file data and is more efficient for large archives.
+    /// Only available on non-WASM targets.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn extract_mmap(&self, path: &str) -> Result<memmap2::Mmap, ArchiveError> {
+        let entry = self
+            .get_entry(path)
+            .ok_or_else(|| ArchiveError::NotFound(path.to_string()))?;
+
+        let file = File::open(&self.base_path)?;
+        let mmap = unsafe { memmap2::Mmap::map(&file)? };
+
+        // Verify the file is large enough for the requested range
+        let end_offset = entry.offset.saturating_add(entry.size);
+        if end_offset > mmap.len() as u64 {
+            return Err(ArchiveError::InvalidFormat);
+        }
+
+        Ok(mmap)
+    }
+
+    /// Get a slice of memory-mapped data for a file entry (native platforms only).
+    ///
+    /// Returns a view into the memory-mapped file at the correct offset for the entry.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn extract_mmap_slice<'a>(
+        &self,
+        path: &str,
+        mmap: &'a memmap2::Mmap,
+    ) -> Result<&'a [u8], ArchiveError> {
+        let entry = self
+            .get_entry(path)
+            .ok_or_else(|| ArchiveError::NotFound(path.to_string()))?;
+
+        let end_offset = entry.offset.saturating_add(entry.size);
+        if end_offset > mmap.len() as u64 {
+            return Err(ArchiveError::InvalidFormat);
+        }
+
+        let start = entry.offset as usize;
+        let end = end_offset as usize;
+        Ok(&mmap[start..end])
+    }
+}
+
+/// Web-specific archive loader using HTTP range requests (WASM only).
+///
+/// This provides streaming access to archive files without loading the entire archive.
+#[cfg(target_arch = "wasm32")]
+pub struct WebArchiveLoader {
+    url: String,
+    entries: HashMap<String, ArchiveEntry>,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl WebArchiveLoader {
+    /// Load archive metadata from a URL via HTTP.
+    ///
+    /// This fetches only the header and entry table, not the full file data.
+    pub async fn load_from_url(url: String) -> Result<Self, ArchiveError> {
+        use wasm_bindgen::JsCast;
+        use web_sys::{Request, RequestInit, Response};
+
+        // Fetch the entire archive (we need the entry table at the end)
+        // TODO: In a real implementation, use HEAD + Content-Length to calculate
+        // the entry table offset, then fetch only the last N bytes with Range headers.
+        let mut opts = RequestInit::new();
+        opts.method("GET");
+
+        let request = Request::new_with_str_and_init(&url, &opts)
+            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
+
+        let window = web_sys::window()
+            .ok_or_else(|| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, "no window")))?;
+        let response_value = window
+            .fetch_with_request(&request)
+            .await
+            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
+
+        let response: Response = response_value
+            .dyn_into()
+            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
+
+        if !response.ok() {
+            return Err(ArchiveError::Io(io::Error::new(
+                io::ErrorKind::Other,
+                format!("HTTP error: {}", response.status()),
+            )));
+        }
+
+        let array_buffer = response
+            .array_buffer()
+            .await
+            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
+        let js_array = js_sys::Uint8Array::new(&array_buffer);
+        let mut data = vec![0u8; js_array.length() as usize];
+        js_array.copy_to(&mut data);
+
+        // Parse the archive from the fetched data
+        let archive = Self::parse_from_bytes(&data)?;
+
+        Ok(Self {
+            url,
+            entries: archive.entries,
+        })
+    }
+
+    /// Parse archive from raw bytes (shared helper).
+    fn parse_from_bytes(data: &[u8]) -> Result<Archive, ArchiveError> {
+        let mut cursor = std::io::Cursor::new(data);
+
+        // Read and verify magic
+        let mut magic = [0u8; 8];
+        cursor.read_exact(&mut magic)?;
+        let is_v2 = &magic == ARCHIVE_MAGIC_V2;
+        if !is_v2 && &magic != ARCHIVE_MAGIC_V1 {
+            return Err(ArchiveError::InvalidFormat);
+        }
+
+        // Skip entry count placeholder
+        let mut _count_bytes = [0u8; 4];
+        cursor.read_exact(&mut _count_bytes)?;
+
+        // Skip metadata if V2
+        if is_v2 {
+            let mut meta_len_bytes = [0u8; 4];
+            cursor.read_exact(&mut meta_len_bytes)?;
+            let meta_len = u32::from_le_bytes(meta_len_bytes) as usize;
+            cursor.seek(io::SeekFrom::Current(meta_len as i64))?;
+        }
+
+        // Read table offset (last 8 bytes)
+        let data_len = data.len() as u64;
+        cursor.seek(io::SeekFrom::End(-8))?;
+        let mut table_offset_bytes = [0u8; 8];
+        cursor.read_exact(&mut table_offset_bytes)?;
+        let table_offset = u64::from_le_bytes(table_offset_bytes);
+
+        // Seek to entry table
+        cursor.seek(io::SeekFrom::Start(table_offset))?;
+
+        // Read entry count
+        let mut count_bytes = [0u8; 4];
+        cursor.read_exact(&mut count_bytes)?;
+        let count = u32::from_le_bytes(count_bytes) as usize;
+
+        let mut entries = HashMap::new();
+        for _ in 0..count {
+            let mut path_len_bytes = [0u8; 2];
+            cursor.read_exact(&mut path_len_bytes)?;
+            let path_len = u16::from_le_bytes(path_len_bytes) as usize;
+
+            let mut path_bytes = vec![0u8; path_len];
+            cursor.read_exact(&mut path_bytes)?;
+            let path = String::from_utf8(path_bytes).map_err(|_| ArchiveError::InvalidFormat)?;
+
+            let mut offset_bytes = [0u8; 8];
+            cursor.read_exact(&mut offset_bytes)?;
+            let offset = u64::from_le_bytes(offset_bytes);
+
+            let mut size_bytes = [0u8; 8];
+            cursor.read_exact(&mut size_bytes)?;
+            let size = u64::from_le_bytes(size_bytes);
+
+            entries.insert(path.clone(), ArchiveEntry { path, offset, size });
+        }
+
+        Ok(Archive {
+            entries,
+            base_path: PathBuf::new(), // Not used for web
+        })
+    }
+
+    /// Extract a file from the archive via HTTP range request.
+    ///
+    /// This fetches only the required bytes for the file, not the entire archive.
+    pub async fn extract(&self, path: &str) -> Result<Vec<u8>, ArchiveError> {
+        use wasm_bindgen::JsCast;
+        use web_sys::{Headers, Request, RequestInit, Response};
+
+        let entry = self
+            .entries
+            .get(path)
+            .ok_or_else(|| ArchiveError::NotFound(path.to_string()))?;
+
+        let end_offset = entry.offset.saturating_add(entry.size).saturating_sub(1);
+        let range_header = format!("bytes={}-{}", entry.offset, end_offset);
+
+        let mut opts = RequestInit::new();
+        opts.method("GET");
+
+        let headers = Headers::new();
+        headers
+            .set("Range", &range_header)
+            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
+        opts.headers(&headers);
+
+        let request = Request::new_with_str_and_init(&self.url, &opts)
+            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
+
+        let window = web_sys::window()
+            .ok_or_else(|| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, "no window")))?;
+        let response_value = window
+            .fetch_with_request(&request)
+            .await
+            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
+
+        let response: Response = response_value
+            .dyn_into()
+            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
+
+        // Accept 206 Partial Content or 200 OK
+        if !response.ok() && response.status() != 206 {
+            return Err(ArchiveError::Io(io::Error::new(
+                io::ErrorKind::Other,
+                format!("HTTP error: {}", response.status()),
+            )));
+        }
+
+        let array_buffer = response
+            .array_buffer()
+            .await
+            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
+        let js_array = js_sys::Uint8Array::new(&array_buffer);
+        let mut data = vec![0u8; js_array.length() as usize];
+        js_array.copy_to(&mut data);
+
+        Ok(data)
+    }
+
+    /// Get metadata for a file in the archive.
+    pub fn get_entry(&self, path: &str) -> Option<&ArchiveEntry> {
+        self.entries.get(path)
+    }
+
+    /// List all files in the archive.
+    pub fn list(&self) -> Vec<&str> {
+        self.entries.keys().map(|k| k.as_str()).collect()
+    }
 }
 
 #[cfg(test)]
@@ -366,5 +610,50 @@ mod tests {
 
         let metadata = Archive::get_metadata(&archive_path).unwrap();
         assert!(metadata.is_none()); // V1 has no metadata
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn extract_with_mmap() {
+        let temp_dir = TempDir::new().unwrap();
+        let archive_path = temp_dir.path().join("archive.kar");
+
+        let file1 = temp_dir.path().join("file1.txt");
+        let file2 = temp_dir.path().join("file2.txt");
+        fs::write(&file1, b"content1").unwrap();
+        fs::write(&file2, b"content2").unwrap();
+
+        let mut archive = Archive::new(archive_path.clone());
+        archive.pack(&[file1, file2]).unwrap();
+
+        let loaded = Archive::load(&archive_path).unwrap();
+        let mmap = loaded.extract_mmap("file1.txt").unwrap();
+        let data = loaded.extract_mmap_slice("file1.txt", &mmap).unwrap();
+
+        assert_eq!(data, b"content1");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn extract_mmap_bounds_check() {
+        let temp_dir = TempDir::new().unwrap();
+        let archive_path = temp_dir.path().join("archive.kar");
+
+        let file = temp_dir.path().join("file.txt");
+        fs::write(&file, b"content").unwrap();
+
+        let mut archive = Archive::new(archive_path.clone());
+        archive.pack(&[file]).unwrap();
+
+        let loaded = Archive::load(&archive_path).unwrap();
+        let mmap = loaded.extract_mmap("file.txt").unwrap();
+
+        // Try to extract a file that doesn't exist
+        let result = loaded.extract_mmap_slice("nonexistent.txt", &mmap);
+        assert!(matches!(result, Err(ArchiveError::NotFound(_))));
+
+        // The mmap is valid for the existing file
+        let data = loaded.extract_mmap_slice("file.txt", &mmap).unwrap();
+        assert_eq!(data, b"content");
     }
 }

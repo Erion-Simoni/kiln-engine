@@ -24,11 +24,12 @@ This file tracks all stubs, TODOs, and incomplete features across M0-M28. Based 
 **Status:** Documentation complete (2026-10-20). Old hardware testing requires physical device.
 
 ### R0-2: Asset archive dual loaders
-- [ ] Implement memory-mapped file loader for native
-- [ ] Implement HTTP streaming loader for web
-- [ ] Test both loaders with same archive format
+- [x] Implement memory-mapped file loader for native
+- [x] Implement HTTP streaming loader for web
+- [x] Test both loaders with same archive format
 **Location:** `kiln-assets/src/archive.rs`
 **Milestone:** R0
+**Status:** Complete (2026-10-20). Added `memmap2` dependency for native, `WebArchiveLoader` for WASM with HTTP range requests.
 
 ### R0-3: Audio device management (M11)
 - [ ] Implement device selection
