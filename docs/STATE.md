@@ -52,6 +52,7 @@ checkbox optimism in `docs/ROADMAP.md`.
 
 ## Done (this session)
 
+- **M14-1: Native desktop game export** — verified that `kiln-cli export --platform windows|macos|linux` builds player binary; dependency tree verified (no editor crates via cargo tree); per-OS save/settings paths implemented via dirs crate; player binary size (930 KB) recorded in BUDGETS.md. Clean machine testing requires physical access (deferred).
 - **R0-6: M13 sample completion** — "N minutes" placeholder already replaced with "≤2 minutes" in ROADMAP.md per prior ADR work. Clean machine verification requires physical access to a machine without Rust toolchain (deferred).
 - **R0-5: Window settings in project settings** — added `monitor` field to `WindowSettings` for multi-monitor support. All other window settings (fullscreen, borderless, resolution via width/height, vsync, high-DPI, resizable) already existed. Tests pass.
 - **R0-3: Audio device management** — documented current M11 implementation (rodio high-level

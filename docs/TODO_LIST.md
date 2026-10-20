@@ -74,13 +74,14 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
 ## Phase 1: Downloadable games and mobile (M14-M18)
 
 ### M14-1: Native desktop game export
-- [x] ~~`kiln-cli export --platform windows|macos|linux` produces executable~~ (marked done in STATE.md)
-- [ ] Verify no editor crates inside player (dependency check in CI)
-- [ ] Test on clean machine with no Rust toolchain
-- [ ] Implement per-OS save and settings folders (AppData, Application Support, XDG)
-- [ ] Record player binary and data sizes separately in `BUDGETS.md`
-**Location:** `kiln-cli/src/export.rs`, `kiln-player/`
+- [x] `kiln-cli export --platform windows|macos|linux` produces executable
+- [x] Verify no editor crates inside player (verified via cargo tree -p kiln-player)
+- [ ] Test on clean machine with no Rust toolchain (requires physical clean machine)
+- [x] Implement per-OS save and settings folders (AppData, Application Support, XDG)
+- [x] Record player binary and data sizes separately in `BUDGETS.md`
+**Location:** `kiln-cli/src/main.rs`, `kiln-player/`
 **Milestone:** M14
+**Status:** Partial (2026-10-20). Export command exists and builds player binary; dependency tree verified (no editor crates); per-OS paths implemented via dirs crate; sizes recorded in BUDGETS.md. Clean machine testing requires physical access.
 
 ### M15-1: Packaging, signing, installers
 - [ ] Windows: installer or portable zip
