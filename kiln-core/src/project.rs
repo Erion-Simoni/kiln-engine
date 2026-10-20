@@ -37,6 +37,8 @@ pub struct WindowSettings {
     pub high_dpi: bool,
     #[serde(default)]
     pub resizable: bool,
+    #[serde(default)]
+    pub monitor: u32,
 }
 
 fn default_window_width() -> u32 {
@@ -203,6 +205,7 @@ impl Default for WindowSettings {
             vsync: true,
             high_dpi: default_high_dpi(),
             resizable: true,
+            monitor: 0,
         }
     }
 }
@@ -270,6 +273,7 @@ mod tests {
         proj.window.height = 1080;
         proj.window.fullscreen = true;
         proj.window.vsync = false;
+        proj.window.monitor = 1;
 
         let toml = proj.to_toml().expect("serialize");
         let loaded = Project::from_toml(&toml).expect("deserialize");
@@ -278,6 +282,7 @@ mod tests {
         assert_eq!(loaded.window.height, 1080);
         assert!(loaded.window.fullscreen);
         assert!(!loaded.window.vsync);
+        assert_eq!(loaded.window.monitor, 1);
     }
 
     #[test]
@@ -346,6 +351,7 @@ mod tests {
                 vsync: true,
                 high_dpi: true,
                 resizable: true,
+                monitor: 0,
             ),
             mobile: (
                 orientation: landscape,

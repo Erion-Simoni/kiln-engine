@@ -52,6 +52,7 @@ checkbox optimism in `docs/ROADMAP.md`.
 
 ## Done (this session)
 
+- **R0-5: Window settings in project settings** — added `monitor` field to `WindowSettings` for multi-monitor support. All other fields (fullscreen, borderless, resolution via width/height, vsync, high-DPI, resizable) already existed. Tests pass.
 - **R0-3: Audio device management** — documented current M11 implementation (rodio high-level
   API, default device only). Device selection, hot-plug detection, sample-rate changes
   deferred to M49 audio v2 per ADR-0014 (sufficient for basic 2D games).
