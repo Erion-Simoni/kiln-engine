@@ -276,23 +276,25 @@ Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 
 ---
 
-## ADR-0014: Audio device management (proposed)
+## ADR-0014: Audio device management (accepted - deferred)
 
 **Date:** 2026-10-19
-**Status:** proposed
+**Status:** accepted (deferred to M49)
+**R0 audit:** 2026-10-20
 
-**Decision:** Use rodio's cpal backend directly for device enumeration, selection, hot-plug detection, and sample-rate changes. The current M11 implementation is a minimal stub that only opens the default sink; full device management will be added in a future milestone.
+**Decision:** Use rodio's cpal backend directly for device enumeration, selection, hot-plug detection, and sample-rate changes. The current M11 implementation is a minimal stub that only opens the default sink; full device management will be added in M49 audio v2.
 
 **Alternatives:**
-- rodio + cpal direct access: full control over devices (proposed)
-- rodio high-level API only: simpler, but limited device control
+- rodio + cpal direct access: full control over devices (chosen for M49)
+- rodio high-level API only: simpler, but limited device control (current M11 implementation)
 - Custom audio backend: more control, but significant maintenance burden
 
 **Consequences:**
 - Current M11 implementation uses rodio's high-level `DeviceSinkBuilder::open_default_sink()`
 - Device selection, hot-plug, and sample-rate changes are NOT implemented in M0-M13
-- Deferred to future milestone (M49 audio v2 or earlier if needed)
-- R0 audit documents this gap
+- Deferred to M49 audio v2 (full device management not needed for basic 2D games)
+- R0 audit documents this gap in TODO_LIST.md
+- Current implementation is sufficient for basic audio playback (default device only)
 
 ---
 

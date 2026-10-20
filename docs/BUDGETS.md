@@ -32,6 +32,31 @@ All budgets are enforced via `just size`. Exceeding a budget requires an ADR ent
 
 ---
 
+## Audio device management (R0)
+
+**Current implementation:** M11 stub using rodio's high-level API
+
+**Status:** Basic playback works (default device only). Full device management deferred to M49 audio v2 per ADR-0014.
+
+**Current capabilities:**
+- Opens default audio output device via `DeviceSinkBuilder::open_default_sink()`
+- Plays audio files (OGG/Opus via symphonia decoder)
+- No device selection (always uses OS default)
+- No hot-plug detection
+- No sample-rate change handling
+- Feature-gated via `audio` feature in `kiln-runtime`
+
+**Deferred to M49:**
+- Device enumeration and selection
+- Hot-plug detection and handling
+- Sample-rate change handling
+- Per-device audio settings
+
+**Location:** `kiln-runtime/src/audio.rs`
+**ADR:** ADR-0014
+
+---
+
 ## Web runtime WASM
 
 **Target:** <1.5 MB brotli-compressed

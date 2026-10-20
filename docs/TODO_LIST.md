@@ -32,12 +32,15 @@ This file tracks all stubs, TODOs, and incomplete features across M0-M28. Based 
 **Status:** Complete (2026-10-20). Added `memmap2` dependency for native, `WebArchiveLoader` for WASM with HTTP range requests.
 
 ### R0-3: Audio device management (M11)
-- [ ] Implement device selection
-- [ ] Implement hot-plug detection
-- [ ] Implement sample-rate changes
-- [ ] Test on desktop
-**Location:** `kiln-audio/src/device.rs` (currently stub)
+- [x] Document current implementation status
+- [ ] Implement device selection (deferred to M49 per ADR-0014)
+- [ ] Implement hot-plug detection (deferred to M49 per ADR-0014)
+- [ ] Implement sample-rate changes (deferred to M49 per ADR-0014)
+- [ ] Test on desktop (deferred to M49 per ADR-0014)
+**Location:** `kiln-runtime/src/audio.rs` (current stub), ADR-0014
 **Milestone:** R0, M11
+**Status:** Current implementation uses rodio's high-level `DeviceSinkBuilder::open_default_sink()`.
+Full device management (selection, hot-plug, sample-rate) deferred to M49 audio v2 per ADR-0014.
 
 ### R0-4: Budgets documentation
 - [ ] Add native player size budget to `BUDGETS.md` (target: <15 MB executable)
