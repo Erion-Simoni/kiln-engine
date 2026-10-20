@@ -31,6 +31,9 @@ pub enum ComponentOverride {
     },
     Sprite {
         color: Option<[f32; 4]>,
+        /// Asset path of the sprite texture to override.
+        #[serde(default)]
+        texture: Option<String>,
     },
 }
 
@@ -84,9 +87,19 @@ impl Prefab {
                         }
                     }
                     (
-                        Component::Sprite { color },
-                        ComponentOverride::Sprite { color: Some(val) },
-                    ) => *color = *val,
+                        Component::Sprite { color, texture },
+                        ComponentOverride::Sprite {
+                            color: color_override,
+                            texture: texture_override,
+                        },
+                    ) => {
+                        if let Some(val) = color_override {
+                            *color = *val;
+                        }
+                        if let Some(val) = texture_override {
+                            *texture = Some(val.clone());
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -137,6 +150,7 @@ mod tests {
                 },
                 Component::Sprite {
                     color: [1.0, 0.0, 0.0, 1.0],
+                    texture: None,
                 },
             ],
         };
@@ -210,6 +224,7 @@ mod tests {
             name: "TestEntity".to_string(),
             components: vec![Component::Sprite {
                 color: [1.0, 0.0, 0.0, 1.0],
+                texture: None,
             }],
         };
 
@@ -220,12 +235,13 @@ mod tests {
             "sprite".to_string(),
             ComponentOverride::Sprite {
                 color: Some([0.0, 1.0, 0.0, 1.0]),
+                texture: None,
             },
         );
 
         let instance = prefab.instantiate(Some(overrides));
 
-        if let Component::Sprite { color } = instance.components[0] {
+        if let Component::Sprite { color, .. } = instance.components[0] {
             assert_eq!(color, [0.0, 1.0, 0.0, 1.0]);
         } else {
             panic!("Expected Sprite component");
@@ -270,6 +286,7 @@ mod tests {
                 },
                 Component::Sprite {
                     color: [1.0, 0.0, 0.0, 1.0],
+                    texture: None,
                 },
             ],
         };

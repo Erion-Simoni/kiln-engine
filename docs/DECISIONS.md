@@ -4,6 +4,66 @@ Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 
 ---
 
+## ADR-0028: Sprite texture paths are project-relative, `/`-separated (accepted)
+
+**Date:** 2026-10-20
+**Status:** accepted
+
+**Decision:** `kiln_core::Component::Sprite` carries an optional `texture`
+field holding an **asset path relative to the project root**, always
+normalised to `/` separators (e.g. `"sprites/hero.png"`, never
+`"sprites\\hero.png"`). The path is resolved against the assets the player
+loaded from the project directory or `.kar` archive.
+
+The player resolves a path by exact match first, then falls back to matching
+the **file name only** (`hero.png`), because `.kar` archives historically
+store entries by file name rather than by full path.
+
+**Alternatives:**
+- Store absolute paths: breaks portability and archive packaging.
+- Store only file names: ambiguous as soon as two folders contain the same
+  file name.
+- Store asset handles/UUIDs: needs a manifest and an import step, which the
+  2D gate does not have yet. Can be layered on later without changing the
+  on-disk format of the scene files.
+
+**Consequences:**
+- Project directories are loaded **recursively**, so nested assets
+  (`sprites/hero.png`) are reachable.
+- A missing texture is not fatal: the player logs a warning and falls back
+  to the built-in white tinted quad, so the game still runs.
+- The editor asset browser lists project-relative paths with `/` separators,
+  which is also what it shows in previews.
+- Path normalisation must happen on every platform; Windows `\` separators
+  are converted on load.
+
+---
+
+## ADR-0029: Editor previews are CPU-side `egui` images (accepted)
+
+**Date:** 2026-10-20
+**Status:** accepted
+
+**Decision:** The editor asset browser decodes a PNG on the CPU and shows it
+as an `egui::ColorImage` built with `ColorImage::from_rgba_unmultiplied`,
+rather than uploading it to the editor's GPU as a `TextureId`.
+
+**Alternatives:**
+- Upload to the editor GPU: reuses the player path, but the editor does not
+  yet have a live texture cache, and a preview texture would need cache
+  invalidation when the file changes on disk.
+- `from_rgba` (premultiplied): would darken the edges of images with
+  transparency, since the decoder produces straight (unpremultiplied) alpha.
+
+**Consequences:**
+- Previews work without a GPU and cost only a CPU decode.
+- The decoded pixels are straight RGBA8, so `from_rgba_unmultiplied` is the
+  correct conversion.
+- When the editor gains a real GPU scene view (G-6), the same decoded image
+  can be uploaded there; the decode step is shared.
+
+---
+
 ## ADR-0001: Editor UI framework (accepted)
 
 **Date:** 2026-10-18

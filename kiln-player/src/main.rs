@@ -3,12 +3,14 @@
 
 use anyhow::Result;
 use clap::Parser;
-use kiln_core::{cache_dir, save_dir, settings_dir, Transform};
+use kiln_core::{cache_dir, save_dir, settings_dir, Project, Transform};
 use kiln_player::loader;
 use kiln_player::spawn;
+use kiln_player::textures::TextureLibrary;
 use kiln_render::{camera::Camera, sprite_renderer::SpriteInstance, Renderer, SpriteRenderer};
 use kiln_runtime::{GameLoop, GameWorld, InputState, Sprite};
 use log::info;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::event::KeyEvent;
@@ -62,14 +64,21 @@ fn main() -> Result<()> {
     );
     info!("Scene '{}' selected", game.scene_id);
 
-    // Spawn the scene entities into the runtime world
-    let mut world = GameWorld::new();
-    let spawned = spawn::spawn_scene_by_id(&mut world, &game.project, &game.scene_id);
-    info!("Spawned {} entities", spawned.len());
+    // Spawn the scene entities into the runtime world.
+    // The scene is spawned once the GPU is ready, because sprite textures
+    // have to be uploaded before entities can reference them.
+    let world = GameWorld::new();
 
     let window_settings = &game.project.window;
     let event_loop = EventLoop::new().expect("event loop");
-    let mut app = PlayerApp::new(world, window_settings.width, window_settings.height);
+    let mut app = PlayerApp::new(
+        world,
+        window_settings.width,
+        window_settings.height,
+        game.project,
+        game.scene_id,
+        game.assets,
+    );
     event_loop.run_app(&mut app)?;
 
     Ok(())
@@ -96,11 +105,22 @@ struct PlayerApp {
     #[allow(dead_code)]
     input: InputState,
     title: String,
+    project: Project,
+    scene_id: String,
+    assets: HashMap<String, Vec<u8>>,
+    textures: TextureLibrary,
 }
 
 impl PlayerApp {
     /// Create the application around an already populated world.
-    fn new(world: GameWorld, width: u32, height: u32) -> Self {
+    fn new(
+        world: GameWorld,
+        width: u32,
+        height: u32,
+        project: Project,
+        scene_id: String,
+        assets: HashMap<String, Vec<u8>>,
+    ) -> Self {
         Self {
             gpu: None,
             camera: Camera::new(width as f32, height as f32),
@@ -108,6 +128,10 @@ impl PlayerApp {
             world,
             input: InputState::new(),
             title: "Kiln Game".to_string(),
+            project,
+            scene_id,
+            assets,
+            textures: TextureLibrary::default(),
         }
     }
 
@@ -124,9 +148,32 @@ impl PlayerApp {
         let renderer = Renderer::new(&instance, &surface, size.width, size.height).await;
         // The scene may be rendered into an intermediate HDR target when
         // post-processing is enabled, so target that format.
-        let sprite_renderer =
+        let mut sprite_renderer =
             SpriteRenderer::new(renderer.device(), renderer.queue(), renderer.scene_format());
         sprite_renderer.upload_quad(renderer.queue());
+
+        // Decode the project's PNG assets and upload them as GPU textures.
+        let (textures, errors) = TextureLibrary::upload_for_project(
+            &mut sprite_renderer,
+            renderer.device(),
+            renderer.queue(),
+            &self.project,
+            &self.assets,
+        );
+        for error in &errors {
+            log::warn!("{error}");
+        }
+        info!("Uploaded {} textures", textures.len());
+        self.textures = textures;
+
+        // Now that the textures exist, spawn the scene with them bound.
+        let spawned = spawn::spawn_scene_by_id_with_textures(
+            &mut self.world,
+            &self.project,
+            &self.scene_id,
+            &self.textures,
+        );
+        info!("Spawned {} entities", spawned.len());
 
         self.gpu = Some(GpuState {
             window,

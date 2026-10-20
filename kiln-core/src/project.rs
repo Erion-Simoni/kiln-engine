@@ -166,6 +166,12 @@ pub enum Component {
     },
     Sprite {
         color: [f32; 4],
+        /// Asset path of the sprite texture (e.g. `"sprites/hero.png"`).
+        ///
+        /// `None` means the sprite is drawn with the built-in white texel and
+        /// tinted by `color`.
+        #[serde(default)]
+        texture: Option<String>,
     },
 }
 

@@ -222,7 +222,21 @@ fn parse_project(path: &Path, bytes: &[u8]) -> Result<Project, LoaderError> {
 }
 
 /// Collect every file in the project directory as an asset.
+///
+/// Files are keyed by their path relative to the project directory, so
+/// `sprites/hero.png` is stored under that key. The manifest itself is
+/// skipped, because it is parsed separately.
 fn collect_directory_assets(
+    dir: &Path,
+    manifest_path: &Path,
+    assets: &mut HashMap<String, Vec<u8>>,
+) -> Result<(), LoaderError> {
+    collect_directory_assets_inner(dir, dir, manifest_path, assets)
+}
+
+/// Recursive helper for [`collect_directory_assets`].
+fn collect_directory_assets_inner(
+    root: &Path,
     dir: &Path,
     manifest_path: &Path,
     assets: &mut HashMap<String, Vec<u8>>,
@@ -230,14 +244,26 @@ fn collect_directory_assets(
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
+
+        if path.is_dir() {
+            collect_directory_assets_inner(root, &path, manifest_path, assets)?;
+            continue;
+        }
+
         if !path.is_file() || path == manifest_path {
             continue;
         }
+
         let name = path
-            .file_name()
-            .and_then(|n| n.to_str())
+            .strip_prefix(root)
+            .ok()
+            .and_then(|p| p.to_str())
             .unwrap_or_default()
-            .to_string();
+            .replace('\\', "/");
+        if name.is_empty() {
+            continue;
+        }
+
         let bytes = std::fs::read(&path)?;
         assets.insert(name, bytes);
     }

@@ -49,6 +49,7 @@ mod tests {
 
         let sprite = Component::Sprite {
             color: [1.0, 0.0, 0.0, 1.0],
+            texture: None,
         };
 
         let toml_str = toml::to_string_pretty(&transform).unwrap();
@@ -57,6 +58,35 @@ mod tests {
         match parsed {
             Component::Transform { x, .. } => assert_eq!(x, 10.0),
             _ => panic!("Expected Transform component"),
+        }
+
+        // A sprite without an explicit texture still round-trips.
+        let sprite_toml = toml::to_string_pretty(&sprite).unwrap();
+        let parsed_sprite: Component = toml::from_str(&sprite_toml).unwrap();
+        match parsed_sprite {
+            Component::Sprite { color, texture } => {
+                assert_eq!(color, [1.0, 0.0, 0.0, 1.0]);
+                assert!(texture.is_none());
+            }
+            _ => panic!("Expected Sprite component"),
+        }
+    }
+
+    #[test]
+    fn test_sprite_texture_path_round_trips() {
+        let sprite = Component::Sprite {
+            color: [1.0, 1.0, 1.0, 1.0],
+            texture: Some("sprites/hero.png".to_string()),
+        };
+
+        let toml_str = toml::to_string_pretty(&sprite).unwrap();
+        let parsed: Component = toml::from_str(&toml_str).unwrap();
+
+        match parsed {
+            Component::Sprite { texture, .. } => {
+                assert_eq!(texture.as_deref(), Some("sprites/hero.png"));
+            }
+            _ => panic!("Expected Sprite component"),
         }
     }
 }

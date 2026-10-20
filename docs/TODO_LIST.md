@@ -20,17 +20,35 @@ tracked checkbox. They are the hard prerequisites for a shippable 2D engine.
 **Do not start M29 (3D) until every item in this section is `[x]`.**
 
 ### G-1: Asset → GPU
-- [ ] Decode PNG bytes to RGBA8 on the CPU
-- [ ] Register decoded images as GPU textures (`TextureId`) in the sprite renderer
-- [ ] Wire `Component::Sprite` in project data to a texture asset path
-- [ ] Player loads textures from `.kar` assets and binds them
-- [ ] Editor asset panel lists and previews imported images
+- [x] Decode PNG bytes to RGBA8 on the CPU
+- [x] Register decoded images as GPU textures (`TextureId`) in the sprite renderer
+- [x] Wire `Component::Sprite` in project data to a texture asset path
+- [x] Player loads textures from `.kar` assets and binds them
+- [x] Editor asset panel lists and previews imported images
 **Location:** `kiln-assets/src/image.rs` (new), `kiln-render/src/texture.rs`,
 `kiln-player/src/`, `kiln-editor/src/app.rs`
 **Milestone:** 2D gate
-**Status:** Not started. No image decoding exists in the workspace; textures are
-raw RGBA8 only. `kiln-render/src/texture.rs` notes "PNG lands with the
-asset→GPU step". Uses the `png` crate per ADR-0027.
+**Status:** Done.
+
+**What landed:**
+- `kiln-assets::image` decodes any PNG colour type (grayscale, palette, RGB,
+  RGBA, 16-bit, `tRNS`) into straight RGBA8 via the `png` crate (ADR-0027).
+  `encode_png_rgba` is the inverse and is used by tests and future importers.
+- `kiln_core::Component::Sprite` gained an optional `texture` field holding an
+  asset path (e.g. `"sprites/hero.png"`); prefabs can override it too.
+- `kiln-player::textures::TextureLibrary` collects every texture path
+  referenced by the project, decodes them, uploads them via
+  `SpriteRenderer::create_texture_rgba`, and keeps the pixel size so the
+  spawner can size the sprite to the image.
+- The player defers scene spawning until after GPU init so textures exist
+  when entities are created. Missing or invalid textures log a warning and
+  fall back to the white tinted quad.
+- Project directories are loaded recursively; assets are keyed by their
+  project-relative path with `/` separators.
+- The editor has an `AssetBrowser` panel that scans the project directory,
+  lists files, selects images and shows a CPU-side `egui` preview. Previews
+  use `ColorImage::from_rgba_unmultiplied` because the decoded pixels are
+  unpremultiplied.
 
 ### G-2: Real tilemap
 - [ ] `kiln-tilemap` module (or `kiln-runtime` submodule) with tileset definitions
@@ -489,7 +507,7 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
 
    | Gate item | TODO | State |
    | --- | --- | --- |
-   | Asset → GPU | G-1 | Not started — no image decoding exists |
+   | Asset → GPU | G-1 | Done |
    | Real tilemap | G-2 | Not started — no tilemap module |
    | VM maturity | G-3 | Not started — no string values |
    | Vertical slice sample | G-4 | Not started — all samples are console smokes |

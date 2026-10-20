@@ -11,6 +11,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 walkdir = { workspace = true }
 memmap2 = "0.9"
+png = "0.18"
 
 [dev-dependencies]
 tempfile = "3.14"

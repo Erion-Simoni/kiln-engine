@@ -3,6 +3,7 @@
 
 pub mod loader;
 pub mod spawn;
+pub mod textures;
 
 #[cfg(target_os = "android")]
 pub mod android;

@@ -8,11 +8,13 @@ use kiln_core::{Component, Entity, Project, Scene, SceneOffset, Transform};
 use kiln_runtime::{GameWorld, Sprite};
 use std::collections::HashMap;
 
+use crate::textures::TextureLibrary;
+
 /// Default sprite size in pixels, used when a scene entity has no explicit size.
 pub const DEFAULT_SPRITE_SIZE: [f32; 2] = [32.0, 32.0];
 
 /// The components created for a single scene entity.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct SpawnedEntity {
     /// Position of the entity in world space.
     pub position: [f32; 2],
@@ -22,6 +24,8 @@ pub struct SpawnedEntity {
     pub scale: kiln_core::Vec2,
     /// Tint colour (RGBA) when the entity has a sprite.
     pub color: Option<[f32; 4]>,
+    /// Asset path of the sprite texture, when the entity references one.
+    pub texture: Option<String>,
 }
 
 /// Spawn the entities of `scene` into `world` and return what was created.
@@ -35,11 +39,30 @@ pub fn spawn_scene(
     offset: SceneOffset,
     visited: &mut Vec<String>,
 ) -> Vec<SpawnedEntity> {
+    spawn_scene_with_textures(world, project, scene, offset, visited, None)
+}
+
+/// Spawn the entities of `scene` into `world` and return what was created.
+///
+/// Nested scenes referenced by `scene.nested_scenes` are spawned as well,
+/// with their offsets applied. `visited` guards against cyclic nesting.
+///
+/// When `textures` is given, sprites referencing a texture use that texture
+/// and are sized to the image's pixel dimensions.
+pub fn spawn_scene_with_textures(
+    world: &mut GameWorld,
+    project: &Project,
+    scene: &Scene,
+    offset: SceneOffset,
+    visited: &mut Vec<String>,
+    textures: Option<&TextureLibrary>,
+) -> Vec<SpawnedEntity> {
     let mut spawned = Vec::new();
 
     for entity in &scene.entities {
         let transform = entity_transform(entity);
         let color = entity_sprite_color(entity);
+        let texture_path = entity_sprite_texture(entity);
 
         let position = [
             transform.position.x + offset.x,
@@ -51,8 +74,22 @@ pub fn spawn_scene(
 
         match color {
             Some(rgba) => {
-                let sprite = Sprite::new(rgba[0], rgba[1], rgba[2], rgba[3])
-                    .with_size(DEFAULT_SPRITE_SIZE[0], DEFAULT_SPRITE_SIZE[1]);
+                let mut sprite = Sprite::new(rgba[0], rgba[1], rgba[2], rgba[3]);
+                let gpu_texture = texture_path
+                    .as_deref()
+                    .and_then(|path| textures.and_then(|lib| lib.get(path)));
+
+                match gpu_texture {
+                    Some(tex) => {
+                        sprite = sprite
+                            .with_texture(tex.id)
+                            .with_size(tex.width as f32, tex.height as f32);
+                    }
+                    None => {
+                        sprite = sprite.with_size(DEFAULT_SPRITE_SIZE[0], DEFAULT_SPRITE_SIZE[1]);
+                    }
+                }
+
                 world.spawn((runtime_transform, sprite));
             }
             None => {
@@ -65,6 +102,7 @@ pub fn spawn_scene(
             rotation: transform.rotation,
             scale: transform.scale,
             color,
+            texture: texture_path,
         });
     }
 
@@ -80,7 +118,14 @@ pub fn spawn_scene(
             x: offset.x + nested.offset.x,
             y: offset.y + nested.offset.y,
         };
-        spawned.extend(spawn_scene(world, project, child, child_offset, visited));
+        spawned.extend(spawn_scene_with_textures(
+            world,
+            project,
+            child,
+            child_offset,
+            visited,
+            textures,
+        ));
         visited.pop();
     }
 
@@ -98,6 +143,27 @@ pub fn spawn_scene_by_id(
     };
     let mut visited = vec![scene_id.to_string()];
     spawn_scene(world, project, scene, SceneOffset::default(), &mut visited)
+}
+
+/// Spawn the scene with the given id from `project`, binding GPU textures.
+pub fn spawn_scene_by_id_with_textures(
+    world: &mut GameWorld,
+    project: &Project,
+    scene_id: &str,
+    textures: &TextureLibrary,
+) -> Vec<SpawnedEntity> {
+    let Some(scene) = project.scenes.get(scene_id) else {
+        return Vec::new();
+    };
+    let mut visited = vec![scene_id.to_string()];
+    spawn_scene_with_textures(
+        world,
+        project,
+        scene,
+        SceneOffset::default(),
+        &mut visited,
+        Some(textures),
+    )
 }
 
 /// Read the transform of a scene entity, defaulting to the origin.
@@ -121,8 +187,18 @@ fn entity_transform(entity: &Entity) -> Transform {
 /// Read the sprite tint of a scene entity, if it has one.
 fn entity_sprite_color(entity: &Entity) -> Option<[f32; 4]> {
     for component in &entity.components {
-        if let Component::Sprite { color } = component {
+        if let Component::Sprite { color, .. } = component {
             return Some(*color);
+        }
+    }
+    None
+}
+
+/// Read the sprite texture path of a scene entity, if it has one.
+fn entity_sprite_texture(entity: &Entity) -> Option<String> {
+    for component in &entity.components {
+        if let Component::Sprite { texture, .. } = component {
+            return texture.clone();
         }
     }
     None
@@ -181,6 +257,7 @@ mod tests {
                         },
                         Component::Sprite {
                             color: [1.0, 0.0, 0.0, 1.0],
+                            texture: None,
                         },
                     ],
                 },

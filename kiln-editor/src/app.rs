@@ -16,6 +16,7 @@ use winit::{
     window::Window,
 };
 
+use crate::assets::{AssetBrowser, AssetKind};
 use crate::prefab_editor::PrefabEditorState;
 
 #[derive(Error, Debug)]
@@ -53,6 +54,11 @@ pub struct EditorApp {
     gameplay_editor: GameplayEditorState,
     project_path: Option<PathBuf>,
     current_project: Option<Project>,
+    asset_browser: AssetBrowser,
+    /// Set by the scene toolbar, handled after the UI pass.
+    scene_save_requested: bool,
+    /// Set by the scene toolbar, handled after the UI pass.
+    scene_load_requested: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -301,6 +307,9 @@ impl EditorApp {
             gameplay_editor: GameplayEditorState::new(),
             project_path: None,
             current_project: None,
+            asset_browser: AssetBrowser::new(),
+            scene_save_requested: false,
+            scene_load_requested: false,
         })
     }
 
@@ -364,6 +373,7 @@ impl EditorApp {
                             },
                             kiln_core::project::Component::Sprite {
                                 color: sprite.color,
+                                texture: None,
                             },
                         ],
                     });
@@ -403,8 +413,13 @@ impl EditorApp {
         let toml_str = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
         let project = Project::from_toml(&toml_str).map_err(|e| e.to_string())?;
 
-        self.project_path = Some(path);
+        self.project_path = Some(path.clone());
         self.current_project = Some(project);
+
+        // Scan the project directory so the asset browser lists its files.
+        if let Some(dir) = path.parent() {
+            self.asset_browser.scan(dir);
+        }
 
         // Clear current world and load scene entities
         self.world = GameWorld::new();
@@ -417,14 +432,26 @@ impl EditorApp {
 
                     for component in &entity_data.components {
                         match component {
-                            kiln_core::project::Component::Transform { x, y, rotation, scale } => {
-                                transform_opt = Some(Transform::new(*x, *y)
-                                    .with_rotation(*rotation)
-                                    .with_scale(Vec2::new(*scale, *scale)));
+                            kiln_core::project::Component::Transform {
+                                x,
+                                y,
+                                rotation,
+                                scale,
+                            } => {
+                                transform_opt = Some(
+                                    Transform::new(*x, *y)
+                                        .with_rotation(*rotation)
+                                        .with_scale(Vec2::new(*scale, *scale)),
+                                );
                             }
-                            kiln_core::project::Component::Sprite { color } => {
-                                sprite_opt = Some(Sprite::new(color[0], color[1], color[2], color[3])
-                                    .with_size(64.0, 64.0));
+                            kiln_core::project::Component::Sprite { color, texture } => {
+                                // The texture path stays on the project data; the
+                                // GPU texture is bound when the scene is spawned.
+                                let _ = texture;
+                                sprite_opt = Some(
+                                    Sprite::new(color[0], color[1], color[2], color[3])
+                                        .with_size(64.0, 64.0),
+                                );
                             }
                         }
                     }
@@ -464,6 +491,7 @@ impl EditorApp {
                         },
                         kiln_core::project::Component::Sprite {
                             color: sprite.color,
+                            texture: None,
                         },
                     ],
                 });
@@ -496,14 +524,26 @@ impl EditorApp {
 
                     for component in &entity_data.components {
                         match component {
-                            kiln_core::project::Component::Transform { x, y, rotation, scale } => {
-                                transform_opt = Some(Transform::new(*x, *y)
-                                    .with_rotation(*rotation)
-                                    .with_scale(Vec2::new(*scale, *scale)));
+                            kiln_core::project::Component::Transform {
+                                x,
+                                y,
+                                rotation,
+                                scale,
+                            } => {
+                                transform_opt = Some(
+                                    Transform::new(*x, *y)
+                                        .with_rotation(*rotation)
+                                        .with_scale(Vec2::new(*scale, *scale)),
+                                );
                             }
-                            kiln_core::project::Component::Sprite { color } => {
-                                sprite_opt = Some(Sprite::new(color[0], color[1], color[2], color[3])
-                                    .with_size(64.0, 64.0));
+                            kiln_core::project::Component::Sprite { color, texture } => {
+                                // The texture path stays on the project data; the
+                                // GPU texture is bound when the scene is spawned.
+                                let _ = texture;
+                                sprite_opt = Some(
+                                    Sprite::new(color[0], color[1], color[2], color[3])
+                                        .with_size(64.0, 64.0),
+                                );
                             }
                         }
                     }
@@ -638,6 +678,14 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     if ui.button("Save Project As...").clicked() {
                         menu_actions.push(MenuAction::SaveProjectAs);
+                        ui.close_menu();
+                    }
+                    if ui.button("Save Scene").clicked() {
+                        menu_actions.push(MenuAction::SaveScene);
+                        ui.close_menu();
+                    }
+                    if ui.button("Load Scene").clicked() {
+                        menu_actions.push(MenuAction::LoadScene);
                         ui.close_menu();
                     }
                     ui.separator();
@@ -809,6 +857,9 @@ impl winit::application::ApplicationHandler for EditorApp {
                     ui_designer: &mut self.ui_designer,
                     prefab_editor: &mut self.prefab_editor,
                     gameplay_editor: &mut self.gameplay_editor,
+                    asset_browser: &mut self.asset_browser,
+                    scene_save_requested: &mut self.scene_save_requested,
+                    scene_load_requested: &mut self.scene_load_requested,
                 };
                 tree.show(ctx, &mut tab_viewer);
             });
@@ -942,16 +993,26 @@ impl winit::application::ApplicationHandler for EditorApp {
                         eprintln!("Failed to save project as: {}", e);
                     }
                 }
+                MenuAction::SaveScene => {
+                    if let Err(e) = self.save_scene() {
+                        eprintln!("Failed to save scene: {}", e);
+                    }
+                }
+                MenuAction::LoadScene => {
+                    if let Err(e) = self.load_scene() {
+                        eprintln!("Failed to load scene: {}", e);
+                    }
+                }
             }
         }
 
         // Handle scene save/load requests
-        if self.scene_save_requested {
+        if std::mem::take(&mut self.scene_save_requested) {
             if let Err(e) = self.save_scene() {
                 eprintln!("Failed to save scene: {}", e);
             }
         }
-        if self.scene_load_requested {
+        if std::mem::take(&mut self.scene_load_requested) {
             if let Err(e) = self.load_scene() {
                 eprintln!("Failed to load scene: {}", e);
             }
@@ -1007,6 +1068,9 @@ struct TabViewer<'a> {
     ui_designer: &'a mut UIDesignerState,
     prefab_editor: &'a mut PrefabEditorState,
     gameplay_editor: &'a mut GameplayEditorState,
+    asset_browser: &'a mut AssetBrowser,
+    scene_save_requested: &'a mut bool,
+    scene_load_requested: &'a mut bool,
 }
 
 impl<'a> egui_dock::TabViewer for TabViewer<'a> {
@@ -1500,26 +1564,81 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     ui.horizontal(|ui| {
                         ui.heading("Assets");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button("Import").clicked() {
-                                // TODO: Import assets
+                            if ui.button("Refresh").clicked() {
+                                if let Some(dir) =
+                                    self.asset_browser.root().map(|p| p.to_path_buf())
+                                {
+                                    self.asset_browser.scan(&dir);
+                                }
                             }
                         });
                     });
 
                     ui.add_space(8.0);
 
-                    // Asset browser placeholder
                     egui::Frame::none()
                         .fill(egui::Color32::from_rgb(35, 35, 40))
                         .rounding(4.0)
-                        .inner_margin(16.0)
+                        .inner_margin(12.0)
                         .show(ui, |ui| {
-                            ui.centered_and_justified(|ui| {
-                                ui.label("Asset browser will appear here");
-                                ui.add_space(8.0);
-                                ui.label("Drag and drop assets to import");
-                            });
+                            let entries = self.asset_browser.entries().to_vec();
+                            if entries.is_empty() {
+                                ui.centered_and_justified(|ui| {
+                                    ui.label("No assets found");
+                                    ui.add_space(8.0);
+                                    ui.label("Open a project to browse its files");
+                                });
+                            } else {
+                                egui::ScrollArea::vertical().show(ui, |ui| {
+                                    for entry in &entries {
+                                        let name = entry
+                                            .path
+                                            .rsplit('/')
+                                            .next()
+                                            .unwrap_or(&entry.path)
+                                            .to_string();
+                                        let selected = self.asset_browser.preview_source()
+                                            == Some(&entry.path);
+
+                                        let response = ui
+                                            .selectable_label(selected, &name)
+                                            .on_hover_text(&entry.path);
+
+                                        if response.clicked() && entry.kind == AssetKind::Image {
+                                            if let Err(e) = self.asset_browser.select(&entry.path) {
+                                                log::warn!("asset '{}': {e}", entry.path);
+                                            }
+                                        }
+                                    }
+                                });
+                            }
                         });
+
+                    // PNG preview of the selected asset.
+                    if let Some(source) = self.asset_browser.preview_source() {
+                        ui.add_space(8.0);
+                        ui.label(format!("Preview: {source}"));
+                        if let Some(image) = self.asset_browser.preview_color_image() {
+                            let texture_id = ui.ctx().load_texture(
+                                "preview",
+                                image,
+                                egui::TextureOptions::NEAREST,
+                            );
+                            let size = self.asset_browser.preview_size().unwrap_or((0, 0));
+                            let scale = if size.0 > 0 {
+                                96.0 / size.0 as f32
+                            } else {
+                                1.0
+                            };
+                            ui.add(egui::Image::new(&texture_id).fit_to_exact_size(egui::vec2(
+                                size.0 as f32 * scale,
+                                size.1 as f32 * scale,
+                            )));
+                            if let Some((w, h)) = self.asset_browser.preview_size() {
+                                ui.label(format!("{w} x {h} pixels"));
+                            }
+                        }
+                    }
                 });
             }
             Tab::Console => {

@@ -2,6 +2,7 @@
 
 **Current milestone:** M0–M28 claimed complete in prior sessions — **honesty audit
 says Partial overall**. Do **not** start M29 (3D) until the 2D gate below is met.
+**G-1 (Asset → GPU) is now done** — G-2 is next.
 
 ---
 
@@ -52,31 +53,29 @@ checkbox optimism in `docs/ROADMAP.md`.
 
 ## Done (this session)
 
-- **M18-1: Android export + touch input** — audited current implementation: APK build command exists in export command via cargo-apk. Missing: touch input implementation, physical device testing, suspend/resume handling, rotation handling, signed AAB in CI, v0.4 gate verification. Marked as partial in TODO_LIST.md.
-- **M17-1: Updates, patching, DLC packs** — audited current implementation: versioned archives (pack_with_version), delta patch generation (generate_patch with qbsdiff), and DLC pack CLI command exist. Missing: in-game updater (check/download/verify/apply/rollback), store updater integration, compile-out logic, crash-report hook. Marked as partial in TODO_LIST.md.
-- **M16-1: Storefront distribution** — audited current implementation: CLI stubs for itch.io and Steam depot generation exist in main.rs; kiln-platform crate has trait and stub implementation. Missing: actual Steamworks SDK integration, achievements/cloud saves/overlay, Steam Deck testing, fees/docs. Marked as partial in TODO_LIST.md.
-- **M15-1: Packaging, signing, installers** — audited current implementation: basic packaging stubs exist in export command (zip for Windows, .app for macOS, AppDir for Linux). Missing: no package.rs module, no code signing, no certificate documentation, no notarization, no ADR for Linux format, no project settings integration, no unsigned build testing, no SmartScreen/Gatekeeper docs. Marked as stub in TODO_LIST.md.
-- **R0-6: M13 sample completion** — "N minutes" placeholder already replaced with "≤2 minutes" in ROADMAP.md per prior ADR work. Clean machine verification requires physical access to a machine without Rust toolchain (deferred).
-- **R0-5: Window settings in project settings** — added `monitor` field to `WindowSettings` for multi-monitor support. All other window settings (fullscreen, borderless, resolution via width/height, vsync, high-DPI, resizable) already existed. Tests pass.
-- **R0-3: Audio device management** — documented current M11 implementation (rodio high-level
-  API, default device only). Device selection, hot-plug detection, sample-rate changes
-  deferred to M49 audio v2 per ADR-0014 (sufficient for basic 2D games).
-- **R0-2: Asset archive dual loaders** — implemented memory-mapped loader for native
-  (`memmap2` crate, zero-copy access) and HTTP streaming loader for web (WASM,
-  range requests via `WebArchiveLoader`). Archive format unchanged (KILNARV1/V2).
-  All 14 tests pass. ADR-0013 updated to accepted.
-- **R0-1: Native backends verification** — documented wgpu 22.1 backend support in `BUDGETS.md`:
-  Vulkan, Metal, DX12, GL/WebGL2, WebGPU with fallback order and environment variables.
-  Old hardware testing deferred (requires physical device).
-- Created `docs/TODO_LIST.md` with 90+ stub/TODO items organized by milestone (R0-M28).
-- Prior session work (from STATE.md):
-  - ADR-0026 + `AGENTS.md`: AI may break the 400-line soft rule
-  - Honesty audit recorded here; **M29 deferred** until 2D gate
-  - **M9 Post (F5)** — real GPU post chain in `kiln-render`
-  - **UI draw path (F1/F2/F3)** — `kiln-ui` bitmap font and quad emission
-  - **Textured sprites** — atlas builder, UV rects, batch-by-texture sample
-  - **F6** — `kiln-player` project/scene/archive loading
-  - Clippy clean workspace-wide
+- **G-1: Asset → GPU** — the full PNG → GPU path now exists end to end:
+  - `kiln-assets/src/image.rs` (new) decodes every PNG colour type
+    (grayscale, palette, RGB, RGBA, 16-bit, `tRNS`) into straight RGBA8 using
+    the `png` crate (ADR-0027). `encode_png_rgba` is the inverse helper.
+  - `kiln_core::Component::Sprite` gained an optional `texture` asset path
+    (`"sprites/hero.png"`); prefab `ComponentOverride::Sprite` can override it.
+  - `kiln-player/src/textures.rs` (new) collects every texture path referenced
+    by the project, decodes them and uploads them via
+    `SpriteRenderer::create_texture_rgba`, keeping the pixel size so sprites
+    are sized to the image.
+  - The player now **defers scene spawning until after GPU init** so textures
+    exist when entities are created. Missing/invalid textures log a warning and
+    fall back to the white tinted quad.
+  - `kiln-player/src/loader.rs` loads project directories **recursively** and
+    keys assets by project-relative path with `/` separators.
+  - `kiln-editor/src/assets.rs` (new) adds an `AssetBrowser` that scans the
+    project directory, lists files, selects images and renders a CPU-side
+    `egui` preview (`ColorImage::from_rgba_unmultiplied`, since the decoded
+    pixels are unpremultiplied).
+  - Also fixed pre-existing editor breakage: missing scene save/load request
+    handling and menu actions in `kiln-editor/src/app.rs`.
+  - `cargo fmt --all`, targeted Clippy and `cargo build --workspace` are clean;
+    all 78 tests in `kiln-assets`/`kiln-core`/`kiln-player`/`kiln-editor` pass.
 
 ---
 
@@ -91,8 +90,7 @@ None
 These are now tracked as checkboxes in `docs/TODO_LIST.md` **Phase 0.5 (G-1 … G-6)**.
 Ordered by impact. One item per session; commit after each.
 
-1. **G-1: Asset → GPU** — decode PNG to RGBA8, register GPU textures, wire scene
-   sprites to texture paths, load in player/editor
+1. **G-1: Asset → GPU** — ✅ **done this session**
 2. **G-2: Real tilemap** — tileset, layers, chunking, culling, collision flags
 3. **G-3: VM maturity** — string values (`Value::Str`), string constants and
    host-call arguments, script/graph frontends
@@ -117,5 +115,8 @@ ships from editor/player without console-only demos.
   verification with `B` / `O` / `F`; the GPU test only checks non-black output.
   Per-effect spatial regression tests are still to do.
 - `kiln-editor/src/app.rs` and `kiln-cli/src/main.rs` are large; allowed under ADR-0026
+- G-1 leftovers: the editor preview is CPU-side only (no runtime GPU texture in
+  the editor), and the editor asset browser cannot yet **assign** a texture to a
+  sprite — the `texture` field is only editable in project data.
 
 **Blocked:** None — blocked only by product choice: finish 2D before 3D.
