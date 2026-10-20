@@ -75,10 +75,11 @@ checkbox optimism in `docs/ROADMAP.md`.
 
 ## In progress
 
-- **F6 — `kiln-player` project/scene/archive loading** (M14): design done,
-  not implemented. Plan: load `Project`/scene TOML from archive (or plain dir),
-  spawn entities into `GameWorld` from `Component::Transform` / `Component::Sprite`,
-  run the real winit render loop instead of exiting after load.
+- **F6 — `kiln-player` project/scene/archive loading** (M14): **done** ->
+  `loader.rs` loads `.kar` archives and project directories (`kiln.toml`/`kiln.ron`);
+  `spawn.rs` spawns `Transform`/`Sprite` into `GameWorld`, incl. nested scenes with
+  offsets and a cycle guard; `main.rs` wires load -> spawn -> winit render loop.
+  `cargo check -p kiln-player --all-targets`, clippy, and 6 unit tests pass.
 
 ---
 
@@ -90,7 +91,7 @@ Ordered by impact. One milestone per session when work resumes:
 2. **Real tilemap** — tileset, layers, chunking (not checkerboard sprites)
 3. **Asset → GPU** — packed images become bindable textures in samples/editor
 4. **Editor truth** — GPU scene view; inspector + save/load; undo; PIE runs VM
-5. **Standalone player** — load `.kar` + scene + run loop (finish M14 for real) — *in progress (F6)*
+5. **Standalone player** — load `.kar` + scene + run loop (finish M14 for real) — **done (F6)**
 6. **VM maturity** — f32/f64 (and strings or host transforms) for usable gameplay
 7. **Vertical slice sample** — textured art + script/graph + save + on-screen UI
 8. **UI draw path** — replace `UiRenderer` stubs (or explicitly defer UI)
