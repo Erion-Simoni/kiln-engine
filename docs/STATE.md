@@ -52,6 +52,10 @@ checkbox optimism in `docs/ROADMAP.md`.
 
 ## Done (this session)
 
+- **R0-2: Asset archive dual loaders** — implemented memory-mapped loader for native
+  (`memmap2` crate, zero-copy access) and HTTP streaming loader for web (WASM,
+  range requests via `WebArchiveLoader`). Archive format unchanged (KILNARV1/V2).
+  All 14 tests pass. ADR-0013 updated to accepted.
 - **R0-1: Native backends verification** — documented wgpu 22.1 backend support in `BUDGETS.md`:
   Vulkan, Metal, DX12, GL/WebGL2, WebGPU with fallback order and environment variables.
   Old hardware testing deferred (requires physical device).
