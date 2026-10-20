@@ -8,7 +8,7 @@ says Partial overall**. Do **not** start M29 (3D) until the 2D gate below is met
 ## Audit (M0–M28 honesty pass) — 2026-10-19
 
 **Verdict:** Promising 2D **architecture / libraries**, not yet a solid shippable
-2D engine. Many milestones are real crates with tests; several “done” items are
+2D engine. Many milestones are real crates with tests; several "done" items are
 stubs, console smokes, or unwired editor UI. Trust code + this audit over
 checkbox optimism in `docs/ROADMAP.md`.
 
@@ -35,7 +35,7 @@ checkbox optimism in `docs/ROADMAP.md`.
 | Undo / save / asset hub | TODOs in `kiln-editor` |
 | `kiln-player` | Loads `.kar` then exits (M14 TODO) |
 | `kiln-web` | Isolation/shell; not a full game loop export |
-| `UiRenderer` | Returns empty `Vec`s — widgets don’t draw |
+| `UiRenderer` | Returns empty `Vec`s — widgets don't draw |
 | Store / installers / iOS ship | CLI/docs scaffolding; not end-to-end proven |
 | Most `samples/` | Console `println` smokes, not playable vertical slices |
 
@@ -52,7 +52,8 @@ checkbox optimism in `docs/ROADMAP.md`.
 
 ## Done (this session)
 
-- **R0-5: Window settings in project settings** — added `monitor` field to `WindowSettings` for multi-monitor support. All other fields (fullscreen, borderless, resolution via width/height, vsync, high-DPI, resizable) already existed. Tests pass.
+- **R0-6: M13 sample completion** — "N minutes" placeholder already replaced with "≤2 minutes" in ROADMAP.md per prior ADR work. Clean machine verification requires physical access to a machine without Rust toolchain (deferred).
+- **R0-5: Window settings in project settings** — added `monitor` field to `WindowSettings` for multi-monitor support. All other window settings (fullscreen, borderless, resolution via width/height, vsync, high-DPI, resizable) already existed. Tests pass.
 - **R0-3: Audio device management** — documented current M11 implementation (rodio high-level
   API, default device only). Device selection, hot-plug detection, sample-rate changes
   deferred to M49 audio v2 per ADR-0014 (sufficient for basic 2D games).
