@@ -52,6 +52,7 @@ checkbox optimism in `docs/ROADMAP.md`.
 
 ## Done (this session)
 
+- **M16-1: Storefront distribution** — audited current implementation: CLI stubs for itch.io and Steam depot generation exist in main.rs; kiln-platform crate has trait and stub implementation. Missing: actual Steamworks SDK integration, achievements/cloud saves/overlay, Steam Deck testing, fees/docs. Marked as partial in TODO_LIST.md.
 - **M15-1: Packaging, signing, installers** — audited current implementation: basic packaging stubs exist in export command (zip for Windows, .app for macOS, AppDir for Linux). Missing: no package.rs module, no code signing, no certificate documentation, no notarization, no ADR for Linux format, no project settings integration, no unsigned build testing, no SmartScreen/Gatekeeper docs. Marked as stub in TODO_LIST.md.
 - **M14-1: Native desktop game export** — verified that `kiln-cli export --platform windows|macos|linux` builds player binary; dependency tree verified (no editor crates via cargo tree); per-OS save/settings paths implemented via dirs crate; player binary size (930 KB) recorded in BUDGETS.md. Clean machine testing requires physical access (deferred).
 - **R0-6: M13 sample completion** — "N minutes" placeholder already replaced with "≤2 minutes" in ROADMAP.md per prior ADR work. Clean machine verification requires physical access to a machine without Rust toolchain (deferred).
@@ -80,11 +81,7 @@ checkbox optimism in `docs/ROADMAP.md`.
 
 ## In progress
 
-- **F6 — `kiln-player` project/scene/archive loading** (M14): **done** ->
-  `loader.rs` loads `.kar` archives and project directories (`kiln.toml`/`kiln.ron`);
-  `spawn.rs` spawns `Transform`/`Sprite` into `GameWorld`, incl. nested scenes with
-  offsets and a cycle guard; `main.rs` wires load -> spawn -> winit render loop.
-  `cargo check -p kiln-player --all-targets`, clippy, and 6 unit tests pass.
+None
 
 ---
 

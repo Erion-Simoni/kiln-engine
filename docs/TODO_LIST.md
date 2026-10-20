@@ -98,17 +98,18 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
 **Status:** Stub implementation (2026-10-20). Basic packaging stubs exist in export command (zip for Windows, .app for macOS, AppDir for Linux). Missing: no package.rs module, no code signing, no certificate documentation, no notarization, no ADR for Linux format, no project settings integration, no unsigned build testing, no SmartScreen/Gatekeeper docs.
 
 ### M16-1: Storefront distribution
-- [ ] itch.io: `kiln-cli publish itch` builds and uploads
-- [ ] Document butler CLI integration or manual flow
-- [ ] Steam: generate depot/build scripts
+- [x] itch.io: `kiln-cli publish itch` builds and uploads (stub in main.rs)
+- [x] Document butler CLI integration or manual flow (documented in main.rs)
+- [x] Steam: generate depot/build scripts (generate_steam_vdf() in main.rs)
 - [ ] Steam: Steamworks integration behind Cargo feature
 - [ ] Steam: implement achievements, cloud saves, overlay
-- [ ] Implement stub backend when Steam feature is off
-- [ ] Implement platform-services trait (not locked to one store)
+- [x] Implement stub backend when Steam feature is off (kiln-platform stub exists)
+- [x] Implement platform-services trait (not locked to one store) (kiln-platform trait exists)
 - [ ] Test Steam Deck / Linux handheld (controller, 800p, sleep/resume)
 - [ ] Document fees, review requirements, account setup
-**Location:** `kiln-platform/src/lib.rs` (stub exists), `kiln-cli/src/publish.rs`
+**Location:** `kiln-platform/src/lib.rs` (stub exists), `kiln-cli/src/main.rs`
 **Milestone:** M16
+**Status:** Partial (2026-10-20). CLI stubs for itch.io and Steam depot generation exist in main.rs; kiln-platform crate has trait and stub implementation. Missing: actual Steamworks SDK integration, achievements/cloud saves/overlay, Steam Deck testing, fees/docs.
 
 ### M17-1: Updates, patching, DLC packs
 - [ ] Implement versioned data archives
