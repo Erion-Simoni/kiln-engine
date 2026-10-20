@@ -8,7 +8,7 @@ use kiln_player::loader;
 use kiln_player::spawn;
 use kiln_player::textures::TextureLibrary;
 use kiln_render::{camera::Camera, sprite_renderer::SpriteInstance, Renderer, SpriteRenderer};
-use kiln_runtime::{GameLoop, GameWorld, InputState, Sprite};
+use kiln_runtime::{GameLoop, GameWorld, InputState, Sprite, Tilemap};
 use log::info;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -175,6 +175,19 @@ impl PlayerApp {
         );
         info!("Spawned {} entities", spawned.len());
 
+        // Tilemaps are separate components: they are culled and drawn in
+        // chunks rather than as individual entities.
+        if let Some(scene) = self.project.scenes.get(&self.scene_id) {
+            let maps = spawn::spawn_tilemaps(
+                &mut self.world,
+                &self.project,
+                scene,
+                kiln_core::SceneOffset::default(),
+                &self.textures,
+            );
+            info!("Spawned {} tilemaps", maps.len());
+        }
+
         self.gpu = Some(GpuState {
             window,
             surface,
@@ -229,6 +242,16 @@ impl PlayerApp {
 
         // Collect sprite instances from the ECS world (CPU gather pass).
         gpu.sprite_renderer.begin_frame();
+
+        // Tilemaps are drawn first so entities appear on top of them.
+        // Only the chunks inside the camera view are submitted.
+        let view_bounds = self.camera.view_bounds();
+        for (_, tilemap) in self.world.world_mut().query_mut::<(&Transform, &Tilemap)>() {
+            for (texture, instance) in tilemap.collect_visible(view_bounds) {
+                gpu.sprite_renderer.push_textured(texture, instance);
+            }
+        }
+
         for (transform, sprite) in self.world.world_mut().query_mut::<(&Transform, &Sprite)>() {
             gpu.sprite_renderer.push_textured(
                 sprite.texture,

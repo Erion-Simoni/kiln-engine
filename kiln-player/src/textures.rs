@@ -97,7 +97,6 @@ impl TextureLibrary {
         (library, errors)
     }
 }
-
 /// Collect every distinct texture path referenced by the project scenes.
 pub fn texture_paths(project: &Project) -> Vec<String> {
     let mut paths: Vec<String> = Vec::new();
@@ -118,8 +117,26 @@ pub fn texture_paths(project: &Project) -> Vec<String> {
         }
     }
 
+    // Tileset images are uploaded the same way as sprite textures.
+    for tileset in project.tilesets.values() {
+        if !tileset.texture.is_empty() && !paths.iter().any(|p| p == &tileset.texture) {
+            paths.push(tileset.texture.clone());
+        }
+    }
+
     paths.sort();
     paths
+}
+
+/// GPU texture handles of the project's tilesets, keyed by tileset id.
+pub fn tileset_textures(project: &Project, library: &TextureLibrary) -> HashMap<String, TextureId> {
+    let mut out = HashMap::new();
+    for (id, tileset) in &project.tilesets {
+        if let Some(tex) = library.get(&tileset.texture) {
+            out.insert(id.clone(), tex.id);
+        }
+    }
+    out
 }
 
 /// Find the bytes of an asset, falling back to a match by file name.
@@ -203,5 +220,51 @@ mod tests {
     fn missing_asset_returns_none() {
         let assets = HashMap::new();
         assert!(find_asset(&assets, "missing.png").is_none());
+    }
+
+    #[test]
+    fn collects_tileset_texture_paths() {
+        let mut project = project_with_texture("sprites/hero.png");
+        project.tilesets.insert(
+            "terrain".to_string(),
+            kiln_core::TileSet {
+                texture: "tiles/terrain.png".to_string(),
+                tile_size: [16, 16],
+                columns: 2,
+                rows: 2,
+                solid: Vec::new(),
+            },
+        );
+        let paths = texture_paths(&project);
+        assert!(paths.contains(&"tiles/terrain.png".to_string()));
+        assert!(paths.contains(&"sprites/hero.png".to_string()));
+    }
+
+    #[test]
+    fn tileset_textures_map_ids_to_handles() {
+        let mut project = Project::default();
+        project.tilesets.insert(
+            "terrain".to_string(),
+            kiln_core::TileSet {
+                texture: "tiles/terrain.png".to_string(),
+                tile_size: [16, 16],
+                columns: 1,
+                rows: 1,
+                solid: Vec::new(),
+            },
+        );
+
+        let mut library = TextureLibrary::default();
+        library.textures.insert(
+            "tiles/terrain.png".to_string(),
+            GpuTexture {
+                id: TextureId(3),
+                width: 16,
+                height: 16,
+            },
+        );
+
+        let map = tileset_textures(&project, &library);
+        assert_eq!(map.get("terrain"), Some(&TextureId(3)));
     }
 }

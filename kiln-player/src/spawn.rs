@@ -5,7 +5,7 @@
 //! [`kiln_runtime::Sprite`]) inside a [`kiln_runtime::GameWorld`].
 
 use kiln_core::{Component, Entity, Project, Scene, SceneOffset, Transform};
-use kiln_runtime::{GameWorld, Sprite};
+use kiln_runtime::{GameWorld, Sprite, Tilemap};
 use std::collections::HashMap;
 
 use crate::textures::TextureLibrary;
@@ -145,6 +145,39 @@ pub fn spawn_scene_by_id(
     spawn_scene(world, project, scene, SceneOffset::default(), &mut visited)
 }
 
+/// Spawn the tilemaps of a scene into `world`.
+///
+/// Each entity with a `Component::Tilemap` gets a runtime [`Tilemap`]
+/// component bound to the project's tilesets and their GPU textures.
+pub fn spawn_tilemaps(
+    world: &mut GameWorld,
+    project: &Project,
+    scene: &Scene,
+    offset: SceneOffset,
+    textures: &TextureLibrary,
+) -> Vec<String> {
+    let mut spawned = Vec::new();
+    let tileset_gpu = crate::textures::tileset_textures(project, textures);
+
+    for entity in &scene.entities {
+        let Some(map_id) = entity_tilemap_id(entity) else {
+            continue;
+        };
+        let Some(map) = project.tilemaps.get(&map_id) else {
+            log::warn!("tilemap '{map_id}' not found in project");
+            continue;
+        };
+
+        let transform = entity_transform(entity);
+        let mut tilemap = Tilemap::new(map.clone(), project.tilesets.clone(), tileset_gpu.clone());
+        tilemap.offset = [transform.position.x + offset.x, transform.position.y + offset.y];
+        world.spawn((transform, tilemap));
+        spawned.push(map_id);
+    }
+
+    spawned
+}
+
 /// Spawn the scene with the given id from `project`, binding GPU textures.
 pub fn spawn_scene_by_id_with_textures(
     world: &mut GameWorld,
@@ -199,6 +232,16 @@ fn entity_sprite_texture(entity: &Entity) -> Option<String> {
     for component in &entity.components {
         if let Component::Sprite { texture, .. } = component {
             return texture.clone();
+        }
+    }
+    None
+}
+
+/// Read the tilemap id of a scene entity, if it has one.
+fn entity_tilemap_id(entity: &Entity) -> Option<String> {
+    for component in &entity.components {
+        if let Component::Tilemap { map } = component {
+            return Some(map.clone());
         }
     }
     None
@@ -292,6 +335,76 @@ mod tests {
         let project = project_with_scene();
         let mut world = GameWorld::new();
         let spawned = spawn_scene_by_id(&mut world, &project, "missing");
+        assert!(spawned.is_empty());
+    }
+
+    #[test]
+    fn spawns_tilemap_components() {
+        let mut project = project_with_scene();
+        let mut map = kiln_core::TileMap::default();
+        map.id = "map1".to_string();
+        let mut layer = kiln_core::TileMapLayer {
+            tileset: "terrain".to_string(),
+            ..Default::default()
+        };
+        layer.set_tile_at(0, 0, 1);
+        map.layers.push(layer);
+        project.tilemaps.insert("map1".to_string(), map);
+        project.tilesets.insert(
+            "terrain".to_string(),
+            kiln_core::TileSet {
+                texture: "tiles/terrain.png".to_string(),
+                tile_size: [16, 16],
+                columns: 2,
+                rows: 2,
+                solid: Vec::new(),
+            },
+        );
+
+        let scene = project.scenes.get_mut("main").expect("main");
+        scene.entities.push(Entity {
+            id: "e3".to_string(),
+            name: "Map".to_string(),
+            components: vec![Component::Tilemap {
+                map: "map1".to_string(),
+            }],
+        });
+
+        let mut world = GameWorld::new();
+        let textures = TextureLibrary::default();
+        let scene = project.scenes.get("main").expect("main");
+        let spawned = spawn_tilemaps(
+            &mut world,
+            &project,
+            scene,
+            kiln_core::SceneOffset::default(),
+            &textures,
+        );
+        assert_eq!(spawned, vec!["map1".to_string()]);
+    }
+
+    #[test]
+    fn unknown_tilemap_is_skipped() {
+        let mut project = project_with_scene();
+        let scene = project.scenes.get_mut("main").expect("main");
+        scene.entities.push(Entity {
+            id: "e3".to_string(),
+            name: "Map".to_string(),
+            components: vec![Component::Tilemap {
+                map: "missing".to_string(),
+            }],
+        });
+
+        let mut world = GameWorld::new();
+        let textures = TextureLibrary::default();
+        let scene = project.scenes.get("main").expect("main");
+        let spawned = spawn_tilemaps(
+            &mut world,
+            &project,
+            scene,
+            kiln_core::SceneOffset::default(),
+            &textures,
+        );
         assert!(spawned.is_empty());
     }
 

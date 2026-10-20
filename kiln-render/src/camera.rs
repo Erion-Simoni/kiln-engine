@@ -47,6 +47,18 @@ impl Camera {
         ])
     }
 
+    /// World-space rectangle of the camera view: `[min_x, min_y, max_x, max_y]`.
+    pub fn view_bounds(&self) -> [f32; 4] {
+        let w = self.viewport_size[0] / self.zoom;
+        let h = self.viewport_size[1] / self.zoom;
+        [
+            self.position[0],
+            self.position[1],
+            self.position[0] + w,
+            self.position[1] + h,
+        ]
+    }
+
     pub fn pan(&mut self, dx: f32, dy: f32) {
         self.position[0] += dx;
         self.position[1] += dy;
@@ -85,6 +97,17 @@ mod tests {
         let ndc = proj * glam::Vec4::new(100.0, 50.0, 0.0, 1.0);
         assert!(approx_eq(ndc.x, 0.0), "ndc.x = {}", ndc.x);
         assert!(approx_eq(ndc.y, 0.0), "ndc.y = {}", ndc.y);
+    }
+
+    /// The visible world rectangle grows as the camera zooms out.
+    #[test]
+    fn view_bounds_follow_zoom_and_pan() {
+        let mut cam = Camera::new(200.0, 100.0);
+        assert_eq!(cam.view_bounds(), [0.0, 0.0, 200.0, 100.0]);
+        cam.pan(10.0, 20.0);
+        assert_eq!(cam.view_bounds(), [10.0, 20.0, 210.0, 120.0]);
+        cam.zoom(2.0);
+        assert_eq!(cam.view_bounds(), [10.0, 20.0, 110.0, 70.0]);
     }
 
     #[test]
