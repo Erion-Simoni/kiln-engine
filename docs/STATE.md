@@ -52,21 +52,18 @@ checkbox optimism in `docs/ROADMAP.md`.
 
 ## Done (this session)
 
-- ADR-0026 + `AGENTS.md`: AI may break the 400-line soft rule
-- Honesty audit recorded here; **M29 deferred** until 2D gate
-- **M9 Post (F5)** — real GPU post chain in `kiln-render`:
-  `post_gpu.rs` (bright extract → horizontal blur → vertical blur → composite),
-  `post.wgsl`, `PostConfig` (bloom / outline / fog), tier gating in
-  `Renderer::scene_format()` (`Rgba16Float` when post is active).
-  `kiln-render` tests: 41 pass (incl. GPU post-chain non-black check).
-- **UI draw path (F1/F2/F3)** — `kiln-ui`: built-in 5×7 bitmap font (`font.rs`),
-  real text metrics/render (`text.rs`), `UiRenderer` now emits quads.
-- **Textured sprites** — `kiln-render/src/texture.rs` (atlas builder, UV rects,
-  `TextureId`), `samples/sprites` batch-by-texture sample.
-- Demo post toggles use winit 0.30 **physical keys** (layout independent):
-  `B` bloom, `O` outline, `F` fog.
-- Clippy clean workspace-wide (`cargo clippy --workspace --all-targets`: 0 warnings).
-- Fix tracker: `docs/fixes m1-29.md` (F1–F15 audit).
+- **R0-1: Native backends verification** — documented wgpu 22.1 backend support in `BUDGETS.md`:
+  Vulkan, Metal, DX12, GL/WebGL2, WebGPU with fallback order and environment variables.
+  Old hardware testing deferred (requires physical device).
+- Created `docs/TODO_LIST.md` with 90+ stub/TODO items organized by milestone (R0-M28).
+- Prior session work (from STATE.md):
+  - ADR-0026 + `AGENTS.md`: AI may break the 400-line soft rule
+  - Honesty audit recorded here; **M29 deferred** until 2D gate
+  - **M9 Post (F5)** — real GPU post chain in `kiln-render`
+  - **UI draw path (F1/F2/F3)** — `kiln-ui` bitmap font and quad emission
+  - **Textured sprites** — atlas builder, UV rects, batch-by-texture sample
+  - **F6** — `kiln-player` project/scene/archive loading
+  - Clippy clean workspace-wide
 
 ---
 
