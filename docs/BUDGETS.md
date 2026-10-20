@@ -4,6 +4,34 @@ All budgets are enforced via `just size`. Exceeding a budget requires an ADR ent
 
 ---
 
+## Native GPU backend support (R0)
+
+**wgpu version:** 22.1
+
+**Supported backends:**
+- **Vulkan:** Windows, Linux/Android, macOS/iOS via MoltenVK (requires `vulkan-portability` feature)
+- **Metal:** macOS and iOS (first-class support)
+- **Direct3D 12:** Windows 10 and later (first-class support)
+- **OpenGL/GL ES:** Linux/Android, Windows, macOS/iOS via ANGLE (downlevel/second-tier support)
+- **WebGPU:** WebAssembly (first-class support)
+- **WebGL2:** WebAssembly (via gles backend, downlevel support)
+
+**Configuration:**
+- All backends enabled via `wgpu::Backends::all()` in renderer initialization
+- Fallback order: PRIMARY (Vulkan/Metal/DX12/WebGPU) → SECONDARY (GL/WebGL2)
+- Environment variables available for forcing specific backends:
+  - `WGPU_BACKEND`: comma-separated list (`vulkan,metal,dx12,gl`)
+  - `WGPU_ADAPTER_NAME`: substring match for specific GPU
+  - `WGPU_POWER_PREF`: `high`, `low`, or `none`
+
+**Current status:** Verified wgpu 22.1 backend support documentation (2026-10-20)
+**Testing needed:** Test fallback on real old hardware (requires physical testing on old GPU)
+
+**Location:** `kiln-render/src/renderer.rs` (line 48-50), `kiln-render/src/screenshot.rs` (line 24-26)
+**References:** https://docs.rs/wgpu/22.1.0/wgpu/
+
+---
+
 ## Web runtime WASM
 
 **Target:** <1.5 MB brotli-compressed
