@@ -3,9 +3,6 @@
 **Current milestone:** M0–M28 claimed complete in prior sessions — **honesty audit
 says Partial overall**. Do **not** start M29 (3D) until the 2D gate below is met.
 
-**Policy note:** ADR-0026 — AI agents may exceed the 400-line soft file limit
-when a split would hurt clarity (`AGENTS.md` rule 4).
-
 ---
 
 ## Audit (M0–M28 honesty pass) — 2026-10-19
