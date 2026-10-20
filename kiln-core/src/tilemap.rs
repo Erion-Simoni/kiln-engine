@@ -54,7 +54,10 @@ impl TileSet {
 
     /// Size of the whole tileset image, in pixels.
     pub fn image_size(&self) -> [u32; 2] {
-        [self.tile_size[0] * self.columns, self.tile_size[1] * self.rows]
+        [
+            self.tile_size[0] * self.columns,
+            self.tile_size[1] * self.rows,
+        ]
     }
 
     /// Normalised UV rect (`u0, v0, u1, v1`) of a tile, or `None` when the
@@ -224,8 +227,6 @@ impl TileMapLayer {
     }
 }
 
-
-
 /// A tilemap: one or more layers drawn over a shared tile size.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TileMap {
@@ -324,7 +325,6 @@ impl TileMap {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -403,7 +403,11 @@ mod tests {
             z: -5,
             ..Default::default()
         });
-        let names: Vec<&str> = map.sorted_layers().iter().map(|l| l.name.as_str()).collect();
+        let names: Vec<&str> = map
+            .sorted_layers()
+            .iter()
+            .map(|l| l.name.as_str())
+            .collect();
         assert_eq!(names, vec!["bottom", "top"]);
     }
 

@@ -51,16 +51,15 @@ tracked checkbox. They are the hard prerequisites for a shippable 2D engine.
   unpremultiplied.
 
 ### G-2: Real tilemap
-- [ ] `kiln-tilemap` module (or `kiln-runtime` submodule) with tileset definitions
-- [ ] Multiple layers per map, each with its own transform/z-order
-- [ ] Chunked storage so large maps do not allocate one entity per tile
-- [ ] Camera culling of chunks (only visible chunks are submitted)
-- [ ] Tile collision data (solid flags) queryable by gameplay code
-- [ ] Editor panel to author tilemaps
-**Location:** new module — currently only `samples/tilemap` draws a checkerboard
-of coloured quads; there is no tilemap module in the workspace
+- [x] `kiln-tilemap` module (or `kiln-runtime` submodule) with tileset definitions
+- [x] Multiple layers per map, each with its own transform/z-order
+- [x] Chunked storage so large maps do not allocate one entity per tile
+- [x] Camera culling of chunks (only visible chunks are submitted)
+- [x] Tile collision data (solid flags) queryable by gameplay code
+- [x] Editor panel to author tilemaps
+**Location:** `kiln-core/src/tilemap.rs`, `kiln-runtime/src/tilemap.rs`, `kiln-player/src/spawn.rs`, `kiln-editor/src/tilemap_editor.rs`
 **Milestone:** 2D gate
-**Status:** Not started.
+**Status:** Done.
 
 ### G-3: VM maturity
 - [ ] `Value::Str` variant with equality and comparison

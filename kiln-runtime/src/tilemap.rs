@@ -124,12 +124,15 @@ impl Tilemap {
                             let ty = cy * CHUNK_SIZE as i32 + ly as i32;
                             let px = self.offset[0] + layer.offset[0] + tx as f32 * ts[0];
                             let py = self.offset[1] + layer.offset[1] + ty as f32 * ts[1];
-                            instances.push((texture, SpriteInstance {
-                                position: [px + ts[0] * 0.5, py + ts[1] * 0.5],
-                                size: ts,
-                                color: self.color,
-                                uv_rect,
-                            }));
+                            instances.push((
+                                texture,
+                                SpriteInstance {
+                                    position: [px + ts[0] * 0.5, py + ts[1] * 0.5],
+                                    size: ts,
+                                    color: self.color,
+                                    uv_rect,
+                                },
+                            ));
                         }
                     }
                 }
@@ -139,7 +142,6 @@ impl Tilemap {
         instances
     }
 }
-
 
 #[cfg(test)]
 mod tests {

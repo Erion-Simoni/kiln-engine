@@ -170,7 +170,10 @@ pub fn spawn_tilemaps(
 
         let transform = entity_transform(entity);
         let mut tilemap = Tilemap::new(map.clone(), project.tilesets.clone(), tileset_gpu.clone());
-        tilemap.offset = [transform.position.x + offset.x, transform.position.y + offset.y];
+        tilemap.offset = [
+            transform.position.x + offset.x,
+            transform.position.y + offset.y,
+        ];
         world.spawn((transform, tilemap));
         spawned.push(map_id);
     }

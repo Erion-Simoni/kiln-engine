@@ -2,7 +2,7 @@
 
 **Current milestone:** M0–M28 claimed complete in prior sessions — **honesty audit
 says Partial overall**. Do **not** start M29 (3D) until the 2D gate below is met.
-**G-1 (Asset → GPU) is now done** — G-2 is next.
+**G-1 and G-2 (Asset → GPU and Real tilemap) are now done** — G-3 is next.
 
 ---
 
@@ -78,6 +78,27 @@ checkbox optimism in `docs/ROADMAP.md`.
   - `cargo fmt --all`, targeted Clippy and `cargo build --workspace` are clean;
     all 81 tests in `kiln-assets`/`kiln-core`/`kiln-player`/`kiln-editor` pass.
 
+- **G-2: Real tilemap** — full chunked tilemap module, end to end:
+  - `kiln-core/src/tilemap.rs` (new): `TileSet`, `TileMapLayer`, `TileMap`,
+    `TileChunk`; per-tile solid flags; UV lookup; chunked storage keyed by
+    `"cx,cy"`; solid-tile world rect query (`first_solid_hit`).
+  - `kiln_core::Component::Tilemap` + `Project.tilemaps`/`Project.tilesets`
+    (RO trip TOML). 15 new core tests.
+  - `kiln-runtime/src/tilemap.rs` (new): runtime `Tilemap` component bound to
+    tileset textures; camera-culling `collect_visible(view_bounds)` that skips
+    off-screen chunks; solid hit query. 6 runtime tests.
+  - `kiln-player`: uploads tileset PNGs with sprites; `spawn_tilemaps` in
+    `kiln-player/src/spawn.rs` binds each entity's map; the frame gather pass
+    draws tilemap chunks before sprites so entities draw on top. 4 new player
+    tests.
+  - `kiln-editor/src/tilemap_editor.rs` (new): `TilemapEditorState` panel —
+    tilemap/layer selection, tileset combo, tile brush, solid toggle, a
+    clickable painting grid, chunk-scrolled origin, +Layer/New. 3 editor
+    tests; wired as `Tab::TilemapEditor` in `kiln-editor/src/app.rs`.
+  - `kiln-render/src/camera.rs`: added `view_bounds()` + test.
+  - `cargo fmt --all`, targeted Clippy clean; all tests pass across
+    `kiln-core`/`kiln-render`/`kiln-runtime`/`kiln-player`/`kiln-editor`.
+
 ---
 
 ## In progress
@@ -91,8 +112,8 @@ None
 These are now tracked as checkboxes in `docs/TODO_LIST.md` **Phase 0.5 (G-1 … G-6)**.
 Ordered by impact. One item per session; commit after each.
 
-1. **G-1: Asset → GPU** — ✅ **done this session**
-2. **G-2: Real tilemap** — tileset, layers, chunking, culling, collision flags
+1. **G-1: Asset → GPU** — ✅ done
+2. **G-2: Real tilemap** — ✅ done this session
 3. **G-3: VM maturity** — string values (`Value::Str`), string constants and
    host-call arguments, script/graph frontends
 4. **G-4: Vertical slice sample** — textured art + script/graph + save + on-screen UI

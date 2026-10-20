@@ -18,6 +18,7 @@ use winit::{
 
 use crate::assets::{AssetBrowser, AssetKind};
 use crate::prefab_editor::PrefabEditorState;
+use crate::tilemap_editor::TilemapEditorState;
 
 #[derive(Error, Debug)]
 pub enum EditorError {
@@ -52,6 +53,7 @@ pub struct EditorApp {
     ui_designer: UIDesignerState,
     prefab_editor: PrefabEditorState,
     gameplay_editor: GameplayEditorState,
+    tilemap_editor: TilemapEditorState,
     project_path: Option<PathBuf>,
     current_project: Option<Project>,
     asset_browser: AssetBrowser,
@@ -74,6 +76,7 @@ enum Tab {
     PrefabEditor,
     SceneEditor,
     GameplayEditor,
+    TilemapEditor,
 }
 
 struct GpuState {
@@ -305,6 +308,7 @@ impl EditorApp {
             ui_designer: UIDesignerState::new(),
             prefab_editor: PrefabEditorState::new(),
             gameplay_editor: GameplayEditorState::new(),
+            tilemap_editor: TilemapEditorState::new(),
             project_path: None,
             current_project: None,
             asset_browser: AssetBrowser::new(),
@@ -453,6 +457,11 @@ impl EditorApp {
                                         .with_size(64.0, 64.0),
                                 );
                             }
+                            kiln_core::project::Component::Tilemap { map } => {
+                                // Tilemaps are culled and drawn in chunks, not
+                                // spawned as individual entities.
+                                let _ = map;
+                            }
                         }
                     }
 
@@ -544,6 +553,11 @@ impl EditorApp {
                                     Sprite::new(color[0], color[1], color[2], color[3])
                                         .with_size(64.0, 64.0),
                                 );
+                            }
+                            kiln_core::project::Component::Tilemap { map } => {
+                                // Tilemaps are culled and drawn in chunks, not
+                                // spawned as individual entities.
+                                let _ = map;
                             }
                         }
                     }
@@ -753,6 +767,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                         self.dock_state.add_window(vec![Tab::GameplayEditor]);
                         ui.close_menu();
                     }
+                    if ui.button("Tilemap Editor").clicked() {
+                        self.dock_state.add_window(vec![Tab::TilemapEditor]);
+                        ui.close_menu();
+                    }
                 });
 
                 ui.menu_button("Project", |ui| {
@@ -858,6 +876,8 @@ impl winit::application::ApplicationHandler for EditorApp {
                     prefab_editor: &mut self.prefab_editor,
                     gameplay_editor: &mut self.gameplay_editor,
                     asset_browser: &mut self.asset_browser,
+                    tilemap_editor: &mut self.tilemap_editor,
+                    current_project: &mut self.current_project,
                     scene_save_requested: &mut self.scene_save_requested,
                     scene_load_requested: &mut self.scene_load_requested,
                 };
@@ -1069,6 +1089,8 @@ struct TabViewer<'a> {
     prefab_editor: &'a mut PrefabEditorState,
     gameplay_editor: &'a mut GameplayEditorState,
     asset_browser: &'a mut AssetBrowser,
+    tilemap_editor: &'a mut TilemapEditorState,
+    current_project: &'a mut Option<Project>,
     scene_save_requested: &'a mut bool,
     scene_load_requested: &'a mut bool,
 }
@@ -2156,6 +2178,17 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     });
                 });
             }
+            Tab::TilemapEditor => {
+                ui.vertical(|ui| {
+                    if let Some(project) = self.current_project.as_mut() {
+                        crate::tilemap_editor::show(ui, self.tilemap_editor, project);
+                    } else {
+                        ui.heading("Tilemap Editor");
+                        ui.add_space(8.0);
+                        ui.label("Open a project to author tilemaps.");
+                    }
+                });
+            }
         }
     }
 
@@ -2171,6 +2204,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::PrefabEditor => "Prefab Editor".into(),
             Tab::SceneEditor => "Scene Editor".into(),
             Tab::GameplayEditor => "Gameplay Editor".into(),
+            Tab::TilemapEditor => "Tilemap Editor".into(),
         }
     }
 }
