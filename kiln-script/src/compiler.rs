@@ -3,6 +3,7 @@
 use crate::diagnostic::Span;
 use crate::parser::{BinaryOp, Expr, Stmt};
 use kiln_ir::{Instruction, Label, Program, Value};
+use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -17,13 +18,23 @@ pub enum CompileError {
 
 pub struct Compiler {
     program: Program,
+    /// Name → host-call id for script `name(...)` calls.
+    builtins: HashMap<String, u32>,
 }
 
 impl Compiler {
     pub fn new() -> Self {
+        let mut builtins = HashMap::new();
+        builtins.insert("print".to_string(), 0u32);
         Self {
             program: Program::new(),
+            builtins,
         }
+    }
+
+    /// Register a host function name callable from scripts.
+    pub fn register_builtin(&mut self, name: &str, host_id: u32) {
+        self.builtins.insert(name.to_string(), host_id);
     }
 
     pub fn compile(&mut self, stmts: &[Stmt]) -> Result<Program, CompileError> {
@@ -132,11 +143,11 @@ impl Compiler {
                 for arg in args {
                     self.compile_expr(arg)?;
                 }
-                // For now, we use fixed host call IDs
-                let func_id = match func.as_str() {
-                    "print" => 0,
-                    _ => return Err(CompileError::UndefinedFunction(func.clone(), *span)),
-                };
+                let func_id = self
+                    .builtins
+                    .get(func.as_str())
+                    .copied()
+                    .ok_or_else(|| CompileError::UndefinedFunction(func.clone(), *span))?;
                 self.program.add_instruction(Instruction::HostCall(func_id));
             }
         }

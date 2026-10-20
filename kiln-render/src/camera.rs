@@ -6,6 +6,12 @@ pub struct Camera {
     pub position: [f32; 2],
     pub zoom: f32,
     pub viewport_size: [f32; 2],
+    /// Whether the camera treats the projection origin as top-left.
+    ///
+    /// When false, world Y grows upward, matching tilemaps and gameplay. When
+    /// true, world Y grows downward from the viewport top, pairing with the
+    /// y-down UI renderer.
+    pub top_left_origin: bool,
 }
 
 impl Camera {
@@ -14,6 +20,17 @@ impl Camera {
             position: [0.0, 0.0],
             zoom: 1.0,
             viewport_size: [width, height],
+            top_left_origin: false,
+        }
+    }
+
+    /// Top-left-origin camera for y-down UI overlays.
+    pub fn new_top_left(width: f32, height: f32) -> Self {
+        Self {
+            position: [0.0, 0.0],
+            zoom: 1.0,
+            viewport_size: [width, height],
+            top_left_origin: true,
         }
     }
 
@@ -22,6 +39,11 @@ impl Camera {
         let right = self.position[0] + self.viewport_size[0] / self.zoom;
         let bottom = self.position[1];
         let top = self.position[1] + self.viewport_size[1] / self.zoom;
+        let (bottom, top) = if self.top_left_origin {
+            (top, bottom)
+        } else {
+            (bottom, top)
+        };
 
         // Manual orthographic matrix construction
         let tx = -(right + left) / (right - left);
