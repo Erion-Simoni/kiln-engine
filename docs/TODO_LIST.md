@@ -123,15 +123,16 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
 **Status:** Partial (2026-10-20). Versioned archives (pack_with_version), delta patch generation (generate_patch with qbsdiff), and DLC pack CLI command exist. Missing: in-game updater (check/download/verify/apply/rollback), store updater integration, compile-out logic, crash-report hook.
 
 ### M18-1: Android export + touch input
-- [ ] APK builds from `just android`
-- [ ] Test on physical Android device
+- [x] APK builds from `just android` (cargo apk build in export command)
+- [ ] Test on physical Android device (requires physical device)
 - [ ] Implement touch input (tap, drag, multi-touch) reaching ECS systems
 - [ ] Test suspend/resume survival
 - [ ] Test rotation (surface recreated)
 - [ ] Signed AAB builds in CI
 - [ ] v0.4 gate: same game runs as native download on desktop and Android
-**Location:** Android glue code (via ADR), `kiln-runtime/src/input.rs`
+**Location:** Android glue code (via ADR), `kiln-runtime/src/input.rs`, `kiln-cli/src/main.rs`
 **Milestone:** M18
+**Status:** Partial (2026-10-20). APK build command exists in export command via cargo-apk. Missing: touch input implementation, physical device testing, suspend/resume handling, rotation handling, signed AAB in CI, v0.4 gate verification.
 
 ---
 

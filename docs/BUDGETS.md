@@ -88,7 +88,7 @@ cargo build --release --bin kiln-player
 ls -lh target/release/kiln-player
 ```
 
-**Current status:** 930 KB (measured in M14, release build with LTO, panic=abort, strip=true)
+**Current status:** 930 KB (verified 2026-10-20, release build with LTO, panic=abort, strip=true)
 
 **Notes:**
 - Player binary contains only runtime, not editor
@@ -174,13 +174,14 @@ ls -lh dist/kiln-*.msi  # or .dmg, .AppImage
 # Measure from process launch to first rendered frame
 ```
 
-**Current status:** Not yet measured (record after M14 or when player binary exists)
+**Current status:** Not yet measured (player binary exists at 930 KB; startup timing instrumentation needed)
 
 **Notes:**
 - Measure on desktop reference hardware (similar to frame budget reference)
 - Exclude time spent loading large game assets (measure with minimal sample)
-- Archive loading should be fast; defer to M14 when streaming loaders are implemented
+- Archive loading should be fast; memory-mapped loader implemented in R0-2
 - Critical for perceived performance
+- Requires instrumentation code to measure from process launch to first rendered frame
 
 ---
 
