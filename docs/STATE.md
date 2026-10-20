@@ -52,6 +52,9 @@ checkbox optimism in `docs/ROADMAP.md`.
 
 ## Done (this session)
 
+- **R0-3: Audio device management** — documented current M11 implementation (rodio high-level
+  API, default device only). Device selection, hot-plug detection, sample-rate changes
+  deferred to M49 audio v2 per ADR-0014 (sufficient for basic 2D games).
 - **R0-2: Asset archive dual loaders** — implemented memory-mapped loader for native
   (`memmap2` crate, zero-copy access) and HTTP streaming loader for web (WASM,
   range requests via `WebArchiveLoader`). Archive format unchanged (KILNARV1/V2).
