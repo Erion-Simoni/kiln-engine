@@ -112,14 +112,15 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
 **Status:** Partial (2026-10-20). CLI stubs for itch.io and Steam depot generation exist in main.rs; kiln-platform crate has trait and stub implementation. Missing: actual Steamworks SDK integration, achievements/cloud saves/overlay, Steam Deck testing, fees/docs.
 
 ### M17-1: Updates, patching, DLC packs
-- [ ] Implement versioned data archives
-- [ ] Implement delta patch generation between versions
+- [x] Implement versioned data archives (Archive::pack_with_version() exists)
+- [x] Implement delta patch generation between versions (generate_patch() in kiln-updater)
 - [ ] Implement optional in-game updater (check, download, verify hash, apply, rollback)
 - [ ] Ensure store builds use store updater, in-game updater compiles out
-- [ ] Implement additional content archives (DLC packs) with version dependencies
+- [x] Implement additional content archives (DLC packs) with version dependencies (CLI dlc command exists)
 - [ ] Add opt-in crash-report hook (full tooling in M56)
-**Location:** `kiln-updater/src/updater.rs` (stub when feature disabled)
+**Location:** `kiln-updater/src/updater.rs` (stub when feature disabled), `kiln-cli/src/main.rs`
 **Milestone:** M17
+**Status:** Partial (2026-10-20). Versioned archives (pack_with_version), delta patch generation (generate_patch with qbsdiff), and DLC pack CLI command exist. Missing: in-game updater (check/download/verify/apply/rollback), store updater integration, compile-out logic, crash-report hook.
 
 ### M18-1: Android export + touch input
 - [ ] APK builds from `just android`

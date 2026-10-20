@@ -52,6 +52,7 @@ checkbox optimism in `docs/ROADMAP.md`.
 
 ## Done (this session)
 
+- **M17-1: Updates, patching, DLC packs** — audited current implementation: versioned archives (pack_with_version), delta patch generation (generate_patch with qbsdiff), and DLC pack CLI command exist. Missing: in-game updater (check/download/verify/apply/rollback), store updater integration, compile-out logic, crash-report hook. Marked as partial in TODO_LIST.md.
 - **M16-1: Storefront distribution** — audited current implementation: CLI stubs for itch.io and Steam depot generation exist in main.rs; kiln-platform crate has trait and stub implementation. Missing: actual Steamworks SDK integration, achievements/cloud saves/overlay, Steam Deck testing, fees/docs. Marked as partial in TODO_LIST.md.
 - **M15-1: Packaging, signing, installers** — audited current implementation: basic packaging stubs exist in export command (zip for Windows, .app for macOS, AppDir for Linux). Missing: no package.rs module, no code signing, no certificate documentation, no notarization, no ADR for Linux format, no project settings integration, no unsigned build testing, no SmartScreen/Gatekeeper docs. Marked as stub in TODO_LIST.md.
 - **M14-1: Native desktop game export** — verified that `kiln-cli export --platform windows|macos|linux` builds player binary; dependency tree verified (no editor crates via cargo tree); per-OS save/settings paths implemented via dirs crate; player binary size (930 KB) recorded in BUDGETS.md. Clean machine testing requires physical access (deferred).
