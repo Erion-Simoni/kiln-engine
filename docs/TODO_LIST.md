@@ -63,10 +63,11 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
 **Status:** Complete (2026-10-20). All fields already existed in WindowSettings struct; added `monitor` field for multi-monitor support. Tests pass.
 
 ### R0-6: M13 sample completion
-- [ ] Replace "N minutes" placeholder with real number
-- [ ] Verify all M0-M13 checkboxes on clean machine
+- [x] Replace "N minutes" placeholder with real number
+- [ ] Verify all M0-M13 checkboxes on clean machine (requires physical clean machine)
 **Location:** `samples/` directories
 **Milestone:** R0, M13
+**Status:** Partial (2026-10-20). "N minutes" replaced with "≤2 minutes" in ROADMAP.md per ADR work. Clean machine verification requires access to a physical machine without Rust toolchain.
 
 ---
 
