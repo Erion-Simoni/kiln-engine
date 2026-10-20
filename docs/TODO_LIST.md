@@ -93,8 +93,9 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
 - [ ] Use game icon, name, version, publisher from project settings
 - [ ] Test unsigned builds work
 - [ ] Document SmartScreen/Gatekeeper notes for unsigned builds
-**Location:** `kiln-cli/src/package.rs`, CI configuration
+**Location:** `kiln-cli/src/main.rs` (packaging stubs in export command), CI configuration
 **Milestone:** M15
+**Status:** Stub implementation (2026-10-20). Basic packaging stubs exist in export command (zip for Windows, .app for macOS, AppDir for Linux). Missing: no package.rs module, no code signing, no certificate documentation, no notarization, no ADR for Linux format, no project settings integration, no unsigned build testing, no SmartScreen/Gatekeeper docs.
 
 ### M16-1: Storefront distribution
 - [ ] itch.io: `kiln-cli publish itch` builds and uploads
