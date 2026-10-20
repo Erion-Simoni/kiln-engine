@@ -625,6 +625,36 @@ Full skeletal animation (bones, IK, blend trees) is deferred to M33 (3D skeletal
 
 ---
 
+## ADR-0027: PNG decoding via the `png` crate (accepted)
+
+**Date:** 2026-10-20
+**Status:** accepted
+
+**Decision:** Decode PNG assets to RGBA8 on the CPU using the `png` crate (0.18),
+in a new `kiln-assets::image` module. Decoding stays in `kiln-assets`; GPU upload
+stays in `kiln-render` (`create_rgba8_texture` / `SpriteRenderer::create_texture_rgba`).
+The two are joined at the player/editor call site.
+
+**Alternatives:**
+- `image` crate: broad format support, but pulls in far more dependencies and
+  image processing we do not need for a 2D engine.
+- Hand-rolled PNG decoder: no dependency cost, but zlib inflate alone is a large
+  amount of subtle code to get right. Not worth it.
+- Pre-baking textures to a custom format at import time: plausible later for
+  shipping (and still worth it for size budgets), but the source PNG must be
+  decodable anyway, so the `png` dependency does not go away.
+
+**Consequences:**
+- New dependency `png = "0.18"` in `kiln-assets` (see `Cargo.toml`).
+  Transitive deps are small (`flate2`, `crc32fast`, `bitflags`, `fdeflate`, `miniz_oxide`).
+- Only PNG is supported for now. JPEG/WebP are out of scope for the 2D gate.
+- Decoded images are plain `Vec<u8>` RGBA8 + dimensions; no GPU types in
+  `kiln-assets`, so it stays usable on WASM and in tests without a device.
+- Alpha is preserved; PNG colour types 0/2/3/4/6 are all handled by the crate,
+  and 16-bit inputs are downconverted to 8-bit per channel.
+
+---
+
 ## ADR-0026: File length soft limit + AI exception (accepted)
 
 **Date:** 2026-10-19

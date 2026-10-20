@@ -88,20 +88,23 @@ None
 
 ## Next steps (2D-first gate — before M29)
 
-Ordered by impact. One milestone per session when work resumes:
+These are now tracked as checkboxes in `docs/TODO_LIST.md` **Phase 0.5 (G-1 … G-6)**.
+Ordered by impact. One item per session; commit after each.
 
-1. **Textured sprites** — atlas, UV rects, batch by texture
-2. **Real tilemap** — tileset, layers, chunking (not checkerboard sprites)
-3. **Asset → GPU** — packed images become bindable textures in samples/editor
-4. **Editor truth** — GPU scene view; inspector + save/load; undo; PIE runs VM
-5. **Standalone player** — load `.kar` + scene + run loop (finish M14 for real) — **done (F6)**
-6. **VM maturity** — f32/f64 (and strings or host transforms) for usable gameplay
-7. **Vertical slice sample** — textured art + script/graph + save + on-screen UI
-8. **UI draw path** — replace `UiRenderer` stubs (or explicitly defer UI)
-9. **Post** — implement a Low-safe path or stop claiming Medium+ looks
-10. Reconcile `docs/ROADMAP.md` / `ROADMAP_FULL` checkboxes with this audit
+1. **G-1: Asset → GPU** — decode PNG to RGBA8, register GPU textures, wire scene
+   sprites to texture paths, load in player/editor
+2. **G-2: Real tilemap** — tileset, layers, chunking, culling, collision flags
+3. **G-3: VM maturity** — string values (`Value::Str`), string constants and
+   host-call arguments, script/graph frontends
+4. **G-4: Vertical slice sample** — textured art + script/graph + save + on-screen UI
+5. **G-5: Reconcile ROADMAP checkboxes** with this audit
+6. **G-6: Editor truth** — GPU scene view; inspector + save/load; undo; PIE runs VM
+   (see E-1 / E-9 / E-10)
 
-**Do not start M29 (3D)** until items 1–5 are honestly done and a 2D sample
+Already done (no TODO entry needed): textured sprites, standalone player (F6),
+UI draw path (F1/F2/F3). Still needs manual verification: post effects.
+
+**Do not start M29 (3D)** until G-1 … G-6 are honestly done and a 2D sample
 ships from editor/player without console-only demos.
 
 ---

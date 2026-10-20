@@ -13,6 +13,78 @@ This file tracks all stubs, TODOs, and incomplete features across M0-M28. Based 
 
 ---
 
+## Phase 0.5: 2D Gate (blocking M29 / 3D)
+
+These items were previously only listed as prose in the Notes section, with no
+tracked checkbox. They are the hard prerequisites for a shippable 2D engine.
+**Do not start M29 (3D) until every item in this section is `[x]`.**
+
+### G-1: Asset → GPU
+- [ ] Decode PNG bytes to RGBA8 on the CPU
+- [ ] Register decoded images as GPU textures (`TextureId`) in the sprite renderer
+- [ ] Wire `Component::Sprite` in project data to a texture asset path
+- [ ] Player loads textures from `.kar` assets and binds them
+- [ ] Editor asset panel lists and previews imported images
+**Location:** `kiln-assets/src/image.rs` (new), `kiln-render/src/texture.rs`,
+`kiln-player/src/`, `kiln-editor/src/app.rs`
+**Milestone:** 2D gate
+**Status:** Not started. No image decoding exists in the workspace; textures are
+raw RGBA8 only. `kiln-render/src/texture.rs` notes "PNG lands with the
+asset→GPU step". Uses the `png` crate per ADR-0027.
+
+### G-2: Real tilemap
+- [ ] `kiln-tilemap` module (or `kiln-runtime` submodule) with tileset definitions
+- [ ] Multiple layers per map, each with its own transform/z-order
+- [ ] Chunked storage so large maps do not allocate one entity per tile
+- [ ] Camera culling of chunks (only visible chunks are submitted)
+- [ ] Tile collision data (solid flags) queryable by gameplay code
+- [ ] Editor panel to author tilemaps
+**Location:** new module — currently only `samples/tilemap` draws a checkerboard
+of coloured quads; there is no tilemap module in the workspace
+**Milestone:** 2D gate
+**Status:** Not started.
+
+### G-3: VM maturity
+- [ ] `Value::Str` variant with equality and comparison
+- [ ] String constants in the program encoding
+- [ ] String host-call arguments and results
+- [ ] Script frontend parses string literals into `Value::Str`
+- [ ] Graph nodes expose string constants
+- [ ] VM tests covering strings end to end
+**Location:** `kiln-ir/src/value.rs`, `kiln-ir/src/vm.rs`, `kiln-script/src/`,
+`kiln-graph/src/`
+**Milestone:** 2D gate
+**Status:** Not started. Values are `I64`/`F64`/`Bool` only; the audit notes
+gameplay scripting is not usable without strings.
+
+### G-4: Vertical slice sample
+- [ ] Sample uses textured art loaded from disk (not generated colours)
+- [ ] Sample uses script or graph logic that actually runs
+- [ ] Sample saves and loads game state
+- [ ] Sample shows on-screen UI (not console output)
+- [ ] Sample runs from the editor and from the standalone player
+**Location:** `samples/` — all current samples are console `println` smokes
+**Milestone:** 2D gate
+**Status:** Not started.
+
+### G-5: Reconcile ROADMAP checkboxes
+- [ ] `docs/ROADMAP.md` checkboxes match the honesty audit
+- [ ] `ROADMAP_FULL_M14_PLUS.md` checkboxes match the audit
+- [ ] Milestone verdicts (Partial / Stub) recorded, not just "done"
+**Location:** `docs/ROADMAP.md`, `ROADMAP_FULL_M14_PLUS.md`
+**Milestone:** 2D gate
+**Status:** Not started. Roadmap checkboxes currently contradict `docs/STATE.md`.
+
+### G-6: Editor truth
+- [ ] Scene view renders through the real engine framebuffer (see E-9)
+- [ ] Play-in-editor runs the real VM/runtime (see E-10)
+- [ ] Inspector edits and saves scene data (see E-1)
+**Location:** `kiln-editor/src/scene_view.rs`, `kiln-editor/src/app.rs`
+**Milestone:** 2D gate
+**Status:** Partial — tracked in detail under Editor TODOs (E-1, E-9, E-10).
+
+---
+
 ## Phase 0: Retroactive Audit (R0)
 
 ### R0-1: Native backends verification
@@ -411,17 +483,22 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
 
 2. **Platform services**: The Steam implementation in `kiln-platform` is a stub demonstrating the API shape. Real Steamworks SDK integration is deferred.
 
-3. **2D-first gate**: Do not start M29 (3D) until the 2D gate items are complete:
-   - Textured sprites (done)
-   - Real tilemap (not done)
-   - Asset → GPU (not done)
-   - Editor truth (not done)
-   - Standalone player (done)
-   - VM maturity (not done)
-   - Vertical slice sample (not done)
-   - UI draw path (done)
-   - Post (partially done - needs manual verification)
-   - Reconcile ROADMAP checkboxes (not done)
+3. **2D-first gate**: Do not start M29 (3D) until the 2D gate items are complete.
+   The gate is now tracked as checkboxes in **Phase 0.5 (G-1 … G-6)** above.
+   Summary of the gate:
+
+   | Gate item | TODO | State |
+   | --- | --- | --- |
+   | Asset → GPU | G-1 | Not started — no image decoding exists |
+   | Real tilemap | G-2 | Not started — no tilemap module |
+   | VM maturity | G-3 | Not started — no string values |
+   | Vertical slice sample | G-4 | Not started — all samples are console smokes |
+   | Reconcile ROADMAP checkboxes | G-5 | Not started — docs contradict the audit |
+   | Editor truth | G-6 | Partial — see E-1 / E-9 / E-10 |
+   | Textured sprites | — | Done |
+   | Standalone player | — | Done (F6) |
+   | UI draw path | — | Done (F1 / F2 / F3) |
+   | Post | — | Partial — needs manual verification |
 
 4. **Session protocol**: Complete one item, mark as `[x]`, update `docs/STATE.md`, commit, then wait for user to say "continue".
 
