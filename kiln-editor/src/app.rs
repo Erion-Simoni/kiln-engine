@@ -1,13 +1,14 @@
 //! Main editor application.
 
 use hecs;
-use kiln_core::Transform;
+use kiln_core::{project::Project, Transform, Vec2};
 use kiln_gameplay::{DataTable, Dialogue, Quest};
 use kiln_graph::{ArithmeticOp, ConstantValue, Graph, Node, NodeType};
 use kiln_render::{clear_view, execute_passes, Frame2dGraph, PassTiming, RenderTier};
 use kiln_runtime::{GameWorld, Sprite};
 use kiln_ui::{Button, Label, List, Panel, Widget, WidgetId};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 use winit::{
@@ -25,6 +26,16 @@ pub enum EditorError {
     Gpu(String),
 }
 
+#[derive(Debug, Clone)]
+enum MenuAction {
+    NewProject,
+    OpenProject,
+    SaveProject,
+    SaveProjectAs,
+    SaveScene,
+    LoadScene,
+}
+
 pub struct EditorApp {
     gpu: Option<GpuState>,
     egui_winit: egui_winit::State,
@@ -40,6 +51,8 @@ pub struct EditorApp {
     ui_designer: UIDesignerState,
     prefab_editor: PrefabEditorState,
     gameplay_editor: GameplayEditorState,
+    project_path: Option<PathBuf>,
+    current_project: Option<Project>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -286,6 +299,8 @@ impl EditorApp {
             ui_designer: UIDesignerState::new(),
             prefab_editor: PrefabEditorState::new(),
             gameplay_editor: GameplayEditorState::new(),
+            project_path: None,
+            current_project: None,
         })
     }
 
@@ -314,6 +329,196 @@ impl EditorApp {
             renderer,
             egui_renderer,
         });
+    }
+
+    /// Save the current project to its file path.
+    pub fn save_project(&mut self) -> Result<(), String> {
+        let path = self
+            .project_path
+            .as_ref()
+            .ok_or("No project file open. Use Save As first.")?;
+
+        // Update project with current world state
+        if let Some(project) = &mut self.current_project {
+            // Convert ECS world to project scenes
+            // For now, create a default scene if none exists
+            if project.scenes.is_empty() {
+                use kiln_core::project::{Entity, Scene};
+                let mut entities = Vec::new();
+                let mut entity_id = 0;
+
+                // Iterate over all entities in the world
+                let world = self.world.world();
+                let mut query = world.query::<(&Transform, &Sprite)>();
+                for (transform, sprite) in query.iter() {
+                    entity_id += 1;
+                    entities.push(Entity {
+                        id: entity_id.to_string(),
+                        name: format!("Entity_{}", entity_id),
+                        components: vec![
+                            kiln_core::project::Component::Transform {
+                                x: transform.position.x,
+                                y: transform.position.y,
+                                rotation: transform.rotation,
+                                scale: transform.scale.x, // Store uniform scale as single value
+                            },
+                            kiln_core::project::Component::Sprite {
+                                color: sprite.color,
+                            },
+                        ],
+                    });
+                }
+
+                let scene = Scene {
+                    id: "main_scene".to_string(),
+                    name: "Main Scene".to_string(),
+                    entities,
+                    nested_scenes: vec![],
+                };
+
+                project.scenes.insert("main_scene".to_string(), scene);
+            }
+
+            let toml_str = project.to_toml().map_err(|e| e.to_string())?;
+            std::fs::write(path, toml_str).map_err(|e| e.to_string())?;
+            Ok(())
+        } else {
+            Err("No project loaded".to_string())
+        }
+    }
+
+    /// Save the current project to a new file path.
+    pub fn save_project_as(&mut self, path: PathBuf) -> Result<(), String> {
+        self.project_path = Some(path.clone());
+
+        if self.current_project.is_none() {
+            self.current_project = Some(Project::default());
+        }
+
+        self.save_project()
+    }
+
+    /// Load a project from a file path.
+    pub fn load_project(&mut self, path: PathBuf) -> Result<(), String> {
+        let toml_str = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let project = Project::from_toml(&toml_str).map_err(|e| e.to_string())?;
+
+        self.project_path = Some(path);
+        self.current_project = Some(project);
+
+        // Clear current world and load scene entities
+        self.world = GameWorld::new();
+
+        if let Some(project) = &self.current_project {
+            if let Some(scene) = project.scenes.get("main_scene") {
+                for entity_data in &scene.entities {
+                    let mut transform_opt: Option<Transform> = None;
+                    let mut sprite_opt: Option<Sprite> = None;
+
+                    for component in &entity_data.components {
+                        match component {
+                            kiln_core::project::Component::Transform { x, y, rotation, scale } => {
+                                transform_opt = Some(Transform::new(*x, *y)
+                                    .with_rotation(*rotation)
+                                    .with_scale(Vec2::new(*scale, *scale)));
+                            }
+                            kiln_core::project::Component::Sprite { color } => {
+                                sprite_opt = Some(Sprite::new(color[0], color[1], color[2], color[3])
+                                    .with_size(64.0, 64.0));
+                            }
+                        }
+                    }
+
+                    // Spawn entity with its components
+                    if let (Some(transform), Some(sprite)) = (transform_opt, sprite_opt) {
+                        self.world.spawn((transform, sprite));
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Save the current world state as a scene.
+    pub fn save_scene(&mut self) -> Result<(), String> {
+        if let Some(project) = &mut self.current_project {
+            use kiln_core::project::{Entity, Scene};
+            let mut entities = Vec::new();
+            let mut entity_id = 0;
+
+            // Collect entity data
+            let world = self.world.world();
+            let mut query = world.query::<(&Transform, &Sprite)>();
+            for (transform, sprite) in query.iter() {
+                entity_id += 1;
+                entities.push(Entity {
+                    id: entity_id.to_string(),
+                    name: format!("Entity_{}", entity_id),
+                    components: vec![
+                        kiln_core::project::Component::Transform {
+                            x: transform.position.x,
+                            y: transform.position.y,
+                            rotation: transform.rotation,
+                            scale: transform.scale.x,
+                        },
+                        kiln_core::project::Component::Sprite {
+                            color: sprite.color,
+                        },
+                    ],
+                });
+            }
+
+            let scene = Scene {
+                id: "main_scene".to_string(),
+                name: "Main Scene".to_string(),
+                entities,
+                nested_scenes: vec![],
+            };
+
+            project.scenes.insert("main_scene".to_string(), scene);
+            Ok(())
+        } else {
+            Err("No project loaded".to_string())
+        }
+    }
+
+    /// Load a scene into the current world.
+    pub fn load_scene(&mut self) -> Result<(), String> {
+        if let Some(project) = &self.current_project {
+            if let Some(scene) = project.scenes.get("main_scene") {
+                // Clear current world
+                self.world = GameWorld::new();
+
+                for entity_data in &scene.entities {
+                    let mut transform_opt: Option<Transform> = None;
+                    let mut sprite_opt: Option<Sprite> = None;
+
+                    for component in &entity_data.components {
+                        match component {
+                            kiln_core::project::Component::Transform { x, y, rotation, scale } => {
+                                transform_opt = Some(Transform::new(*x, *y)
+                                    .with_rotation(*rotation)
+                                    .with_scale(Vec2::new(*scale, *scale)));
+                            }
+                            kiln_core::project::Component::Sprite { color } => {
+                                sprite_opt = Some(Sprite::new(color[0], color[1], color[2], color[3])
+                                    .with_size(64.0, 64.0));
+                            }
+                        }
+                    }
+
+                    if let (Some(transform), Some(sprite)) = (transform_opt, sprite_opt) {
+                        self.world.spawn((transform, sprite));
+                    }
+                }
+                Ok(())
+            } else {
+                Err("Scene 'main_scene' not found in project".to_string())
+            }
+        } else {
+            Err("No project loaded".to_string())
+        }
     }
 }
 
@@ -412,20 +617,27 @@ impl winit::application::ApplicationHandler for EditorApp {
 
         ctx.begin_pass(raw_input);
 
+        // Track menu actions to execute after UI pass
+        let mut menu_actions = Vec::new();
+
         // Top menu bar
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui.button("New Project").clicked() {
-                        self.show_welcome = true;
+                        menu_actions.push(MenuAction::NewProject);
                         ui.close_menu();
                     }
                     if ui.button("Open Project...").clicked() {
-                        // TODO: Open project dialog
+                        menu_actions.push(MenuAction::OpenProject);
                         ui.close_menu();
                     }
                     if ui.button("Save Project").clicked() {
-                        // TODO: Save project
+                        menu_actions.push(MenuAction::SaveProject);
+                        ui.close_menu();
+                    }
+                    if ui.button("Save Project As...").clicked() {
+                        menu_actions.push(MenuAction::SaveProjectAs);
                         ui.close_menu();
                     }
                     ui.separator();
@@ -709,6 +921,42 @@ impl winit::application::ApplicationHandler for EditorApp {
         frame.present();
         gpu.window.request_redraw();
 
+        // Execute menu actions after UI pass (borrows are released)
+        for action in menu_actions {
+            match action {
+                MenuAction::NewProject => {
+                    self.show_welcome = true;
+                }
+                MenuAction::OpenProject => {
+                    if let Err(e) = self.load_project(PathBuf::from("kiln.toml")) {
+                        eprintln!("Failed to load project: {}", e);
+                    }
+                }
+                MenuAction::SaveProject => {
+                    if let Err(e) = self.save_project() {
+                        eprintln!("Failed to save project: {}", e);
+                    }
+                }
+                MenuAction::SaveProjectAs => {
+                    if let Err(e) = self.save_project_as(PathBuf::from("kiln.toml")) {
+                        eprintln!("Failed to save project as: {}", e);
+                    }
+                }
+            }
+        }
+
+        // Handle scene save/load requests
+        if self.scene_save_requested {
+            if let Err(e) = self.save_scene() {
+                eprintln!("Failed to save scene: {}", e);
+            }
+        }
+        if self.scene_load_requested {
+            if let Err(e) = self.load_scene() {
+                eprintln!("Failed to load scene: {}", e);
+            }
+        }
+
         // Update FPS counter
         self.frame_count += 1;
         // TODO: Proper FPS timing
@@ -785,10 +1033,10 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.separator();
 
                         if ui.button("Save Scene").clicked() {
-                            // TODO: Save scene
+                            *self.scene_save_requested = true;
                         }
                         if ui.button("Load Scene").clicked() {
-                            // TODO: Load scene
+                            *self.scene_load_requested = true;
                         }
 
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
