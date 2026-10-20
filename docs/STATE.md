@@ -71,11 +71,12 @@ checkbox optimism in `docs/ROADMAP.md`.
   - `kiln-editor/src/assets.rs` (new) adds an `AssetBrowser` that scans the
     project directory, lists files, selects images and renders a CPU-side
     `egui` preview (`ColorImage::from_rgba_unmultiplied`, since the decoded
-    pixels are unpremultiplied).
+    pixels are unpremultiplied). Project manifests are skipped and decode
+    failures are listed in the asset panel, not only logged.
   - Also fixed pre-existing editor breakage: missing scene save/load request
     handling and menu actions in `kiln-editor/src/app.rs`.
   - `cargo fmt --all`, targeted Clippy and `cargo build --workspace` are clean;
-    all 78 tests in `kiln-assets`/`kiln-core`/`kiln-player`/`kiln-editor` pass.
+    all 81 tests in `kiln-assets`/`kiln-core`/`kiln-player`/`kiln-editor` pass.
 
 ---
 
