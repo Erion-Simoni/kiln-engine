@@ -7,6 +7,7 @@ pub mod loop_;
 pub mod schedule;
 pub mod settings;
 pub mod sprite;
+pub mod tilemap;
 pub mod world;
 
 #[cfg(feature = "audio")]
@@ -21,6 +22,7 @@ pub use loop_::*;
 pub use schedule::{build_stages, Schedule, SchedulePlan, SystemEntry};
 pub use settings::*;
 pub use sprite::*;
+pub use tilemap::*;
 pub use world::*;
 
 #[cfg(feature = "audio")]

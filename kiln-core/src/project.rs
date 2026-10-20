@@ -1,5 +1,6 @@
 //! Project file format
 
+use crate::tilemap::{TileMap, TileSet};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -19,6 +20,12 @@ pub struct Project {
     pub mobile: MobileSettings,
     #[serde(default)]
     pub scenes: HashMap<String, Scene>,
+    /// Tilemaps of the project, keyed by their id.
+    #[serde(default)]
+    pub tilemaps: HashMap<String, TileMap>,
+    /// Tilesets of the project, keyed by their id.
+    #[serde(default)]
+    pub tilesets: HashMap<String, TileSet>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,6 +180,11 @@ pub enum Component {
         #[serde(default)]
         texture: Option<String>,
     },
+    /// A tilemap instance placed in the scene.
+    Tilemap {
+        /// Id of the tilemap in [`Project::tilemaps`].
+        map: String,
+    },
 }
 
 impl Project {
@@ -197,6 +209,8 @@ impl Default for Project {
             window: WindowSettings::default(),
             mobile: MobileSettings::default(),
             scenes: HashMap::new(),
+            tilemaps: HashMap::new(),
+            tilesets: HashMap::new(),
         }
     }
 }
