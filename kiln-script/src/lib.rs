@@ -255,3 +255,90 @@ mod tests {
         assert_eq!(vm.stack(), &[kiln_ir::Value::I64(-3)]);
     }
 }
+
+#[cfg(test)]
+mod call_tests {
+    use super::*;
+    use kiln_ir::{HostContext, Value, Vm, VmError};
+
+    /// A host that records the arguments of every call.
+    #[derive(Default)]
+    struct RecordingHost {
+        calls: Vec<(u32, Vec<Value>)>,
+    }
+
+    impl HostContext for RecordingHost {
+        fn call_host(&mut self, func_id: u32, args: &[Value]) -> Result<Value, VmError> {
+            self.calls.push((func_id, args.to_vec()));
+            // The result marks which call produced it, as a number so it can
+            // be compared.
+            Ok(Value::I64(func_id as i64))
+        }
+    }
+
+    /// Compile a script with the given builtins registered.
+    fn compile(
+        source: &str,
+        builtins: &[(&str, u32, u32)],
+    ) -> Result<kiln_ir::Program, Vec<Diagnostic>> {
+        let mut frontend = KilnScriptFrontend::new();
+        for (name, id, argc) in builtins {
+            frontend = frontend.with_builtin(*name, *id, *argc);
+        }
+        frontend.compile(source)
+    }
+
+    #[test]
+    fn a_call_receives_only_its_own_arguments() {
+        let program = compile("add(1, 2);", &[("add", 1, 2)]).unwrap();
+        let mut vm = Vm::new(RecordingHost::default());
+        vm.execute(&program).unwrap();
+
+        let host = vm.host();
+        assert_eq!(host.calls.len(), 1);
+        assert_eq!(host.calls[0].0, 1);
+        assert_eq!(
+            host.calls[0].1,
+            vec![Value::I64(1), Value::I64(2)],
+            "the arguments keep their order"
+        );
+    }
+
+    #[test]
+    fn nested_calls_pass_their_own_arguments() {
+        // `add(mul(2, 3), 4)` must give `add` the result of `mul` and 4,
+        // not the result of `mul` twice.
+        let program = compile("add(mul(2, 3), 4);", &[("add", 1, 2), ("mul", 2, 2)]).unwrap();
+        let mut vm = Vm::new(RecordingHost::default());
+        vm.execute(&program).unwrap();
+
+        let host = vm.host();
+        assert_eq!(host.calls.len(), 2);
+        assert_eq!(host.calls[0].0, 2, "the inner call runs first");
+        assert_eq!(host.calls[0].1, vec![Value::I64(2), Value::I64(3)]);
+        assert_eq!(host.calls[1].0, 1);
+        assert_eq!(
+            host.calls[1].1,
+            vec![Value::I64(2), Value::I64(4)],
+            "the outer call gets the inner result, not the inner arguments"
+        );
+    }
+
+    #[test]
+    fn a_call_result_can_be_compared() {
+        // The result of a call stays on the stack, so it can be compared.
+        let program = compile(
+            "if score() > 3 { add(1, 0); }",
+            &[("score", 1, 0), ("add", 2, 2)],
+        )
+        .unwrap();
+        let mut vm = Vm::new(RecordingHost::default());
+        vm.execute(&program).unwrap();
+
+        let host = vm.host();
+        assert_eq!(host.calls[0].0, 1, "the score is read");
+        // The host returns 1 for every call, so 1 > 3 is false and the body
+        // is skipped.
+        assert_eq!(host.calls.len(), 1);
+    }
+}
