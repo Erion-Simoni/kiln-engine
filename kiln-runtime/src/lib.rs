@@ -4,6 +4,7 @@
 pub mod input;
 pub mod jobs;
 pub mod loop_;
+pub mod scene;
 pub mod schedule;
 pub mod settings;
 pub mod slice;
@@ -21,6 +22,7 @@ pub use input::*;
 pub use jobs::{load_file_async, JobHandle, TaskPool};
 pub use loop_::*;
 pub use schedule::{build_stages, Schedule, SchedulePlan, SystemEntry};
+pub use scene::{count_scene_entities, spawn_scene, SpawnedEntity, SpriteFactory};
 pub use settings::*;
 pub use slice::*;
 pub use sprite::*;

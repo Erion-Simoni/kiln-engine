@@ -9,8 +9,12 @@
 //! The same runtime drives the standalone player and the editor, so a game
 //! behaves identically in both.
 
+use std::path::Path;
+
 use kiln_ir::{HostContext, Program, Value, Vm, VmError};
 use kiln_script::{Diagnostic, KilnScriptFrontend, LanguageFrontend};
+use kiln_save::slot::SaveSlotError;
+use kiln_save::SaveSlotManager;
 use serde::{Deserialize, Serialize};
 
 use crate::world::{GameWorld, Role, SourceId};
@@ -97,6 +101,20 @@ impl SliceState {
     pub fn is_collected(&self, source_id: &str) -> bool {
         self.collected.iter().any(|id| id == source_id)
     }
+}
+
+/// Write the state to a save slot in `dir`.
+pub fn save_state(dir: &Path, slot: u32, state: &SliceState) -> Result<(), SaveSlotError> {
+    let json = serde_json::to_string(state)?;
+    let manager = SaveSlotManager::with_directory(dir.to_path_buf());
+    manager.save(slot, &json, "vertical slice")
+}
+
+/// Read the state from a save slot in `dir`.
+pub fn load_state(dir: &Path, slot: u32) -> Result<SliceState, SaveSlotError> {
+    let manager = SaveSlotManager::with_directory(dir.to_path_buf());
+    let saved = manager.load(slot)?;
+    Ok(serde_json::from_str(&saved.data)?)
 }
 
 /// The script host: reads facts and records commands.

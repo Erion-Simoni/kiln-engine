@@ -13,6 +13,7 @@ kiln-core = { workspace = true }
 kiln-runtime = { workspace = true }
 kiln-assets = { workspace = true }
 kiln-render = { workspace = true }
+kiln-ui = { workspace = true }
 log = { workspace = true }
 env_logger = { workspace = true }
 anyhow = { workspace = true }
