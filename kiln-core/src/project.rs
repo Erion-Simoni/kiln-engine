@@ -202,6 +202,15 @@ pub enum Component {
 }
 
 impl Project {
+    /// The id of the scene a project starts in.
+    ///
+    /// This is the first scene by id, so the player and the editor start in
+    /// the same place.
+    pub fn default_scene_id(&self) -> Option<String> {
+        let mut ids: Vec<&String> = self.scenes.keys().collect();
+        ids.sort();
+        ids.first().map(|id| (*id).clone())
+    }
     pub fn from_toml(toml_str: &str) -> Result<Self, String> {
         toml::from_str(toml_str).map_err(|e| e.to_string())
     }

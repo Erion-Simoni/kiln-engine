@@ -17,7 +17,8 @@ pub const DEFAULT_SPRITE_SIZE: [f32; 2] = [32.0, 32.0];
 ///
 /// The factory receives the entity's tint and the asset path of its texture
 /// (`None` when the entity has no texture) and returns the sprite to spawn.
-pub type SpriteFactory<'a> = dyn FnMut(&Entity, [f32; 4], Option<&str>) -> crate::sprite::Sprite + 'a;
+pub type SpriteFactory<'a> =
+    dyn FnMut(&Entity, [f32; 4], Option<&str>) -> crate::sprite::Sprite + 'a;
 
 /// A scene entity that was spawned into the world.
 #[derive(Debug, Clone)]
@@ -92,7 +93,12 @@ fn spawn_scene_inner(
                 let sprite = make_sprite(entity, rgba, texture_path.as_deref());
                 match &role {
                     Some(role) => {
-                        world.spawn((runtime_transform, sprite, Role::new(role.clone()), source_id));
+                        world.spawn((
+                            runtime_transform,
+                            sprite,
+                            Role::new(role.clone()),
+                            source_id,
+                        ));
                     }
                     None => {
                         world.spawn((runtime_transform, sprite, source_id));

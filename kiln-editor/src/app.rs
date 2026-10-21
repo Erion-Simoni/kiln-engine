@@ -5,10 +5,10 @@ use kiln_core::{project::Project, Transform, Vec2};
 use kiln_gameplay::{DataTable, Dialogue, Quest};
 use kiln_graph::{ArithmeticOp, ConstantValue, Graph, Node, NodeType};
 use kiln_render::{clear_view, execute_passes, Frame2dGraph, PassTiming, RenderTier};
-use kiln_runtime::{GameWorld, Sprite};
+use kiln_runtime::{GameWorld, SourceId, Sprite};
 use kiln_ui::{Button, Label, List, Panel, Widget, WidgetId};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use thiserror::Error;
 use winit::{
@@ -19,6 +19,21 @@ use winit::{
 use crate::assets::{AssetBrowser, AssetKind};
 use crate::prefab_editor::PrefabEditorState;
 use crate::tilemap_editor::TilemapEditorState;
+
+/// A running game session in the editor.
+///
+/// The editor runs the same script-driven game loop as the standalone
+/// player, so a project behaves the same in both.
+struct PlaySession {
+    /// The gameplay script of the played scene.
+    slice: kiln_runtime::SliceSession,
+    /// The world the script drives.
+    world: GameWorld,
+    /// The scene being played.
+    scene_id: String,
+    /// The last error of the script, shown in the status bar.
+    error: Option<String>,
+}
 
 #[derive(Error, Debug)]
 pub enum EditorError {
@@ -45,6 +60,16 @@ pub struct EditorApp {
     world: GameWorld,
     selected_entity: Option<hecs::Entity>,
     is_playing: bool,
+    /// The running game session, present while playing.
+    play: Option<PlaySession>,
+    /// Lines shown in the console panel.
+    console_log: Vec<String>,
+    /// Directory of the open project, where the assets live.
+    project_root: Option<PathBuf>,
+    /// Asset path of each scene entity's texture, keyed by entity id.
+    entity_textures: HashMap<String, String>,
+    /// Textures loaded for the scene view, keyed by asset path.
+    scene_textures: HashMap<String, egui::TextureHandle>,
     graph: Graph,
     render_tier: RenderTier,
     show_welcome: bool,
@@ -57,6 +82,8 @@ pub struct EditorApp {
     project_path: Option<PathBuf>,
     current_project: Option<Project>,
     asset_browser: AssetBrowser,
+    /// Set by the scene toolbar, handled after the UI pass.
+    play_toggle_requested: bool,
     /// Set by the scene toolbar, handled after the UI pass.
     scene_save_requested: bool,
     /// Set by the scene toolbar, handled after the UI pass.
@@ -234,6 +261,45 @@ impl UIDesignerState {
     }
 }
 
+/// The texture of a scene asset, loaded from disk on first use.
+///
+/// Returns `None` when the file is missing or cannot be decoded.
+fn scene_texture(
+    ctx: &egui::Context,
+    root: Option<&Path>,
+    cache: &mut HashMap<String, egui::TextureHandle>,
+    path: &str,
+) -> Option<egui::TextureHandle> {
+    if let Some(texture) = cache.get(path) {
+        return Some(texture.clone());
+    }
+    let root = root?;
+    let bytes = std::fs::read(root.join(path)).ok()?;
+    let image = kiln_assets::decode_png(&bytes).ok()?;
+    let size = [image.width as usize, image.height as usize];
+    let color = egui::ColorImage::from_rgba_unmultiplied(size, &image.pixels);
+    let texture = ctx.load_texture("scene", color, egui::TextureOptions::NEAREST);
+    cache.insert(path.to_string(), texture.clone());
+    Some(texture)
+}
+
+/// Spawn a project scene into a fresh world for the editor.
+///
+/// The editor has no GPU textures of its own yet, so sprites keep their
+/// tint; the scene view draws the texture from disk instead.
+fn spawn_editor_scene(
+    project: &Project,
+    scene_id: &str,
+) -> (GameWorld, Vec<kiln_runtime::SpawnedEntity>) {
+    let mut world = GameWorld::new();
+    let mut make_sprite =
+        |_entity: &kiln_core::project::Entity, color: [f32; 4], _texture: Option<&str>| {
+            Sprite::new(color[0], color[1], color[2], color[3]).with_size(64.0, 64.0)
+        };
+    let spawned = kiln_runtime::spawn_scene(&mut world, project, scene_id, &mut make_sprite);
+    (world, spawned)
+}
+
 impl Default for UIDesignerState {
     fn default() -> Self {
         Self::new()
@@ -300,6 +366,11 @@ impl EditorApp {
             world,
             selected_entity: None,
             is_playing: false,
+            play: None,
+            console_log: Vec::new(),
+            project_root: None,
+            entity_textures: HashMap::new(),
+            scene_textures: HashMap::new(),
             graph: Graph::new(),
             render_tier: RenderTier::default(),
             show_welcome: true,
@@ -312,6 +383,7 @@ impl EditorApp {
             project_path: None,
             current_project: None,
             asset_browser: AssetBrowser::new(),
+            play_toggle_requested: false,
             scene_save_requested: false,
             scene_load_requested: false,
         })
@@ -423,58 +495,135 @@ impl EditorApp {
 
         // Scan the project directory so the asset browser lists its files.
         if let Some(dir) = path.parent() {
+            self.project_root = Some(dir.to_path_buf());
             self.asset_browser.scan(dir);
         }
 
         // Clear current world and load scene entities
-        self.world = GameWorld::new();
-
-        if let Some(project) = &self.current_project {
-            if let Some(scene) = project.scenes.get("main_scene") {
-                for entity_data in &scene.entities {
-                    let mut transform_opt: Option<Transform> = None;
-                    let mut sprite_opt: Option<Sprite> = None;
-
-                    for component in &entity_data.components {
-                        match component {
-                            kiln_core::project::Component::Transform {
-                                x,
-                                y,
-                                rotation,
-                                scale,
-                            } => {
-                                transform_opt = Some(
-                                    Transform::new(*x, *y)
-                                        .with_rotation(*rotation)
-                                        .with_scale(Vec2::new(*scale, *scale)),
-                                );
-                            }
-                            kiln_core::project::Component::Sprite { color, texture } => {
-                                // The texture path stays on the project data; the
-                                // GPU texture is bound when the scene is spawned.
-                                let _ = texture;
-                                sprite_opt = Some(
-                                    Sprite::new(color[0], color[1], color[2], color[3])
-                                        .with_size(64.0, 64.0),
-                                );
-                            }
-                            kiln_core::project::Component::Tilemap { map } => {
-                                // Tilemaps are culled and drawn in chunks, not
-                                // spawned as individual entities.
-                                let _ = map;
-                            }
-                        }
-                    }
-
-                    // Spawn entity with its components
-                    if let (Some(transform), Some(sprite)) = (transform_opt, sprite_opt) {
-                        self.world.spawn((transform, sprite));
-                    }
-                }
-            }
-        }
+        self.load_project_scene();
 
         Ok(())
+    }
+
+    /// Start playing the current project's scene.
+    ///
+    /// The game runs the scene's script against a fresh world, exactly like
+    /// the standalone player does.
+    fn start_play(&mut self) -> Result<(), String> {
+        let project = self
+            .current_project
+            .as_ref()
+            .ok_or("No project loaded")?
+            .clone();
+        let scene_id = project
+            .default_scene_id()
+            .ok_or("The project has no scenes")?;
+        let scene = project
+            .scenes
+            .get(&scene_id)
+            .ok_or_else(|| format!("Scene '{scene_id}' not found"))?;
+
+        // The script lives next to the project file.
+        let source = match &scene.script {
+            Some(path) => {
+                let root = self
+                    .project_path
+                    .as_ref()
+                    .and_then(|p| p.parent())
+                    .ok_or("The project has no directory")?;
+                let text = std::fs::read_to_string(root.join(path))
+                    .map_err(|e| format!("could not read the scene script: {e}"))?;
+                text
+            }
+            None => return Err("The scene has no script".to_string()),
+        };
+
+        let slice = kiln_runtime::SliceSession::new(&source).map_err(|d| {
+            d.iter()
+                .map(|d| d.message.clone())
+                .collect::<Vec<_>>()
+                .join("; ")
+        })?;
+
+        let mut world = GameWorld::new();
+        let mut make_sprite =
+            |_entity: &kiln_core::project::Entity, color: [f32; 4], _texture: Option<&str>| {
+                Sprite::new(color[0], color[1], color[2], color[3]).with_size(64.0, 64.0)
+            };
+        kiln_runtime::spawn_scene(&mut world, &project, &scene_id, &mut make_sprite);
+        self.play = Some(PlaySession {
+            slice,
+            world,
+            scene_id,
+            error: None,
+        });
+        Ok(())
+    }
+
+    /// Stop playing and return to editing the scene.
+    fn stop_play(&mut self) {
+        self.play = None;
+        self.is_playing = false;
+        self.load_project_scene();
+    }
+
+    /// Reload the edited scene into the editor world.
+    fn load_project_scene(&mut self) {
+        let Some(project) = self.current_project.clone() else {
+            self.world = GameWorld::new();
+            self.entity_textures.clear();
+            return;
+        };
+        let Some(scene_id) = project.default_scene_id() else {
+            self.world = GameWorld::new();
+            self.entity_textures.clear();
+            return;
+        };
+        self.world = GameWorld::new();
+        self.entity_textures.clear();
+        let (world, spawned) = spawn_editor_scene(&project, &scene_id);
+        self.world = world;
+        for entity in spawned {
+            if let Some(texture) = entity.texture {
+                self.entity_textures.insert(entity.source_id, texture);
+            }
+        }
+    }
+
+    /// Advance the running game by one frame.
+    fn update_play(&mut self, dt: f32) {
+        let axis = self.play_axis();
+        let Some(play) = self.play.as_mut() else {
+            return;
+        };
+        let result = play.slice.step(&mut play.world, axis, dt as f64);
+        play.error = match result {
+            Ok(()) => None,
+            Err(e) => Some(e.to_string()),
+        };
+    }
+
+    /// The movement axis from the keys held down in the editor.
+    fn play_axis(&self) -> (f64, f64) {
+        let ctx = self.egui_winit.egui_ctx();
+        let mut x = 0.0;
+        let mut y = 0.0;
+        ctx.input(|i| {
+            for key in &i.keys_down {
+                match key {
+                    egui::Key::ArrowLeft => x -= 1.0,
+                    egui::Key::ArrowRight => x += 1.0,
+                    egui::Key::ArrowUp => y += 1.0,
+                    egui::Key::ArrowDown => y -= 1.0,
+                    egui::Key::A => x -= 1.0,
+                    egui::Key::D => x += 1.0,
+                    egui::Key::W => y += 1.0,
+                    egui::Key::S => y -= 1.0,
+                    _ => {}
+                }
+            }
+        });
+        (x, y)
     }
 
     /// Save the current world state as a scene.
@@ -561,6 +710,10 @@ impl EditorApp {
                                 // spawned as individual entities.
                                 let _ = map;
                             }
+                            kiln_core::project::Component::Role { role } => {
+                                // The gameplay role is used by the scene script.
+                                let _ = role;
+                            }
                         }
                     }
 
@@ -637,6 +790,11 @@ impl winit::application::ApplicationHandler for EditorApp {
             .as_ref()
             .map(|g| g.renderer.profiler().supported())
             .unwrap_or(false);
+
+        // Advance the running game, if the editor is in play mode.
+        if self.play.is_some() {
+            self.update_play(1.0 / 60.0);
+        }
 
         let gpu = self.gpu.as_mut().unwrap();
         let size = gpu.window.inner_size();
@@ -880,8 +1038,15 @@ impl winit::application::ApplicationHandler for EditorApp {
                     asset_browser: &mut self.asset_browser,
                     tilemap_editor: &mut self.tilemap_editor,
                     current_project: &mut self.current_project,
+                    play_toggle_requested: &mut self.play_toggle_requested,
                     scene_save_requested: &mut self.scene_save_requested,
                     scene_load_requested: &mut self.scene_load_requested,
+                    play: self.play.as_ref(),
+                    entity_textures: &self.entity_textures,
+                    scene_textures: &mut self.scene_textures,
+                    project_root: self.project_root.as_deref(),
+                    ctx: &self.egui_winit.egui_ctx(),
+                    console_log: &self.console_log,
                 };
                 tree.show(ctx, &mut tab_viewer);
             });
@@ -1028,6 +1193,22 @@ impl winit::application::ApplicationHandler for EditorApp {
             }
         }
 
+        // Handle the play/pause request from the scene toolbar.
+        if std::mem::take(&mut self.play_toggle_requested) {
+            if self.is_playing {
+                self.is_playing = false;
+                self.stop_play();
+            } else {
+                // Playing needs a project with a scripted scene.
+                match self.start_play() {
+                    Ok(()) => self.is_playing = true,
+                    Err(message) => {
+                        self.console_log.push(format!("[ERROR] {message}"));
+                    }
+                }
+            }
+        }
+
         // Handle scene save/load requests
         if std::mem::take(&mut self.scene_save_requested) {
             if let Err(e) = self.save_scene() {
@@ -1093,8 +1274,21 @@ struct TabViewer<'a> {
     asset_browser: &'a mut AssetBrowser,
     tilemap_editor: &'a mut TilemapEditorState,
     current_project: &'a mut Option<Project>,
+    play_toggle_requested: &'a mut bool,
     scene_save_requested: &'a mut bool,
     scene_load_requested: &'a mut bool,
+    /// The running game session, drawn over the scene view.
+    play: Option<&'a PlaySession>,
+    /// Asset path of each scene entity's texture, keyed by entity id.
+    entity_textures: &'a HashMap<String, String>,
+    /// Textures loaded for the scene view, keyed by asset path.
+    scene_textures: &'a mut HashMap<String, egui::TextureHandle>,
+    /// Directory of the open project, where the assets live.
+    project_root: Option<&'a Path>,
+    /// The egui context, used to upload scene textures.
+    ctx: &'a egui::Context,
+    /// Lines shown in the console panel.
+    console_log: &'a [String],
 }
 
 impl<'a> egui_dock::TabViewer for TabViewer<'a> {
@@ -1110,12 +1304,12 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                         // Play/Stop button with icon-like styling
                         let play_btn = if *self.is_playing {
-                            ui.add_sized([100.0, 28.0], egui::Button::new("▶ Stop"))
+                            ui.add_sized([100.0, 28.0], egui::Button::new("■ Stop"))
                         } else {
                             ui.add_sized([100.0, 28.0], egui::Button::new("▶ Play"))
                         };
                         if play_btn.clicked() {
-                            *self.is_playing = !*self.is_playing;
+                            *self.play_toggle_requested = true;
                         }
 
                         ui.separator();
@@ -1172,16 +1366,17 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         );
                     }
 
-                    // Draw sprites as rectangles
-                    let sprites: Vec<(Transform, Sprite)> = self
+                    // Draw sprites, using their texture when the project
+                    // provides one.
+                    let sprites: Vec<(String, Transform, Sprite)> = self
                         .world
                         .world()
-                        .query::<(&Transform, &Sprite)>()
+                        .query::<(&SourceId, &Transform, &Sprite)>()
                         .iter()
-                        .map(|(t, s)| (*t, *s))
+                        .map(|(id, t, s)| (id.0.clone(), *t, *s))
                         .collect();
 
-                    for (transform, sprite) in sprites {
+                    for (source_id, transform, sprite) in sprites {
                         let screen_x = rect.min.x + transform.position.x;
                         let screen_y = rect.min.y + transform.position.y;
                         let sprite_rect = egui::Rect::from_min_size(
@@ -1196,15 +1391,68 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             (sprite.color[3] * 255.0) as u8,
                         );
 
-                        painter.rect_filled(sprite_rect, 2.0, color);
-                        painter.rect_stroke(
-                            sprite_rect,
-                            2.0,
-                            egui::Stroke::new(
-                                1.0_f32,
-                                egui::Color32::from_rgba_premultiplied(255, 255, 255, 50),
-                            ),
+                        let texture = self.entity_textures.get(&source_id).and_then(|path| {
+                            scene_texture(
+                                self.ctx,
+                                self.project_root.as_deref(),
+                                self.scene_textures,
+                                path,
+                            )
+                        });
+                        match texture {
+                            Some(texture) => {
+                                painter.image(
+                                    texture.id(),
+                                    sprite_rect,
+                                    egui::Rect::from_min_max(
+                                        egui::pos2(0.0, 0.0),
+                                        egui::pos2(1.0, 1.0),
+                                    ),
+                                    color,
+                                );
+                            }
+                            None => {
+                                painter.rect_filled(sprite_rect, 2.0, color);
+                                painter.rect_stroke(
+                                    sprite_rect,
+                                    2.0,
+                                    egui::Stroke::new(
+                                        1.0_f32,
+                                        egui::Color32::from_rgba_premultiplied(255, 255, 255, 50),
+                                    ),
+                                );
+                            }
+                        }
+                    }
+
+                    // While playing, show the game's HUD over the scene.
+                    if let Some(play) = &self.play {
+                        let state = play.slice.state();
+                        painter.text(
+                            egui::pos2(rect.left() + 12.0, rect.top() + 12.0),
+                            egui::Align2::LEFT_TOP,
+                            format!("{} - SCORE {}", play.scene_id, state.score),
+                            egui::FontId::monospace(16.0),
+                            egui::Color32::WHITE,
                         );
+                        if !state.status.is_empty() {
+                            painter.text(
+                                egui::pos2(rect.left() + 12.0, rect.top() + 34.0),
+                                egui::Align2::LEFT_TOP,
+                                &state.status,
+                                egui::FontId::monospace(14.0),
+                                egui::Color32::from_rgba_premultiplied(255, 220, 120, 255),
+                            );
+                        }
+                        if let Some(error) = &play.error {
+                            painter.text(
+                                egui::pos2(rect.left() + 12.0, rect.bottom() - 20.0),
+                                egui::Align2::LEFT_BOTTOM,
+                                error,
+                                egui::FontId::monospace(13.0),
+                                egui::Color32::from_rgba_premultiplied(255, 90, 90, 255),
+                            );
+                        }
                     }
 
                     // Entity list for selection
@@ -1691,16 +1939,23 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                     ui.add_space(8.0);
 
-                    // Console log placeholder
+                    // Console log
                     egui::Frame::none()
                         .fill(egui::Color32::from_rgb(35, 35, 40))
                         .rounding(4.0)
                         .inner_margin(16.0)
                         .show(ui, |ui| {
-                            ui.label("[INFO] System initialized");
-                            ui.label("[INFO] Editor ready");
-                            ui.label("[WARN] GPU driver outdated (Intel)");
-                            ui.label("[INFO] WGPU backend initialized");
+                            if self.console_log.is_empty() {
+                                ui.label("[INFO] System initialized");
+                                ui.label("[INFO] Editor ready");
+                                ui.label("[INFO] WGPU backend initialized");
+                            } else {
+                                egui::ScrollArea::vertical().show(ui, |ui| {
+                                    for line in self.console_log {
+                                        ui.label(line);
+                                    }
+                                });
+                            }
                         });
                 });
             }
