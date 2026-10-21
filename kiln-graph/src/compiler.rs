@@ -297,7 +297,7 @@ fn compile_node_recursive(
             label_map.insert(node_id, label);
 
             let id = simple_hash(name);
-            program.add_instruction(Instruction::HostCall(id));
+            program.add_instruction(Instruction::HostCall { id, argc: 0 });
         }
         NodeType::Output => {
             // Compile the input (trigger event)
@@ -326,7 +326,7 @@ fn compile_node_recursive(
 
             // Push clip name as string (simplified: use hash as placeholder)
             let id = simple_hash(clip_name);
-            program.add_instruction(Instruction::HostCall(id));
+            program.add_instruction(Instruction::HostCall { id, argc: 0 });
 
             // Handle loop input if connected
             let loop_pin = node
@@ -353,7 +353,7 @@ fn compile_node_recursive(
             label_map.insert(node_id, label);
 
             let id = simple_hash(state_name);
-            program.add_instruction(Instruction::HostCall(id));
+            program.add_instruction(Instruction::HostCall { id, argc: 0 });
         }
         NodeType::AnimationTransition => {
             // Compile condition and trigger
@@ -410,7 +410,7 @@ fn compile_node_recursive(
             label_map.insert(node_id, label);
 
             let id = simple_hash("selector");
-            program.add_instruction(Instruction::HostCall(id));
+            program.add_instruction(Instruction::HostCall { id, argc: 0 });
         }
         NodeType::Sequence => {
             // Emit host call for sequence behavior tree node
@@ -419,7 +419,7 @@ fn compile_node_recursive(
             label_map.insert(node_id, label);
 
             let id = simple_hash("sequence");
-            program.add_instruction(Instruction::HostCall(id));
+            program.add_instruction(Instruction::HostCall { id, argc: 0 });
         }
         NodeType::BehaviorCondition => {
             // Emit host call for behavior condition
@@ -428,7 +428,7 @@ fn compile_node_recursive(
             label_map.insert(node_id, label);
 
             let id = simple_hash("behavior_condition");
-            program.add_instruction(Instruction::HostCall(id));
+            program.add_instruction(Instruction::HostCall { id, argc: 0 });
         }
         NodeType::BehaviorAction { name } => {
             // Emit host call for behavior action
@@ -437,7 +437,7 @@ fn compile_node_recursive(
             label_map.insert(node_id, label);
 
             let id = simple_hash(name);
-            program.add_instruction(Instruction::HostCall(id));
+            program.add_instruction(Instruction::HostCall { id, argc: 0 });
         }
         NodeType::AIState { state_name } => {
             // Emit host call for AI state
@@ -446,7 +446,7 @@ fn compile_node_recursive(
             label_map.insert(node_id, label);
 
             let id = simple_hash(state_name);
-            program.add_instruction(Instruction::HostCall(id));
+            program.add_instruction(Instruction::HostCall { id, argc: 0 });
         }
         NodeType::AITransition => {
             // Compile condition and trigger (similar to animation transition)
@@ -503,7 +503,7 @@ fn compile_node_recursive(
             label_map.insert(node_id, label);
 
             let id = simple_hash(dialogue_id);
-            program.add_instruction(Instruction::HostCall(id));
+            program.add_instruction(Instruction::HostCall { id, argc: 0 });
         }
         NodeType::DialogueChoice => {
             // Emit host call for dialogue choice
@@ -512,7 +512,7 @@ fn compile_node_recursive(
             label_map.insert(node_id, label);
 
             let id = simple_hash("dialogue_choice");
-            program.add_instruction(Instruction::HostCall(id));
+            program.add_instruction(Instruction::HostCall { id, argc: 0 });
         }
         NodeType::QuestStart { quest_id } => {
             // Emit host call to start quest
@@ -521,7 +521,7 @@ fn compile_node_recursive(
             label_map.insert(node_id, label);
 
             let id = simple_hash(quest_id);
-            program.add_instruction(Instruction::HostCall(id));
+            program.add_instruction(Instruction::HostCall { id, argc: 0 });
         }
         NodeType::QuestComplete { quest_id } => {
             // Emit host call to complete quest
@@ -530,7 +530,7 @@ fn compile_node_recursive(
             label_map.insert(node_id, label);
 
             let id = simple_hash(quest_id);
-            program.add_instruction(Instruction::HostCall(id));
+            program.add_instruction(Instruction::HostCall { id, argc: 0 });
         }
         NodeType::QuestObjectiveUpdate {
             quest_id,
@@ -545,7 +545,7 @@ fn compile_node_recursive(
             program.add_instruction(Instruction::PushConst(Value::I64(*objective_index as i64)));
 
             let id = simple_hash(quest_id);
-            program.add_instruction(Instruction::HostCall(id));
+            program.add_instruction(Instruction::HostCall { id, argc: 1 });
         }
         NodeType::DataTableLookup {
             table_id,
@@ -557,7 +557,7 @@ fn compile_node_recursive(
             label_map.insert(node_id, label);
 
             let id = simple_hash(&format!("{}:{}", table_id, column_name));
-            program.add_instruction(Instruction::HostCall(id));
+            program.add_instruction(Instruction::HostCall { id, argc: 0 });
         }
         NodeType::DataTableRowGet { table_id } => {
             // Emit host call for data table row get
@@ -566,7 +566,7 @@ fn compile_node_recursive(
             label_map.insert(node_id, label);
 
             let id = simple_hash(table_id);
-            program.add_instruction(Instruction::HostCall(id));
+            program.add_instruction(Instruction::HostCall { id, argc: 0 });
         }
     }
 

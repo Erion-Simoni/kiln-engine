@@ -114,6 +114,8 @@ fn compare(op: BinOp, a: Value, b: Value) -> Result<Value, VmError> {
 /// allocation-free for typical programs that stay within stack limits.
 pub struct Vm<H: HostContext> {
     stack: Vec<Value>,
+    /// Local variable slots, indexed by the slot number in `GetLocal`/`SetLocal`.
+    locals: Vec<Value>,
     ip: usize,
     host: H,
     max_stack: usize,
@@ -124,6 +126,7 @@ impl<H: HostContext> Vm<H> {
     pub fn new(host: H) -> Self {
         Self {
             stack: Vec::with_capacity(256),
+            locals: Vec::new(),
             ip: 0,
             host,
             max_stack: 1024,
@@ -134,10 +137,21 @@ impl<H: HostContext> Vm<H> {
     pub fn with_max_stack(host: H, max_stack: usize) -> Self {
         Self {
             stack: Vec::with_capacity(max_stack.min(256)),
+            locals: Vec::new(),
             ip: 0,
             host,
             max_stack,
         }
+    }
+
+    /// Borrow the host context, e.g. to read or write host-side state.
+    pub fn host(&self) -> &H {
+        &self.host
+    }
+
+    /// Mutably borrow the host context, e.g. to read or write host-side state.
+    pub fn host_mut(&mut self) -> &mut H {
+        &mut self.host
     }
 
     /// Execute a bytecode program.
@@ -148,6 +162,11 @@ impl<H: HostContext> Vm<H> {
     pub fn execute(&mut self, program: &Program) -> Result<(), VmError> {
         self.ip = 0;
         self.stack.clear();
+        // Make sure every local slot the program declares exists.
+        let slots = program.local_slots() as usize;
+        if self.locals.len() < slots {
+            self.locals.resize(slots, Value::I64(0));
+        }
 
         while self.ip < program.len() {
             if !self.step(program)? {
@@ -185,6 +204,22 @@ impl<H: HostContext> Vm<H> {
                 let a = self.pop()?;
                 self.push(b)?;
                 self.push(a)?;
+            }
+            Instruction::GetLocal(slot) => {
+                let value = self
+                    .locals
+                    .get(*slot as usize)
+                    .cloned()
+                    .unwrap_or(Value::I64(0));
+                self.push(value)?;
+            }
+            Instruction::SetLocal(slot) => {
+                let value = self.pop()?;
+                let index = *slot as usize;
+                if self.locals.len() <= index {
+                    self.locals.resize(index + 1, Value::I64(0));
+                }
+                self.locals[index] = value;
             }
             Instruction::Add => {
                 let b = self.pop()?;
@@ -276,9 +311,10 @@ impl<H: HostContext> Vm<H> {
                 // Halt execution; the return value stays on the stack.
                 return Ok(false);
             }
-            Instruction::HostCall(func_id) => {
-                let result = self.host.call_host(*func_id, &self.stack)?;
-                self.stack.clear();
+            Instruction::HostCall { id, argc } => {
+                // Pop the call's arguments, then push the host's result.
+                let args = self.pop_args(*argc as usize)?;
+                let result = self.host.call_host(*id, &args)?;
                 self.push(result)?;
             }
         }
@@ -305,6 +341,21 @@ impl<H: HostContext> Vm<H> {
             expected: "bool",
             got: v,
         })
+    }
+
+    /// Pop `count` values off the stack, returned in push order.
+    fn pop_args(&mut self, count: usize) -> Result<Vec<Value>, VmError> {
+        if self.stack.len() < count {
+            return Err(VmError::StackUnderflow);
+        }
+        let mut args = Vec::with_capacity(count);
+        for _ in 0..count {
+            args.push(self.pop()?);
+        }
+        // The arguments were pushed left to right, so popping yields them
+        // right to left; reverse to restore the source order.
+        args.reverse();
+        Ok(args)
     }
 
     /// Get a reference to the current stack contents.
@@ -434,7 +485,7 @@ mod tests {
     fn host_call() {
         let mut program = Program::new();
         program.add_instruction(Instruction::PushConst(Value::I64(42)));
-        program.add_instruction(Instruction::HostCall(1));
+        program.add_instruction(Instruction::HostCall { id: 1, argc: 1 });
 
         let mut vm = Vm::new(TestHost);
         vm.execute(&program).unwrap();
@@ -624,10 +675,35 @@ mod tests {
         // TestHost host function 1 echoes its first argument back.
         let mut program = Program::new();
         program.add_instruction(Instruction::PushConst(Value::Str("echo me".into())));
-        program.add_instruction(Instruction::HostCall(1));
+        program.add_instruction(Instruction::HostCall { id: 1, argc: 1 });
 
         let mut vm = Vm::new(TestHost);
         vm.execute(&program).unwrap();
         assert_eq!(vm.stack(), &[Value::Str("echo me".to_string())]);
+    }
+
+    #[test]
+    fn host_call_keeps_surrounding_stack_values() {
+        // A host call consumes only its own arguments, so values pushed
+        // before the call are still on the stack afterwards.
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::I64(7)));
+        program.add_instruction(Instruction::PushConst(Value::I64(42)));
+        program.add_instruction(Instruction::HostCall { id: 1, argc: 1 });
+
+        let mut vm = Vm::new(TestHost);
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[Value::I64(7), Value::I64(42)]);
+    }
+
+    #[test]
+    fn host_call_with_too_few_arguments_underflows() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::I64(1)));
+        program.add_instruction(Instruction::HostCall { id: 1, argc: 2 });
+
+        let mut vm = Vm::new(TestHost);
+        let err = vm.execute(&program).unwrap_err();
+        assert!(matches!(err, VmError::StackUnderflow));
     }
 }

@@ -48,6 +48,18 @@ pub enum BinaryOp {
 pub enum Stmt {
     Expr(Expr),
     Return(Expr),
+    /// `let name = expr;` — declares a new local variable.
+    Let {
+        name: String,
+        value: Expr,
+        span: crate::diagnostic::Span,
+    },
+    /// `name = expr;` — assigns to an existing local variable.
+    Assign {
+        name: String,
+        value: Expr,
+        span: crate::diagnostic::Span,
+    },
     If {
         condition: Expr,
         then_block: Vec<Stmt>,
@@ -57,7 +69,10 @@ pub enum Stmt {
 
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
+    /// The next token to be consumed.
     current: Option<TokenWithSpan>,
+    /// The token after `current`, used to disambiguate `a` from `a = 1`.
+    lookahead: Option<TokenWithSpan>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -65,9 +80,11 @@ impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Self {
         let mut lexer = Lexer::new(input);
         let current = lexer.next_token().ok();
+        let lookahead = lexer.next_token().ok();
         Self {
             lexer,
             current,
+            lookahead,
             diagnostics: Vec::new(),
         }
     }
@@ -92,10 +109,12 @@ impl<'a> Parser<'a> {
         match self.peek_token() {
             Some(Token::If) => self.parse_if(),
             Some(Token::Return) => self.parse_return(),
+            Some(Token::Let) => self.parse_let(),
             Some(Token::Semicolon) => {
                 self.advance();
                 Ok(None)
             }
+            Some(Token::Identifier(_)) if self.peek_assignment() => self.parse_assign(),
             _ => {
                 let expr = self.parse_expr()?;
                 if self.peek_token() == Some(Token::Semicolon) {
@@ -104,6 +123,75 @@ impl<'a> Parser<'a> {
                 Ok(Some(Stmt::Expr(expr)))
             }
         }
+    }
+
+    /// Whether the upcoming tokens are `identifier =`.
+    fn peek_assignment(&self) -> bool {
+        matches!(self.peek_token(), Some(Token::Identifier(_))) && self.lookahead_is_assignment()
+    }
+
+    /// Look one token past the current identifier for `=`.
+    fn lookahead_is_assignment(&self) -> bool {
+        // The lexer is a pull-based iterator, so a second token is needed to
+        // tell `a = 1` apart from the expression `a`. The parser keeps the
+        // token after the current one in `self.lookahead`.
+        matches!(
+            self.lookahead.as_ref().map(|t| &t.token),
+            Some(Token::Assign)
+        )
+    }
+
+    fn parse_let(&mut self) -> Result<Option<Stmt>, ParseError> {
+        self.consume(Token::Let)?;
+        let span = self
+            .current
+            .as_ref()
+            .map(|t| t.span)
+            .unwrap_or(crate::diagnostic::Span::new(0, 0));
+        let name = match self.peek_token() {
+            Some(Token::Identifier(name)) => {
+                self.advance();
+                name
+            }
+            _ => {
+                self.diagnostics.push(crate::diagnostic::Diagnostic::new(
+                    span,
+                    "Expected a variable name after 'let'".to_string(),
+                ));
+                return Err(ParseError::Custom(
+                    "Expected a variable name after 'let'".to_string(),
+                ));
+            }
+        };
+        self.consume(Token::Assign)?;
+        let value = self.parse_expr()?;
+        if self.peek_token() == Some(Token::Semicolon) {
+            self.advance();
+        }
+        Ok(Some(Stmt::Let { name, value, span }))
+    }
+
+    fn parse_assign(&mut self) -> Result<Option<Stmt>, ParseError> {
+        let span = self
+            .current
+            .as_ref()
+            .map(|t| t.span)
+            .unwrap_or(crate::diagnostic::Span::new(0, 0));
+        let name = match self.peek_token() {
+            Some(Token::Identifier(name)) => {
+                self.advance();
+                name
+            }
+            _ => {
+                return Err(ParseError::Custom("Expected a variable name".to_string()));
+            }
+        };
+        self.consume(Token::Assign)?;
+        let value = self.parse_expr()?;
+        if self.peek_token() == Some(Token::Semicolon) {
+            self.advance();
+        }
+        Ok(Some(Stmt::Assign { name, value, span }))
     }
 
     fn parse_if(&mut self) -> Result<Option<Stmt>, ParseError> {
@@ -343,7 +431,8 @@ impl<'a> Parser<'a> {
     }
 
     fn advance(&mut self) {
-        self.current = self.lexer.next_token().ok();
+        self.current = self.lookahead.take();
+        self.lookahead = self.lexer.next_token().ok();
     }
 
     fn peek_token(&self) -> Option<Token> {

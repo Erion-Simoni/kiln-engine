@@ -25,6 +25,10 @@ pub enum Instruction {
     Dup,
     /// Swap the top two values on the stack.
     Swap,
+    /// Push the value of a local variable.
+    GetLocal(u16),
+    /// Pop a value into a local variable.
+    SetLocal(u16),
     /// Add two i64 values.
     Add,
     /// Subtract two i64 values.
@@ -58,7 +62,12 @@ pub enum Instruction {
     /// Return from a function.
     Return,
     /// Call a host function by ID.
-    HostCall(u32),
+    ///
+    /// `argc` values are popped from the stack and passed to the host as the
+    /// call's arguments, and the host's result is pushed back. Keeping the
+    /// argument count in the instruction lets calls nest: the arguments of a
+    /// call are exactly the values pushed for it, not the whole stack.
+    HostCall { id: u32, argc: u32 },
 }
 
 /// Bytecode program.
@@ -69,6 +78,8 @@ pub enum Instruction {
 pub struct Program {
     instructions: Vec<Instruction>,
     labels: HashMap<String, Label>,
+    /// Number of local variable slots the program uses.
+    local_slots: u16,
 }
 
 impl Program {
@@ -106,5 +117,15 @@ impl Program {
         if index < self.instructions.len() {
             self.instructions[index] = instr;
         }
+    }
+
+    /// Number of local variable slots the program uses.
+    pub fn local_slots(&self) -> u16 {
+        self.local_slots
+    }
+
+    /// Set the number of local variable slots the program uses.
+    pub fn set_local_slots(&mut self, slots: u16) {
+        self.local_slots = slots;
     }
 }

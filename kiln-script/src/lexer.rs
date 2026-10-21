@@ -17,6 +17,7 @@ pub enum Token {
     Else,
     Return,
     Call,
+    Let,
 
     // Operators
     Plus,
@@ -29,6 +30,8 @@ pub enum Token {
     Le,
     Gt,
     Ge,
+    /// `=` — assignment to an existing variable.
+    Assign,
 
     // Punctuation
     LParen,
@@ -175,6 +178,7 @@ impl<'a> Lexer<'a> {
             "else" => Token::Else,
             "return" => Token::Return,
             "call" => Token::Call,
+            "let" => Token::Let,
             _ => Token::Identifier(ident),
         };
 
@@ -229,7 +233,7 @@ impl<'a> Lexer<'a> {
                     self.next_char();
                     Token::EqEq
                 } else {
-                    return None;
+                    Token::Assign
                 }
             }
             '!' => {
