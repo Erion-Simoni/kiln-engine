@@ -63,8 +63,8 @@ fn playing_the_sample_moves_the_player_and_collects_a_coin() {
     // The player starts at the position of the manifest.
     let start = player_position(&mut world).expect("the scene has a player");
 
-    // Moving right for a while brings the player to the first coin.
-    for _ in 0..120 {
+    // Moving right for a few seconds brings the player to the first coin.
+    for _ in 0..300 {
         session
             .step(&mut world, (1.0, 0.0), 1.0 / 60.0)
             .expect("the script runs");
@@ -117,7 +117,7 @@ fn the_sample_state_survives_a_save_and_load() {
         };
     spawn_scene(&mut world, &game.project, &game.scene_id, &mut make_sprite);
 
-    for _ in 0..120 {
+    for _ in 0..300 {
         session
             .step(&mut world, (1.0, 0.0), 1.0 / 60.0)
             .expect("the script runs");

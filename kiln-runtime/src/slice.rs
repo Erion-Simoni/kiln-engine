@@ -34,6 +34,7 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("move_player", 8, 2),
     ("set_status", 9, 1),
     ("get_status", 10, 0),
+    ("get_delta_time", 11, 0),
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -62,6 +63,8 @@ pub struct SliceFacts {
     pub coin_in_reach: Option<String>,
     /// The current status message.
     pub status: String,
+    /// Length of the current frame, in seconds.
+    pub delta_time: f64,
 }
 
 /// A change the script asked for.
@@ -189,6 +192,7 @@ impl HostContext for SliceHost {
                 Ok(Value::I64(0))
             }
             10 => Ok(Value::Str(self.facts.status.clone())),
+            11 => Ok(Value::F64(self.facts.delta_time)),
             _ => Err(VmError::HostCallError(format!(
                 "unknown slice builtin id {func_id}"
             ))),
@@ -251,7 +255,7 @@ impl SliceSession {
     ) -> Result<(), VmError> {
         self.state.elapsed += dt;
 
-        let facts = self.collect_facts(world, input);
+        let facts = self.collect_facts(world, input, dt);
         {
             let host = self.vm.host_mut();
             host.facts = facts;
@@ -268,7 +272,7 @@ impl SliceSession {
     }
 
     /// Gather the facts the script can read this frame.
-    fn collect_facts(&mut self, world: &mut GameWorld, input: (f64, f64)) -> SliceFacts {
+    fn collect_facts(&mut self, world: &mut GameWorld, input: (f64, f64), dt: f64) -> SliceFacts {
         let player = find_player(world);
         let (player_x, player_y) = player.as_ref().map(|p| (p.x, p.y)).unwrap_or((0.0, 0.0));
 
@@ -296,6 +300,7 @@ impl SliceSession {
             coin_count: remaining,
             coin_in_reach,
             status: self.state.status.clone(),
+            delta_time: dt,
         }
     }
 

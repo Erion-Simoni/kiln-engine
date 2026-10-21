@@ -27,8 +27,6 @@ use crate::tilemap_editor::TilemapEditorState;
 struct PlaySession {
     /// The gameplay script of the played scene.
     slice: kiln_runtime::SliceSession,
-    /// The world the script drives.
-    world: GameWorld,
     /// The scene being played.
     scene_id: String,
     /// The last error of the script, shown in the status bar.
@@ -545,15 +543,12 @@ impl EditorApp {
                 .join("; ")
         })?;
 
-        let mut world = GameWorld::new();
-        let mut make_sprite =
-            |_entity: &kiln_core::project::Entity, color: [f32; 4], _texture: Option<&str>| {
-                Sprite::new(color[0], color[1], color[2], color[3]).with_size(64.0, 64.0)
-            };
-        kiln_runtime::spawn_scene(&mut world, &project, &scene_id, &mut make_sprite);
+        // The played scene replaces the edited one, so the scene view shows
+        // the running game.
+        let (world, _spawned) = spawn_editor_scene(&project, &scene_id);
+        self.world = world;
         self.play = Some(PlaySession {
             slice,
-            world,
             scene_id,
             error: None,
         });
@@ -593,10 +588,11 @@ impl EditorApp {
     /// Advance the running game by one frame.
     fn update_play(&mut self, dt: f32) {
         let axis = self.play_axis();
-        let Some(play) = self.play.as_mut() else {
+        let EditorApp { world, play, .. } = self;
+        let Some(play) = play.as_mut() else {
             return;
         };
-        let result = play.slice.step(&mut play.world, axis, dt as f64);
+        let result = play.slice.step(world, axis, dt as f64);
         play.error = match result {
             Ok(()) => None,
             Err(e) => Some(e.to_string()),

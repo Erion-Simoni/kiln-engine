@@ -117,6 +117,10 @@ struct PlayerApp {
     slice: Option<SliceSession>,
     /// Keys currently held down, used to drive the player.
     held: Vec<Key>,
+    /// Width of the game window, in logical pixels.
+    window_width: u32,
+    /// Height of the game window, in logical pixels.
+    window_height: u32,
     /// The directory save slots are written to.
     save_dir: PathBuf,
     /// The save slot the game state is stored in.
@@ -147,6 +151,8 @@ impl PlayerApp {
             textures: TextureLibrary::default(),
             slice: None,
             held: Vec::new(),
+            window_width: width,
+            window_height: height,
             save_dir,
             save_slot: 0,
         }
@@ -492,7 +498,10 @@ impl winit::application::ApplicationHandler for PlayerApp {
                 .create_window(
                     winit::window::WindowAttributes::default()
                         .with_title(self.title.clone())
-                        .with_inner_size(winit::dpi::LogicalSize::new(1280u32, 720u32)),
+                        .with_inner_size(winit::dpi::LogicalSize::new(
+                            self.window_width,
+                            self.window_height,
+                        )),
                 )
                 .expect("window"),
         );
