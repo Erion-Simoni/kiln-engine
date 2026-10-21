@@ -2,7 +2,12 @@
 
 A lightweight standalone desktop game engine: editor + runtime + CLI.
 
-**Status:** Planning phase. See `docs/ROADMAP.md` for milestones.
+**Status:** In implementation. The 2D gate (G-1 through G-5) is complete —
+textured sprites, real tilemaps, VM maturity, a vertical-slice sample, and
+roadmap reconciliation all ship in `samples/vertical_slice/`. G-6 (editor
+truth: GPU scene view, inspector save/load, undo, PIE viewport) is next.
+**Do not start M29 (3D) until G-6 is done.** See `docs/ROADMAP.md` for
+milestones and `docs/STATE.md` for the current session handoff.
 
 ## Goals
 
@@ -24,15 +29,15 @@ just web      # wasm demo in browser
 
 ## Download
 
-Pre-built installers are available on the [GitHub Releases](https://github.com/kiln-engine/kiln/releases) page:
+No releases are published yet. Packaging (installers, code-signing, store
+upload) is planned for M15–M16 but has not been shipped; see
+`docs/PACKAGING.md` and the packaging section of `docs/ROADMAP.md`.
 
-- **Windows:** MSI installer
-- **macOS:** DMG installer
-- **Linux:** AppImage package
+Build from source instead:
 
-The editor is also available via `cargo install`:
 ```bash
-cargo install --git https://github.com/kiln-engine/kiln kiln-editor
+cargo run --bin kiln-editor                        # editor
+cargo run -p kiln-player -- --archive samples/vertical_slice   # vertical slice
 ```
 
 ## Try the vertical slice
@@ -55,7 +60,7 @@ New to Kiln? Start with the [Tutorial](docs/TUTORIAL.md) to build your first gam
 
 - **AGENTS.md** - Agent brief and coding rules
 - **docs/ARCHITECTURE.md** - Crate map, data flow, IR design
-- **docs/ROADMAP.md** - Milestones M0-M14+
+- **docs/ROADMAP.md** - Milestones M0-M61+
 - **docs/DECISIONS.md** - Architecture decision records
 - **docs/BUDGETS.md** - Size and performance budgets
 - **docs/STATE.md** - Session handoff (current status)
