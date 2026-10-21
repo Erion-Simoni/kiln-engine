@@ -1,7 +1,7 @@
 //! Main editor application.
 
 use hecs;
-use kiln_core::{project::Project, Transform, Vec2};
+use kiln_core::{project::Project, Transform};
 use kiln_gameplay::{DataTable, Dialogue, Quest};
 use kiln_graph::{ArithmeticOp, ConstantValue, Graph, Node, NodeType};
 use kiln_render::{clear_view, execute_passes, Frame2dGraph, PassTiming, RenderTier};
@@ -68,6 +68,8 @@ pub struct EditorApp {
     project_path_input: String,
     /// Asset path of each scene entity's texture, keyed by entity id.
     entity_textures: HashMap<String, String>,
+    /// Gameplay role of each scene entity, keyed by entity id.
+    entity_roles: HashMap<String, String>,
     /// Textures loaded for the scene view, keyed by asset path.
     scene_textures: HashMap<String, egui::TextureHandle>,
     graph: Graph,
@@ -373,6 +375,7 @@ impl EditorApp {
             project_root: None,
             project_path_input: "kiln.toml".to_string(),
             entity_textures: HashMap::new(),
+            entity_roles: HashMap::new(),
             scene_textures: HashMap::new(),
             graph: Graph::new(),
             render_tier: RenderTier::default(),
@@ -586,7 +589,11 @@ impl EditorApp {
         self.world = world;
         for entity in spawned {
             if let Some(texture) = entity.texture {
-                self.entity_textures.insert(entity.source_id, texture);
+                self.entity_textures
+                    .insert(entity.source_id.clone(), texture);
+            }
+            if let Some(role) = entity.role {
+                self.entity_roles.insert(entity.source_id, role);
             }
         }
     }
@@ -630,6 +637,18 @@ impl EditorApp {
 
     /// Save the current world state as a scene.
     pub fn save_scene(&mut self) -> Result<(), String> {
+        // The scene keeps its id and script, so saving does not break the game.
+        let scene_id = self
+            .current_project
+            .as_ref()
+            .and_then(|p| p.default_scene_id())
+            .unwrap_or_else(|| "main_scene".to_string());
+        let script = self
+            .current_project
+            .as_ref()
+            .and_then(|p| p.scenes.get(&scene_id))
+            .and_then(|s| s.script.clone());
+
         if let Some(project) = &mut self.current_project {
             use kiln_core::project::{Entity, Scene};
             let mut entities = Vec::new();
@@ -637,36 +656,45 @@ impl EditorApp {
 
             // Collect entity data
             let world = self.world.world();
-            let mut query = world.query::<(&Transform, &Sprite)>();
-            for (transform, sprite) in query.iter() {
+            let mut query = world.query::<(&SourceId, &Transform, &Sprite)>();
+            for (source_id, transform, sprite) in query.iter() {
                 entity_id += 1;
+                // The source id keeps the entity's identity, so the roles and
+                // textures of the scene survive a save.
+                let id = source_id.0.clone();
+                let texture = self.entity_textures.get(&id).cloned();
+                let role = self.entity_roles.get(&id).cloned();
+                let mut components = vec![
+                    kiln_core::project::Component::Transform {
+                        x: transform.position.x,
+                        y: transform.position.y,
+                        rotation: transform.rotation,
+                        scale: transform.scale.x,
+                    },
+                    kiln_core::project::Component::Sprite {
+                        color: sprite.color,
+                        texture,
+                    },
+                ];
+                if let Some(role) = role {
+                    components.push(kiln_core::project::Component::Role { role });
+                }
                 entities.push(Entity {
-                    id: entity_id.to_string(),
+                    id,
                     name: format!("Entity_{}", entity_id),
-                    components: vec![
-                        kiln_core::project::Component::Transform {
-                            x: transform.position.x,
-                            y: transform.position.y,
-                            rotation: transform.rotation,
-                            scale: transform.scale.x,
-                        },
-                        kiln_core::project::Component::Sprite {
-                            color: sprite.color,
-                            texture: None,
-                        },
-                    ],
+                    components,
                 });
             }
 
             let scene = Scene {
-                id: "main_scene".to_string(),
+                id: scene_id.clone(),
                 name: "Main Scene".to_string(),
                 entities,
                 nested_scenes: vec![],
-                script: None,
+                script,
             };
 
-            project.scenes.insert("main_scene".to_string(), scene);
+            project.scenes.insert(scene_id, scene);
             Ok(())
         } else {
             Err("No project loaded".to_string())
@@ -675,61 +703,19 @@ impl EditorApp {
 
     /// Load a scene into the current world.
     pub fn load_scene(&mut self) -> Result<(), String> {
-        if let Some(project) = &self.current_project {
-            if let Some(scene) = project.scenes.get("main_scene") {
-                // Clear current world
-                self.world = GameWorld::new();
-
-                for entity_data in &scene.entities {
-                    let mut transform_opt: Option<Transform> = None;
-                    let mut sprite_opt: Option<Sprite> = None;
-
-                    for component in &entity_data.components {
-                        match component {
-                            kiln_core::project::Component::Transform {
-                                x,
-                                y,
-                                rotation,
-                                scale,
-                            } => {
-                                transform_opt = Some(
-                                    Transform::new(*x, *y)
-                                        .with_rotation(*rotation)
-                                        .with_scale(Vec2::new(*scale, *scale)),
-                                );
-                            }
-                            kiln_core::project::Component::Sprite { color, texture } => {
-                                // The texture path stays on the project data; the
-                                // GPU texture is bound when the scene is spawned.
-                                let _ = texture;
-                                sprite_opt = Some(
-                                    Sprite::new(color[0], color[1], color[2], color[3])
-                                        .with_size(64.0, 64.0),
-                                );
-                            }
-                            kiln_core::project::Component::Tilemap { map } => {
-                                // Tilemaps are culled and drawn in chunks, not
-                                // spawned as individual entities.
-                                let _ = map;
-                            }
-                            kiln_core::project::Component::Role { role } => {
-                                // The gameplay role is used by the scene script.
-                                let _ = role;
-                            }
-                        }
-                    }
-
-                    if let (Some(transform), Some(sprite)) = (transform_opt, sprite_opt) {
-                        self.world.spawn((transform, sprite));
-                    }
-                }
-                Ok(())
-            } else {
-                Err("Scene 'main_scene' not found in project".to_string())
-            }
-        } else {
-            Err("No project loaded".to_string())
+        if self.current_project.is_none() {
+            return Err("No project loaded".to_string());
         }
+        let Some(scene_id) = self
+            .current_project
+            .as_ref()
+            .and_then(|p| p.default_scene_id())
+        else {
+            return Err("The project has no scenes".to_string());
+        };
+        self.load_project_scene();
+        let _ = scene_id;
+        Ok(())
     }
 }
 
