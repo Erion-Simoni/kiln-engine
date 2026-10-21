@@ -79,6 +79,7 @@ impl Compiler {
             self.compile_stmt(stmt)?;
         }
         self.program.set_local_slots(self.next_slot);
+        self.program.validate_jump_targets().map_err(|e| CompileError::Custom(e))?;
         Ok(self.program.clone())
     }
 

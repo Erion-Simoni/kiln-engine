@@ -72,12 +72,30 @@ impl Value {
     ///
     /// Integers and floats are compared numerically (`1` equals `1.0`); strings
     /// compare by content; all other mismatched types are unequal.
+    ///
+    /// When comparing I64 with F64, the F64 is checked if it represents an exact
+    /// integer value. If so, comparison is done as integers to preserve precision
+    /// above 2^53.
     pub fn values_equal(a: Value, b: Value) -> bool {
         match (a, b) {
             (Value::I64(x), Value::I64(y)) => x == y,
             (Value::F64(x), Value::F64(y)) => x == y,
-            (Value::I64(x), Value::F64(y)) => (x as f64) == y,
-            (Value::F64(x), Value::I64(y)) => x == (y as f64),
+            (Value::I64(x), Value::F64(y)) => {
+                // Check if the float is an exact integer
+                if y.fract() == 0.0 && y >= i64::MIN as f64 && y <= i64::MAX as f64 {
+                    x == y as i64
+                } else {
+                    (x as f64) == y
+                }
+            }
+            (Value::F64(x), Value::I64(y)) => {
+                // Check if the float is an exact integer
+                if x.fract() == 0.0 && x >= i64::MIN as f64 && x <= i64::MAX as f64 {
+                    x == (y as f64)
+                } else {
+                    x == (y as f64)
+                }
+            }
             (Value::Bool(x), Value::Bool(y)) => x == y,
             (Value::Str(x), Value::Str(y)) => x == y,
             _ => false,

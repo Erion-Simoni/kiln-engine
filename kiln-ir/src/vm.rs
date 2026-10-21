@@ -20,6 +20,8 @@ pub enum VmError {
     InvalidOpcode(u8),
     #[error("Non-finite float result")]
     NonFiniteFloat,
+    #[error("Invalid local access: slot {0}")]
+    InvalidLocalAccess(u16),
     #[error("Label not found: {0}")]
     LabelNotFound(Label),
     #[error("Type error: expected {expected}, got {got:?}")]
@@ -246,18 +248,18 @@ impl<H: HostContext> Vm<H> {
                 self.push(a)?;
             }
             Instruction::GetLocal(slot) => {
-                let value = self
-                    .locals
-                    .get(*slot as usize)
-                    .cloned()
-                    .unwrap_or(Value::I64(0));
+                let index = *slot as usize;
+                if index >= self.locals.len() {
+                    return Err(VmError::InvalidLocalAccess(*slot));
+                }
+                let value = self.locals[index].clone();
                 self.push(value)?;
             }
             Instruction::SetLocal(slot) => {
                 let value = self.pop()?;
                 let index = *slot as usize;
-                if self.locals.len() <= index {
-                    self.locals.resize(index + 1, Value::I64(0));
+                if index >= self.locals.len() {
+                    return Err(VmError::InvalidLocalAccess(*slot));
                 }
                 self.locals[index] = value;
             }
