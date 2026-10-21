@@ -16,6 +16,8 @@ pub enum CompileError {
     UndefinedFunction(String, Span),
     #[error("Variable already declared: {0}")]
     DuplicateVariable(String, Span),
+    #[error("Invalid program: {0}")]
+    Program(#[from] kiln_ir::ProgramError),
 }
 
 pub struct Compiler {
@@ -79,7 +81,7 @@ impl Compiler {
             self.compile_stmt(stmt)?;
         }
         self.program.set_local_slots(self.next_slot);
-        self.program.validate_jump_targets().map_err(|e| CompileError::Custom(e))?;
+        self.program.validate_jump_targets()?;
         Ok(self.program.clone())
     }
 

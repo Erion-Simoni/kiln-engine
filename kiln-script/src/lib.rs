@@ -70,6 +70,7 @@ impl LanguageFrontend for KilnScriptFrontend {
                 compiler::CompileError::UndefinedFunction(_, s) => *s,
                 compiler::CompileError::DuplicateVariable(_, s) => *s,
                 compiler::CompileError::Custom(_) => Span::new(0, source.len()),
+                compiler::CompileError::Program(_) => Span::new(0, source.len()),
             };
             vec![Diagnostic::new(span, format!("Compile error: {}", e))]
         })

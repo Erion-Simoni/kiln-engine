@@ -14,6 +14,42 @@ impl fmt::Display for Label {
     }
 }
 
+/// A problem found while building or validating a [`Program`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProgramError {
+    /// A label name was defined twice.
+    DuplicateLabel(String),
+    /// A jump or call points past the end of the program.
+    InvalidJumpTarget {
+        /// Index of the instruction holding the bad jump.
+        instruction: usize,
+        /// The target the jump points at.
+        target: Label,
+        /// Number of instructions in the program.
+        length: usize,
+    },
+}
+
+impl fmt::Display for ProgramError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ProgramError::DuplicateLabel(name) => {
+                write!(f, "Duplicate label: {name}")
+            }
+            ProgramError::InvalidJumpTarget {
+                instruction,
+                target,
+                length,
+            } => write!(
+                f,
+                "Invalid jump target {target} at instruction {instruction} (program has {length} instructions)"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ProgramError {}
+
 /// Bytecode instruction.
 #[derive(Debug, Clone)]
 pub enum Instruction {
@@ -91,10 +127,42 @@ impl Program {
         self.instructions.push(instr);
     }
 
-    pub fn define_label(&mut self, name: &str) -> Label {
+    /// Define a named label at the current instruction position.
+    ///
+    /// Returns an error when the name is already defined, because a duplicate
+    /// label silently overwrites the first definition and makes jumps target
+    /// the wrong instruction.
+    pub fn define_label(&mut self, name: &str) -> Result<Label, ProgramError> {
+        if self.labels.contains_key(name) {
+            return Err(ProgramError::DuplicateLabel(name.to_string()));
+        }
         let label = Label(self.instructions.len());
         self.labels.insert(name.to_string(), label);
-        label
+        Ok(label)
+    }
+
+    /// Check that every jump and call target points at a real instruction.
+    ///
+    /// A jump to an instruction index outside the program would run past the
+    /// end of the bytecode, so the compiler refuses to emit such a program.
+    pub fn validate_jump_targets(&self) -> Result<(), ProgramError> {
+        for (index, instruction) in self.instructions.iter().enumerate() {
+            let target = match instruction {
+                Instruction::Jump(label)
+                | Instruction::JumpIf(label)
+                | Instruction::JumpIfNot(label)
+                | Instruction::Call(label) => *label,
+                _ => continue,
+            };
+            if target.0 > self.instructions.len() {
+                return Err(ProgramError::InvalidJumpTarget {
+                    instruction: index,
+                    target,
+                    length: self.instructions.len(),
+                });
+            }
+        }
+        Ok(())
     }
 
     pub fn get_label(&self, name: &str) -> Option<Label> {
@@ -127,5 +195,72 @@ impl Program {
     /// Set the number of local variable slots the program uses.
     pub fn set_local_slots(&mut self, slots: u16) {
         self.local_slots = slots;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn define_label_returns_the_current_position() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::I64(1)));
+        let label = program.define_label("start").expect("label is new");
+        assert_eq!(label, Label(1));
+        assert_eq!(program.get_label("start"), Some(Label(1)));
+    }
+
+    #[test]
+    fn define_label_rejects_duplicates() {
+        let mut program = Program::new();
+        program.define_label("start").expect("first label");
+        let err = program.define_label("start").expect_err("duplicate is rejected");
+        assert_eq!(err, ProgramError::DuplicateLabel("start".to_string()));
+        // The original definition is kept, so jumps still target it.
+        assert_eq!(program.get_label("start"), Some(Label(0)));
+    }
+
+    #[test]
+    fn validate_jump_targets_accepts_a_valid_program() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::Jump(Label(2)));
+        program.add_instruction(Instruction::PushConst(Value::I64(1)));
+        program.add_instruction(Instruction::Return);
+        assert!(program.validate_jump_targets().is_ok());
+    }
+
+    #[test]
+    fn validate_jump_targets_rejects_a_target_past_the_end() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::Jump(Label(9)));
+        let err = program
+            .validate_jump_targets()
+            .expect_err("out of range jump is rejected");
+        assert_eq!(
+            err,
+            ProgramError::InvalidJumpTarget {
+                instruction: 0,
+                target: Label(9),
+                length: 1,
+            }
+        );
+    }
+
+    #[test]
+    fn validate_jump_targets_rejects_a_bad_call() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::Call(Label(5)));
+        let err = program
+            .validate_jump_targets()
+            .expect_err("out of range call is rejected");
+        assert!(matches!(err, ProgramError::InvalidJumpTarget { .. }));
+    }
+
+    #[test]
+    fn validate_jump_targets_ignores_non_jump_instructions() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::I64(42)));
+        assert!(program.validate_jump_targets().is_ok());
     }
 }

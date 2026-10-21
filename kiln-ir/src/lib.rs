@@ -6,6 +6,6 @@ pub mod value;
 pub mod vm;
 
 pub use opcode::Opcode;
-pub use program::{Instruction, Label, Program};
+pub use program::{Instruction, Label, Program, ProgramError};
 pub use value::Value;
 pub use vm::{HostContext, Vm, VmError};
