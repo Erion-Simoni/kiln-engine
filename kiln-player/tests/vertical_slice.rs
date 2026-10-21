@@ -154,3 +154,43 @@ fn the_sample_art_is_found_by_the_paths_the_manifest_uses() {
         kiln_assets::decode_png(bytes).expect("the texture decodes");
     }
 }
+
+#[test]
+fn the_script_decides_the_score_not_the_engine() {
+    let game = loader::load(&sample_dir(), None).expect("the sample loads");
+    let scene = game.project.scenes.get(&game.scene_id).unwrap();
+    let source = String::from_utf8(
+        game.assets
+            .get(scene.script.as_ref().unwrap())
+            .expect("the script is loaded")
+            .clone(),
+    )
+    .expect("the script is text");
+
+    // A script that scores nothing leaves the score alone.
+    let mut quiet = SliceSession::new("move_player(get_input_x(), 0.0);").unwrap();
+    let mut world = sample_world(&game);
+    for _ in 0..300 {
+        quiet.step(&mut world, (1.0, 0.0), 1.0 / 60.0).unwrap();
+    }
+    assert_eq!(quiet.state().score, 0, "the script decides the score");
+
+    // The sample's script awards a coin, so the score follows the rules.
+    let mut session = SliceSession::new(&source).expect("the script compiles");
+    let mut world = sample_world(&game);
+    for _ in 0..300 {
+        session.step(&mut world, (1.0, 0.0), 1.0 / 60.0).unwrap();
+    }
+    assert!(session.state().score > 0, "the sample script scores");
+}
+
+/// A fresh world holding the sample scene.
+fn sample_world(game: &loader::LoadedGame) -> GameWorld {
+    let mut world = GameWorld::new();
+    let mut make_sprite =
+        |_entity: &kiln_core::project::Entity, color: [f32; 4], _texture: Option<&str>| {
+            Sprite::new(color[0], color[1], color[2], color[3]).with_size(16.0, 16.0)
+        };
+    spawn_scene(&mut world, &game.project, &game.scene_id, &mut make_sprite);
+    world
+}
