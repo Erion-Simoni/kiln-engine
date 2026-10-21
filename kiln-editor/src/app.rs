@@ -158,6 +158,11 @@ pub struct EditorApp {
     next_entity_name: u32,
     /// Set when the scene was changed by a panel, so the world is rebuilt.
     scene_dirty: bool,
+    /// The scene as it was before the edit in progress.
+    ///
+    /// The inspector clones the scene before it changes a value, so the
+    /// change can be undone. The clone is only made when something changes.
+    scene_before_edit: Option<Scene>,
     /// Set by the scene view, handled after the UI pass.
     add_entity_requested: bool,
     /// Set by the inspector, handled after the UI pass.
@@ -452,6 +457,18 @@ fn collect_texture_sizes(dir: &Path, project: &Project) -> HashMap<String, (u32,
     sizes
 }
 
+/// Record the scene before an inspector change, so the change can be undone.
+///
+/// The key names the edited value, so a slider drag is one undo step. The
+/// history and the snapshot are passed separately, because the inspector
+/// holds a borrow of the scene at the same time.
+fn record_edit(history: &mut History, snapshot: &mut Option<Scene>, key: &str) {
+    let Some(before) = snapshot.take() else {
+        return;
+    };
+    history.record_with_key(Some(key), &before);
+}
+
 /// Open a URL in the user's browser.
 ///
 /// Uses the platform's opener, so no extra dependency is needed. Fails when
@@ -565,6 +582,7 @@ impl EditorApp {
             scene: Scene::new(),
             next_entity_name: 1,
             scene_dirty: false,
+            scene_before_edit: None,
             add_entity_requested: false,
             remove_entity_requested: false,
             remove_component_requested: None,
@@ -771,7 +789,15 @@ impl EditorApp {
     ///
     /// The edit runs on the scene data; the world is rebuilt afterwards, so
     /// the inspector, the world and the undo stack never disagree.
+    ///
+    /// Edits are ignored while the game is playing, because the world then
+    /// belongs to the running game.
     fn apply_edit(&mut self, edit: impl FnOnce(&mut Scene)) {
+        if self.is_playing {
+            self.console_log
+                .push("[WARN] Stop the game before editing the scene".to_string());
+            return;
+        }
         self.record_history();
         edit(&mut self.scene);
         self.rebuild_world();
@@ -1447,6 +1473,8 @@ impl winit::application::ApplicationHandler for EditorApp {
 
                 let mut tab_viewer = TabViewer {
                     scene: &mut self.scene,
+                    history: &mut self.history,
+                    scene_before_edit: &mut self.scene_before_edit,
                     scene_dirty: &mut self.scene_dirty,
                     add_entity_requested: &mut self.add_entity_requested,
                     remove_entity_requested: &mut self.remove_entity_requested,
@@ -1902,9 +1930,15 @@ impl winit::application::ApplicationHandler for EditorApp {
             self.add_component();
         }
 
-        // A panel changed the scene, so the world has to follow.
+        // A panel changed the scene, so the world has to follow. While the
+        // game is playing the world belongs to the game, so it is left alone.
         if std::mem::take(&mut self.scene_dirty) {
-            self.rebuild_world();
+            if self.is_playing {
+                self.console_log
+                    .push("[WARN] Stop the game before editing the scene".to_string());
+            } else {
+                self.rebuild_world();
+            }
         }
 
         // Start an export the dialog asked for, and read the result of a
@@ -1965,6 +1999,10 @@ fn show_status_bar(
 struct TabViewer<'a> {
     /// The scene being edited; the inspector changes it directly.
     scene: &'a mut Scene,
+    /// The undo stack, so an edit can be recorded before it happens.
+    history: &'a mut History,
+    /// The scene as it was before the edit in progress.
+    scene_before_edit: &'a mut Option<Scene>,
     /// Set when the scene was changed, so the world can be rebuilt.
     scene_dirty: &'a mut bool,
     /// Set when the user asked to add an entity to the scene.
@@ -2006,6 +2044,16 @@ struct TabViewer<'a> {
 }
 
 impl<'a> TabViewer<'a> {
+    /// Take the snapshot of the scene before the inspector changes it.
+    ///
+    /// The snapshot is only made when there is none, so an idle editor does
+    /// not copy the scene every frame.
+    fn snapshot_before_edit(&mut self) {
+        if self.scene_before_edit.is_none() {
+            *self.scene_before_edit = Some(self.scene.clone());
+        }
+    }
+
     /// Make a prefab out of the selected entity.
     fn create_prefab_from_selection(&mut self) {
         let Some(id) = self.selected_id.clone() else {
@@ -2384,6 +2432,10 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 });
             }
             Tab::Inspector => {
+                // The scene is snapshotted before it is changed, so the
+                // change can be undone.
+                self.snapshot_before_edit();
+
                 ui.vertical(|ui| {
                     ui.heading("Inspector");
 
@@ -2441,6 +2493,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     .add(egui::DragValue::new(&mut transform.position.x).speed(1.0))
                                     .changed()
                                 {
+                                    record_edit(
+                                        &mut *self.history,
+                                        &mut *self.scene_before_edit,
+                                        "transform.x",
+                                    );
                                     *self.scene_dirty = true;
                                 }
                                 ui.add_space(8.0);
@@ -2449,6 +2506,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     .add(egui::DragValue::new(&mut transform.position.y).speed(1.0))
                                     .changed()
                                 {
+                                    record_edit(
+                                        &mut *self.history,
+                                        &mut *self.scene_before_edit,
+                                        "transform.y",
+                                    );
                                     *self.scene_dirty = true;
                                 }
                             });
@@ -2464,6 +2526,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     )
                                     .changed()
                                 {
+                                    record_edit(
+                                        &mut *self.history,
+                                        &mut *self.scene_before_edit,
+                                        "transform.rotation",
+                                    );
                                     *self.scene_dirty = true;
                                 }
                             });
@@ -2479,6 +2546,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     )
                                     .changed()
                                 {
+                                    record_edit(
+                                        &mut *self.history,
+                                        &mut *self.scene_before_edit,
+                                        "transform.scale",
+                                    );
                                     transform.scale.y = transform.scale.x;
                                     *self.scene_dirty = true;
                                 }
@@ -2519,6 +2591,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         )
                                         .changed()
                                     {
+                                        record_edit(
+                                            &mut *self.history,
+                                            &mut *self.scene_before_edit,
+                                            "color.r",
+                                        );
                                         *self.scene_dirty = true;
                                     }
                                     ui.add_space(8.0);
@@ -2531,6 +2608,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         )
                                         .changed()
                                     {
+                                        record_edit(
+                                            &mut *self.history,
+                                            &mut *self.scene_before_edit,
+                                            "color.g",
+                                        );
                                         *self.scene_dirty = true;
                                     }
                                     ui.add_space(8.0);
@@ -2543,6 +2625,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         )
                                         .changed()
                                     {
+                                        record_edit(
+                                            &mut *self.history,
+                                            &mut *self.scene_before_edit,
+                                            "color.b",
+                                        );
                                         *self.scene_dirty = true;
                                     }
                                     ui.add_space(8.0);
@@ -2555,6 +2642,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         )
                                         .changed()
                                     {
+                                        record_edit(
+                                            &mut *self.history,
+                                            &mut *self.scene_before_edit,
+                                            "color.a",
+                                        );
                                         *self.scene_dirty = true;
                                     }
                                 });
@@ -2611,6 +2703,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 ui.label("Name");
                                 ui.add_space(16.0);
                                 if ui.text_edit_singleline(&mut role).changed() {
+                                    record_edit(
+                                        &mut *self.history,
+                                        &mut *self.scene_before_edit,
+                                        "role",
+                                    );
                                     entity.extras.role = if role.is_empty() {
                                         None
                                     } else {

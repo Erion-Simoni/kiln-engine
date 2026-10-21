@@ -16,6 +16,8 @@ pub struct History {
     redo: Vec<Scene>,
     /// Whether the next edit is recorded.
     enabled: bool,
+    /// The key of the last recorded edit, used to coalesce a drag.
+    last_key: Option<String>,
 }
 
 impl Default for History {
@@ -24,6 +26,7 @@ impl Default for History {
             undo: Vec::new(),
             redo: Vec::new(),
             enabled: true,
+            last_key: None,
         }
     }
 }
@@ -49,9 +52,22 @@ impl History {
     /// Recording a new edit clears the redo stack, because the redo stack
     /// describes a future that no longer happens.
     pub fn record(&mut self, scene: &Scene) {
+        self.record_with_key(None, scene);
+    }
+
+    /// Record the scene as it was before an edit, with a key.
+    ///
+    /// While the same key is recorded again in a row, the first snapshot is
+    /// kept. That way a slider drag is one undo step and not one per frame.
+    pub fn record_with_key(&mut self, key: Option<&str>, scene: &Scene) {
         if !self.enabled {
             return;
         }
+        if key.is_some() && key == self.last_key.as_deref() {
+            // The same edit is still going on, so the first snapshot stands.
+            return;
+        }
+        self.last_key = key.map(str::to_string);
         self.undo.push(scene.clone());
         self.redo.clear();
     }
@@ -179,5 +195,35 @@ mod tests {
         history.clear();
         assert!(!history.can_undo());
         assert!(!history.can_redo());
+    }
+
+    #[test]
+    fn the_same_key_is_recorded_once() {
+        let mut history = History::new();
+        let before = scene_with("hero");
+
+        // A drag records the same key on every frame.
+        history.record_with_key(Some("transform.x"), &before);
+        history.record_with_key(Some("transform.x"), &before);
+        history.record_with_key(Some("transform.x"), &before);
+
+        // One undo step for the whole drag.
+        assert!(history.can_undo());
+        let restored = history.undo(&before).expect("undo");
+        assert!(!history.can_undo());
+        assert_eq!(restored, before);
+    }
+
+    #[test]
+    fn a_different_key_records_a_new_step() {
+        let mut history = History::new();
+        let before = scene_with("hero");
+
+        history.record_with_key(Some("transform.x"), &before);
+        history.record_with_key(Some("transform.y"), &before);
+
+        assert!(history.can_undo());
+        history.undo(&before).expect("undo");
+        assert!(history.can_undo(), "the second edit is still undoable");
     }
 }
