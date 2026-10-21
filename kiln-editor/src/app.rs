@@ -64,6 +64,8 @@ pub struct EditorApp {
     console_log: Vec<String>,
     /// Directory of the open project, where the assets live.
     project_root: Option<PathBuf>,
+    /// The path typed in the open-project prompt.
+    project_path_input: String,
     /// Asset path of each scene entity's texture, keyed by entity id.
     entity_textures: HashMap<String, String>,
     /// Textures loaded for the scene view, keyed by asset path.
@@ -80,6 +82,8 @@ pub struct EditorApp {
     project_path: Option<PathBuf>,
     current_project: Option<Project>,
     asset_browser: AssetBrowser,
+    /// Set by the welcome screen, handled after the UI pass.
+    open_project_requested: bool,
     /// Set by the scene toolbar, handled after the UI pass.
     play_toggle_requested: bool,
     /// Set by the scene toolbar, handled after the UI pass.
@@ -367,6 +371,7 @@ impl EditorApp {
             play: None,
             console_log: Vec::new(),
             project_root: None,
+            project_path_input: "kiln.toml".to_string(),
             entity_textures: HashMap::new(),
             scene_textures: HashMap::new(),
             graph: Graph::new(),
@@ -381,6 +386,7 @@ impl EditorApp {
             project_path: None,
             current_project: None,
             asset_browser: AssetBrowser::new(),
+            open_project_requested: false,
             play_toggle_requested: false,
             scene_save_requested: false,
             scene_load_requested: false,
@@ -992,10 +998,20 @@ impl winit::application::ApplicationHandler for EditorApp {
                                         .clicked()
                                     {
                                         self.show_welcome = false;
+                                        self.play_toggle_requested = false;
+                                        self.open_project_requested = true;
                                     }
                                 });
 
                                 ui.add_space(16.0);
+                                ui.horizontal(|ui| {
+                                    ui.label("Project file:");
+                                    ui.add_sized(
+                                        [320.0, 24.0],
+                                        egui::TextEdit::singleline(&mut self.project_path_input),
+                                    );
+                                });
+                                ui.add_space(8.0);
                                 ui.label("Recent Projects:");
                                 ui.add_space(8.0);
                                 ui.label("(No recent projects)");
@@ -1162,8 +1178,14 @@ impl winit::application::ApplicationHandler for EditorApp {
                     self.show_welcome = true;
                 }
                 MenuAction::OpenProject => {
-                    if let Err(e) = self.load_project(PathBuf::from("kiln.toml")) {
-                        eprintln!("Failed to load project: {}", e);
+                    let path = PathBuf::from(self.project_path_input.trim());
+                    match self.load_project(path) {
+                        Ok(()) => self.console_log.push("[INFO] Project loaded".to_string()),
+                        Err(e) => {
+                            let message = format!("[ERROR] Could not load the project: {e}");
+                            log::error!("{message}");
+                            self.console_log.push(message);
+                        }
                     }
                 }
                 MenuAction::SaveProject => {
@@ -1185,6 +1207,19 @@ impl winit::application::ApplicationHandler for EditorApp {
                     if let Err(e) = self.load_scene() {
                         eprintln!("Failed to load scene: {}", e);
                     }
+                }
+            }
+        }
+
+        // Handle the open-project request from the welcome screen.
+        if std::mem::take(&mut self.open_project_requested) {
+            let path = PathBuf::from(self.project_path_input.trim());
+            match self.load_project(path) {
+                Ok(()) => self.console_log.push("[INFO] Project loaded".to_string()),
+                Err(e) => {
+                    let message = format!("[ERROR] Could not load the project: {e}");
+                    log::error!("{message}");
+                    self.console_log.push(message);
                 }
             }
         }

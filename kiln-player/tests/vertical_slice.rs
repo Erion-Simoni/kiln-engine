@@ -134,3 +134,23 @@ fn the_sample_state_survives_a_save_and_load() {
     assert_eq!(loaded.score, score);
     assert_eq!(loaded.collected, session.state().collected);
 }
+
+#[test]
+fn the_sample_art_is_found_by_the_paths_the_manifest_uses() {
+    let game = loader::load(&sample_dir(), None).expect("the sample loads");
+
+    // The player uploads every texture the scenes reference, so the paths in
+    // the manifest have to match the files on disk.
+    let paths = kiln_player::textures::texture_paths(&game.project);
+    assert!(paths.contains(&"art/hero.png".to_string()));
+    assert!(paths.contains(&"art/coin.png".to_string()));
+    assert!(paths.contains(&"art/ground.png".to_string()));
+
+    for path in paths {
+        let bytes = game
+            .assets
+            .get(&path)
+            .expect("the texture is in the assets");
+        kiln_assets::decode_png(bytes).expect("the texture decodes");
+    }
+}
