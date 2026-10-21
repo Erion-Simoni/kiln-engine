@@ -98,8 +98,9 @@ art, KilnScript), replacing the console `println` smokes
 - The player shows an on-screen HUD (score, status, controls) and saves and
   loads the game state with F5/F9; the editor's Play button runs the same
   loop and shows the same HUD over the scene view.
-- 5 integration tests in `kiln-player/tests/vertical_slice.rs` load the real
-  project and check the art, the script, the gameplay and the save round trip.
+- Integration tests in `kiln-player/tests/vertical_slice.rs` and
+  `kiln-editor/tests/vertical_slice.rs` load the real project and check the
+  art, the script, the gameplay and the save round trip in both hosts.
 
 **How to run it:**
 ```sh
