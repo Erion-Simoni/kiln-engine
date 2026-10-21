@@ -1306,26 +1306,20 @@ impl winit::application::ApplicationHandler for EditorApp {
                     .scene_view_texture_ids
                     .entry(path.clone())
                     .or_insert_with(|| {
-                        let full_path = self
-                            .project_root
-                            .as_ref()
-                            .unwrap()
-                            .join(&path);
+                        let full_path = self.project_root.as_ref().unwrap().join(&path);
                         let bytes = match std::fs::read(&full_path) {
                             Ok(b) => b,
                             Err(_) => return TextureId::WHITE,
                         };
                         match kiln_assets::decode_png(&bytes) {
-                            Ok(image) => gpu
-                                .scene_view_sprite_renderer
-                                .create_texture_rgba(
-                                    device,
-                                    queue,
-                                    &path,
-                                    image.width,
-                                    image.height,
-                                    &image.pixels,
-                                ),
+                            Ok(image) => gpu.scene_view_sprite_renderer.create_texture_rgba(
+                                device,
+                                queue,
+                                &path,
+                                image.width,
+                                image.height,
+                                &image.pixels,
+                            ),
                             Err(_) => TextureId::WHITE,
                         }
                     });
@@ -1341,10 +1335,7 @@ impl winit::application::ApplicationHandler for EditorApp {
             }
 
             // Render sprites to the swapchain view, clipped to the scene view rect.
-            let target_size = [
-                rect.width() as u32,
-                rect.height() as u32,
-            ];
+            let target_size = [rect.width() as u32, rect.height() as u32];
             let offset = [rect.min.x as u32, rect.min.y as u32];
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("scene_view_pass"),

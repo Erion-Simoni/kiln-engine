@@ -74,6 +74,8 @@ pub struct Parser<'a> {
     /// The token after `current`, used to disambiguate `a` from `a = 1`.
     lookahead: Option<TokenWithSpan>,
     diagnostics: Vec<Diagnostic>,
+    /// Nesting depth of parenthesized expressions, to prevent stack overflow.
+    depth: u32,
 }
 
 impl<'a> Parser<'a> {
@@ -86,6 +88,7 @@ impl<'a> Parser<'a> {
             current,
             lookahead,
             diagnostics: Vec::new(),
+            depth: 0,
         }
     }
 
@@ -238,7 +241,15 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, ParseError> {
-        self.parse_comparison()
+        self.depth += 1;
+        if self.depth > 256 {
+            return Err(ParseError::Custom(
+                "Expression nesting too deep".to_string(),
+            ));
+        }
+        let result = self.parse_comparison();
+        self.depth -= 1;
+        result
     }
 
     fn parse_comparison(&mut self) -> Result<Expr, ParseError> {
@@ -285,7 +296,9 @@ impl<'a> Parser<'a> {
         let mut expr = self.parse_primary()?;
 
         while let Some(op) = self.match_multiplicative_op() {
-            let right = self.parse_primary()?;
+            // Use parse_factor (not parse_primary) so unary minus works as an
+            // operand: `2 * -1`, `6 / -2`, `3.0 * -x`.
+            let right = self.parse_factor()?;
             expr = Expr::BinaryOp {
                 op,
                 left: Box::new(expr),

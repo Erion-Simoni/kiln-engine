@@ -12,8 +12,12 @@ pub enum VmError {
     StackOverflow,
     #[error("Division by zero")]
     DivisionByZero,
+    #[error("Integer overflow")]
+    IntegerOverflow,
     #[error("Invalid opcode: {0}")]
     InvalidOpcode(u8),
+    #[error("Non-finite float result")]
+    NonFiniteFloat,
     #[error("Label not found: {0}")]
     LabelNotFound(Label),
     #[error("Type error: expected {expected}, got {got:?}")]
@@ -59,26 +63,33 @@ fn binop(op: BinOp, a: Value, b: Value) -> Result<Value, VmError> {
     if matches!(a, Value::F64(_)) || matches!(b, Value::F64(_)) {
         let x = a.to_f64().ok_or_else(|| type_err(&a))?;
         let y = b.to_f64().ok_or_else(|| type_err(&b))?;
-        return Ok(match op {
-            BinOp::Add => Value::F64(x + y),
-            BinOp::Sub => Value::F64(x - y),
-            BinOp::Mul => Value::F64(x * y),
-            BinOp::Div => Value::F64(x / y),
-            BinOp::Lt => Value::Bool(x < y),
-            BinOp::Le => Value::Bool(x <= y),
-            BinOp::Gt => Value::Bool(x > y),
-            BinOp::Ge => Value::Bool(x >= y),
-        });
+        let result = match op {
+            BinOp::Add => x + y,
+            BinOp::Sub => x - y,
+            BinOp::Mul => x * y,
+            BinOp::Div => x / y,
+            BinOp::Lt => return Ok(Value::Bool(x < y)),
+            BinOp::Le => return Ok(Value::Bool(x <= y)),
+            BinOp::Gt => return Ok(Value::Bool(x > y)),
+            BinOp::Ge => return Ok(Value::Bool(x >= y)),
+        };
+        if !result.is_finite() {
+            return Err(VmError::NonFiniteFloat);
+        }
+        return Ok(Value::F64(result));
     }
     let x = a.as_i64().ok_or_else(|| type_err(&a))?;
     let y = b.as_i64().ok_or_else(|| type_err(&b))?;
     Ok(match op {
-        BinOp::Add => Value::I64(x + y),
-        BinOp::Sub => Value::I64(x - y),
-        BinOp::Mul => Value::I64(x * y),
+        BinOp::Add => Value::I64(x.checked_add(y).ok_or(VmError::IntegerOverflow)?),
+        BinOp::Sub => Value::I64(x.checked_sub(y).ok_or(VmError::IntegerOverflow)?),
+        BinOp::Mul => Value::I64(x.checked_mul(y).ok_or(VmError::IntegerOverflow)?),
         BinOp::Div => {
             if y == 0 {
                 return Err(VmError::DivisionByZero);
+            }
+            if x == i64::MIN && y == -1 {
+                return Err(VmError::IntegerOverflow);
             }
             Value::I64(x / y)
         }
@@ -529,15 +540,15 @@ mod tests {
     }
 
     #[test]
-    fn arith_float_div_by_zero_is_infinite() {
+    fn arith_float_div_by_zero_is_error() {
         let mut program = Program::new();
         program.add_instruction(Instruction::PushConst(Value::F64(1.0)));
         program.add_instruction(Instruction::PushConst(Value::F64(0.0)));
         program.add_instruction(Instruction::Div);
 
         let mut vm = Vm::new(TestHost);
-        vm.execute(&program).unwrap();
-        assert_eq!(vm.stack(), &[Value::F64(f64::INFINITY)]);
+        let err = vm.execute(&program).unwrap_err();
+        assert!(matches!(err, VmError::NonFiniteFloat));
     }
 
     #[test]

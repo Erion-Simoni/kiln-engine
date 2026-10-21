@@ -209,13 +209,18 @@ impl Compiler {
                     .get(func.as_str())
                     .copied()
                     .ok_or_else(|| CompileError::UndefinedFunction(func.clone(), *span))?;
-                let argc = self
-                    .arities
-                    .get(func.as_str())
-                    .copied()
-                    .unwrap_or(args.len() as u32);
-                self.program
-                    .add_instruction(Instruction::HostCall { id: func_id, argc });
+                let expected_argc = self.arities.get(func.as_str()).copied().unwrap_or(0);
+                let actual_argc = args.len() as u32;
+                if expected_argc != actual_argc {
+                    return Err(CompileError::Custom(format!(
+                        "Function '{}' expects {} arguments, got {}",
+                        func, expected_argc, actual_argc
+                    )));
+                }
+                self.program.add_instruction(Instruction::HostCall {
+                    id: func_id,
+                    argc: actual_argc,
+                });
             }
         }
         Ok(())
