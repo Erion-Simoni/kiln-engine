@@ -62,18 +62,20 @@ pub fn spawn_scene(
     )
 }
 
-/// Spawn a scene and its nested scenes.
-fn spawn_scene_inner(
+/// Spawn a list of scene entities into the world.
+///
+/// This is the same work [`spawn_scene`] does for one scene's entities, but
+/// it takes the entities directly instead of looking them up in a project.
+/// The editor uses it to rebuild a world from an undo snapshot.
+pub fn spawn_entities(
     world: &mut GameWorld,
-    project: &Project,
-    scene: &Scene,
+    entities: &[Entity],
     offset: SceneOffset,
-    visited: &mut Vec<String>,
     make_sprite: &mut SpriteFactory<'_>,
 ) -> Vec<SpawnedEntity> {
     let mut spawned = Vec::new();
 
-    for entity in &scene.entities {
+    for entity in entities {
         let transform = entity_transform(entity);
         let color = entity_sprite_color(entity);
         let texture_path = entity_sprite_texture(entity);
@@ -125,6 +127,20 @@ fn spawn_scene_inner(
             role,
         });
     }
+
+    spawned
+}
+
+/// Spawn a scene and its nested scenes.
+fn spawn_scene_inner(
+    world: &mut GameWorld,
+    project: &Project,
+    scene: &Scene,
+    offset: SceneOffset,
+    visited: &mut Vec<String>,
+    make_sprite: &mut SpriteFactory<'_>,
+) -> Vec<SpawnedEntity> {
+    let mut spawned = spawn_entities(world, &scene.entities, offset, make_sprite);
 
     for nested in &scene.nested_scenes {
         if visited.contains(&nested.scene_id) {
@@ -219,4 +235,94 @@ pub fn count_scene_entities(project: &Project, scene_id: &str) -> usize {
     }
     let mut visited = Vec::new();
     count(project, scene_id, &mut visited)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kiln_core::project::Component;
+
+    fn entity(id: &str, x: f32, y: f32) -> Entity {
+        Entity {
+            id: id.to_string(),
+            name: id.to_string(),
+            components: vec![
+                Component::Transform {
+                    x,
+                    y,
+                    rotation: 0.0,
+                    scale: 1.0,
+                },
+                Component::Sprite {
+                    color: [1.0, 1.0, 1.0, 1.0],
+                    texture: None,
+                },
+            ],
+        }
+    }
+
+    fn plain_sprite(
+        _entity: &Entity,
+        color: [f32; 4],
+        _texture: Option<&str>,
+    ) -> crate::sprite::Sprite {
+        crate::sprite::Sprite::new(color[0], color[1], color[2], color[3])
+    }
+
+    #[test]
+    fn spawn_entities_creates_one_entity_per_list_entry() {
+        let mut world = GameWorld::new();
+        let entities = vec![entity("a", 1.0, 2.0), entity("b", 3.0, 4.0)];
+
+        let spawned = spawn_entities(
+            &mut world,
+            &entities,
+            SceneOffset::default(),
+            &mut plain_sprite,
+        );
+
+        assert_eq!(spawned.len(), 2);
+        assert_eq!(world.world_ref().len(), 2);
+        assert_eq!(spawned[0].source_id, "a");
+        assert_eq!(spawned[0].position, [1.0, 2.0]);
+        assert_eq!(spawned[1].position, [3.0, 4.0]);
+    }
+
+    #[test]
+    fn spawn_entities_applies_the_offset() {
+        let mut world = GameWorld::new();
+        let entities = vec![entity("a", 1.0, 2.0)];
+
+        let spawned = spawn_entities(
+            &mut world,
+            &entities,
+            SceneOffset { x: 10.0, y: 20.0 },
+            &mut plain_sprite,
+        );
+
+        assert_eq!(spawned[0].position, [11.0, 22.0]);
+    }
+
+    #[test]
+    fn spawn_entities_spawns_role_only_entities_without_a_sprite() {
+        let mut world = GameWorld::new();
+        let entities = vec![Entity {
+            id: "player".to_string(),
+            name: "Player".to_string(),
+            components: vec![Component::Role {
+                role: "player".to_string(),
+            }],
+        }];
+
+        let spawned = spawn_entities(
+            &mut world,
+            &entities,
+            SceneOffset::default(),
+            &mut plain_sprite,
+        );
+
+        assert_eq!(spawned.len(), 1);
+        assert_eq!(spawned[0].role.as_deref(), Some("player"));
+        assert!(spawned[0].color.is_none());
+    }
 }

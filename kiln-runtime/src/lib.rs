@@ -21,7 +21,7 @@ pub mod physics;
 pub use input::*;
 pub use jobs::{load_file_async, JobHandle, TaskPool};
 pub use loop_::*;
-pub use scene::{count_scene_entities, spawn_scene, SpawnedEntity, SpriteFactory};
+pub use scene::{count_scene_entities, spawn_entities, spawn_scene, SpawnedEntity, SpriteFactory};
 pub use schedule::{build_stages, Schedule, SchedulePlan, SystemEntry};
 pub use settings::*;
 pub use slice::*;
