@@ -376,6 +376,7 @@ fn start_play_session(
     project: &Project,
     root: &Path,
     sizes: &HashMap<String, (u32, u32)>,
+    entities: &[kiln_core::project::Entity],
 ) -> Result<(kiln_runtime::SliceSession, String, GameWorld), String> {
     let scene_id = project
         .default_scene_id()
@@ -396,7 +397,25 @@ fn start_play_session(
             .join("; ")
     })?;
 
-    let (world, _spawned) = spawn_editor_scene(project, &scene_id, sizes);
+    // The game starts from the edited scene, so the editor shows what the
+    // player will see, even with unsaved changes.
+    let mut world = GameWorld::new();
+    let mut make_sprite =
+        |_entity: &kiln_core::project::Entity, color: [f32; 4], texture: Option<&str>| {
+            let size = texture
+                .and_then(|path| sizes.get(path))
+                .copied()
+                .unwrap_or((64, 64));
+            kiln_runtime::Sprite::new(color[0], color[1], color[2], color[3])
+                .with_size(size.0 as f32, size.1 as f32)
+        };
+    kiln_runtime::spawn_entities(
+        &mut world,
+        entities,
+        kiln_core::project::SceneOffset::default(),
+        &mut make_sprite,
+    );
+
     Ok((slice, scene_id, world))
 }
 
@@ -450,30 +469,6 @@ fn open_in_browser(url: &str) -> Result<(), String> {
         .spawn()
         .map(|_| ())
         .map_err(|e| format!("could not run {opener}: {e}"))
-}
-
-/// Spawn a project scene into a fresh world for the editor.
-///
-/// The editor has no GPU textures of its own yet, so sprites keep their
-/// tint; the scene view draws the texture from disk instead.
-fn spawn_editor_scene(
-    project: &Project,
-    scene_id: &str,
-    sizes: &HashMap<String, (u32, u32)>,
-) -> (GameWorld, Vec<kiln_runtime::SpawnedEntity>) {
-    let mut world = GameWorld::new();
-    let mut make_sprite = |_entity: &kiln_core::project::Entity,
-                           color: [f32; 4],
-                           texture: Option<&str>| {
-        // A sprite is as big as its texture, like in the player.
-        let size = texture
-            .and_then(|path| sizes.get(path))
-            .copied()
-            .unwrap_or((64, 64));
-        Sprite::new(color[0], color[1], color[2], color[3]).with_size(size.0 as f32, size.1 as f32)
-    };
-    let spawned = kiln_runtime::spawn_scene(&mut world, project, scene_id, &mut make_sprite);
-    (world, spawned)
 }
 
 impl Default for UIDesignerState {
@@ -628,60 +623,10 @@ impl EditorApp {
 
     /// Save the current project to its file path.
     pub fn save_project(&mut self) -> Result<(), String> {
-        let path = self
-            .project_path
-            .as_ref()
-            .ok_or("No project file open. Use Save As first.")?;
-
-        // Update project with current world state
-        if let Some(project) = &mut self.current_project {
-            // Convert ECS world to project scenes
-            // For now, create a default scene if none exists
-            if project.scenes.is_empty() {
-                use kiln_core::project::{Entity, Scene};
-                let mut entities = Vec::new();
-                let mut entity_id = 0;
-
-                // Iterate over all entities in the world
-                let world = self.world.world();
-                let mut query = world.query::<(&Transform, &Sprite)>();
-                for (transform, sprite) in query.iter() {
-                    entity_id += 1;
-                    entities.push(Entity {
-                        id: entity_id.to_string(),
-                        name: format!("Entity_{}", entity_id),
-                        components: vec![
-                            kiln_core::project::Component::Transform {
-                                x: transform.position.x,
-                                y: transform.position.y,
-                                rotation: transform.rotation,
-                                scale: transform.scale.x, // Store uniform scale as single value
-                            },
-                            kiln_core::project::Component::Sprite {
-                                color: sprite.color,
-                                texture: None,
-                            },
-                        ],
-                    });
-                }
-
-                let scene = Scene {
-                    id: "main_scene".to_string(),
-                    name: "Main Scene".to_string(),
-                    entities,
-                    nested_scenes: vec![],
-                    script: None,
-                };
-
-                project.scenes.insert("main_scene".to_string(), scene);
-            }
-
-            let toml_str = project.to_toml().map_err(|e| e.to_string())?;
-            std::fs::write(path, toml_str).map_err(|e| e.to_string())?;
-            Ok(())
-        } else {
-            Err("No project loaded".to_string())
-        }
+        // The edited scene is written into the project first, so the file
+        // holds what the user sees in the editor.
+        self.sync_scene_into_project()?;
+        self.write_project_file()
     }
 
     /// Save the current project to a new file path.
@@ -735,7 +680,9 @@ impl EditorApp {
             .ok_or("The project has no directory")?
             .to_path_buf();
 
-        let (slice, scene_id, world) = start_play_session(&project, &root, &self.texture_sizes)?;
+        let entities = self.scene.to_project_entities();
+        let (slice, scene_id, world) =
+            start_play_session(&project, &root, &self.texture_sizes, &entities)?;
 
         // The played scene replaces the edited one, so the scene view shows
         // the running game.
@@ -755,7 +702,9 @@ impl EditorApp {
     fn stop_play(&mut self) {
         self.play = None;
         self.is_playing = false;
-        self.load_project_scene();
+        // The edited scene is kept, so unsaved edits are not lost. The world
+        // is rebuilt from it, because the game changed it.
+        self.rebuild_world();
     }
 
     /// Reload the edited scene into the editor world.
@@ -1040,8 +989,11 @@ impl EditorApp {
         (x, y)
     }
 
-    /// Save the current world state as a scene.
-    pub fn save_scene(&mut self) -> Result<(), String> {
+    /// Write the edited scene into the project data.
+    ///
+    /// The scene keeps its id, name, script and nested scenes, so saving does
+    /// not break the game.
+    fn sync_scene_into_project(&mut self) -> Result<(), String> {
         // The scene keeps its id and script, so saving does not break the game.
         let scene_id = self.edited_scene_id();
         let script = self
@@ -1078,6 +1030,32 @@ impl EditorApp {
         } else {
             Err("No project loaded".to_string())
         }
+    }
+
+    /// Save the current world state as a scene.
+    ///
+    /// The scene is written into the project and the project file is written
+    /// to disk, because a scene lives inside the project file.
+    pub fn save_scene(&mut self) -> Result<(), String> {
+        self.sync_scene_into_project()?;
+        self.write_project_file()
+    }
+
+    /// Write the project data to the project file.
+    fn write_project_file(&mut self) -> Result<(), String> {
+        let path = self
+            .project_path
+            .as_ref()
+            .ok_or("No project file open. Use Save As first.")?
+            .clone();
+
+        let Some(project) = &mut self.current_project else {
+            return Err("No project loaded".to_string());
+        };
+
+        let toml_str = project.to_toml().map_err(|e| e.to_string())?;
+        std::fs::write(&path, toml_str).map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     /// Save the running game to its save slot.
