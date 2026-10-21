@@ -4,7 +4,10 @@ use hecs;
 use kiln_core::{project::Project, Transform};
 use kiln_gameplay::{DataTable, Dialogue, Quest};
 use kiln_graph::{ArithmeticOp, ConstantValue, Graph, Node, NodeType};
-use kiln_render::{clear_view, execute_passes, Frame2dGraph, PassTiming, RenderTier};
+use kiln_render::{
+    camera::Camera, clear_view, execute_passes, Frame2dGraph, PassTiming, RenderTier,
+    SpriteInstance, SpriteRenderer, TextureId,
+};
 use kiln_runtime::{GameWorld, SourceId, Sprite};
 use kiln_ui::{Button, Label, List, Panel, Widget, WidgetId};
 use std::collections::HashMap;
@@ -74,6 +77,10 @@ pub struct EditorApp {
     scene_textures: HashMap<String, egui::TextureHandle>,
     /// Pixel size of every scene texture, keyed by asset path.
     texture_sizes: HashMap<String, (u32, u32)>,
+    /// Texture IDs in the scene view SpriteRenderer, keyed by asset path.
+    scene_view_texture_ids: HashMap<String, TextureId>,
+    /// Screen-space rectangle of the scene view panel from the last frame.
+    scene_view_rect: Option<egui::Rect>,
     graph: Graph,
     render_tier: RenderTier,
     show_welcome: bool,
@@ -117,6 +124,11 @@ struct GpuState {
     surface: wgpu::Surface<'static>,
     renderer: kiln_render::Renderer,
     egui_renderer: egui_wgpu::Renderer,
+    /// Sprite batch renderer for the scene view. Draws scene entities using the
+    /// same GPU pipeline as the standalone player.
+    scene_view_sprite_renderer: SpriteRenderer,
+    /// Camera for the scene view (screen space, top-left origin).
+    scene_view_camera: Camera,
 }
 
 /// UI designer state for the visual UI editor.
@@ -452,6 +464,8 @@ impl EditorApp {
             entity_textures: HashMap::new(),
             entity_roles: HashMap::new(),
             scene_textures: HashMap::new(),
+            scene_view_texture_ids: HashMap::new(),
+            scene_view_rect: None,
             texture_sizes: HashMap::new(),
             graph: Graph::new(),
             render_tier: RenderTier::default(),
@@ -488,14 +502,24 @@ impl EditorApp {
         // Capture auto-selected tier
         self.render_tier = renderer.tier();
 
-        let egui_renderer =
-            egui_wgpu::Renderer::new(renderer.device(), renderer.format(), None, 1, false);
+        // Create sprite and egui renderers while borrowing `renderer`,
+        // then move `renderer` into GpuState once borrows end.
+        let (scene_view_sprite_renderer, egui_renderer) = {
+            let device = renderer.device();
+            let queue = renderer.queue();
+            let format = renderer.format();
+            let sr = SpriteRenderer::new(device, queue, format);
+            let er = egui_wgpu::Renderer::new(device, format, None, 1, false);
+            (sr, er)
+        };
 
         self.gpu = Some(GpuState {
             window,
             surface,
             renderer,
             egui_renderer,
+            scene_view_sprite_renderer,
+            scene_view_camera: Camera::new_top_left(size.width as f32, size.height as f32),
         });
     }
 
@@ -1151,8 +1175,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                     project_root: self.project_root.as_deref(),
                     ctx: self.egui_winit.egui_ctx(),
                     console_log: &self.console_log,
+                    scene_view_rect: self.scene_view_rect,
                 };
                 tree.show(ctx, &mut tab_viewer);
+                self.scene_view_rect = tab_viewer.scene_view_rect;
             });
 
             // Status bar
@@ -1258,10 +1284,89 @@ impl winit::application::ApplicationHandler for EditorApp {
             .end_pass(&mut encoder, egui_begin);
         gpu.renderer.profiler_mut().resolve(&mut encoder);
 
+        // Render scene sprites into the swapchain view using the GPU sprite
+        // renderer, clipped to the scene view panel rect so egui overlays on top.
+        if let Some(rect) = self.scene_view_rect {
+            let device = gpu.renderer.device();
+            let queue = gpu.renderer.queue();
+
+            // Upload textures and push sprites to the sprite renderer.
+            gpu.scene_view_sprite_renderer.begin_frame();
+            for (source_id, transform, sprite) in self
+                .world
+                .world()
+                .query::<(&SourceId, &Transform, &Sprite)>()
+                .iter()
+            {
+                let path = match self.entity_textures.get(&source_id.0) {
+                    Some(p) => p.clone(),
+                    None => continue,
+                };
+                let texture_id = *self
+                    .scene_view_texture_ids
+                    .entry(path.clone())
+                    .or_insert_with(|| {
+                        let full_path = self
+                            .project_root
+                            .as_ref()
+                            .unwrap()
+                            .join(&path);
+                        let bytes = match std::fs::read(&full_path) {
+                            Ok(b) => b,
+                            Err(_) => return TextureId::WHITE,
+                        };
+                        match kiln_assets::decode_png(&bytes) {
+                            Ok(image) => gpu
+                                .scene_view_sprite_renderer
+                                .create_texture_rgba(
+                                    device,
+                                    queue,
+                                    &path,
+                                    image.width,
+                                    image.height,
+                                    &image.pixels,
+                                ),
+                            Err(_) => TextureId::WHITE,
+                        }
+                    });
+                gpu.scene_view_sprite_renderer.push_textured(
+                    texture_id,
+                    SpriteInstance {
+                        position: [transform.position.x, transform.position.y],
+                        size: sprite.size,
+                        color: sprite.color,
+                        uv_rect: sprite.uv_rect,
+                    },
+                );
+            }
+
+            // Render sprites to the swapchain view, clipped to the scene view rect.
+            let target_size = [
+                rect.width() as u32,
+                rect.height() as u32,
+            ];
+            let offset = [rect.min.x as u32, rect.min.y as u32];
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("scene_view_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            pass.set_scissor_rect(offset[0], offset[1], target_size[0], target_size[1]);
+            gpu.scene_view_sprite_renderer
+                .flush(&mut pass, &gpu.scene_view_camera, queue);
+            drop(pass);
+        }
+
         gpu.renderer.queue().submit([encoder.finish()]);
-        gpu.renderer.poll_profiler();
-        frame.present();
-        gpu.window.request_redraw();
 
         // Execute menu actions after UI pass (borrows are released)
         for action in menu_actions {
@@ -1431,6 +1536,8 @@ struct TabViewer<'a> {
     ctx: &'a egui::Context,
     /// Lines shown in the console panel.
     console_log: &'a [String],
+    /// Screen-space rectangle of the scene view panel from the last frame.
+    scene_view_rect: Option<egui::Rect>,
 }
 
 impl<'a> egui_dock::TabViewer for TabViewer<'a> {
