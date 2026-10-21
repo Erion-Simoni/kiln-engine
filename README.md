@@ -35,6 +35,18 @@ The editor is also available via `cargo install`:
 cargo install --git https://github.com/kiln-engine/kiln kiln-editor
 ```
 
+## Try the vertical slice
+
+`samples/vertical_slice/` is a small 2D game that exercises the whole stack:
+art loaded from disk, game rules written in KilnScript, save/load and an
+on-screen HUD. It runs in the standalone player and in the editor.
+
+```bash
+cargo run -p kiln-player -- --archive samples/vertical_slice
+```
+
+See [samples/vertical_slice/README.md](samples/vertical_slice/README.md).
+
 ## Tutorial
 
 New to Kiln? Start with the [Tutorial](docs/TUTORIAL.md) to build your first game.

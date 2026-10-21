@@ -252,6 +252,8 @@ impl PlayerApp {
             Ok(session) => {
                 info!("Loaded scene script '{path}'");
                 self.slice = Some(session);
+                // Resume the game from its save, if there is one.
+                self.load_game();
             }
             Err(diagnostics) => {
                 for diagnostic in diagnostics {

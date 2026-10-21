@@ -24,6 +24,9 @@ Thumbs.db
 # Asset cache
 .kiln-cache/
 
+# Game saves written next to a project
+.kiln-save/
+
 # Generated archives
 *.kar
 

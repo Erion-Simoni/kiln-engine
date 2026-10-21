@@ -736,3 +736,77 @@ for a split in review.
 - Existing large files (`kiln-editor/src/app.rs`, `kiln-cli/src/main.rs`, etc.)
   are acceptable until a natural split is warranted
 - Splits still preferred when a clear submodule boundary appears
+
+---
+
+## ADR-0028: Script-driven vertical slice with a shared scene spawner (accepted)
+
+**Date:** 2026-10-21
+**Status:** accepted
+
+**Decision:** The vertical slice (G-4) is a real Kiln project in
+`samples/vertical_slice/` — a manifest, PNG art on disk and a KilnScript
+holding the game rules — rather than a hard-coded Rust sample. Three engine
+changes make that work:
+
+1. **Scenes can name a script.** `kiln_core::project::Scene` gains a
+   `script: Option<String>` field (path relative to the project root), and
+   entities can declare a gameplay `Component::Role { role }`.
+2. **One scene spawner for both hosts.** `kiln_runtime::scene` turns project
+   data into runtime components. The player binds GPU textures through a
+   sprite factory callback; the editor draws the textures with `egui`.
+3. **A script-driven game loop in the runtime.** `kiln_runtime::slice` runs a
+   KilnScript once per frame. The script reads *facts* (input axis, frame
+   length, score, nearby pickups) and emits *commands* (move, collect, score,
+   status); the runtime applies the commands to the world. The script never
+   touches the ECS world directly, so it stays safe to run and easy to test.
+
+The VM's host call gains an argument count (`Instruction::HostCall { id,
+argc }`), so a call consumes only its own arguments and calls compose. The
+script language gains `let` bindings, assignment, unary minus and line
+comments, which a game needs to keep state.
+
+**Alternatives:**
+- Hard-coded Rust sample: fast to write, but proves nothing about the
+  engine — the sample would be the game, not the engine running a game.
+- Script drives the ECS world directly (queries, spawns, despawns): more
+  powerful, but the script would need a mutable world borrow, which
+  conflicts with the VM's own borrow, and every script becomes untestable
+  without a world.
+- One script per entity rather than per scene: finer grained, but the game
+  rules of a slice belong together; per-entity scripts can come later.
+
+**Consequences:**
+- `kiln-runtime` depends on `kiln-ir` and `kiln-script`; `kiln-player` and
+  `kiln-editor` depend on `kiln-runtime` only.
+- The HUD is drawn in screen space with the top-left camera
+  (`Camera::new_top_left`) and the built-in bitmap font, so no font assets
+  are needed.
+- Game state is a plain serialisable struct written to a save slot through
+  `kiln-save`, so the player (F5/F9) and the editor share one format.
+- The script API is a fixed list of builtins (`kiln_runtime::slice::BUILTINS`);
+  growing it means adding an id and a host arm together.
+
+---
+
+## ADR-0029: Local variables in KilnScript (accepted)
+
+**Date:** 2026-10-21
+**Status:** accepted
+
+**Decision:** KilnScript supports local variables: `let name = expr;` declares
+one, `name = expr;` assigns to it, and a name reads its value. Slots are
+allocated per program and stored in the VM (`GetLocal` / `SetLocal`), reset
+when a program starts running.
+
+**Alternatives:**
+- Keep the language expression-only: a game script could not keep a score or
+  a timer, so the rules could not live in the script.
+- Store variables on the host: then the state of a script run would live in
+  the host, and the same script could not be run twice with different state.
+
+**Consequences:**
+- `let` may not redeclare a name in the same scope; blocks (`if`) get their
+  own scope.
+- Variables live in the VM, so they are reset for every run of a program —
+  a per-frame script has to keep its state in the host (the slice state).

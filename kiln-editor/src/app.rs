@@ -607,6 +607,9 @@ impl EditorApp {
             scene_id,
             error: None,
         });
+
+        // Resume the game from its save, if there is one.
+        self.load_game();
         Ok(())
     }
 
@@ -747,6 +750,49 @@ impl EditorApp {
         }
     }
 
+    /// Save the running game to its save slot.
+    fn save_game(&mut self) {
+        let Some(play) = self.play.as_ref() else {
+            return;
+        };
+        let Some(dir) = self.save_dir() else {
+            return;
+        };
+        match kiln_runtime::save_state(&dir, 0, play.slice.state()) {
+            Ok(()) => self.console_log.push("[INFO] Game saved".to_string()),
+            Err(e) => {
+                let message = format!("[ERROR] Could not save the game: {e}");
+                log::error!("{message}");
+                self.console_log.push(message);
+            }
+        }
+    }
+
+    /// Load the running game from its save slot.
+    fn load_game(&mut self) {
+        let Some(dir) = self.save_dir() else {
+            return;
+        };
+        let state = match kiln_runtime::load_state(&dir, 0) {
+            Ok(state) => state,
+            // No save yet is not an error; the game just starts fresh.
+            Err(_) => return,
+        };
+        let Some(play) = self.play.as_mut() else {
+            return;
+        };
+        play.slice.set_state(state);
+        play.slice.sync_world(&mut self.world);
+        self.console_log.push("[INFO] Game loaded".to_string());
+    }
+
+    /// The directory the game state is saved in.
+    fn save_dir(&self) -> Option<PathBuf> {
+        self.project_root
+            .as_ref()
+            .map(|root| root.join(".kiln-save"))
+    }
+
     /// Load a scene into the current world.
     pub fn load_scene(&mut self) -> Result<(), String> {
         if self.current_project.is_none() {
@@ -867,6 +913,9 @@ impl winit::application::ApplicationHandler for EditorApp {
 
         // Track menu actions to execute after UI pass
         let mut menu_actions = Vec::new();
+        // Track the save and load requests from the keyboard.
+        let mut save_requested = false;
+        let mut load_requested = false;
 
         // Top menu bar
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
@@ -1243,6 +1292,25 @@ impl winit::application::ApplicationHandler for EditorApp {
             }
         }
 
+        // Save and load the running game, like the standalone player does.
+        if self.play.is_some() {
+            let ctx = self.egui_winit.egui_ctx();
+            ctx.input(|i| {
+                if i.key_pressed(egui::Key::F5) {
+                    save_requested = true;
+                }
+                if i.key_pressed(egui::Key::F9) {
+                    load_requested = true;
+                }
+            });
+        }
+        if save_requested {
+            self.save_game();
+        }
+        if load_requested {
+            self.load_game();
+        }
+
         // Handle the open-project request from the welcome screen.
         if std::mem::take(&mut self.open_project_requested) {
             let path = PathBuf::from(self.project_path_input.trim());
@@ -1502,6 +1570,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 egui::Color32::from_rgba_premultiplied(255, 220, 120, 255),
                             );
                         }
+                        painter.text(
+                            egui::pos2(rect.left() + 12.0, rect.bottom() - 40.0),
+                            egui::Align2::LEFT_BOTTOM,
+                            "ARROWS MOVE   F5 SAVE   F9 LOAD",
+                            egui::FontId::monospace(13.0),
+                            egui::Color32::from_rgba_premultiplied(200, 200, 210, 255),
+                        );
                         if let Some(error) = &play.error {
                             painter.text(
                                 egui::pos2(rect.left() + 12.0, rect.bottom() - 20.0),

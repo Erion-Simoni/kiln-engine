@@ -74,14 +74,38 @@ tracked checkbox. They are the hard prerequisites for a shippable 2D engine.
 **Status:** Done.
 
 ### G-4: Vertical slice sample
-- [ ] Sample uses textured art loaded from disk (not generated colours)
-- [ ] Sample uses script or graph logic that actually runs
-- [ ] Sample saves and loads game state
-- [ ] Sample shows on-screen UI (not console output)
-- [ ] Sample runs from the editor and from the standalone player
-**Location:** `samples/` — all current samples are console `println` smokes
+- [x] Sample uses textured art loaded from disk (not generated colours)
+- [x] Sample uses script or graph logic that actually runs
+- [x] Sample saves and loads game state
+- [x] Sample shows on-screen UI (not console output)
+- [x] Sample runs from the editor and from the standalone player
+**Location:** `samples/vertical_slice/` — a real Kiln project (manifest, PNG
+art, KilnScript), replacing the console `println` smokes
 **Milestone:** 2D gate
-**Status:** Not started.
+**Status:** Done (2026-10-21).
+
+**What landed:**
+- `samples/vertical_slice/` is a Kiln project: `kiln.toml` (window, scene,
+  entities), `art/hero.png`, `art/coin.png`, `art/ground.png` (real PNGs
+  loaded from disk) and `scripts/main.ks` (the game rules).
+- The rules live in the script: it moves the hero, collects a coin and keeps
+  the score. The engine only provides the vocabulary (`move_player`,
+  `collect_coin`, `add_score`, `set_status`, `get_input_x`, ...).
+- `kiln-runtime::slice` runs the script once per frame: it reads the frame's
+  facts and applies the commands the script emits to the world.
+- `kiln-runtime::scene` is the one scene spawner: the player binds GPU
+  textures, the editor draws them with `egui`, and both build the same world.
+- The player shows an on-screen HUD (score, status, controls) and saves and
+  loads the game state with F5/F9; the editor's Play button runs the same
+  loop and shows the same HUD over the scene view.
+- 5 integration tests in `kiln-player/tests/vertical_slice.rs` load the real
+  project and check the art, the script, the gameplay and the save round trip.
+
+**How to run it:**
+```sh
+cargo run -p kiln-player -- --archive samples/vertical_slice
+```
+or open `samples/vertical_slice/kiln.toml` in the editor and press Play.
 
 ### G-5: Reconcile ROADMAP checkboxes
 - [ ] `docs/ROADMAP.md` checkboxes match the honesty audit
@@ -508,7 +532,7 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
    | Asset → GPU | G-1 | Done |
    | Real tilemap | G-2 | Not started — no tilemap module |
    | VM maturity | G-3 | Not started — no string values |
-   | Vertical slice sample | G-4 | Not started — all samples are console smokes |
+   | Vertical slice sample | G-4 | Done — script-driven project in `samples/vertical_slice/` |
    | Reconcile ROADMAP checkboxes | G-5 | Not started — docs contradict the audit |
    | Editor truth | G-6 | Partial — see E-1 / E-9 / E-10 |
    | Textured sprites | — | Done |
