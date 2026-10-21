@@ -3,8 +3,8 @@
 **Current milestone:** M0–M28 claimed complete in prior sessions — the
 honesty audit says **Partial overall**. Do **not** start M29 (3D) until the 2D
 gate below is met.
-**G-1, G-2, G-3 and G-4 are done** — the vertical slice now runs from both
-the standalone player and the editor. **G-5 is next.**
+**G-1, G-2, G-3, G-4 and G-5 are done** — the vertical slice now runs from
+the standalone player and the editor. **G-6 is next.**
 
 ---
 
@@ -108,11 +108,11 @@ Ordered by impact. One item per session; commit after each.
 2. **G-2: Real tilemap** — ✅ done
 3. **G-3: VM maturity** — ✅ done
 4. **G-4: Vertical slice sample** — ✅ done this session
-5. **G-5: Reconcile ROADMAP checkboxes** with this audit
+5. **G-5: Reconcile ROADMAP checkboxes** with this audit — **done**
 6. **G-6: Editor truth** — GPU scene view; inspector + save/load; undo; PIE
    viewport (E-1 / E-9 / E-10)
 
-**Do not start M29 (3D)** until G-5 and G-6 are honestly done.
+**Do not start M29 (3D)** until G-6 is honestly done.
 
 ---
 

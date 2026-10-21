@@ -109,12 +109,23 @@ cargo run -p kiln-player -- --archive samples/vertical_slice
 or open `samples/vertical_slice/kiln.toml` in the editor and press Play.
 
 ### G-5: Reconcile ROADMAP checkboxes
-- [ ] `docs/ROADMAP.md` checkboxes match the honesty audit
-- [ ] `ROADMAP_FULL_M14_PLUS.md` checkboxes match the audit
-- [ ] Milestone verdicts (Partial / Stub) recorded, not just "done"
+- [x] `docs/ROADMAP.md` checkboxes match the honesty audit
+- [x] `ROADMAP_FULL_M14_PLUS.md` checkboxes match the audit
+- [x] Milestone verdicts (Partial / Stub / Done / Not started) recorded, not just "done"
 **Location:** `docs/ROADMAP.md`, `ROADMAP_FULL_M14_PLUS.md`
 **Milestone:** 2D gate
-**Status:** Not started. Roadmap checkboxes currently contradict `docs/STATE.md`.
+**Status:** Done (2026-10-21).
+
+**What landed:**
+- `docs/ROADMAP.md` (M0-M17): every acceptance checkbox checked against the
+  code and marked [x] where real, [ ] where deferred/stub; each milestone
+  ends with a **Verdict: Done / Partial / Not started** line.
+- `ROADMAP_FULL_M14_PLUS.md` (R0, M14-M61): every milestone has the same
+  treatment; R0 and M14-M28 carry evidence-backed verdicts, M29-M61 are
+  marked **Verdict: Not started** - planned; no code yet.
+- Contradictions between the roadmaps and `docs/STATE.md` resolved: the
+  roadmaps now say Partial where STATE.md says Partial, and Done where
+  STATE.md says Done.
 
 ### G-6: Editor truth
 - [ ] Scene view renders through the real engine framebuffer (see E-9)
@@ -534,7 +545,7 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
    | Real tilemap | G-2 | Not started — no tilemap module |
    | VM maturity | G-3 | Not started — no string values |
    | Vertical slice sample | G-4 | Done — script-driven project in `samples/vertical_slice/` |
-   | Reconcile ROADMAP checkboxes | G-5 | Not started — docs contradict the audit |
+   | Reconcile ROADMAP checkboxes | G-5 | Done — checkboxes and verdicts reconciled with the audit |
    | Editor truth | G-6 | Partial — see E-1 / E-9 / E-10 |
    | Textured sprites | — | Done |
    | Standalone player | — | Done (F6) |

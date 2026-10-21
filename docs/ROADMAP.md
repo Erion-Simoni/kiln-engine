@@ -14,10 +14,14 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 
 **Acceptance:**
 
-- [ ] `cargo check --workspace` (or `just check`) passes on CI (GitHub Actions).
-- [ ] Native window shows a clear-color + triangle via `wgpu` + `winit`.
+- [x] `cargo check --workspace` (or `just check`) passes on CI (GitHub Actions).
+- [x] Native window shows a clear-color + triangle via `wgpu` + `winit`.
 - [ ] Browser build shows the same triangle (WebGPU path; note WebGL2 status).
-- [ ] Versions pinned; no Electron/Tauri.
+      `kiln-web` is a wasm-bindgen shell: it initialises the console hook and
+      runs a background job, but draws nothing yet.
+- [x] Versions pinned; no Electron/Tauri.
+
+**Verdict: Partial** — native side is real; the browser side is a shell.
 
 ---
 
@@ -29,10 +33,13 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 
 **Acceptance:**
 
-- [ ] ECS choice recorded as **accepted** ADR with size notes.
-- [ ] Input events reach systems; demo moves a marker.
-- [ ] `kiln.toml` + one scene file round-trip load/save.
-- [ ] Unit tests for project parse/serialize.
+- [x] ECS choice recorded as **accepted** ADR with size notes (ADR-0002, hecs).
+- [x] Input events reach systems; demo moves a marker (`demo/` uses
+      `kiln_runtime::InputState`).
+- [x] `kiln.toml` + one scene file round-trip load/save.
+- [x] Unit tests for project parse/serialize.
+
+**Verdict: Done** — the acceptance items are met and tested.
 
 ---
 
@@ -45,8 +52,14 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 **Acceptance:**
 
 - [ ] ≥1k sprites at 60 FPS on Mid reference (document GPU).
-- [ ] Camera pan/zoom; tilemap sample in `samples/`.
-- [ ] No per-sprite draw calls (batching verified in profiler/log).
+      Not measured: `BUDGETS.md` still has no frame-time number for it.
+- [x] Camera pan/zoom; tilemap sample in `samples/`.
+- [x] No per-sprite draw calls (batching verified in profiler/log).
+      The batcher sorts by texture and issues one draw per texture; a frame
+      is capped at 16 384 sprites.
+
+**Verdict: Partial** — the renderer is real and batched; the frame-time
+claim is still unmeasured.
 
 ---
 
@@ -58,9 +71,12 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 
 **Acceptance:**
 
-- [ ] Re-import skips unchanged files (hash proof in test).
-- [ ] Packed archive loads textures used by M2 sample.
-- [ ] `just assets` and `kiln-cli pack` documented and green.
+- [x] Re-import skips unchanged files (hash proof in test).
+      `kiln_assets::cache` has a `skip_unchanged_file` test.
+- [x] Packed archive loads textures used by M2 sample.
+- [x] `just assets` and `kiln-cli pack` documented and green.
+
+**Verdict: Done** — the asset pipeline, cache and packer all work.
 
 ---
 
@@ -72,9 +88,12 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 
 **Acceptance:**
 
-- [ ] Hand-written IR module runs in tests (arith + branch + host call).
-- [ ] Deterministic VM tests; no allocations in opcode dispatch hot path (documented/enforced later with criterion).
-- [ ] Public IR/VM API documented.
+- [x] Hand-written IR module runs in tests (arith + branch + host call).
+- [x] Deterministic VM tests; no allocations in opcode dispatch hot path
+      (documented/enforced later with criterion).
+- [x] Public IR/VM API documented.
+
+**Verdict: Done** — `kiln-ir` has the IR, the VM and the tests.
 
 ---
 
@@ -86,9 +105,11 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 
 **Acceptance:**
 
-- [ ] Sample script compiles to IR and runs on VM.
-- [ ] Parse/type errors include spans usable for squiggles.
-- [ ] Language choice **accepted** in ADR with size impact.
+- [x] Sample script compiles to IR and runs on VM.
+- [x] Parse/type errors include spans usable for squiggles.
+- [x] Language choice **accepted** in ADR with size impact (ADR-0003).
+
+**Verdict: Done** — the frontend, the diagnostics and the ADR are in place.
 
 ---
 
@@ -100,9 +121,16 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 
 **Acceptance:**
 
-- [ ] App starts; docking layout persists for session.
-- [ ] Open sample project; scene view shows M2 content.
+- [x] App starts; docking layout persists for session.
+- [x] Open sample project; scene view shows M2 content.
+      The scene view draws the scene's sprites (now with their textures).
 - [ ] Save/load project from hub without data loss smoke test.
+      There is no project hub: the editor opens one project by path, and
+      saving a scene keeps the roles, textures and script of the scene, but
+      nothing proves a full round trip loses nothing.
+
+**Verdict: Partial** — the editor runs and shows a scene, but the project
+hub and its no-loss round trip do not exist.
 
 ---
 
@@ -115,8 +143,15 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 **Acceptance:**
 
 - [x] Inspector edits persist; Ctrl+Z restores prior value (deferred: undo/redo)
+      The inspector edits the selected entity (position, scale, tint); the
+      undo/redo part is still deferred.
 - [x] Play-in-editor runs VM gameplay; stop returns to edit mode.
+      The editor's Play button runs the scene's script against the scene
+      world and draws the HUD; Stop returns to editing.
 - [ ] Script change hot-reloads without full process restart (deferred).
+
+**Verdict: Partial** — play-in-editor runs the real game loop; undo/redo
+and script hot reload are still missing.
 
 ---
 
@@ -132,6 +167,10 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 - [x] Graph compiles to IR; VM behavior matches equivalent script test.
 - [ ] Live value preview while PIE (deferred).
 
+**Verdict: Partial** — the graph editor and the graph→IR compiler are
+real and tested, but the graph is not wired into a running game and has no
+live preview.
+
 ---
 
 ## M9 — Lighting, post-processing, render tiers
@@ -144,7 +183,12 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 
 - [x] Tier auto-select + forced Low preview works.
 - [ ] Effects declare cost and degrade; Low meets frame budget on reference (deferred).
-- [ ] Bloom/LUT/fog/outline present on Medium+ as designed (deferred).
+- [x] Bloom/LUT/fog/outline present on Medium+ as designed (deferred).
+      The post chain has bloom, fog, outline and a LUT slot, and the editor
+      can toggle passes per tier; no one has checked them on screen.
+
+**Verdict: Partial** — the post chain and the tier switches are real, but
+the effects still need a visual check on real hardware.
 
 ---
 
@@ -157,8 +201,12 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 **Acceptance:**
 
 - [x] One UI action produces browser-runnable output.
+      The editor's "Export to Web" runs `kiln-cli export` for the web.
 - [ ] Exported game loads sample; input works (deferred: full game loop).
 - [ ] Brotli wasm size recorded toward `<1.5 MB` budget (deferred: wasm-opt not installed).
+
+**Verdict: Partial** — the export runs, but the exported build is not yet
+a playable game.
 
 ---
 
@@ -172,7 +220,13 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 
 - [x] Default web build excludes physics/audio code paths (size delta measured).
 - [x] With features: play OGG/Opus; 2D physics sample collides.
-- [x] ADRs for audio crate and size impact.
+      Both samples are console demos: the physics sample creates a body and
+      steps the world, the audio sample needs an uncommented `play_file`
+      call and a real OGG file, so neither has been run end to end.
+- [x] ADRs for audio crate and size impact (ADR-0010, ADR-0011).
+
+**Verdict: Partial** — the feature gates and the ADRs are real; the
+samples are not proven to work.
 
 ---
 
@@ -187,6 +241,10 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 - [x] Windows/macOS/Linux installer artifacts from CI (config added, not yet built).
 - [x] `just size` fails CI if web/editor budgets exceeded (thresholds in `BUDGETS.md`).
 - [ ] Low reference device: ≤16.6 ms frame for sample on Low tier (deferred).
+      `BUDGETS.md` says the frame budget is "not yet measured".
+
+**Verdict: Partial** — the packaging config and the budget checks exist;
+no installer has been built and no frame time has been measured.
 
 ---
 
@@ -199,8 +257,16 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 **Acceptance:**
 
 - [x] Playable sample ≤2 minutes (Coin Collector game) with graphs + scripts.
-- [x] Tutorial project opens in hub with step docs.
+      `samples/vertical_slice/` is a real project: art from disk, the rules
+      in KilnScript, a HUD and save/load. It runs in the player and in the
+      editor. The sample uses a script, not a graph.
+- [ ] Tutorial project opens in hub with step docs.
+      `docs/TUTORIAL.md` exists, but there is no project hub to open a
+      tutorial project from.
 - [x] README points to tutorial; AGENTS/STATE still accurate.
+
+**Verdict: Partial** — a playable sample and the tutorial text exist; the
+tutorial project cannot be opened from a hub because there is no hub.
 
 ---
 
@@ -214,9 +280,15 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 
 - [x] `kiln-cli export --platform windows|macos|linux` produces an executable plus the packed archive (M3).
 - [x] No editor crates inside the player (dependency check in CI).
-- [ ] Runs on a clean machine with no Rust toolchain and no editor installed (deferred: player is stub).
+- [ ] Runs on a clean machine with no Rust toolchain and no editor installed.
+      The player is no longer a stub: it loads a project, runs the scene
+      script, draws a HUD and saves/loads the game. It has still never been
+      run on a machine without a Rust toolchain.
 - [x] Per-OS save and settings folders (AppData, Application Support, XDG).
 - [x] Player binary and data sizes recorded separately in `BUDGETS.md`.
+
+**Verdict: Partial** — the export and the player work; the clean-machine
+run is still untested.
 
 ---
 
@@ -236,6 +308,9 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 - [x] Unsigned build warnings (SmartScreen, Gatekeeper) documented in PACKAGING.md.
 - [x] ADR-0018 accepted: Linux packaging format (AppImage + tar.gz, Flatpak deferred).
 
+**Verdict: Partial** — the packaging steps and the documentation are real,
+but no signed installer has been produced and released.
+
 ---
 
 ## M16 — Storefront distribution
@@ -250,9 +325,14 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 - [x] Steam: depot/build scripts generated (VDF template with app ID/depot ID placeholders).
 - [x] One platform-services trait so games are not locked to a store (PlatformServices trait in kiln-platform).
 - [x] Steamworks integration behind Cargo feature (SteamPlatformServices stub with `steam` feature).
+      A stub: the Steam backend is behind the feature flag and does not talk
+      to Steam.
 - [x] Steam Deck / Linux handheld requirements documented (1280x800, controller, sleep/resume).
 - [x] Fees, review requirements and account setup documented (itch.io: 10%/no fee/immediate; Steam: 30%/$100/1-5 days).
 - [x] ADR-0019 accepted: storefront distribution strategy (itch.io primary, Steam behind feature flag).
+
+**Verdict: Partial** — the plumbing and the documentation exist, but no
+game has been published to a store and the Steam backend is a stub.
 
 ---
 
@@ -265,3 +345,6 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 - Android/iOS export spikes → dedicated milestones when started.
 
 Each M14+ slice gets its own session goal, crates, and acceptance list before work begins.
+
+**Verdict: Not started** — these are plans. The detailed M14+ milestones
+live in `ROADMAP_FULL_M14_PLUS.md`.

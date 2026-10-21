@@ -739,7 +739,7 @@ for a split in review.
 
 ---
 
-## ADR-0028: Script-driven vertical slice with a shared scene spawner (accepted)
+## ADR-0030: Script-driven vertical slice with a shared scene spawner (accepted)
 
 **Date:** 2026-10-21
 **Status:** accepted
@@ -789,7 +789,7 @@ comments, which a game needs to keep state.
 
 ---
 
-## ADR-0029: Local variables in KilnScript (accepted)
+## ADR-0031: Local variables in KilnScript (accepted)
 
 **Date:** 2026-10-21
 **Status:** accepted
