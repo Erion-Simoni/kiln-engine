@@ -46,8 +46,12 @@ impl SaveSlotManager {
         })
     }
 
-    /// Create a new save slot manager with a custom directory (for testing).
+    /// Create a new save slot manager with a custom directory.
+    ///
+    /// The directory is created if it does not exist yet, so a save always
+    /// has somewhere to go.
     pub fn with_directory(save_dir: PathBuf) -> Self {
+        let _ = fs::create_dir_all(&save_dir);
         Self {
             save_dir,
             migrations: Vec::new(),

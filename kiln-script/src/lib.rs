@@ -21,17 +21,10 @@ pub trait LanguageFrontend {
 }
 
 /// KilnScript frontend implementation.
+#[derive(Default)]
 pub struct KilnScriptFrontend {
     /// Host functions callable from scripts: name → (host id, argument count).
     builtins: Vec<(String, u32, u32)>,
-}
-
-impl Default for KilnScriptFrontend {
-    fn default() -> Self {
-        Self {
-            builtins: Vec::new(),
-        }
-    }
 }
 
 impl KilnScriptFrontend {

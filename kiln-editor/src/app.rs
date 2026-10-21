@@ -1045,7 +1045,7 @@ impl winit::application::ApplicationHandler for EditorApp {
                     entity_textures: &self.entity_textures,
                     scene_textures: &mut self.scene_textures,
                     project_root: self.project_root.as_deref(),
-                    ctx: &self.egui_winit.egui_ctx(),
+                    ctx: self.egui_winit.egui_ctx(),
                     console_log: &self.console_log,
                 };
                 tree.show(ctx, &mut tab_viewer);
@@ -1392,12 +1392,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         );
 
                         let texture = self.entity_textures.get(&source_id).and_then(|path| {
-                            scene_texture(
-                                self.ctx,
-                                self.project_root.as_deref(),
-                                self.scene_textures,
-                                path,
-                            )
+                            scene_texture(self.ctx, self.project_root, self.scene_textures, path)
                         });
                         match texture {
                             Some(texture) => {

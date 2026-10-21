@@ -90,13 +90,28 @@ impl<'a> Lexer<'a> {
     }
 
     fn skip_whitespace(&mut self) {
-        while let Some(&c) = self.input.peek() {
-            if c.is_ascii_whitespace() {
-                self.input.next();
-                self.pos += 1;
-            } else {
-                break;
+        loop {
+            while let Some(&c) = self.input.peek() {
+                if c.is_ascii_whitespace() {
+                    self.input.next();
+                    self.pos += 1;
+                } else {
+                    break;
+                }
             }
+
+            // Line comments run to the end of the line.
+            if self.input.peek() == Some(&'/') && self.input.clone().nth(1) == Some('/') {
+                for c in self.input.by_ref() {
+                    self.pos += 1;
+                    if c == '\n' {
+                        break;
+                    }
+                }
+                continue;
+            }
+
+            break;
         }
     }
 
@@ -328,6 +343,13 @@ mod tests {
         let mut lexer = Lexer::new("  42  ");
         let t = lexer.next_token().unwrap();
         assert_eq!(t.token, Token::Number(42));
+    }
+
+    #[test]
+    fn lex_line_comment() {
+        let mut lexer = Lexer::new("// a comment\n42 // trailing\n7");
+        assert_eq!(lexer.next_token().unwrap().token, Token::Number(42));
+        assert_eq!(lexer.next_token().unwrap().token, Token::Number(7));
     }
 
     #[test]
