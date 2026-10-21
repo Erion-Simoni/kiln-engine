@@ -312,6 +312,9 @@ impl SliceSession {
                     let x = player.x as f64 + dx;
                     let y = player.y as f64 + dy;
                     set_player_position(world, &player.source_id, x, y);
+                    // Remember the position, so a save keeps it.
+                    self.state.player_x = x;
+                    self.state.player_y = y;
                 }
             }
             SliceCommand::AddScore(amount) => {
@@ -528,6 +531,28 @@ mod tests {
         session.sync_world(&mut rebuilt);
 
         assert_eq!(entity_count(&rebuilt), 1);
+    }
+
+    #[test]
+    fn the_player_position_survives_a_save_and_load() {
+        let mut world = GameWorld::new();
+        spawn_player(&mut world, 0.0, 0.0);
+
+        let mut session = SliceSession::new("move_player(3.0, 4.0);").unwrap();
+        session.step(&mut world, (0.0, 0.0), 0.016).unwrap();
+        assert!((session.state().player_x - 3.0).abs() < 0.001);
+        assert!((session.state().player_y - 4.0).abs() < 0.001);
+
+        // Rebuild the world and restore the state.
+        let mut rebuilt = GameWorld::new();
+        spawn_player(&mut rebuilt, 0.0, 0.0);
+        let saved = session.state().clone();
+        session.set_state(saved);
+        session.sync_world(&mut rebuilt);
+
+        let position = find_player(&mut rebuilt).unwrap();
+        assert!((position.x - 3.0).abs() < 0.001, "the player is back");
+        assert!((position.y - 4.0).abs() < 0.001, "the player is back");
     }
 
     #[test]
