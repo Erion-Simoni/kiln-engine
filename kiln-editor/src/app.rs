@@ -388,6 +388,7 @@ impl EditorApp {
                     name: "Main Scene".to_string(),
                     entities,
                     nested_scenes: vec![],
+                    script: None,
                 };
 
                 project.scenes.insert("main_scene".to_string(), scene);
@@ -511,6 +512,7 @@ impl EditorApp {
                 name: "Main Scene".to_string(),
                 entities,
                 nested_scenes: vec![],
+                script: None,
             };
 
             project.scenes.insert("main_scene".to_string(), scene);

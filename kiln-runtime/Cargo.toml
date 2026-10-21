@@ -17,10 +17,13 @@ kiln-core = { path = "../kiln-core" }
 kiln-render = { path = "../kiln-render" }
 kiln-input = { path = "../kiln-input" }
 kiln-save = { path = "../kiln-save" }
+kiln-ir = { path = "../kiln-ir" }
+kiln-script = { path = "../kiln-script" }
 hecs = { workspace = true }
 winit = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+log = { workspace = true }
 
 # Audio (feature-gated)
 rodio = { version = "0.23", optional = true, default-features = false, features = ["symphonia-ogg", "symphonia-all", "playback"] }

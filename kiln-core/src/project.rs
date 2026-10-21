@@ -128,6 +128,12 @@ pub struct Scene {
     pub entities: Vec<Entity>,
     #[serde(default)]
     pub nested_scenes: Vec<NestedScene>,
+    /// Path of the scene's gameplay script, relative to the project root.
+    ///
+    /// The script is a KilnScript source file that the runtime executes once
+    /// per frame. Scenes without a script are static.
+    #[serde(default)]
+    pub script: Option<String>,
 }
 
 /// Reference to another scene that is loaded as part of this scene
@@ -184,6 +190,14 @@ pub enum Component {
     Tilemap {
         /// Id of the tilemap in [`Project::tilemaps`].
         map: String,
+    },
+    /// The gameplay role of the entity in a scripted scene.
+    ///
+    /// Roles let a scene's script find entities by purpose instead of by
+    /// index, e.g. `"player"` or `"coin"`.
+    Role {
+        /// Role name, e.g. `"player"` or `"coin"`.
+        role: String,
     },
 }
 
@@ -330,6 +344,7 @@ mod tests {
                 additive: true,
                 offset: SceneOffset { x: 100.0, y: 200.0 },
             }],
+            script: None,
         };
 
         let mut proj = Project::default();

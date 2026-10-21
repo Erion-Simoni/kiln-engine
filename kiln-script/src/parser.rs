@@ -272,6 +272,16 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_factor(&mut self) -> Result<Expr, ParseError> {
+        // Unary minus: `-3` is `0 - 3`.
+        if self.peek_token() == Some(Token::Minus) {
+            self.advance();
+            let operand = self.parse_factor()?;
+            return Ok(Expr::BinaryOp {
+                op: BinaryOp::Sub,
+                left: Box::new(Expr::Number(0, crate::diagnostic::Span::new(0, 0))),
+                right: Box::new(operand),
+            });
+        }
         let mut expr = self.parse_primary()?;
 
         while let Some(op) = self.match_multiplicative_op() {

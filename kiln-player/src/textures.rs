@@ -179,6 +179,7 @@ mod tests {
                 }],
             }],
             nested_scenes: Vec::new(),
+            script: None,
         };
         project.scenes.insert("main".to_string(), scene);
         project

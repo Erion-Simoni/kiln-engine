@@ -251,4 +251,14 @@ mod tests {
         let result = frontend.compile("let x = 1; let x = 2;");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn unary_minus_negates_a_number() {
+        let mut frontend = KilnScriptFrontend::new();
+        let program = frontend.compile("return -3;").unwrap();
+
+        let mut vm = Vm::new(TestHost::new());
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[kiln_ir::Value::I64(-3)]);
+    }
 }

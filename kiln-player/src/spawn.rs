@@ -314,6 +314,7 @@ mod tests {
                 },
             ],
             nested_scenes: Vec::new(),
+            script: None,
         };
         project.scenes.insert("main".to_string(), scene);
         project
@@ -428,6 +429,7 @@ mod tests {
                 }],
             }],
             nested_scenes: Vec::new(),
+            script: None,
         };
         project.scenes.insert("child".to_string(), child);
 

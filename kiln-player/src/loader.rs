@@ -317,6 +317,7 @@ mod tests {
                     }],
                 }],
                 nested_scenes: Vec::new(),
+                script: None,
             },
         );
         let toml = project.to_toml().expect("serialize");
