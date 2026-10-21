@@ -136,6 +136,8 @@ pub struct Vm<H: HostContext> {
     /// Prevents infinite loops from hanging the game.
     /// Set to 0 for unlimited (not recommended for untrusted scripts).
     instruction_budget: u64,
+    /// Call stack for function calls (return addresses).
+    call_stack: Vec<usize>,
 }
 
 impl<H: HostContext> Vm<H> {
@@ -148,6 +150,7 @@ impl<H: HostContext> Vm<H> {
             host,
             max_stack: 1024,
             instruction_budget: 1_000_000,
+            call_stack: Vec::new(),
         }
     }
 
@@ -160,6 +163,7 @@ impl<H: HostContext> Vm<H> {
             host,
             max_stack,
             instruction_budget: 1_000_000,
+            call_stack: Vec::new(),
         }
     }
 
@@ -191,6 +195,7 @@ impl<H: HostContext> Vm<H> {
     pub fn execute(&mut self, program: &Program) -> Result<(), VmError> {
         self.ip = 0;
         self.stack.clear();
+        self.call_stack.clear(); // Clear call stack at start of execution
         // Reset instruction budget for this execution
         self.instruction_budget = 1_000_000;
         // Make sure every local slot the program declares exists.
@@ -339,12 +344,20 @@ impl<H: HostContext> Vm<H> {
                 }
             }
             Instruction::Call(label) => {
+                // Push return address (next instruction) onto call stack
+                self.call_stack.push(self.ip + 1);
                 self.ip = label.0;
                 return Ok(true);
             }
             Instruction::Return => {
-                // Halt execution; the return value stays on the stack.
-                return Ok(false);
+                // Pop return address from call stack and jump back
+                if let Some(return_ip) = self.call_stack.pop() {
+                    self.ip = return_ip;
+                    return Ok(true);
+                } else {
+                    // No return address - halt execution (like before)
+                    return Ok(false);
+                }
             }
             Instruction::HostCall { id, argc } => {
                 // Pop the call's arguments, then push the host's result.
