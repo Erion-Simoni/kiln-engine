@@ -72,6 +72,8 @@ pub struct EditorApp {
     entity_roles: HashMap<String, String>,
     /// Textures loaded for the scene view, keyed by asset path.
     scene_textures: HashMap<String, egui::TextureHandle>,
+    /// Pixel size of every scene texture, keyed by asset path.
+    texture_sizes: HashMap<String, (u32, u32)>,
     graph: Graph,
     render_tier: RenderTier,
     show_welcome: bool,
@@ -265,6 +267,39 @@ impl UIDesignerState {
     }
 }
 
+/// Read the pixel size of every texture a project uses.
+///
+/// Sprites are as big as their texture, so the sizes are needed before the
+/// scene is spawned.
+fn collect_texture_sizes(dir: &Path, project: &Project) -> HashMap<String, (u32, u32)> {
+    let mut sizes = HashMap::new();
+    let mut paths: Vec<String> = Vec::new();
+    for scene in project.scenes.values() {
+        for entity in &scene.entities {
+            for component in &entity.components {
+                if let kiln_core::project::Component::Sprite {
+                    texture: Some(path),
+                    ..
+                } = component
+                {
+                    if !paths.contains(path) {
+                        paths.push(path.clone());
+                    }
+                }
+            }
+        }
+    }
+    for path in paths {
+        let Ok(bytes) = std::fs::read(dir.join(&path)) else {
+            continue;
+        };
+        if let Ok(image) = kiln_assets::decode_png(&bytes) {
+            sizes.insert(path, (image.width, image.height));
+        }
+    }
+    sizes
+}
+
 /// The texture of a scene asset, loaded from disk on first use.
 ///
 /// Returns `None` when the file is missing or cannot be decoded.
@@ -294,12 +329,19 @@ fn scene_texture(
 fn spawn_editor_scene(
     project: &Project,
     scene_id: &str,
+    sizes: &HashMap<String, (u32, u32)>,
 ) -> (GameWorld, Vec<kiln_runtime::SpawnedEntity>) {
     let mut world = GameWorld::new();
-    let mut make_sprite =
-        |_entity: &kiln_core::project::Entity, color: [f32; 4], _texture: Option<&str>| {
-            Sprite::new(color[0], color[1], color[2], color[3]).with_size(64.0, 64.0)
-        };
+    let mut make_sprite = |_entity: &kiln_core::project::Entity,
+                           color: [f32; 4],
+                           texture: Option<&str>| {
+        // A sprite is as big as its texture, like in the player.
+        let size = texture
+            .and_then(|path| sizes.get(path))
+            .copied()
+            .unwrap_or((64, 64));
+        Sprite::new(color[0], color[1], color[2], color[3]).with_size(size.0 as f32, size.1 as f32)
+    };
     let spawned = kiln_runtime::spawn_scene(&mut world, project, scene_id, &mut make_sprite);
     (world, spawned)
 }
@@ -377,6 +419,7 @@ impl EditorApp {
             entity_textures: HashMap::new(),
             entity_roles: HashMap::new(),
             scene_textures: HashMap::new(),
+            texture_sizes: HashMap::new(),
             graph: Graph::new(),
             render_tier: RenderTier::default(),
             show_welcome: true,
@@ -504,6 +547,9 @@ impl EditorApp {
         if let Some(dir) = path.parent() {
             self.project_root = Some(dir.to_path_buf());
             self.asset_browser.scan(dir);
+            if let Some(project) = &self.current_project {
+                self.texture_sizes = collect_texture_sizes(dir, project);
+            }
         }
 
         // Clear current world and load scene entities
@@ -554,7 +600,7 @@ impl EditorApp {
 
         // The played scene replaces the edited one, so the scene view shows
         // the running game.
-        let (world, _spawned) = spawn_editor_scene(&project, &scene_id);
+        let (world, _spawned) = spawn_editor_scene(&project, &scene_id, &self.texture_sizes);
         self.world = world;
         self.play = Some(PlaySession {
             slice,
@@ -585,7 +631,7 @@ impl EditorApp {
         };
         self.world = GameWorld::new();
         self.entity_textures.clear();
-        let (world, spawned) = spawn_editor_scene(&project, &scene_id);
+        let (world, spawned) = spawn_editor_scene(&project, &scene_id, &self.texture_sizes);
         self.world = world;
         for entity in spawned {
             if let Some(texture) = entity.texture {
