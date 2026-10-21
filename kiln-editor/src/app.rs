@@ -267,6 +267,39 @@ impl UIDesignerState {
     }
 }
 
+/// Start a game session for a project.
+///
+/// The scene's script is read from the project directory, compiled and
+/// paired with a world holding the scene. The player and the editor run the
+/// same session, so a project behaves the same in both.
+fn start_play_session(
+    project: &Project,
+    root: &Path,
+    sizes: &HashMap<String, (u32, u32)>,
+) -> Result<(kiln_runtime::SliceSession, String, GameWorld), String> {
+    let scene_id = project
+        .default_scene_id()
+        .ok_or("The project has no scenes")?;
+    let scene = project
+        .scenes
+        .get(&scene_id)
+        .ok_or_else(|| format!("Scene '{scene_id}' not found"))?;
+
+    let path = scene.script.as_ref().ok_or("The scene has no script")?;
+    let source = std::fs::read_to_string(root.join(path))
+        .map_err(|e| format!("could not read the scene script: {e}"))?;
+
+    let slice = kiln_runtime::SliceSession::new(&source).map_err(|d| {
+        d.iter()
+            .map(|d| d.message.clone())
+            .collect::<Vec<_>>()
+            .join("; ")
+    })?;
+
+    let (world, _spawned) = spawn_editor_scene(project, &scene_id, sizes);
+    Ok((slice, scene_id, world))
+}
+
 /// Read the pixel size of every texture a project uses.
 ///
 /// Sprites are as big as their texture, so the sizes are needed before the
@@ -568,39 +601,17 @@ impl EditorApp {
             .as_ref()
             .ok_or("No project loaded")?
             .clone();
-        let scene_id = project
-            .default_scene_id()
-            .ok_or("The project has no scenes")?;
-        let scene = project
-            .scenes
-            .get(&scene_id)
-            .ok_or_else(|| format!("Scene '{scene_id}' not found"))?;
+        let root = self
+            .project_path
+            .as_ref()
+            .and_then(|p| p.parent())
+            .ok_or("The project has no directory")?
+            .to_path_buf();
 
-        // The script lives next to the project file.
-        let source = match &scene.script {
-            Some(path) => {
-                let root = self
-                    .project_path
-                    .as_ref()
-                    .and_then(|p| p.parent())
-                    .ok_or("The project has no directory")?;
-                let text = std::fs::read_to_string(root.join(path))
-                    .map_err(|e| format!("could not read the scene script: {e}"))?;
-                text
-            }
-            None => return Err("The scene has no script".to_string()),
-        };
-
-        let slice = kiln_runtime::SliceSession::new(&source).map_err(|d| {
-            d.iter()
-                .map(|d| d.message.clone())
-                .collect::<Vec<_>>()
-                .join("; ")
-        })?;
+        let (slice, scene_id, world) = start_play_session(&project, &root, &self.texture_sizes)?;
 
         // The played scene replaces the edited one, so the scene view shows
         // the running game.
-        let (world, _spawned) = spawn_editor_scene(&project, &scene_id, &self.texture_sizes);
         self.world = world;
         self.play = Some(PlaySession {
             slice,
