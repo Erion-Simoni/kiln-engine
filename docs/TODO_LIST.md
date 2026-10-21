@@ -128,12 +128,18 @@ or open `samples/vertical_slice/kiln.toml` in the editor and press Play.
   STATE.md says Done.
 
 ### G-6: Editor truth
-- [ ] Scene view renders through the real engine framebuffer (see E-9)
-- [ ] Play-in-editor runs the real VM/runtime (see E-10)
-- [ ] Inspector edits and saves scene data (see E-1)
-**Location:** `kiln-editor/src/scene_view.rs`, `kiln-editor/src/app.rs`
+- [x] Scene view renders through the real engine framebuffer (see E-9)
+- [x] Play-in-editor runs the real VM/runtime (see E-10)
+- [x] Inspector edits and saves scene data (see E-1)
+**Location:** `kiln-editor/src/app.rs`, `kiln-editor/src/scene_ops.rs`,
+`kiln-editor/src/history.rs`
 **Milestone:** 2D gate
-**Status:** Partial — tracked in detail under Editor TODOs (E-1, E-9, E-10).
+**Status:** Done (2026-10-21). The editor keeps the scene as data
+(`scene_ops::Scene`), the runtime world is rebuilt from it after every edit,
+and the inspector, the scene view and the saved file all show the same
+thing. Undo and redo work over the scene data, the scene view draws the
+scene with the engine's own sprite renderer into the panel rectangle, and
+the play session runs the real script against the edited scene.
 
 ---
 
@@ -371,67 +377,97 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
 ## Editor TODOs (M0-M28)
 
 ### E-1: File menu actions
-- [ ] Implement Export dialog (line 645 in `kiln-editor/src/app.rs`)
-- [ ] Implement Undo (line 656)
-- [ ] Implement Redo (line 660)
-- [ ] Implement Package (line 716)
-**Location:** `kiln-editor/src/app.rs` lines 645-716
+- [x] Implement Export dialog
+- [x] Implement Undo
+- [x] Implement Redo
+- [x] Implement Package
+**Location:** `kiln-editor/src/app.rs`, `kiln-editor/src/history.rs`
 **Milestone:** M7, M14, M15
+**Status:** Done (2026-10-21). Undo and redo restore whole scenes from the
+history stack (Edit menu, Ctrl+Z / Ctrl+Y). The export dialog picks a
+platform and runs `kiln-cli export` in a thread, so the editor stays
+responsive; the result is shown in the console panel.
 
 ### E-2: Help menu actions
-- [ ] Implement Open docs (line 730)
-- [ ] Implement About dialog (line 734)
-**Location:** `kiln-editor/src/app.rs` lines 730-734
+- [x] Implement Open docs
+- [x] Implement About dialog
+**Location:** `kiln-editor/src/app.rs`
 **Milestone:** M7
+**Status:** Done (2026-10-21). The about dialog shows the version and links
+to the documentation; the documentation link opens the browser and falls
+back to showing the URL.
 
 ### E-3: FPS timing
-- [ ] Implement proper FPS timing (line 962)
-**Location:** `kiln-editor/src/app.rs` line 962
+- [x] Implement proper FPS timing
+**Location:** `kiln-editor/src/app.rs`
 **Milestone:** M7
+**Status:** Done (2026-10-21). The frame time is measured with
+`std::time::Instant` and smoothed; the status bar and the scene view toolbar
+show the real frame rate.
 
 ### E-4: Scene Editor panel
-- [ ] Implement Add Entity (line 1131)
-- [ ] Implement Component menu for Transform (line 1188)
-- [ ] Implement Component menu for Sprite (line 1245)
-- [ ] Implement Add Component (line 1329)
-**Location:** `kiln-editor/src/app.rs` lines 1131-1329
+- [x] Implement Add Entity
+- [x] Implement Component menu for Transform
+- [x] Implement Component menu for Sprite
+- [x] Implement Add Component
+**Location:** `kiln-editor/src/app.rs`, `kiln-editor/src/scene_ops.rs`
 **Milestone:** M7
+**Status:** Done (2026-10-21). The panel edits the scene data, so every edit
+can be undone and shows up in the saved file.
 
 ### E-5: Assets panel
-- [ ] Implement Import assets (line 1504)
-**Location:** `kiln-editor/src/app.rs` line 1504
+- [x] Implement Import assets
+**Location:** `kiln-editor/src/app.rs`
 **Milestone:** M7
+**Status:** Done (2026-10-21). A path is typed into the panel and the file is
+copied into the project's `art` folder, then the asset list is refreshed.
 
 ### E-6: Console panel
-- [ ] Implement Clear console (line 1531)
-**Location:** `kiln-editor/src/app.rs` line 1531
+- [x] Implement Clear console
+**Location:** `kiln-editor/src/app.rs`
 **Milestone:** M7
+**Status:** Done (2026-10-21).
 
 ### E-7: Prefab Editor panel
-- [ ] Implement Create prefab from selected entity (line 1812)
-- [ ] Implement Instantiate selected prefab (line 1818)
-- [ ] Implement Edit prefab (line 1853)
-**Location:** `kiln-editor/src/app.rs` lines 1812-1853
+- [x] Implement Create prefab from selected entity
+- [x] Implement Instantiate selected prefab
+- [x] Implement Edit prefab
+**Location:** `kiln-editor/src/app.rs`, `kiln-editor/src/prefab_editor.rs`
 **Milestone:** M23
+**Status:** Done (2026-10-21). A prefab is made from the selected entity,
+instances are placed into the scene, and the selected prefab can be renamed
+and inspected.
 
 ### E-8: Scene Editor panel (scene-specific)
-- [ ] Implement Create new scene (line 1881)
-- [ ] Implement Add nested scene (line 1887)
-**Location:** `kiln-editor/src/app.rs` lines 1881-1887
+- [x] Implement Create new scene
+- [x] Implement Add nested scene
+**Location:** `kiln-editor/src/app.rs`
 **Milestone:** M23
+**Status:** Done (2026-10-21). Scenes can be created, deleted and picked as
+the start scene; nested scenes are added and removed from the scene being
+edited.
 
 ### E-9: Editor scene view
-- [ ] Replace egui painted rects with actual engine framebuffer
-- [ ] Integrate real GPU rendering in scene view
-**Location:** `kiln-editor/src/scene_view.rs`
+- [x] Replace egui painted rects with actual engine framebuffer
+- [x] Integrate real GPU rendering in scene view
+**Location:** `kiln-editor/src/app.rs`
 **Milestone:** M7
+**Status:** Done (2026-10-21). The scene view writes the rectangle of its
+canvas, and the renderer draws the scene into it with the engine's sprite
+renderer and camera, using the player's convention (world Y grows upwards)
+and one world unit per pixel. The egui sprite painting was removed, so
+there is a single source of truth. The HUD is drawn with the engine's text
+renderer, so the editor shows the same pixels as the player.
 
 ### E-10: Play-in-editor
-- [ ] Replace bool toggle with real VM/runtime PIE
-- [ ] Integrate VM execution in editor context
-- [ ] Handle scene serialization/deserialization for PIE
+- [x] Replace bool toggle with real VM/runtime PIE
+- [x] Integrate VM execution in editor context
+- [x] Handle scene serialization/deserialization for PIE
 **Location:** `kiln-editor/src/app.rs`, `kiln-runtime/`
 **Milestone:** M7
+**Status:** Done (2026-10-21). Play runs the scene's script through
+`kiln_runtime::SliceSession` against the edited scene, and the scene view
+shows the running game through the same GPU path the editor uses.
 
 ---
 
@@ -542,11 +578,11 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
    | Gate item | TODO | State |
    | --- | --- | --- |
    | Asset → GPU | G-1 | Done |
-   | Real tilemap | G-2 | Not started — no tilemap module |
-   | VM maturity | G-3 | Not started — no string values |
+   | Real tilemap | G-2 | Done — chunked maps, culling, solid queries |
+   | VM maturity | G-3 | Done — string values end to end |
    | Vertical slice sample | G-4 | Done — script-driven project in `samples/vertical_slice/` |
    | Reconcile ROADMAP checkboxes | G-5 | Done — checkboxes and verdicts reconciled with the audit |
-   | Editor truth | G-6 | Partial — see E-1 / E-9 / E-10 |
+   | Editor truth | G-6 | Done — scene data, undo/redo, GPU scene view, real PIE |
    | Textured sprites | — | Done |
    | Standalone player | — | Done (F6) |
    | UI draw path | — | Done (F1 / F2 / F3) |

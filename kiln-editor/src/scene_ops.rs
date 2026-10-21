@@ -72,9 +72,7 @@ impl SceneEntity {
             });
         }
         if let Some(role) = &self.extras.role {
-            components.push(Component::Role {
-                role: role.clone(),
-            });
+            components.push(Component::Role { role: role.clone() });
         }
 
         Entity {
@@ -103,7 +101,10 @@ impl SceneEntity {
                         .with_rotation(*rotation)
                         .with_scale(kiln_core::Vec2::splat(*scale));
                 }
-                Component::Sprite { color: c, texture: t } => {
+                Component::Sprite {
+                    color: c,
+                    texture: t,
+                } => {
                     color = Some(*c);
                     texture = t.clone();
                 }
@@ -276,7 +277,9 @@ pub fn scene_from_world(world: &GameWorld) -> Scene {
     let mut scene = Scene::new();
     let world = world.world_ref();
 
-    for (entity, source_id, transform) in world.query::<(hecs::Entity, &SourceId, &Transform)>().iter()
+    for (entity, source_id, transform) in world
+        .query::<(hecs::Entity, &SourceId, &Transform)>()
+        .iter()
     {
         let sprite = world.get::<&Sprite>(entity).ok();
         let color = sprite.as_ref().map(|s| s.color);
@@ -493,10 +496,7 @@ mod tests {
 
         let world_ref = world.world_ref();
         let mut query = world_ref.query::<(&SourceId, &Transform, &Sprite)>();
-        let (id, transform, sprite) = query
-            .iter()
-            .next()
-            .expect("the hero is in the world");
+        let (id, transform, sprite) = query.iter().next().expect("the hero is in the world");
         assert_eq!(id.0, "hero");
         assert_eq!(transform.position.x, 1.0);
         // The sprite is as big as its texture.

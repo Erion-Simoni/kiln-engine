@@ -104,8 +104,10 @@ pub fn get_device_capabilities() -> DeviceCapabilities {
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 pub fn get_device_capabilities() -> DeviceCapabilities {
-    // Desktop/web platforms use GPU-based detection from kiln-render
-    // This is a stub for compatibility
+    // Desktop and web pick their render tier from the GPU adapter, in
+    // `kiln_render::RenderTier::auto_select`, which sees the real driver and
+    // device type. This function only describes the machine, so it stays a
+    // best-effort set of defaults here.
     DeviceCapabilities::default()
 }
 

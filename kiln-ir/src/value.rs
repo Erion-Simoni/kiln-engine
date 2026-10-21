@@ -91,7 +91,7 @@ impl Value {
             (Value::F64(x), Value::I64(y)) => {
                 // Check if the float is an exact integer
                 if x.fract() == 0.0 && x >= i64::MIN as f64 && x <= i64::MAX as f64 {
-                    x == (y as f64)
+                    (x as i64) == y
                 } else {
                     x == (y as f64)
                 }
@@ -183,6 +183,27 @@ mod tests {
         assert!(!Value::values_equal(Value::I64(1), Value::F64(1.5)));
         assert!(Value::values_equal(Value::Bool(true), Value::Bool(true)));
         assert!(!Value::values_equal(Value::Bool(true), Value::I64(1)));
+    }
+
+    #[test]
+    fn values_equal_keeps_precision_above_2_pow_53() {
+        // 2^53 is the last integer a float holds exactly, so the comparison
+        // goes through the integer value on both sides.
+        let exact = 9_007_199_254_740_992i64;
+        assert!(Value::values_equal(
+            Value::I64(exact),
+            Value::F64(exact as f64)
+        ));
+        assert!(Value::values_equal(
+            Value::F64(exact as f64),
+            Value::I64(exact)
+        ));
+
+        // 2^53 + 1 is not representable, so the float is a different number.
+        assert!(!Value::values_equal(
+            Value::I64(exact + 1),
+            Value::F64(exact as f64)
+        ));
     }
 
     #[test]

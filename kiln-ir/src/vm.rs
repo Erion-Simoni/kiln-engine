@@ -198,7 +198,7 @@ impl<H: HostContext> Vm<H> {
         self.ip = 0;
         self.stack.clear();
         self.call_stack.clear(); // Clear call stack at start of execution
-        // Reset instruction budget for this execution
+                                 // Reset instruction budget for this execution
         self.instruction_budget = 1_000_000;
         // Make sure every local slot the program declares exists.
         let slots = program.local_slots() as usize;

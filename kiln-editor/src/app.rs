@@ -750,7 +750,8 @@ impl EditorApp {
     ///
     /// The world is what the renderer draws, so it has to follow every edit.
     fn rebuild_world(&mut self) {
-        let textures = scene_ops::world_from_scene(&mut self.world, &self.scene, &self.texture_sizes);
+        let textures =
+            scene_ops::world_from_scene(&mut self.world, &self.scene, &self.texture_sizes);
         self.entity_textures = textures;
 
         self.entity_roles.clear();
@@ -1439,6 +1440,11 @@ impl winit::application::ApplicationHandler for EditorApp {
 
                 let tree = egui_dock::DockArea::new(&mut self.dock_state).style(dock_style);
 
+                // The scene view writes its rectangle during the pass. It is
+                // cleared first, so a hidden scene view does not draw the
+                // scene over the panel that replaced it.
+                self.scene_view_rect = None;
+
                 let mut tab_viewer = TabViewer {
                     scene: &mut self.scene,
                     scene_dirty: &mut self.scene_dirty,
@@ -1486,7 +1492,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                         ui.label("A small, fast game engine for 2D games.");
                         ui.label("Rust · wgpu · egui");
                         ui.add_space(8.0);
-                        ui.hyperlink_to("Documentation", "https://github.com/kiln-engine/kiln/tree/master/docs");
+                        ui.hyperlink_to(
+                            "Documentation",
+                            "https://github.com/kiln-engine/kiln/tree/master/docs",
+                        );
                         ui.add_space(8.0);
                         if ui.button("Close").clicked() {
                             self.show_about = false;
@@ -2014,7 +2023,8 @@ impl<'a> TabViewer<'a> {
         let prefab_id = prefab.id.clone();
         self.prefab_editor.add_prefab(prefab);
         self.prefab_editor.select_prefab(&prefab_id);
-        self.console_log.push(format!("[INFO] Created prefab '{name}'"));
+        self.console_log
+            .push(format!("[INFO] Created prefab '{name}'"));
     }
 
     /// Put an instance of the selected prefab into the scene.
@@ -2139,7 +2149,8 @@ impl<'a> TabViewer<'a> {
             script: None,
         };
         project.scenes.insert(id.clone(), scene);
-        self.console_log.push(format!("[INFO] Created scene '{id}'"));
+        self.console_log
+            .push(format!("[INFO] Created scene '{id}'"));
     }
 
     /// Make a scene the one the game starts in.
@@ -2172,7 +2183,8 @@ impl<'a> TabViewer<'a> {
             return;
         }
         if project.scenes.remove(id).is_some() {
-            self.console_log.push(format!("[INFO] Deleted scene '{id}'"));
+            self.console_log
+                .push(format!("[INFO] Deleted scene '{id}'"));
         }
     }
 
@@ -2329,7 +2341,6 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         );
                     }
 
-
                     // Entity list for selection
                     ui.add_space(8.0);
                     ui.separator();
@@ -2362,7 +2373,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 })
                                 .collect();
                             for (id, name, position) in entities {
-                                let label = format!("{} ({:.0}, {:.0})", name, position[0], position[1]);
+                                let label =
+                                    format!("{} ({:.0}, {:.0})", name, position[0], position[1]);
                                 let selected = self.selected_id.as_deref() == Some(&id);
                                 if ui.selectable_label(selected, label).clicked() {
                                     *self.selected_id = Some(id);
@@ -2550,8 +2562,10 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 ui.add_space(8.0);
 
                                 // Color preview
-                                let color_rect =
-                                    egui::Rect::from_min_size(ui.cursor().left_top(), egui::vec2(40.0, 24.0));
+                                let color_rect = egui::Rect::from_min_size(
+                                    ui.cursor().left_top(),
+                                    egui::vec2(40.0, 24.0),
+                                );
                                 let preview_color = egui::Color32::from_rgba_premultiplied(
                                     (color[0] * 255.0) as u8,
                                     (color[1] * 255.0) as u8,
@@ -3409,7 +3423,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                             egui::Layout::right_to_left(egui::Align::Center),
                                             |ui| {
                                                 if ui.button("Remove").clicked() {
-                                                    self.remove_nested_scene(&nested_scene.scene_id);
+                                                    self.remove_nested_scene(
+                                                        &nested_scene.scene_id,
+                                                    );
                                                 }
                                             },
                                         );

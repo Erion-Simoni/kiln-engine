@@ -142,16 +142,18 @@ hub and its no-loss round trip do not exist.
 
 **Acceptance:**
 
-- [x] Inspector edits persist; Ctrl+Z restores prior value (deferred: undo/redo)
-      The inspector edits the selected entity (position, scale, tint); the
-      undo/redo part is still deferred.
+- [x] Inspector edits persist; Ctrl+Z restores prior value
+      The inspector edits the scene data (position, rotation, scale, tint,
+      role); the world is rebuilt from that data, and Ctrl+Z / Ctrl+Y undo
+      and redo the edit. The edited scene is written to the project file.
 - [x] Play-in-editor runs VM gameplay; stop returns to edit mode.
       The editor's Play button runs the scene's script against the scene
-      world and draws the HUD; Stop returns to editing.
+      world and draws the HUD; Stop returns to editing and keeps unsaved
+      edits.
 - [ ] Script change hot-reloads without full process restart (deferred).
 
-**Verdict: Partial** — play-in-editor runs the real game loop; undo/redo
-and script hot reload are still missing.
+**Verdict: Partial** — play-in-editor runs the real game loop and undo/redo
+work; script hot reload is still missing.
 
 ---
 

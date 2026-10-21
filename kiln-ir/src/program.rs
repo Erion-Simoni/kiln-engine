@@ -215,7 +215,9 @@ mod tests {
     fn define_label_rejects_duplicates() {
         let mut program = Program::new();
         program.define_label("start").expect("first label");
-        let err = program.define_label("start").expect_err("duplicate is rejected");
+        let err = program
+            .define_label("start")
+            .expect_err("duplicate is rejected");
         assert_eq!(err, ProgramError::DuplicateLabel("start".to_string()));
         // The original definition is kept, so jumps still target it.
         assert_eq!(program.get_label("start"), Some(Label(0)));

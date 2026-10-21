@@ -69,7 +69,10 @@ fn an_edited_scene_survives_a_save() {
 
     // The editor reads the scene into its own data.
     let mut edited = Scene::from_project_entities(&scene.entities);
-    assert!(edited.entity("player").is_some(), "the player is in the scene");
+    assert!(
+        edited.entity("player").is_some(),
+        "the player is in the scene"
+    );
 
     // Move the player, as the inspector does.
     let player = edited.entity_mut("player").expect("the player is there");
