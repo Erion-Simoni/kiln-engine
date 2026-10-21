@@ -14,6 +14,8 @@ pub enum VmError {
     DivisionByZero,
     #[error("Integer overflow")]
     IntegerOverflow,
+    #[error("Instruction budget exceeded")]
+    InstructionBudgetExceeded,
     #[error("Invalid opcode: {0}")]
     InvalidOpcode(u8),
     #[error("Non-finite float result")]
@@ -130,6 +132,10 @@ pub struct Vm<H: HostContext> {
     ip: usize,
     host: H,
     max_stack: usize,
+    /// Maximum number of instructions to execute before halting.
+    /// Prevents infinite loops from hanging the game.
+    /// Set to 0 for unlimited (not recommended for untrusted scripts).
+    instruction_budget: u64,
 }
 
 impl<H: HostContext> Vm<H> {
@@ -141,6 +147,7 @@ impl<H: HostContext> Vm<H> {
             ip: 0,
             host,
             max_stack: 1024,
+            instruction_budget: 1_000_000,
         }
     }
 
@@ -152,7 +159,14 @@ impl<H: HostContext> Vm<H> {
             ip: 0,
             host,
             max_stack,
+            instruction_budget: 1_000_000,
         }
+    }
+
+    /// Set the instruction budget for the next execution.
+    /// Set to 0 for unlimited (not recommended for untrusted scripts).
+    pub fn set_instruction_budget(&mut self, budget: u64) {
+        self.instruction_budget = budget;
     }
 
     /// Borrow the host context, e.g. to read or write host-side state.
@@ -170,9 +184,15 @@ impl<H: HostContext> Vm<H> {
     /// The VM will run instructions sequentially until the program ends, a
     /// `Return` instruction is reached, or an error occurs. The stack is
     /// cleared before execution.
+    ///
+    /// The instruction budget is reset at the start of execution and is
+    /// decremented on each instruction. If the budget is exhausted, an
+    /// `VmError::InstructionBudgetExceeded` error is returned.
     pub fn execute(&mut self, program: &Program) -> Result<(), VmError> {
         self.ip = 0;
         self.stack.clear();
+        // Reset instruction budget for this execution
+        self.instruction_budget = 1_000_000;
         // Make sure every local slot the program declares exists.
         let slots = program.local_slots() as usize;
         if self.locals.len() < slots {
@@ -180,6 +200,10 @@ impl<H: HostContext> Vm<H> {
         }
 
         while self.ip < program.len() {
+            if self.instruction_budget == 0 {
+                return Err(VmError::InstructionBudgetExceeded);
+            }
+            self.instruction_budget -= 1;
             if !self.step(program)? {
                 break;
             }
@@ -716,5 +740,26 @@ mod tests {
         let mut vm = Vm::new(TestHost);
         let err = vm.execute(&program).unwrap_err();
         assert!(matches!(err, VmError::StackUnderflow));
+    }
+
+    #[test]
+    fn instruction_budget_exceeded() {
+        // Create a program that loops infinitely without growing the stack
+        let mut program = Program::new();
+        program.add_instruction(Instruction::PushConst(Value::I64(0)));
+        // Label 0: increment and loop
+        program.add_instruction(Instruction::PushConst(Value::I64(1)));
+        program.add_instruction(Instruction::Add);
+        program.add_instruction(Instruction::PushConst(Value::I64(0)));
+        program.add_instruction(Instruction::Lt); // Compare with 0 (always true since we're incrementing)
+        program.add_instruction(Instruction::JumpIf(Label(1)));
+        program.add_instruction(Instruction::Jump(Label(0)));
+
+        let mut vm = Vm::new(TestHost);
+        // Set a small budget to trigger the limit quickly
+        vm.set_instruction_budget(10);
+        let err = vm.execute(&program).unwrap_err();
+        eprintln!("Actual error: {:?}", err);
+        assert!(matches!(err, VmError::InstructionBudgetExceeded));
     }
 }
