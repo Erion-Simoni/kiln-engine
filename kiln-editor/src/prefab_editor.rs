@@ -22,6 +22,27 @@ impl PrefabEditorState {
         self.prefabs.insert(prefab.id.clone(), prefab);
     }
 
+    /// Select the prefab the panel shows.
+    pub fn select_prefab(&mut self, id: &str) {
+        self.selected_prefab = Some(id.to_string());
+    }
+
+    /// The id of the selected prefab, if any.
+    pub fn selected_prefab(&self) -> Option<&str> {
+        self.selected_prefab.as_deref()
+    }
+
+    /// Rename the prefab with the given id.
+    pub fn rename_prefab(&mut self, id: &str, name: &str) -> bool {
+        match self.prefabs.get_mut(id) {
+            Some(prefab) => {
+                prefab.name = name.to_string();
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn get_prefab(&self, id: &str) -> Option<&Prefab> {
         self.prefabs.get(id)
     }

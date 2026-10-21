@@ -1,6 +1,5 @@
 //! Main editor application.
 
-use hecs;
 use kiln_core::{project::Project, Transform};
 use kiln_gameplay::{DataTable, Dialogue, Quest};
 use kiln_graph::{ArithmeticOp, ConstantValue, Graph, Node, NodeType};
@@ -20,8 +19,50 @@ use winit::{
 };
 
 use crate::assets::{AssetBrowser, AssetKind};
+use crate::history::History;
 use crate::prefab_editor::PrefabEditorState;
+use crate::scene_ops::{self, ComponentKind, Scene, SceneEntity};
 use crate::tilemap_editor::TilemapEditorState;
+
+/// The platforms the editor can export a project for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportPlatform {
+    /// A WebAssembly build that runs in the browser.
+    Web,
+    /// A native build for the current desktop.
+    Native,
+    /// An Android package.
+    Android,
+}
+
+impl ExportPlatform {
+    /// The name shown in the export dialog.
+    pub fn label(self) -> &'static str {
+        match self {
+            ExportPlatform::Web => "Web (WASM)",
+            ExportPlatform::Native => "Native (desktop)",
+            ExportPlatform::Android => "Android",
+        }
+    }
+
+    /// The `--platform` argument the command line tool expects.
+    pub fn cli_name(self) -> &'static str {
+        match self {
+            ExportPlatform::Web => "web",
+            ExportPlatform::Native => "native",
+            ExportPlatform::Android => "android",
+        }
+    }
+
+    /// All platforms, in the order the dialog lists them.
+    pub fn all() -> [ExportPlatform; 3] {
+        [
+            ExportPlatform::Web,
+            ExportPlatform::Native,
+            ExportPlatform::Android,
+        ]
+    }
+}
 
 /// A running game session in the editor.
 ///
@@ -52,6 +93,10 @@ enum MenuAction {
     SaveProjectAs,
     SaveScene,
     LoadScene,
+    Undo,
+    Redo,
+    About,
+    Export,
 }
 
 pub struct EditorApp {
@@ -59,7 +104,11 @@ pub struct EditorApp {
     egui_winit: egui_winit::State,
     dock_state: egui_dock::DockState<Tab>,
     world: GameWorld,
-    selected_entity: Option<hecs::Entity>,
+    /// The id of the selected scene entity.
+    ///
+    /// The selection is an id rather than a runtime entity, because the world
+    /// is rebuilt after every edit.
+    selected_id: Option<String>,
     is_playing: bool,
     /// The running game session, present while playing.
     play: Option<PlaySession>,
@@ -73,8 +122,6 @@ pub struct EditorApp {
     entity_textures: HashMap<String, String>,
     /// Gameplay role of each scene entity, keyed by entity id.
     entity_roles: HashMap<String, String>,
-    /// Textures loaded for the scene view, keyed by asset path.
-    scene_textures: HashMap<String, egui::TextureHandle>,
     /// Pixel size of every scene texture, keyed by asset path.
     texture_sizes: HashMap<String, (u32, u32)>,
     /// Texture IDs in the scene view SpriteRenderer, keyed by asset path.
@@ -84,7 +131,6 @@ pub struct EditorApp {
     graph: Graph,
     render_tier: RenderTier,
     show_welcome: bool,
-    fps: f32,
     frame_count: u32,
     ui_designer: UIDesignerState,
     prefab_editor: PrefabEditorState,
@@ -101,6 +147,41 @@ pub struct EditorApp {
     scene_save_requested: bool,
     /// Set by the scene toolbar, handled after the UI pass.
     scene_load_requested: bool,
+    /// The undo and redo stacks of the editor.
+    history: History,
+    /// The scene being edited, as data the user can change.
+    ///
+    /// The runtime world is rebuilt from this after every edit, so the
+    /// inspector, the undo stack and the saved file all agree.
+    scene: Scene,
+    /// The name of the next entity added to the scene.
+    next_entity_name: u32,
+    /// Set when the scene was changed by a panel, so the world is rebuilt.
+    scene_dirty: bool,
+    /// Set by the scene view, handled after the UI pass.
+    add_entity_requested: bool,
+    /// Set by the inspector, handled after the UI pass.
+    remove_entity_requested: bool,
+    /// Set by the inspector, handled after the UI pass.
+    remove_component_requested: Option<ComponentKind>,
+    /// Set by the inspector, handled after the UI pass.
+    add_component_requested: bool,
+    /// The path typed into the asset import field.
+    import_path: String,
+    /// Whether the "About Kiln" window is open.
+    show_about: bool,
+    /// Whether the export dialog is open.
+    show_export: bool,
+    /// The platform the export dialog exports for.
+    export_platform: ExportPlatform,
+    /// The result channel of a running export.
+    export_result: Option<std::sync::mpsc::Receiver<String>>,
+    /// Set by the export dialog, handled after the UI pass.
+    export_requested: bool,
+    /// The last frame time of the editor, in seconds.
+    frame_time: f32,
+    /// The time of the previous frame, used to measure the frame time.
+    last_frame: Option<std::time::Instant>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -127,8 +208,15 @@ struct GpuState {
     /// Sprite batch renderer for the scene view. Draws scene entities using the
     /// same GPU pipeline as the standalone player.
     scene_view_sprite_renderer: SpriteRenderer,
-    /// Camera for the scene view (screen space, top-left origin).
+    /// Sprite batch renderer for the scene view's HUD.
+    ///
+    /// The HUD uses its own renderer because it has its own camera: the scene
+    /// is drawn in world space, the HUD in screen space.
+    scene_view_hud_renderer: SpriteRenderer,
+    /// Camera for the scene view (world space).
     scene_view_camera: Camera,
+    /// Camera for the scene view's HUD (screen space, top-left origin).
+    scene_view_hud_camera: Camera,
 }
 
 /// UI designer state for the visual UI editor.
@@ -345,26 +433,23 @@ fn collect_texture_sizes(dir: &Path, project: &Project) -> HashMap<String, (u32,
     sizes
 }
 
-/// The texture of a scene asset, loaded from disk on first use.
+/// Open a URL in the user's browser.
 ///
-/// Returns `None` when the file is missing or cannot be decoded.
-fn scene_texture(
-    ctx: &egui::Context,
-    root: Option<&Path>,
-    cache: &mut HashMap<String, egui::TextureHandle>,
-    path: &str,
-) -> Option<egui::TextureHandle> {
-    if let Some(texture) = cache.get(path) {
-        return Some(texture.clone());
-    }
-    let root = root?;
-    let bytes = std::fs::read(root.join(path)).ok()?;
-    let image = kiln_assets::decode_png(&bytes).ok()?;
-    let size = [image.width as usize, image.height as usize];
-    let color = egui::ColorImage::from_rgba_unmultiplied(size, &image.pixels);
-    let texture = ctx.load_texture("scene", color, egui::TextureOptions::NEAREST);
-    cache.insert(path.to_string(), texture.clone());
-    Some(texture)
+/// Uses the platform's opener, so no extra dependency is needed. Fails when
+/// no opener is available, which is fine: the caller shows the URL instead.
+fn open_in_browser(url: &str) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    let opener = "xdg-open";
+    #[cfg(target_os = "macos")]
+    let opener = "open";
+    #[cfg(target_os = "windows")]
+    let opener = "explorer";
+
+    std::process::Command::new(opener)
+        .arg(url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("could not run {opener}: {e}"))
 }
 
 /// Spawn a project scene into a fresh world for the editor.
@@ -455,7 +540,7 @@ impl EditorApp {
             egui_winit,
             dock_state,
             world,
-            selected_entity: None,
+            selected_id: None,
             is_playing: false,
             play: None,
             console_log: Vec::new(),
@@ -463,14 +548,12 @@ impl EditorApp {
             project_path_input: "kiln.toml".to_string(),
             entity_textures: HashMap::new(),
             entity_roles: HashMap::new(),
-            scene_textures: HashMap::new(),
             scene_view_texture_ids: HashMap::new(),
             scene_view_rect: None,
             texture_sizes: HashMap::new(),
             graph: Graph::new(),
             render_tier: RenderTier::default(),
             show_welcome: true,
-            fps: 60.0,
             frame_count: 0,
             ui_designer: UIDesignerState::new(),
             prefab_editor: PrefabEditorState::new(),
@@ -483,6 +566,22 @@ impl EditorApp {
             play_toggle_requested: false,
             scene_save_requested: false,
             scene_load_requested: false,
+            history: History::new(),
+            scene: Scene::new(),
+            next_entity_name: 1,
+            scene_dirty: false,
+            add_entity_requested: false,
+            remove_entity_requested: false,
+            remove_component_requested: None,
+            add_component_requested: false,
+            import_path: String::new(),
+            show_about: false,
+            show_export: false,
+            export_platform: ExportPlatform::Web,
+            export_result: None,
+            export_requested: false,
+            frame_time: 1.0 / 60.0,
+            last_frame: None,
         })
     }
 
@@ -504,13 +603,15 @@ impl EditorApp {
 
         // Create sprite and egui renderers while borrowing `renderer`,
         // then move `renderer` into GpuState once borrows end.
-        let (scene_view_sprite_renderer, egui_renderer) = {
+        let (scene_view_sprite_renderer, scene_view_hud_renderer, egui_renderer) = {
             let device = renderer.device();
             let queue = renderer.queue();
             let format = renderer.format();
             let sr = SpriteRenderer::new(device, queue, format);
+            let hud = SpriteRenderer::new(device, queue, format);
+            hud.upload_quad(queue);
             let er = egui_wgpu::Renderer::new(device, format, None, 1, false);
-            (sr, er)
+            (sr, hud, er)
         };
 
         self.gpu = Some(GpuState {
@@ -519,7 +620,9 @@ impl EditorApp {
             renderer,
             egui_renderer,
             scene_view_sprite_renderer,
-            scene_view_camera: Camera::new_top_left(size.width as f32, size.height as f32),
+            scene_view_hud_renderer,
+            scene_view_camera: Camera::new(size.width as f32, size.height as f32),
+            scene_view_hud_camera: Camera::new_top_left(size.width as f32, size.height as f32),
         });
     }
 
@@ -657,29 +760,247 @@ impl EditorApp {
 
     /// Reload the edited scene into the editor world.
     fn load_project_scene(&mut self) {
+        self.scene = Scene::new();
+        self.history.clear();
+        self.selected_id = None;
+
         let Some(project) = self.current_project.clone() else {
             self.world = GameWorld::new();
             self.entity_textures.clear();
+            self.entity_roles.clear();
             return;
         };
         let Some(scene_id) = project.default_scene_id() else {
             self.world = GameWorld::new();
             self.entity_textures.clear();
+            self.entity_roles.clear();
             return;
         };
-        self.world = GameWorld::new();
-        self.entity_textures.clear();
-        let (world, spawned) = spawn_editor_scene(&project, &scene_id, &self.texture_sizes);
-        self.world = world;
-        for entity in spawned {
-            if let Some(texture) = entity.texture {
-                self.entity_textures
-                    .insert(entity.source_id.clone(), texture);
-            }
-            if let Some(role) = entity.role {
-                self.entity_roles.insert(entity.source_id, role);
+
+        let Some(scene) = project.scenes.get(&scene_id) else {
+            self.world = GameWorld::new();
+            self.entity_textures.clear();
+            self.entity_roles.clear();
+            return;
+        };
+
+        // The scene data is the source of truth; the world is built from it.
+        self.scene = Scene::from_project_entities(&scene.entities);
+        self.rebuild_world();
+    }
+
+    /// The id of the scene the editor is editing.
+    fn edited_scene_id(&self) -> String {
+        self.current_project
+            .as_ref()
+            .and_then(|p| p.default_scene_id())
+            .unwrap_or_else(|| "main_scene".to_string())
+    }
+
+    /// Rebuild the runtime world from the edited scene.
+    ///
+    /// The world is what the renderer draws, so it has to follow every edit.
+    fn rebuild_world(&mut self) {
+        let textures = scene_ops::world_from_scene(&mut self.world, &self.scene, &self.texture_sizes);
+        self.entity_textures = textures;
+
+        self.entity_roles.clear();
+        for entity in &self.scene.entities {
+            if let Some(role) = &entity.extras.role {
+                self.entity_roles.insert(entity.id.clone(), role.clone());
             }
         }
+    }
+
+    /// Record the current scene so the next edit can be undone.
+    fn record_history(&mut self) {
+        self.history.record(&self.scene);
+    }
+
+    /// Apply an edit to the scene and rebuild the world.
+    ///
+    /// The edit runs on the scene data; the world is rebuilt afterwards, so
+    /// the inspector, the world and the undo stack never disagree.
+    fn apply_edit(&mut self, edit: impl FnOnce(&mut Scene)) {
+        self.record_history();
+        edit(&mut self.scene);
+        self.rebuild_world();
+    }
+
+    /// Undo the last edit.
+    fn undo(&mut self) {
+        let current = self.scene.clone();
+        let Some(previous) = self.history.undo(&current) else {
+            return;
+        };
+        self.scene = previous;
+        self.rebuild_world();
+    }
+
+    /// Redo the last undone edit.
+    fn redo(&mut self) {
+        let current = self.scene.clone();
+        let Some(next) = self.history.redo(&current) else {
+            return;
+        };
+        self.scene = next;
+        self.rebuild_world();
+    }
+
+    /// Add a new entity to the edited scene and select it.
+    fn add_entity(&mut self) {
+        let name = format!("Entity_{}", self.next_entity_name);
+        self.next_entity_name += 1;
+
+        let mut id = String::new();
+        self.apply_edit(|scene| {
+            id = scene.add_entity(SceneEntity::new(&name, &name));
+        });
+
+        // Select the new entity so the inspector shows it right away.
+        self.selected_id = Some(id);
+    }
+
+    /// Remove the selected entity from the scene.
+    fn remove_selected_entity(&mut self) {
+        let Some(id) = self.selected_id.clone() else {
+            return;
+        };
+        self.apply_edit(|scene| {
+            scene.remove_entity(&id);
+        });
+        self.selected_id = None;
+    }
+
+    /// Remove a component from the selected entity.
+    fn remove_component(&mut self, kind: ComponentKind) {
+        let Some(id) = self.selected_id.clone() else {
+            return;
+        };
+        self.apply_edit(|scene| {
+            scene.remove_component(&id, kind);
+        });
+    }
+
+    /// Add a component to the selected entity.
+    ///
+    /// The component that is added is the one the entity has the least of:
+    /// a role first, then a sprite. The transform is always there.
+    fn add_component(&mut self) {
+        let Some(id) = self.selected_id.clone() else {
+            return;
+        };
+        self.apply_edit(|scene| {
+            let Some(entity) = scene.entity_mut(&id) else {
+                return;
+            };
+            if entity.extras.role.is_none() {
+                entity.extras.role = Some("entity".to_string());
+            } else if entity.color.is_none() {
+                entity.color = Some([1.0, 1.0, 1.0, 1.0]);
+            }
+        });
+    }
+
+    /// Start an export of the project in the background.
+    ///
+    /// The command line tool does the work in a thread, so the editor stays
+    /// responsive. The result is read back into the console panel.
+    fn start_export(&mut self) {
+        let platform = self.export_platform;
+        self.show_export = false;
+
+        // The project has to be saved first, so the export has the latest
+        // version of the scene.
+        if let Err(e) = self.save_project() {
+            self.console_log
+                .push(format!("[ERROR] Could not save the project: {e}"));
+            return;
+        }
+
+        self.console_log.push(format!(
+            "[INFO] Exporting for {} (see the terminal for progress)",
+            platform.label()
+        ));
+
+        let output = std::env::current_dir()
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            .join("export");
+
+        let (sender, receiver) = std::sync::mpsc::channel();
+        self.export_result = Some(receiver);
+
+        // The thread does the work; a failure to start is rare, and the
+        // result channel stays empty in that case.
+        drop(std::thread::spawn(move || {
+            let status = std::process::Command::new("cargo")
+                .args([
+                    "run",
+                    "--release",
+                    "--bin",
+                    "kiln-cli",
+                    "--",
+                    "export",
+                    "--platform",
+                    platform.cli_name(),
+                    "--output",
+                    &output.to_string_lossy(),
+                ])
+                .status();
+
+            let message = match status {
+                Ok(status) if status.success() => {
+                    format!("[INFO] Export for {} finished", platform.label())
+                }
+                Ok(status) => {
+                    format!("[ERROR] Export failed with status {status}")
+                }
+                Err(e) => format!("[ERROR] Could not run the export: {e}"),
+            };
+            let _ = sender.send(message);
+        }));
+    }
+
+    /// Read the result of a finished export into the console.
+    fn poll_export_result(&mut self) {
+        let Some(receiver) = &self.export_result else {
+            return;
+        };
+        match receiver.try_recv() {
+            Ok(message) => {
+                self.console_log.push(message);
+                self.export_result = None;
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                self.export_result = None;
+            }
+        }
+    }
+
+    /// The HUD of the scene view, as text drawn with the engine's renderer.
+    ///
+    /// The player draws the same information the same way, so the editor and
+    /// the game show the same pixels.
+    fn scene_view_hud_text(&self) -> Vec<SpriteInstance> {
+        let Some(play) = self.play.as_ref() else {
+            return Vec::new();
+        };
+
+        let state = play.slice.state();
+        let text = kiln_ui::TextRenderer::new();
+        let mut lines = vec![format!("{} - SCORE {}", play.scene_id, state.score)];
+        if !state.status.is_empty() {
+            lines.push(state.status.clone());
+        }
+        lines.push("ARROWS MOVE   F5 SAVE   F9 LOAD".to_string());
+
+        let mut instances = Vec::new();
+        for (index, line) in lines.iter().enumerate() {
+            let y = 16.0 + index as f32 * 20.0;
+            instances.extend(text.render(line, 16.0, y, 16.0, [1.0, 1.0, 1.0, 1.0]));
+        }
+        instances
     }
 
     /// Advance the running game by one frame.
@@ -722,59 +1043,33 @@ impl EditorApp {
     /// Save the current world state as a scene.
     pub fn save_scene(&mut self) -> Result<(), String> {
         // The scene keeps its id and script, so saving does not break the game.
-        let scene_id = self
-            .current_project
-            .as_ref()
-            .and_then(|p| p.default_scene_id())
-            .unwrap_or_else(|| "main_scene".to_string());
+        let scene_id = self.edited_scene_id();
         let script = self
             .current_project
             .as_ref()
             .and_then(|p| p.scenes.get(&scene_id))
             .and_then(|s| s.script.clone());
+        let name = self
+            .current_project
+            .as_ref()
+            .and_then(|p| p.scenes.get(&scene_id))
+            .map(|s| s.name.clone())
+            .unwrap_or_else(|| "Main Scene".to_string());
+        // Nested scenes belong to the scene, so they survive a save.
+        let nested_scenes = self
+            .current_project
+            .as_ref()
+            .and_then(|p| p.scenes.get(&scene_id))
+            .map(|s| s.nested_scenes.clone())
+            .unwrap_or_default();
 
         if let Some(project) = &mut self.current_project {
-            use kiln_core::project::{Entity, Scene};
-            let mut entities = Vec::new();
-            let mut entity_id = 0;
-
-            // Collect entity data
-            let world = self.world.world();
-            let mut query = world.query::<(&SourceId, &Transform, &Sprite)>();
-            for (source_id, transform, sprite) in query.iter() {
-                entity_id += 1;
-                // The source id keeps the entity's identity, so the roles and
-                // textures of the scene survive a save.
-                let id = source_id.0.clone();
-                let texture = self.entity_textures.get(&id).cloned();
-                let role = self.entity_roles.get(&id).cloned();
-                let mut components = vec![
-                    kiln_core::project::Component::Transform {
-                        x: transform.position.x,
-                        y: transform.position.y,
-                        rotation: transform.rotation,
-                        scale: transform.scale.x,
-                    },
-                    kiln_core::project::Component::Sprite {
-                        color: sprite.color,
-                        texture,
-                    },
-                ];
-                if let Some(role) = role {
-                    components.push(kiln_core::project::Component::Role { role });
-                }
-                entities.push(Entity {
-                    id,
-                    name: format!("Entity_{}", entity_id),
-                    components,
-                });
-            }
-
+            use kiln_core::project::Scene;
             let scene = Scene {
                 id: scene_id.clone(),
-                name: "Main Scene".to_string(),
-                entities,
-                nested_scenes: vec![],
+                name,
+                entities: self.scene.to_project_entities(),
+                nested_scenes,
                 script,
             };
 
@@ -891,7 +1186,11 @@ impl winit::application::ApplicationHandler for EditorApp {
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         // Collect status bar data before any mutable borrows
-        let fps = self.fps;
+        let fps = if self.frame_time > 0.0 {
+            1.0 / self.frame_time
+        } else {
+            0.0
+        };
         let entity_count = self.world.world().len();
         let tier = self.render_tier;
         let is_playing = self.is_playing;
@@ -910,6 +1209,10 @@ impl winit::application::ApplicationHandler for EditorApp {
         if self.play.is_some() {
             self.update_play(1.0 / 60.0);
         }
+
+        // The HUD text is built before the GPU is borrowed, because the
+        // renderer owns the mutable borrow of the editor.
+        let hud_text = self.scene_view_hud_text();
 
         let gpu = self.gpu.as_mut().unwrap();
         let size = gpu.window.inner_size();
@@ -982,7 +1285,7 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     ui.separator();
                     if ui.button("Export...").clicked() {
-                        // TODO: Export dialog
+                        menu_actions.push(MenuAction::Export);
                         ui.close_menu();
                     }
                     ui.separator();
@@ -993,11 +1296,11 @@ impl winit::application::ApplicationHandler for EditorApp {
 
                 ui.menu_button("Edit", |ui| {
                     if ui.button("Undo").clicked() {
-                        // TODO: Undo
+                        menu_actions.push(MenuAction::Undo);
                         ui.close_menu();
                     }
                     if ui.button("Redo").clicked() {
-                        // TODO: Redo
+                        menu_actions.push(MenuAction::Redo);
                         ui.close_menu();
                     }
                     ui.separator();
@@ -1057,7 +1360,7 @@ impl winit::application::ApplicationHandler for EditorApp {
                         ui.close_menu();
                     }
                     if ui.button("Package").clicked() {
-                        // TODO: Package
+                        menu_actions.push(MenuAction::Export);
                         ui.close_menu();
                     }
                 });
@@ -1071,11 +1374,17 @@ impl winit::application::ApplicationHandler for EditorApp {
 
                 ui.menu_button("Help", |ui| {
                     if ui.button("Documentation").clicked() {
-                        // TODO: Open docs
+                        // The documentation lives in the repository.
+                        let url = "https://github.com/kiln-engine/kiln/tree/master/docs";
+                        if let Err(e) = open_in_browser(url) {
+                            log::warn!("could not open the documentation: {e}");
+                            self.console_log
+                                .push(format!("[INFO] Documentation: {url}"));
+                        }
                         ui.close_menu();
                     }
                     if ui.button("About Kiln").clicked() {
-                        // TODO: About dialog
+                        menu_actions.push(MenuAction::About);
                         ui.close_menu();
                     }
                 });
@@ -1153,8 +1462,13 @@ impl winit::application::ApplicationHandler for EditorApp {
                 let tree = egui_dock::DockArea::new(&mut self.dock_state).style(dock_style);
 
                 let mut tab_viewer = TabViewer {
-                    world: &mut self.world,
-                    selected_entity: &mut self.selected_entity,
+                    scene: &mut self.scene,
+                    scene_dirty: &mut self.scene_dirty,
+                    add_entity_requested: &mut self.add_entity_requested,
+                    remove_entity_requested: &mut self.remove_entity_requested,
+                    remove_component_requested: &mut self.remove_component_requested,
+                    add_component_requested: &mut self.add_component_requested,
+                    selected_id: &mut self.selected_id,
                     is_playing: &mut self.is_playing,
                     graph: &mut self.graph,
                     render_tier: &mut self.render_tier,
@@ -1164,25 +1478,80 @@ impl winit::application::ApplicationHandler for EditorApp {
                     prefab_editor: &mut self.prefab_editor,
                     gameplay_editor: &mut self.gameplay_editor,
                     asset_browser: &mut self.asset_browser,
+                    project_root: self.project_root.as_deref(),
+                    import_path: &mut self.import_path,
                     tilemap_editor: &mut self.tilemap_editor,
                     current_project: &mut self.current_project,
                     play_toggle_requested: &mut self.play_toggle_requested,
                     scene_save_requested: &mut self.scene_save_requested,
                     scene_load_requested: &mut self.scene_load_requested,
-                    play: self.play.as_ref(),
-                    entity_textures: &self.entity_textures,
-                    scene_textures: &mut self.scene_textures,
-                    project_root: self.project_root.as_deref(),
-                    ctx: self.egui_winit.egui_ctx(),
-                    console_log: &self.console_log,
-                    scene_view_rect: self.scene_view_rect,
+                    console_log: &mut self.console_log,
+                    scene_view_rect: &mut self.scene_view_rect,
+                    fps,
                 };
                 tree.show(ctx, &mut tab_viewer);
-                self.scene_view_rect = tab_viewer.scene_view_rect;
             });
 
             // Status bar
             show_status_bar(ctx, fps, entity_count, tier, is_playing);
+
+            // The "About Kiln" window.
+            if self.show_about {
+                egui::Window::new("About Kiln")
+                    .collapsible(false)
+                    .resizable(false)
+                    .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                    .show(ctx, |ui| {
+                        ui.heading("Kiln");
+                        ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
+                        ui.add_space(8.0);
+                        ui.label("A small, fast game engine for 2D games.");
+                        ui.label("Rust · wgpu · egui");
+                        ui.add_space(8.0);
+                        ui.hyperlink_to("Documentation", "https://github.com/kiln-engine/kiln/tree/master/docs");
+                        ui.add_space(8.0);
+                        if ui.button("Close").clicked() {
+                            self.show_about = false;
+                        }
+                    });
+            }
+
+            // The export dialog.
+            if self.show_export {
+                egui::Window::new("Export")
+                    .collapsible(false)
+                    .resizable(false)
+                    .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                    .show(ctx, |ui| {
+                        ui.heading("Export");
+                        ui.add_space(8.0);
+
+                        ui.label("Platform");
+                        ui.horizontal(|ui| {
+                            for platform in ExportPlatform::all() {
+                                ui.selectable_value(
+                                    &mut self.export_platform,
+                                    platform,
+                                    platform.label(),
+                                );
+                            }
+                        });
+
+                        ui.add_space(8.0);
+                        ui.label("The export runs the command line tool in the background.");
+                        ui.label("Its output is shown in the console panel.");
+
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            if ui.button("Export").clicked() {
+                                self.export_requested = true;
+                            }
+                            if ui.button("Close").clicked() {
+                                self.show_export = false;
+                            }
+                        });
+                    });
+            }
         }
 
         let full_output = ctx.end_pass();
@@ -1284,11 +1653,28 @@ impl winit::application::ApplicationHandler for EditorApp {
             .end_pass(&mut encoder, egui_begin);
         gpu.renderer.profiler_mut().resolve(&mut encoder);
 
-        // Render scene sprites into the swapchain view using the GPU sprite
-        // renderer, clipped to the scene view panel rect so egui overlays on top.
+        // Render the scene into the scene view panel using the real GPU
+        // pipeline, the same one the standalone player uses.
+        //
+        // The viewport is set to the panel rectangle, so the world is drawn
+        // exactly where the panel is, and the camera uses the player's
+        // convention (world Y grows upwards).
         if let Some(rect) = self.scene_view_rect {
             let device = gpu.renderer.device();
             let queue = gpu.renderer.queue();
+
+            // egui works in points; the framebuffer works in pixels.
+            let scale = full_output.pixels_per_point;
+            let viewport_x = (rect.min.x * scale).round() as u32;
+            let viewport_y = (rect.min.y * scale).round() as u32;
+            let viewport_w = (rect.width() * scale).round().max(1.0) as u32;
+            let viewport_h = (rect.height() * scale).round().max(1.0) as u32;
+
+            // One world unit is one pixel, like in the player.
+            gpu.scene_view_camera.viewport_size = [viewport_w as f32, viewport_h as f32];
+            gpu.scene_view_camera.position = [0.0, 0.0];
+            gpu.scene_view_hud_camera.viewport_size = [viewport_w as f32, viewport_h as f32];
+            gpu.scene_view_hud_camera.position = [0.0, 0.0];
 
             // Upload textures and push sprites to the sprite renderer.
             gpu.scene_view_sprite_renderer.begin_frame();
@@ -1306,7 +1692,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                     .scene_view_texture_ids
                     .entry(path.clone())
                     .or_insert_with(|| {
-                        let full_path = self.project_root.as_ref().unwrap().join(&path);
+                        let Some(root) = self.project_root.as_ref() else {
+                            return TextureId::WHITE;
+                        };
+                        let full_path = root.join(&path);
                         let bytes = match std::fs::read(&full_path) {
                             Ok(b) => b,
                             Err(_) => return TextureId::WHITE,
@@ -1334,9 +1723,17 @@ impl winit::application::ApplicationHandler for EditorApp {
                 );
             }
 
-            // Render sprites to the swapchain view, clipped to the scene view rect.
-            let target_size = [rect.width() as u32, rect.height() as u32];
-            let offset = [rect.min.x as u32, rect.min.y as u32];
+            // The HUD is drawn in screen space with the engine's own text
+            // renderer, so the editor shows the same pixels as the player.
+            gpu.scene_view_hud_renderer.begin_frame();
+            for instance in hud_text {
+                gpu.scene_view_hud_renderer.push(instance);
+            }
+
+            // Render the scene and its HUD into the scene view rectangle.
+            //
+            // The viewport maps the scene onto the panel, and the scissor
+            // keeps the drawing inside it.
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("scene_view_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1351,9 +1748,19 @@ impl winit::application::ApplicationHandler for EditorApp {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            pass.set_scissor_rect(offset[0], offset[1], target_size[0], target_size[1]);
+            pass.set_viewport(
+                viewport_x as f32,
+                viewport_y as f32,
+                viewport_w as f32,
+                viewport_h as f32,
+                0.0,
+                1.0,
+            );
+            pass.set_scissor_rect(viewport_x, viewport_y, viewport_w, viewport_h);
             gpu.scene_view_sprite_renderer
                 .flush(&mut pass, &gpu.scene_view_camera, queue);
+            gpu.scene_view_hud_renderer
+                .flush(&mut pass, &gpu.scene_view_hud_camera, queue);
             drop(pass);
         }
 
@@ -1396,6 +1803,18 @@ impl winit::application::ApplicationHandler for EditorApp {
                         eprintln!("Failed to load scene: {}", e);
                     }
                 }
+                MenuAction::Undo => {
+                    self.undo();
+                }
+                MenuAction::Redo => {
+                    self.redo();
+                }
+                MenuAction::About => {
+                    self.show_about = true;
+                }
+                MenuAction::Export => {
+                    self.show_export = true;
+                }
             }
         }
 
@@ -1416,6 +1835,29 @@ impl winit::application::ApplicationHandler for EditorApp {
         }
         if load_requested {
             self.load_game();
+        }
+
+        // Undo and redo shortcuts, as advertised in the status bar.
+        {
+            let ctx = self.egui_winit.egui_ctx();
+            let mut undo = false;
+            let mut redo = false;
+            ctx.input(|i| {
+                if i.modifiers.ctrl && !i.modifiers.shift {
+                    if i.key_pressed(egui::Key::Z) {
+                        undo = true;
+                    }
+                    if i.key_pressed(egui::Key::Y) {
+                        redo = true;
+                    }
+                }
+            });
+            if undo {
+                self.undo();
+            }
+            if redo {
+                self.redo();
+            }
         }
 
         // Handle the open-project request from the welcome screen.
@@ -1459,9 +1901,44 @@ impl winit::application::ApplicationHandler for EditorApp {
             }
         }
 
-        // Update FPS counter
+        // Handle the entity and component edits the panels asked for.
+        if std::mem::take(&mut self.add_entity_requested) {
+            self.add_entity();
+        }
+        if std::mem::take(&mut self.remove_entity_requested) {
+            self.remove_selected_entity();
+        }
+        if let Some(kind) = self.remove_component_requested.take() {
+            self.remove_component(kind);
+        }
+        if std::mem::take(&mut self.add_component_requested) {
+            self.add_component();
+        }
+
+        // A panel changed the scene, so the world has to follow.
+        if std::mem::take(&mut self.scene_dirty) {
+            self.rebuild_world();
+        }
+
+        // Start an export the dialog asked for, and read the result of a
+        // running one.
+        if std::mem::take(&mut self.export_requested) {
+            self.start_export();
+        }
+        self.poll_export_result();
+
+        // Update the FPS counter from the real frame time.
         self.frame_count += 1;
-        // TODO: Proper FPS timing
+        let now = std::time::Instant::now();
+        if let Some(last) = self.last_frame {
+            let elapsed = now.duration_since(last).as_secs_f32();
+            // Ignore huge gaps (e.g. after the window was minimised) so the
+            // average does not collapse.
+            if elapsed > 0.0 && elapsed < 1.0 {
+                self.frame_time = self.frame_time * 0.9 + elapsed * 0.1;
+            }
+        }
+        self.last_frame = Some(now);
     }
 }
 
@@ -1499,8 +1976,19 @@ fn show_status_bar(
 }
 
 struct TabViewer<'a> {
-    world: &'a mut GameWorld,
-    selected_entity: &'a mut Option<hecs::Entity>,
+    /// The scene being edited; the inspector changes it directly.
+    scene: &'a mut Scene,
+    /// Set when the scene was changed, so the world can be rebuilt.
+    scene_dirty: &'a mut bool,
+    /// Set when the user asked to add an entity to the scene.
+    add_entity_requested: &'a mut bool,
+    /// Set when the user asked to remove the selected entity.
+    remove_entity_requested: &'a mut bool,
+    /// Set when the user asked to remove a component of the selected entity.
+    remove_component_requested: &'a mut Option<ComponentKind>,
+    /// Set when the user asked to add a component to the selected entity.
+    add_component_requested: &'a mut bool,
+    selected_id: &'a mut Option<String>,
     is_playing: &'a mut bool,
     graph: &'a mut Graph,
     render_tier: &'a mut RenderTier,
@@ -1510,25 +1998,279 @@ struct TabViewer<'a> {
     prefab_editor: &'a mut PrefabEditorState,
     gameplay_editor: &'a mut GameplayEditorState,
     asset_browser: &'a mut AssetBrowser,
+    /// Directory of the open project, where the assets live.
+    project_root: Option<&'a Path>,
+    /// The path typed into the asset import field.
+    import_path: &'a mut String,
     tilemap_editor: &'a mut TilemapEditorState,
     current_project: &'a mut Option<Project>,
     play_toggle_requested: &'a mut bool,
     scene_save_requested: &'a mut bool,
     scene_load_requested: &'a mut bool,
-    /// The running game session, drawn over the scene view.
-    play: Option<&'a PlaySession>,
-    /// Asset path of each scene entity's texture, keyed by entity id.
-    entity_textures: &'a HashMap<String, String>,
-    /// Textures loaded for the scene view, keyed by asset path.
-    scene_textures: &'a mut HashMap<String, egui::TextureHandle>,
-    /// Directory of the open project, where the assets live.
-    project_root: Option<&'a Path>,
-    /// The egui context, used to upload scene textures.
-    ctx: &'a egui::Context,
     /// Lines shown in the console panel.
-    console_log: &'a [String],
-    /// Screen-space rectangle of the scene view panel from the last frame.
-    scene_view_rect: Option<egui::Rect>,
+    console_log: &'a mut Vec<String>,
+    /// Screen-space rectangle of the scene view panel.
+    ///
+    /// The scene view writes its canvas rectangle here, so the renderer can
+    /// draw the scene into the right part of the window.
+    scene_view_rect: &'a mut Option<egui::Rect>,
+    /// The real frame rate of the editor, shown in the scene view toolbar.
+    fps: f32,
+}
+
+impl<'a> TabViewer<'a> {
+    /// Make a prefab out of the selected entity.
+    fn create_prefab_from_selection(&mut self) {
+        let Some(id) = self.selected_id.clone() else {
+            self.console_log
+                .push("[WARN] Select an entity before creating a prefab".to_string());
+            return;
+        };
+        let Some(entity) = self.scene.entity(&id) else {
+            return;
+        };
+
+        let project_entity = entity.to_project_entity();
+        let name = entity.name.clone();
+        let prefab = kiln_core::Prefab::new(name.clone(), project_entity);
+        let prefab_id = prefab.id.clone();
+        self.prefab_editor.add_prefab(prefab);
+        self.prefab_editor.select_prefab(&prefab_id);
+        self.console_log.push(format!("[INFO] Created prefab '{name}'"));
+    }
+
+    /// Put an instance of the selected prefab into the scene.
+    fn instantiate_selected_prefab(&mut self) {
+        let Some(prefab_id) = self.prefab_editor.selected_prefab().map(str::to_string) else {
+            self.console_log
+                .push("[WARN] Select a prefab before instantiating it".to_string());
+            return;
+        };
+        let Some(instance) = self.prefab_editor.instantiate_prefab(&prefab_id, None) else {
+            return;
+        };
+
+        let entity = SceneEntity::from_project_entity(&instance);
+        let name = entity.name.clone();
+        let id = self.scene.add_entity(entity);
+        *self.selected_id = Some(id);
+        *self.scene_dirty = true;
+        self.console_log
+            .push(format!("[INFO] Instantiated prefab '{name}'"));
+    }
+
+    /// Copy an image into the project and refresh the asset list.
+    ///
+    /// The path can be absolute or relative to the project directory. The
+    /// file is copied into the project's `art` folder, so the project stays
+    /// self-contained.
+    fn import_asset(&mut self) {
+        let Some(root) = self.project_root.map(|p| p.to_path_buf()) else {
+            self.console_log
+                .push("[WARN] Open a project before importing an asset".to_string());
+            return;
+        };
+
+        let source = self.import_path.trim().to_string();
+        if source.is_empty() {
+            self.console_log
+                .push("[WARN] Type the path of the file to import".to_string());
+            return;
+        }
+
+        let source_path = if Path::new(&source).is_absolute() {
+            PathBuf::from(&source)
+        } else {
+            root.join(&source)
+        };
+
+        if !source_path.is_file() {
+            self.console_log
+                .push(format!("[ERROR] '{source}' is not a file"));
+            return;
+        }
+
+        let Some(file_name) = source_path.file_name() else {
+            self.console_log
+                .push(format!("[ERROR] '{source}' has no file name"));
+            return;
+        };
+
+        let target_dir = root.join("art");
+        if let Err(e) = std::fs::create_dir_all(&target_dir) {
+            self.console_log
+                .push(format!("[ERROR] Could not create the art folder: {e}"));
+            return;
+        }
+        let target = target_dir.join(file_name);
+
+        match std::fs::copy(&source_path, &target) {
+            Ok(_) => {
+                let relative = target
+                    .strip_prefix(&root)
+                    .unwrap_or(&target)
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                self.console_log
+                    .push(format!("[INFO] Imported '{relative}'"));
+                self.import_path.clear();
+                self.asset_browser.scan(&root);
+            }
+            Err(e) => self
+                .console_log
+                .push(format!("[ERROR] Could not import the file: {e}")),
+        }
+    }
+
+    /// The id of the scene the editor is editing.
+    fn current_scene_nested_scenes(&self) -> Vec<kiln_core::project::NestedScene> {
+        let Some(project) = self.current_project.as_ref() else {
+            return Vec::new();
+        };
+        let Some(scene_id) = project.default_scene_id() else {
+            return Vec::new();
+        };
+        project
+            .scenes
+            .get(&scene_id)
+            .map(|scene| scene.nested_scenes.clone())
+            .unwrap_or_default()
+    }
+
+    /// Add an empty scene to the project.
+    fn create_scene(&mut self) {
+        let Some(project) = self.current_project.as_mut() else {
+            self.console_log
+                .push("[WARN] Open a project before creating a scene".to_string());
+            return;
+        };
+
+        // The id has to be unique inside the project.
+        let mut counter = project.scenes.len() + 1;
+        let mut id = format!("scene_{counter}");
+        while project.scenes.contains_key(&id) {
+            counter += 1;
+            id = format!("scene_{counter}");
+        }
+
+        let scene = kiln_core::project::Scene {
+            id: id.clone(),
+            name: format!("Scene {counter}"),
+            entities: Vec::new(),
+            nested_scenes: Vec::new(),
+            script: None,
+        };
+        project.scenes.insert(id.clone(), scene);
+        self.console_log.push(format!("[INFO] Created scene '{id}'"));
+    }
+
+    /// Make a scene the one the game starts in.
+    fn set_start_scene(&mut self, id: &str) {
+        let Some(project) = self.current_project.as_mut() else {
+            return;
+        };
+        if !project.scenes.contains_key(id) {
+            return;
+        }
+        // The start scene is the first one by id, so the id is renamed to
+        // sort before the others.
+        let mut ids: Vec<String> = project.scenes.keys().cloned().collect();
+        ids.sort();
+        if ids.first().map(String::as_str) == Some(id) {
+            return;
+        }
+        let scene = project.scenes.remove(id).expect("the scene exists");
+        project.scenes.insert(format!("0_{id}"), scene);
+    }
+
+    /// Remove a scene from the project.
+    fn delete_scene(&mut self, id: &str) {
+        let Some(project) = self.current_project.as_mut() else {
+            return;
+        };
+        if project.scenes.len() <= 1 {
+            self.console_log
+                .push("[WARN] A project needs at least one scene".to_string());
+            return;
+        }
+        if project.scenes.remove(id).is_some() {
+            self.console_log.push(format!("[INFO] Deleted scene '{id}'"));
+        }
+    }
+
+    /// Add a nested scene to the scene being edited.
+    fn add_nested_scene(&mut self, scene_id: &str) {
+        let Some(project) = self.current_project.as_mut() else {
+            return;
+        };
+        let Some(current_id) = project.default_scene_id() else {
+            return;
+        };
+        let Some(current) = project.scenes.get_mut(&current_id) else {
+            return;
+        };
+        // A scene cannot contain itself.
+        if scene_id == current_id {
+            return;
+        }
+        if current.nested_scenes.iter().any(|n| n.scene_id == scene_id) {
+            return;
+        }
+        current.nested_scenes.push(kiln_core::project::NestedScene {
+            scene_id: scene_id.to_string(),
+            additive: false,
+            offset: kiln_core::project::SceneOffset::default(),
+        });
+    }
+
+    /// Remove a nested scene from the scene being edited.
+    fn remove_nested_scene(&mut self, scene_id: &str) {
+        let Some(project) = self.current_project.as_mut() else {
+            return;
+        };
+        let Some(current_id) = project.default_scene_id() else {
+            return;
+        };
+        let Some(current) = project.scenes.get_mut(&current_id) else {
+            return;
+        };
+        current.nested_scenes.retain(|n| n.scene_id != scene_id);
+    }
+
+    /// The button that adds a nested scene, with a list of the other scenes.
+    fn add_nested_scene_button(&mut self, ui: &mut egui::Ui) {
+        let candidates: Vec<String> = self
+            .current_project
+            .as_ref()
+            .map(|project| {
+                let current = project.default_scene_id();
+                project
+                    .scenes
+                    .keys()
+                    .filter(|id| Some((*id).clone()) != current)
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if candidates.is_empty() {
+            ui.label("Create another scene to nest it here.");
+            return;
+        }
+
+        let mut selected = candidates.first().cloned().unwrap_or_default();
+        egui::ComboBox::from_label("Scene")
+            .selected_text(selected.clone())
+            .show_ui(ui, |ui| {
+                for candidate in &candidates {
+                    ui.selectable_value(&mut selected, candidate.clone(), candidate);
+                }
+            });
+
+        if ui.button("Add Nested Scene").clicked() {
+            self.add_nested_scene(&selected);
+        }
+    }
 }
 
 impl<'a> egui_dock::TabViewer for TabViewer<'a> {
@@ -1562,7 +2304,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         }
 
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.label(format!("FPS: {:.0}", 60.0));
+                            ui.label(format!("FPS: {:.0}", self.fps));
                         });
                     });
 
@@ -1573,6 +2315,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         egui::vec2(ui.available_width(), ui.available_height() * 0.65);
                     let (rect, _response) =
                         ui.allocate_exact_size(desired_size, egui::Sense::click_and_drag());
+
+                    // The renderer draws the scene into this rectangle.
+                    *self.scene_view_rect = Some(rect);
 
                     // Draw background with grid pattern
                     ui.painter()
@@ -1606,96 +2351,6 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         );
                     }
 
-                    // Draw sprites, using their texture when the project
-                    // provides one.
-                    let sprites: Vec<(String, Transform, Sprite)> = self
-                        .world
-                        .world()
-                        .query::<(&SourceId, &Transform, &Sprite)>()
-                        .iter()
-                        .map(|(id, t, s)| (id.0.clone(), *t, *s))
-                        .collect();
-
-                    for (source_id, transform, sprite) in sprites {
-                        let screen_x = rect.min.x + transform.position.x;
-                        let screen_y = rect.min.y + transform.position.y;
-                        let sprite_rect = egui::Rect::from_min_size(
-                            egui::pos2(screen_x, screen_y),
-                            egui::vec2(sprite.size[0], sprite.size[1]),
-                        );
-
-                        let color = egui::Color32::from_rgba_premultiplied(
-                            (sprite.color[0] * 255.0) as u8,
-                            (sprite.color[1] * 255.0) as u8,
-                            (sprite.color[2] * 255.0) as u8,
-                            (sprite.color[3] * 255.0) as u8,
-                        );
-
-                        let texture = self.entity_textures.get(&source_id).and_then(|path| {
-                            scene_texture(self.ctx, self.project_root, self.scene_textures, path)
-                        });
-                        match texture {
-                            Some(texture) => {
-                                painter.image(
-                                    texture.id(),
-                                    sprite_rect,
-                                    egui::Rect::from_min_max(
-                                        egui::pos2(0.0, 0.0),
-                                        egui::pos2(1.0, 1.0),
-                                    ),
-                                    color,
-                                );
-                            }
-                            None => {
-                                painter.rect_filled(sprite_rect, 2.0, color);
-                                painter.rect_stroke(
-                                    sprite_rect,
-                                    2.0,
-                                    egui::Stroke::new(
-                                        1.0_f32,
-                                        egui::Color32::from_rgba_premultiplied(255, 255, 255, 50),
-                                    ),
-                                );
-                            }
-                        }
-                    }
-
-                    // While playing, show the game's HUD over the scene.
-                    if let Some(play) = &self.play {
-                        let state = play.slice.state();
-                        painter.text(
-                            egui::pos2(rect.left() + 12.0, rect.top() + 12.0),
-                            egui::Align2::LEFT_TOP,
-                            format!("{} - SCORE {}", play.scene_id, state.score),
-                            egui::FontId::monospace(16.0),
-                            egui::Color32::WHITE,
-                        );
-                        if !state.status.is_empty() {
-                            painter.text(
-                                egui::pos2(rect.left() + 12.0, rect.top() + 34.0),
-                                egui::Align2::LEFT_TOP,
-                                &state.status,
-                                egui::FontId::monospace(14.0),
-                                egui::Color32::from_rgba_premultiplied(255, 220, 120, 255),
-                            );
-                        }
-                        painter.text(
-                            egui::pos2(rect.left() + 12.0, rect.bottom() - 40.0),
-                            egui::Align2::LEFT_BOTTOM,
-                            "ARROWS MOVE   F5 SAVE   F9 LOAD",
-                            egui::FontId::monospace(13.0),
-                            egui::Color32::from_rgba_premultiplied(200, 200, 210, 255),
-                        );
-                        if let Some(error) = &play.error {
-                            painter.text(
-                                egui::pos2(rect.left() + 12.0, rect.bottom() - 20.0),
-                                egui::Align2::LEFT_BOTTOM,
-                                error,
-                                egui::FontId::monospace(13.0),
-                                egui::Color32::from_rgba_premultiplied(255, 90, 90, 255),
-                            );
-                        }
-                    }
 
                     // Entity list for selection
                     ui.add_space(8.0);
@@ -1706,7 +2361,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.heading("Entities");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button("+ Add Entity").clicked() {
-                                // TODO: Add entity
+                                *self.add_entity_requested = true;
                             }
                         });
                     });
@@ -1716,21 +2371,23 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     egui::ScrollArea::vertical()
                         .max_height(ui.available_height())
                         .show(ui, |ui| {
-                            let entities: Vec<(hecs::Entity, Transform)> = self
-                                .world
-                                .world()
-                                .query::<(hecs::Entity, &Transform, &Sprite)>()
+                            let entities: Vec<(String, String, [f32; 2])> = self
+                                .scene
+                                .entities
                                 .iter()
-                                .map(|(e, t, _s)| (e, *t))
+                                .map(|e| {
+                                    (
+                                        e.id.clone(),
+                                        e.name.clone(),
+                                        [e.transform.position.x, e.transform.position.y],
+                                    )
+                                })
                                 .collect();
-                            for (entity, transform) in entities {
-                                let label = format!(
-                                    "Entity ({:.0}, {:.0})",
-                                    transform.position.x, transform.position.y
-                                );
-                                let selected = *self.selected_entity == Some(entity);
+                            for (id, name, position) in entities {
+                                let label = format!("{} ({:.0}, {:.0})", name, position[0], position[1]);
+                                let selected = self.selected_id.as_deref() == Some(&id);
                                 if ui.selectable_label(selected, label).clicked() {
-                                    *self.selected_entity = Some(entity);
+                                    *self.selected_id = Some(id);
                                 }
                             }
                         });
@@ -1740,188 +2397,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 ui.vertical(|ui| {
                     ui.heading("Inspector");
 
-                    if let Some(entity) = self.selected_entity {
-                        ui.label(format!("Entity ID: {:?}", entity.id()));
-                        ui.add_space(8.0);
-
-                        // Read current values once
-                        let world = self.world.world();
-                        let transform = world.get::<&Transform>(*entity).ok().map(|t| *t);
-                        let sprite = world.get::<&Sprite>(*entity).ok().map(|s| *s);
-
-                        // Transform component
-                        if let Some(mut transform) = transform {
-                            ui.add_space(4.0);
-                            egui::Frame::none()
-                                .fill(egui::Color32::from_rgb(35, 35, 40))
-                                .rounding(4.0)
-                                .inner_margin(12.0)
-                                .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.strong("Transform");
-                                        ui.with_layout(
-                                            egui::Layout::right_to_left(egui::Align::Center),
-                                            |ui| {
-                                                if ui.button("⋮").clicked() {
-                                                    // TODO: Component menu
-                                                }
-                                            },
-                                        );
-                                    });
-                                    ui.add_space(8.0);
-
-                                    ui.horizontal(|ui| {
-                                        ui.label("Position");
-                                        ui.add_space(16.0);
-                                        ui.label("X:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut transform.position.x)
-                                                    .speed(1.0),
-                                            )
-                                            .changed()
-                                        {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut t) = world.get::<&mut Transform>(*entity)
-                                            {
-                                                t.position.x = transform.position.x;
-                                            }
-                                        }
-                                        ui.add_space(8.0);
-                                        ui.label("Y:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut transform.position.y)
-                                                    .speed(1.0),
-                                            )
-                                            .changed()
-                                        {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut t) = world.get::<&mut Transform>(*entity)
-                                            {
-                                                t.position.y = transform.position.y;
-                                            }
-                                        }
-                                    });
-                                });
-                        }
-
-                        // Sprite component
-                        if let Some(mut sprite) = sprite {
-                            ui.add_space(8.0);
-                            egui::Frame::none()
-                                .fill(egui::Color32::from_rgb(35, 35, 40))
-                                .rounding(4.0)
-                                .inner_margin(12.0)
-                                .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.strong("Sprite");
-                                        ui.with_layout(
-                                            egui::Layout::right_to_left(egui::Align::Center),
-                                            |ui| {
-                                                if ui.button("⋮").clicked() {
-                                                    // TODO: Component menu
-                                                }
-                                            },
-                                        );
-                                    });
-                                    ui.add_space(8.0);
-
-                                    ui.horizontal(|ui| {
-                                        ui.label("Color");
-                                        ui.add_space(16.0);
-                                        ui.label("R:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut sprite.color[0])
-                                                    .speed(0.01)
-                                                    .range(0.0..=1.0),
-                                            )
-                                            .changed()
-                                        {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
-                                                s.color[0] = sprite.color[0];
-                                            }
-                                        }
-                                        ui.add_space(8.0);
-                                        ui.label("G:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut sprite.color[1])
-                                                    .speed(0.01)
-                                                    .range(0.0..=1.0),
-                                            )
-                                            .changed()
-                                        {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
-                                                s.color[1] = sprite.color[1];
-                                            }
-                                        }
-                                        ui.add_space(8.0);
-                                        ui.label("B:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut sprite.color[2])
-                                                    .speed(0.01)
-                                                    .range(0.0..=1.0),
-                                            )
-                                            .changed()
-                                        {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
-                                                s.color[2] = sprite.color[2];
-                                            }
-                                        }
-                                        ui.add_space(8.0);
-                                        ui.label("A:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut sprite.color[3])
-                                                    .speed(0.01)
-                                                    .range(0.0..=1.0),
-                                            )
-                                            .changed()
-                                        {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
-                                                s.color[3] = sprite.color[3];
-                                            }
-                                        }
-                                    });
-
-                                    ui.add_space(8.0);
-
-                                    // Color preview
-                                    let color_rect = egui::Rect::from_min_size(
-                                        ui.cursor().left_top(),
-                                        egui::vec2(40.0, 24.0),
-                                    );
-                                    let preview_color = egui::Color32::from_rgba_premultiplied(
-                                        (sprite.color[0] * 255.0) as u8,
-                                        (sprite.color[1] * 255.0) as u8,
-                                        (sprite.color[2] * 255.0) as u8,
-                                        (sprite.color[3] * 255.0) as u8,
-                                    );
-                                    ui.painter().rect_filled(color_rect, 2.0, preview_color);
-                                    ui.painter().rect_stroke(
-                                        color_rect,
-                                        2.0,
-                                        egui::Stroke::new(
-                                            1.0_f32,
-                                            egui::Color32::from_rgb(100, 100, 100),
-                                        ),
-                                    );
-                                    ui.add_space(32.0);
-                                });
-                        }
-
-                        ui.add_space(16.0);
-                        if ui.button("+ Add Component").clicked() {
-                            // TODO: Add component
-                        }
-                    } else {
+                    // The scene data is the source of truth, so the inspector
+                    // edits it directly. The world is rebuilt afterwards.
+                    let Some(id) = self.selected_id.clone() else {
                         ui.add_space(32.0);
                         ui.centered_and_justified(|ui| {
                             ui.label("No entity selected");
@@ -1930,7 +2408,237 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 "Select an entity from the Scene View to inspect its components",
                             );
                         });
+                        return;
+                    };
+
+                    let Some(entity) = self.scene.entity_mut(&id) else {
+                        ui.add_space(32.0);
+                        ui.centered_and_justified(|ui| {
+                            ui.label("The selected entity no longer exists");
+                        });
+                        return;
+                    };
+
+                    ui.label(format!("Entity: {}", entity.name));
+                    ui.add_space(8.0);
+
+                    // Transform component
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_rgb(35, 35, 40))
+                        .rounding(4.0)
+                        .inner_margin(12.0)
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.strong("Transform");
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui.button("⋮").clicked() {
+                                            *self.remove_component_requested =
+                                                Some(ComponentKind::Transform);
+                                        }
+                                    },
+                                );
+                            });
+                            ui.add_space(8.0);
+
+                            let transform = &mut entity.transform;
+                            ui.horizontal(|ui| {
+                                ui.label("Position");
+                                ui.add_space(16.0);
+                                ui.label("X:");
+                                if ui
+                                    .add(egui::DragValue::new(&mut transform.position.x).speed(1.0))
+                                    .changed()
+                                {
+                                    *self.scene_dirty = true;
+                                }
+                                ui.add_space(8.0);
+                                ui.label("Y:");
+                                if ui
+                                    .add(egui::DragValue::new(&mut transform.position.y).speed(1.0))
+                                    .changed()
+                                {
+                                    *self.scene_dirty = true;
+                                }
+                            });
+
+                            ui.horizontal(|ui| {
+                                ui.label("Rotation");
+                                ui.add_space(16.0);
+                                if ui
+                                    .add(
+                                        egui::DragValue::new(&mut transform.rotation)
+                                            .speed(0.01)
+                                            .range(-std::f32::consts::PI..=std::f32::consts::PI),
+                                    )
+                                    .changed()
+                                {
+                                    *self.scene_dirty = true;
+                                }
+                            });
+
+                            ui.horizontal(|ui| {
+                                ui.label("Scale");
+                                ui.add_space(16.0);
+                                if ui
+                                    .add(
+                                        egui::DragValue::new(&mut transform.scale.x)
+                                            .speed(0.01)
+                                            .range(0.01..=100.0),
+                                    )
+                                    .changed()
+                                {
+                                    transform.scale.y = transform.scale.x;
+                                    *self.scene_dirty = true;
+                                }
+                            });
+                        });
+
+                    // Sprite component
+                    if let Some(color) = entity.color.as_mut() {
+                        ui.add_space(8.0);
+                        egui::Frame::none()
+                            .fill(egui::Color32::from_rgb(35, 35, 40))
+                            .rounding(4.0)
+                            .inner_margin(12.0)
+                            .show(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.strong("Sprite");
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if ui.button("⋮").clicked() {
+                                                *self.remove_component_requested =
+                                                    Some(ComponentKind::Sprite);
+                                            }
+                                        },
+                                    );
+                                });
+                                ui.add_space(8.0);
+
+                                ui.horizontal(|ui| {
+                                    ui.label("Color");
+                                    ui.add_space(16.0);
+                                    ui.label("R:");
+                                    if ui
+                                        .add(
+                                            egui::DragValue::new(&mut color[0])
+                                                .speed(0.01)
+                                                .range(0.0..=1.0),
+                                        )
+                                        .changed()
+                                    {
+                                        *self.scene_dirty = true;
+                                    }
+                                    ui.add_space(8.0);
+                                    ui.label("G:");
+                                    if ui
+                                        .add(
+                                            egui::DragValue::new(&mut color[1])
+                                                .speed(0.01)
+                                                .range(0.0..=1.0),
+                                        )
+                                        .changed()
+                                    {
+                                        *self.scene_dirty = true;
+                                    }
+                                    ui.add_space(8.0);
+                                    ui.label("B:");
+                                    if ui
+                                        .add(
+                                            egui::DragValue::new(&mut color[2])
+                                                .speed(0.01)
+                                                .range(0.0..=1.0),
+                                        )
+                                        .changed()
+                                    {
+                                        *self.scene_dirty = true;
+                                    }
+                                    ui.add_space(8.0);
+                                    ui.label("A:");
+                                    if ui
+                                        .add(
+                                            egui::DragValue::new(&mut color[3])
+                                                .speed(0.01)
+                                                .range(0.0..=1.0),
+                                        )
+                                        .changed()
+                                    {
+                                        *self.scene_dirty = true;
+                                    }
+                                });
+
+                                ui.add_space(8.0);
+
+                                // Color preview
+                                let color_rect =
+                                    egui::Rect::from_min_size(ui.cursor().left_top(), egui::vec2(40.0, 24.0));
+                                let preview_color = egui::Color32::from_rgba_premultiplied(
+                                    (color[0] * 255.0) as u8,
+                                    (color[1] * 255.0) as u8,
+                                    (color[2] * 255.0) as u8,
+                                    (color[3] * 255.0) as u8,
+                                );
+                                ui.painter().rect_filled(color_rect, 2.0, preview_color);
+                                ui.painter().rect_stroke(
+                                    color_rect,
+                                    2.0,
+                                    egui::Stroke::new(
+                                        1.0_f32,
+                                        egui::Color32::from_rgb(100, 100, 100),
+                                    ),
+                                );
+                                ui.add_space(32.0);
+                            });
                     }
+
+                    // Role component
+                    ui.add_space(8.0);
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_rgb(35, 35, 40))
+                        .rounding(4.0)
+                        .inner_margin(12.0)
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.strong("Role");
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui.button("⋮").clicked() {
+                                            *self.remove_component_requested =
+                                                Some(ComponentKind::Role);
+                                        }
+                                    },
+                                );
+                            });
+                            ui.add_space(8.0);
+
+                            let mut role = entity.extras.role.clone().unwrap_or_default();
+                            ui.horizontal(|ui| {
+                                ui.label("Name");
+                                ui.add_space(16.0);
+                                if ui.text_edit_singleline(&mut role).changed() {
+                                    entity.extras.role = if role.is_empty() {
+                                        None
+                                    } else {
+                                        Some(role.clone())
+                                    };
+                                    *self.scene_dirty = true;
+                                }
+                            });
+                            ui.label("A role lets a script find this entity, e.g. \"player\".");
+                        });
+
+                    ui.add_space(16.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("+ Add Component").clicked() {
+                            *self.add_component_requested = true;
+                        }
+                        if ui.button("Delete Entity").clicked() {
+                            *self.remove_entity_requested = true;
+                        }
+                    });
                 });
             }
             Tab::GraphEditor => {
@@ -2105,6 +2813,31 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                     ui.add_space(8.0);
 
+                    // Import an image into the project.
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_rgb(35, 35, 40))
+                        .rounding(4.0)
+                        .inner_margin(12.0)
+                        .show(ui, |ui| {
+                            ui.strong("Import");
+                            ui.add_space(8.0);
+                            ui.horizontal(|ui| {
+                                ui.label("File");
+                                ui.add_space(16.0);
+                                ui.add(
+                                    egui::TextEdit::singleline(self.import_path)
+                                        .desired_width(220.0)
+                                        .hint_text("path/to/image.png"),
+                                );
+                                if ui.button("Import").clicked() {
+                                    self.import_asset();
+                                }
+                            });
+                            ui.label("The file is copied into the project's art folder.");
+                        });
+
+                    ui.add_space(8.0);
+
                     egui::Frame::none()
                         .fill(egui::Color32::from_rgb(35, 35, 40))
                         .rounding(4.0)
@@ -2189,7 +2922,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.heading("Console");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button("Clear").clicked() {
-                                // TODO: Clear console
+                                self.console_log.clear();
                             }
                         });
                     });
@@ -2208,7 +2941,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 ui.label("[INFO] WGPU backend initialized");
                             } else {
                                 egui::ScrollArea::vertical().show(ui, |ui| {
-                                    for line in self.console_log {
+                                    for line in self.console_log.iter() {
                                         ui.label(line);
                                     }
                                 });
@@ -2477,13 +3210,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.spacing_mut().item_spacing = egui::vec2(8.0, 0.0);
 
                         if ui.button("Create Prefab from Selection").clicked() {
-                            // TODO: Create prefab from selected entity
+                            self.create_prefab_from_selection();
                         }
 
                         ui.separator();
 
                         if ui.button("Instantiate Prefab").clicked() {
-                            // TODO: Instantiate selected prefab
+                            self.instantiate_selected_prefab();
                         }
 
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -2512,18 +3245,26 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         .collect();
 
                                     let is_empty = prefab_ids.is_empty();
+                                    let selected = self.prefab_editor.selected_prefab().map(str::to_string);
 
                                     for (prefab_id, prefab_name) in prefab_ids {
                                         ui.horizontal(|ui| {
-                                            ui.label(&prefab_name);
-                                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                                if ui.button("Edit").clicked() {
-                                                    // TODO: Edit prefab
-                                                }
-                                                if ui.button("Delete").clicked() {
-                                                    self.prefab_editor.remove_prefab(&prefab_id);
-                                                }
-                                            });
+                                            let is_selected =
+                                                selected.as_deref() == Some(prefab_id.as_str());
+                                            if ui
+                                                .selectable_label(is_selected, &prefab_name)
+                                                .clicked()
+                                            {
+                                                self.prefab_editor.select_prefab(&prefab_id);
+                                            }
+                                            ui.with_layout(
+                                                egui::Layout::right_to_left(egui::Align::Center),
+                                                |ui| {
+                                                    if ui.button("Delete").clicked() {
+                                                        self.prefab_editor.remove_prefab(&prefab_id);
+                                                    }
+                                                },
+                                            );
                                         });
                                         ui.add_space(4.0);
                                     }
@@ -2534,6 +3275,48 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     }
                                 });
                         });
+
+                    // The properties of the selected prefab.
+                    if let Some(prefab_id) = self.prefab_editor.selected_prefab().map(str::to_string)
+                    {
+                        let name = self
+                            .prefab_editor
+                            .get_prefab(&prefab_id)
+                            .map(|p| p.name.clone())
+                            .unwrap_or_default();
+
+                        ui.add_space(8.0);
+                        egui::Frame::none()
+                            .fill(egui::Color32::from_rgb(35, 35, 40))
+                            .rounding(4.0)
+                            .inner_margin(12.0)
+                            .show(ui, |ui| {
+                                ui.strong("Prefab");
+                                ui.add_space(8.0);
+
+                                ui.horizontal(|ui| {
+                                    ui.label("Name");
+                                    ui.add_space(16.0);
+                                    let mut edit_name = name.clone();
+                                    if ui.text_edit_singleline(&mut edit_name).changed() {
+                                        self.prefab_editor.rename_prefab(&prefab_id, &edit_name);
+                                    }
+                                });
+
+                                let entity = self
+                                    .prefab_editor
+                                    .get_prefab(&prefab_id)
+                                    .map(|p| p.root_entity.clone());
+                                if let Some(entity) = entity {
+                                    ui.add_space(8.0);
+                                    ui.label(format!("Entity id: {}", entity.id));
+                                    ui.label(format!(
+                                        "Components: {}",
+                                        entity.components.len()
+                                    ));
+                                }
+                            });
+                    }
                 });
             }
             Tab::SceneEditor => {
@@ -2546,19 +3329,76 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.spacing_mut().item_spacing = egui::vec2(8.0, 0.0);
 
                         if ui.button("Create New Scene").clicked() {
-                            // TODO: Create new scene
+                            self.create_scene();
                         }
 
                         ui.separator();
-
-                        if ui.button("Add Nested Scene").clicked() {
-                            // TODO: Add nested scene
-                        }
 
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.label("Scene Composition");
                         });
                     });
+
+                    ui.add_space(8.0);
+
+                    // The scenes of the project.
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_rgb(35, 35, 40))
+                        .rounding(4.0)
+                        .inner_margin(12.0)
+                        .show(ui, |ui| {
+                            ui.strong("Scenes");
+                            ui.add_space(8.0);
+
+                            let scenes: Vec<(String, String, usize)> = self
+                                .current_project
+                                .as_ref()
+                                .map(|project| {
+                                    project
+                                        .scenes
+                                        .iter()
+                                        .map(|(id, scene)| {
+                                            (id.clone(), scene.name.clone(), scene.entities.len())
+                                        })
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+
+                            if scenes.is_empty() {
+                                ui.label("The project has no scenes yet.");
+                            }
+
+                            let start_scene = self
+                                .current_project
+                                .as_ref()
+                                .and_then(|project| project.default_scene_id());
+
+                            for (id, name, entity_count) in scenes {
+                                ui.horizontal(|ui| {
+                                    let is_start = start_scene.as_deref() == Some(&id);
+                                    let label = if is_start {
+                                        format!("{name} (start)")
+                                    } else {
+                                        name.clone()
+                                    };
+                                    ui.label(label);
+                                    ui.label(format!("{entity_count} entities"));
+
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if ui.button("Set as Start").clicked() {
+                                                self.set_start_scene(&id);
+                                            }
+                                            if ui.button("Delete").clicked() {
+                                                self.delete_scene(&id);
+                                            }
+                                        },
+                                    );
+                                });
+                                ui.add_space(4.0);
+                            }
+                        });
 
                     ui.add_space(8.0);
 
@@ -2575,15 +3415,33 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             ui.label("Each nested scene can have an offset for positioning.");
                             ui.add_space(8.0);
 
-                            ui.label("Features:");
-                            ui.label("  • Load multiple scenes into one view");
-                            ui.label("  • Additive loading (merge entities)");
-                            ui.label("  • Scene offset for world positioning");
-                            ui.label("  • Scene hierarchy support");
-                            ui.add_space(8.0);
+                            let nested = self.current_scene_nested_scenes();
 
-                            ui.label("Current scene has no nested scenes.");
-                            ui.label("Use 'Add Nested Scene' to compose scenes.");
+                            if nested.is_empty() {
+                                ui.label("Current scene has no nested scenes.");
+                                ui.label("Use 'Add Nested Scene' to compose scenes.");
+                            } else {
+                                for nested_scene in nested {
+                                    ui.horizontal(|ui| {
+                                        ui.label(&nested_scene.scene_id);
+                                        if nested_scene.additive {
+                                            ui.label("(additive)");
+                                        }
+                                        ui.with_layout(
+                                            egui::Layout::right_to_left(egui::Align::Center),
+                                            |ui| {
+                                                if ui.button("Remove").clicked() {
+                                                    self.remove_nested_scene(&nested_scene.scene_id);
+                                                }
+                                            },
+                                        );
+                                    });
+                                    ui.add_space(4.0);
+                                }
+                            }
+
+                            ui.add_space(8.0);
+                            self.add_nested_scene_button(ui);
                         });
                 });
             }

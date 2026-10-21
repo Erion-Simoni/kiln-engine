@@ -14,6 +14,25 @@ use crate::tier::RenderTier;
 pub const GOLDEN_LOW_64_SHA256: &str =
     "d17424c3d09af2033da87d25f93284d553c367319acf9529f19efa8c08eb9478";
 
+/// Whether a GPU adapter is available on this machine.
+///
+/// The screenshot tests need a real adapter. On a headless machine (a build
+/// server, a container without a GPU) there is none, and the tests skip
+/// instead of failing.
+#[cfg(test)]
+fn has_gpu_adapter() -> bool {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::all(),
+        ..Default::default()
+    });
+    pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::LowPower,
+        compatible_surface: None,
+        force_fallback_adapter: false,
+    }))
+    .is_some()
+}
+
 /// Render the default 2D graph offscreen and return raw RGBA8 bytes + sha256 hex.
 pub fn render_graph_screenshot(
     width: u32,
@@ -210,6 +229,11 @@ mod tests {
 
     #[test]
     fn screenshot_low_tier_stable_hash() {
+        if !has_gpu_adapter() {
+            eprintln!("skipping: this machine has no GPU adapter");
+            return;
+        }
+
         let cfg = PassEnableConfig::default_2d();
         let (rgba, hash) = render_graph_screenshot(64, 64, RenderTier::Low, &cfg);
         assert_eq!(rgba.len(), 64 * 64 * 4);
