@@ -1883,6 +1883,21 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                                 s.color[2] = sprite.color[2];
                                             }
                                         }
+                                        ui.add_space(8.0);
+                                        ui.label("A:");
+                                        if ui
+                                            .add(
+                                                egui::DragValue::new(&mut sprite.color[3])
+                                                    .speed(0.01)
+                                                    .range(0.0..=1.0),
+                                            )
+                                            .changed()
+                                        {
+                                            let world = self.world.world_mut();
+                                            if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
+                                                s.color[3] = sprite.color[3];
+                                            }
+                                        }
                                     });
 
                                     ui.add_space(8.0);
