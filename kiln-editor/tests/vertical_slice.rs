@@ -50,3 +50,79 @@ fn the_editor_can_play_the_sample_project() {
     }
     assert!(session.state().score > 0, "the sample scores in the editor");
 }
+
+#[test]
+fn an_inspector_edit_is_written_to_the_scene_and_can_be_undone() {
+    let dir = sample_dir();
+    let manifest = dir.join("kiln.toml");
+    let project = Project::from_toml(
+        &std::fs::read_to_string(&manifest).expect("the sample manifest is readable"),
+    )
+    .expect("the sample manifest parses");
+    let scene_id = project.default_scene_id().expect("the sample has a scene");
+    let original = project.scenes.get(&scene_id).expect("the scene exists");
+
+    // The editor spawns the scene the way the player does.
+    let mut world = kiln_runtime::GameWorld::new();
+    let mut make_sprite =
+        |_entity: &kiln_core::project::Entity, color: [f32; 4], _texture: Option<&str>| {
+            kiln_runtime::Sprite::new(color[0], color[1], color[2], color[3]).with_size(16.0, 16.0)
+        };
+    kiln_runtime::spawn_scene(&mut world, &project, &scene_id, &mut make_sprite);
+
+    let entity_textures = std::collections::HashMap::new();
+    let entity_roles = std::collections::HashMap::new();
+
+    // The scene built from the world holds the same entities as the project.
+    let built =
+        kiln_editor::scene_from_world(&world, &entity_textures, &entity_roles, Some(&project));
+    assert_eq!(built.id, scene_id);
+    assert_eq!(built.entities.len(), original.entities.len());
+    assert_eq!(built.entities[0].id, original.entities[0].id);
+    assert_eq!(built.script, original.script);
+
+    // Move an entity, the way the inspector does, and record the scene before
+    // the edit so it can be undone.
+    let mut history = kiln_editor::SceneHistory::new();
+    history.record(built.clone());
+
+    let moved = {
+        let world = world.world_mut();
+        let mut query = world.query::<(&mut kiln_core::Transform, &mut kiln_runtime::Sprite)>();
+        let mut position = None;
+        for (transform, _) in query.iter() {
+            transform.position.x += 25.0;
+            position = Some(transform.position.x);
+            break;
+        }
+        position.expect("the scene has an entity")
+    };
+
+    // The edit shows up in the scene that is written to disk.
+    let edited =
+        kiln_editor::scene_from_world(&world, &entity_textures, &entity_roles, Some(&project));
+    let transform = edited.entities[0]
+        .components
+        .iter()
+        .find_map(|c| match c {
+            kiln_core::project::Component::Transform { x, .. } => Some(*x),
+            _ => None,
+        })
+        .expect("the entity has a transform");
+    assert_eq!(transform, moved);
+
+    // Undo restores the scene as it was before the edit.
+    let restored = history.undo(edited).expect("undo");
+    let original_transform = restored.entities[0]
+        .components
+        .iter()
+        .find_map(|c| match c {
+            kiln_core::project::Component::Transform { x, .. } => Some(*x),
+            _ => None,
+        })
+        .expect("the entity has a transform");
+    assert_ne!(
+        original_transform, transform,
+        "the undo restored the old value"
+    );
+}

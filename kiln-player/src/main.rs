@@ -475,17 +475,10 @@ impl PlayerApp {
     /// drawn for non-game projects.
     fn hud_text(&self) -> Option<Vec<SpriteInstance>> {
         let slice = self.slice.as_ref()?;
-        let state = slice.state();
         let text = TextRenderer::new();
 
-        let mut lines = vec![format!("SCORE {}", state.score)];
-        if !state.status.is_empty() {
-            lines.push(state.status.clone());
-        }
-        lines.push("ARROWS MOVE   F5 SAVE   F9 LOAD".to_string());
-
         let mut instances = Vec::new();
-        for (index, line) in lines.iter().enumerate() {
+        for (index, line) in slice.hud_lines().iter().enumerate() {
             let y = 16.0 + index as f32 * 20.0;
             instances.extend(text.render(line, 16.0, y, 16.0, [1.0, 1.0, 1.0, 1.0]));
         }

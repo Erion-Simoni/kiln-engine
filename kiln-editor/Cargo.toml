@@ -31,4 +31,5 @@ egui = { workspace = true }
 egui_dock = { workspace = true }
 egui-winit = "0.29"
 egui-wgpu = "0.29"
+glam = { workspace = true }
 hecs = { workspace = true }

@@ -40,6 +40,19 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
 /// Distance (in world units) at which a pickup counts as collected.
 pub const PICKUP_RADIUS: f32 = 24.0;
 
+/// The HUD lines that describe a slice state.
+///
+/// The standalone player and the editor both draw these, so the two hosts
+/// show the same information.
+pub fn hud_lines(state: &SliceState) -> Vec<String> {
+    let mut lines = vec![format!("SCORE {}", state.score)];
+    if !state.status.is_empty() {
+        lines.push(state.status.clone());
+    }
+    lines.push("ARROWS MOVE   F5 SAVE   F9 LOAD".to_string());
+    lines
+}
+
 /// Role name of the entity the player controls.
 pub const ROLE_PLAYER: &str = "player";
 
@@ -236,6 +249,14 @@ impl SliceSession {
     /// The persistent state of the slice.
     pub fn state(&self) -> &SliceState {
         &self.state
+    }
+
+    /// The HUD lines that describe the current state.
+    ///
+    /// Both hosts draw the same lines, so the standalone player and the
+    /// editor show the same information.
+    pub fn hud_lines(&self) -> Vec<String> {
+        hud_lines(&self.state)
     }
 
     /// Replace the state of the slice.

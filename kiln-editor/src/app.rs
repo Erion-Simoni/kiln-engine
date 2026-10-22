@@ -1,18 +1,20 @@
 //! Main editor application.
 
 use hecs;
+use kiln_core::project::{Entity, Scene};
 use kiln_core::{project::Project, Transform};
 use kiln_gameplay::{DataTable, Dialogue, Quest};
 use kiln_graph::{ArithmeticOp, ConstantValue, Graph, Node, NodeType};
 use kiln_render::{
-    camera::Camera, clear_view, execute_passes, Frame2dGraph, PassTiming, RenderTier,
-    SpriteInstance, SpriteRenderer, TextureId,
+    clear_view, execute_passes, Frame2dGraph, PassTiming, RenderTier, SpriteInstance,
+    SpriteRenderer,
 };
 use kiln_runtime::{GameWorld, SourceId, Sprite};
 use kiln_ui::{Button, Label, List, Panel, Widget, WidgetId};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 use thiserror::Error;
 use winit::{
     event_loop::{ActiveEventLoop, EventLoop},
@@ -20,7 +22,9 @@ use winit::{
 };
 
 use crate::assets::{AssetBrowser, AssetKind};
+use crate::history::SceneHistory;
 use crate::prefab_editor::PrefabEditorState;
+use crate::scene_view::{self, SceneTextures, ViewportRect};
 use crate::tilemap_editor::TilemapEditorState;
 
 /// A running game session in the editor.
@@ -35,6 +39,18 @@ struct PlaySession {
     /// The last error of the script, shown in the status bar.
     error: Option<String>,
 }
+
+/// The world size the scene view falls back to when no project is open.
+const DEFAULT_WORLD_SIZE: (f32, f32) = (1280.0, 720.0);
+
+/// The spacing of the scene view's grid, in world units.
+const GRID_SPACING: f32 = 50.0;
+
+/// The colour of the scene view's grid lines.
+const GRID_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.06];
+
+/// The default size of a sprite without a texture, in world units.
+const DEFAULT_SPRITE_SIZE: [f32; 2] = [32.0, 32.0];
 
 #[derive(Error, Debug)]
 pub enum EditorError {
@@ -52,6 +68,8 @@ enum MenuAction {
     SaveProjectAs,
     SaveScene,
     LoadScene,
+    Undo,
+    Redo,
 }
 
 pub struct EditorApp {
@@ -73,19 +91,20 @@ pub struct EditorApp {
     entity_textures: HashMap<String, String>,
     /// Gameplay role of each scene entity, keyed by entity id.
     entity_roles: HashMap<String, String>,
-    /// Textures loaded for the scene view, keyed by asset path.
-    scene_textures: HashMap<String, egui::TextureHandle>,
-    /// Pixel size of every scene texture, keyed by asset path.
-    texture_sizes: HashMap<String, (u32, u32)>,
-    /// Texture IDs in the scene view SpriteRenderer, keyed by asset path.
-    scene_view_texture_ids: HashMap<String, TextureId>,
     /// Screen-space rectangle of the scene view panel from the last frame.
     scene_view_rect: Option<egui::Rect>,
     graph: Graph,
     render_tier: RenderTier,
     show_welcome: bool,
+    /// The measured frame rate, in frames per second.
     fps: f32,
+    /// The time the previous frame was rendered, used to measure the frame
+    /// rate.
+    last_frame: Instant,
+    /// The number of frames rendered so far.
     frame_count: u32,
+    /// The history of scene edits, used by undo and redo.
+    history: SceneHistory,
     ui_designer: UIDesignerState,
     prefab_editor: PrefabEditorState,
     gameplay_editor: GameplayEditorState,
@@ -127,8 +146,11 @@ struct GpuState {
     /// Sprite batch renderer for the scene view. Draws scene entities using the
     /// same GPU pipeline as the standalone player.
     scene_view_sprite_renderer: SpriteRenderer,
-    /// Camera for the scene view (screen space, top-left origin).
-    scene_view_camera: Camera,
+    /// Sprite batch renderer for the screen-space overlay drawn over the scene
+    /// view (the HUD).
+    scene_view_overlay_renderer: SpriteRenderer,
+    /// Textures of the open project, uploaded to the scene view renderer.
+    scene_textures: SceneTextures,
 }
 
 /// UI designer state for the visual UI editor.
@@ -287,7 +309,7 @@ impl UIDesignerState {
 fn start_play_session(
     project: &Project,
     root: &Path,
-    sizes: &HashMap<String, (u32, u32)>,
+    textures: &SceneTextures,
 ) -> Result<(kiln_runtime::SliceSession, String, GameWorld), String> {
     let scene_id = project
         .default_scene_id()
@@ -308,85 +330,88 @@ fn start_play_session(
             .join("; ")
     })?;
 
-    let (world, _spawned) = spawn_editor_scene(project, &scene_id, sizes);
+    let (world, _spawned) = spawn_editor_scene(project, &scene_id, textures);
     Ok((slice, scene_id, world))
 }
 
-/// Read the pixel size of every texture a project uses.
+/// Build the scene data of a world.
 ///
-/// Sprites are as big as their texture, so the sizes are needed before the
-/// scene is spawned.
-fn collect_texture_sizes(dir: &Path, project: &Project) -> HashMap<String, (u32, u32)> {
-    let mut sizes = HashMap::new();
-    let mut paths: Vec<String> = Vec::new();
-    for scene in project.scenes.values() {
-        for entity in &scene.entities {
-            for component in &entity.components {
-                if let kiln_core::project::Component::Sprite {
-                    texture: Some(path),
-                    ..
-                } = component
-                {
-                    if !paths.contains(path) {
-                        paths.push(path.clone());
-                    }
-                }
-            }
-        }
-    }
-    for path in paths {
-        let Ok(bytes) = std::fs::read(dir.join(&path)) else {
-            continue;
-        };
-        if let Ok(image) = kiln_assets::decode_png(&bytes) {
-            sizes.insert(path, (image.width, image.height));
-        }
-    }
-    sizes
-}
+/// The source id keeps the entity's identity, so the roles and textures of
+/// the scene survive a save.
+pub fn scene_from_world(
+    world: &GameWorld,
+    entity_textures: &HashMap<String, String>,
+    entity_roles: &HashMap<String, String>,
+    project: Option<&Project>,
+) -> Scene {
+    let scene_id = project
+        .and_then(|p| p.default_scene_id())
+        .unwrap_or_else(|| "main_scene".to_string());
+    let script = project
+        .and_then(|p| p.scenes.get(&scene_id))
+        .and_then(|s| s.script.clone());
 
-/// The texture of a scene asset, loaded from disk on first use.
-///
-/// Returns `None` when the file is missing or cannot be decoded.
-fn scene_texture(
-    ctx: &egui::Context,
-    root: Option<&Path>,
-    cache: &mut HashMap<String, egui::TextureHandle>,
-    path: &str,
-) -> Option<egui::TextureHandle> {
-    if let Some(texture) = cache.get(path) {
-        return Some(texture.clone());
+    let mut entities = Vec::new();
+    let mut entity_id = 0;
+    let world = world.world_ref();
+    let mut query = world.query::<(&SourceId, &Transform, &Sprite)>();
+    for (source_id, transform, sprite) in query.iter() {
+        entity_id += 1;
+        let id = source_id.0.clone();
+        let texture = entity_textures.get(&id).cloned();
+        let role = entity_roles.get(&id).cloned();
+        let mut components = vec![
+            kiln_core::project::Component::Transform {
+                x: transform.position.x,
+                y: transform.position.y,
+                rotation: transform.rotation,
+                scale: transform.scale.x,
+            },
+            kiln_core::project::Component::Sprite {
+                color: sprite.color,
+                texture,
+            },
+        ];
+        if let Some(role) = role {
+            components.push(kiln_core::project::Component::Role { role });
+        }
+        entities.push(Entity {
+            id,
+            name: format!("Entity_{}", entity_id),
+            components,
+        });
     }
-    let root = root?;
-    let bytes = std::fs::read(root.join(path)).ok()?;
-    let image = kiln_assets::decode_png(&bytes).ok()?;
-    let size = [image.width as usize, image.height as usize];
-    let color = egui::ColorImage::from_rgba_unmultiplied(size, &image.pixels);
-    let texture = ctx.load_texture("scene", color, egui::TextureOptions::NEAREST);
-    cache.insert(path.to_string(), texture.clone());
-    Some(texture)
+
+    Scene {
+        id: scene_id,
+        name: "Main Scene".to_string(),
+        entities,
+        nested_scenes: vec![],
+        script,
+    }
 }
 
 /// Spawn a project scene into a fresh world for the editor.
 ///
-/// The editor has no GPU textures of its own yet, so sprites keep their
-/// tint; the scene view draws the texture from disk instead.
+/// The sprites are bound to the textures that were uploaded for the project,
+/// so the editor's scene view shows the same art as the player.
 fn spawn_editor_scene(
     project: &Project,
     scene_id: &str,
-    sizes: &HashMap<String, (u32, u32)>,
+    textures: &SceneTextures,
 ) -> (GameWorld, Vec<kiln_runtime::SpawnedEntity>) {
     let mut world = GameWorld::new();
-    let mut make_sprite = |_entity: &kiln_core::project::Entity,
-                           color: [f32; 4],
-                           texture: Option<&str>| {
-        // A sprite is as big as its texture, like in the player.
-        let size = texture
-            .and_then(|path| sizes.get(path))
-            .copied()
-            .unwrap_or((64, 64));
-        Sprite::new(color[0], color[1], color[2], color[3]).with_size(size.0 as f32, size.1 as f32)
-    };
+    let mut make_sprite =
+        |_entity: &kiln_core::project::Entity, color: [f32; 4], texture: Option<&str>| {
+            // A sprite is as big as its texture, like in the player.
+            match texture.and_then(|path| textures.get(path)) {
+                Some(tex) => Sprite::new(color[0], color[1], color[2], color[3])
+                    .with_texture(tex.id)
+                    .with_size(tex.width as f32, tex.height as f32),
+                None => Sprite::new(color[0], color[1], color[2], color[3])
+                    .with_size(DEFAULT_SPRITE_SIZE[0], DEFAULT_SPRITE_SIZE[1]),
+            }
+        };
     let spawned = kiln_runtime::spawn_scene(&mut world, project, scene_id, &mut make_sprite);
     (world, spawned)
 }
@@ -463,15 +488,14 @@ impl EditorApp {
             project_path_input: "kiln.toml".to_string(),
             entity_textures: HashMap::new(),
             entity_roles: HashMap::new(),
-            scene_textures: HashMap::new(),
-            scene_view_texture_ids: HashMap::new(),
             scene_view_rect: None,
-            texture_sizes: HashMap::new(),
             graph: Graph::new(),
             render_tier: RenderTier::default(),
             show_welcome: true,
             fps: 60.0,
+            last_frame: Instant::now(),
             frame_count: 0,
+            history: SceneHistory::new(),
             ui_designer: UIDesignerState::new(),
             prefab_editor: PrefabEditorState::new(),
             gameplay_editor: GameplayEditorState::new(),
@@ -504,14 +528,17 @@ impl EditorApp {
 
         // Create sprite and egui renderers while borrowing `renderer`,
         // then move `renderer` into GpuState once borrows end.
-        let (scene_view_sprite_renderer, egui_renderer) = {
+        let (scene_view_sprite_renderer, scene_view_overlay_renderer, egui_renderer) = {
             let device = renderer.device();
             let queue = renderer.queue();
             let format = renderer.format();
             let sr = SpriteRenderer::new(device, queue, format);
+            let overlay = SpriteRenderer::new(device, queue, format);
             let er = egui_wgpu::Renderer::new(device, format, None, 1, false);
-            (sr, er)
+            (sr, overlay, er)
         };
+        scene_view_sprite_renderer.upload_quad(renderer.queue());
+        scene_view_overlay_renderer.upload_quad(renderer.queue());
 
         self.gpu = Some(GpuState {
             window,
@@ -519,7 +546,8 @@ impl EditorApp {
             renderer,
             egui_renderer,
             scene_view_sprite_renderer,
-            scene_view_camera: Camera::new_top_left(size.width as f32, size.height as f32),
+            scene_view_overlay_renderer,
+            scene_textures: SceneTextures::default(),
         });
     }
 
@@ -604,15 +632,46 @@ impl EditorApp {
         if let Some(dir) = path.parent() {
             self.project_root = Some(dir.to_path_buf());
             self.asset_browser.scan(dir);
-            if let Some(project) = &self.current_project {
-                self.texture_sizes = collect_texture_sizes(dir, project);
-            }
         }
+
+        // Upload the project's textures to the GPU, so the scene view can
+        // draw the same art the player draws.
+        self.upload_scene_textures();
 
         // Clear current world and load scene entities
         self.load_project_scene();
 
         Ok(())
+    }
+
+    /// Upload the open project's textures to the scene view renderer.
+    ///
+    /// Textures that are missing or cannot be decoded are logged, and the
+    /// entities that use them fall back to the white texture.
+    fn upload_scene_textures(&mut self) {
+        let Some(gpu) = self.gpu.as_mut() else {
+            return;
+        };
+        let Some(project) = self.current_project.clone() else {
+            gpu.scene_textures = SceneTextures::default();
+            return;
+        };
+        let Some(root) = self.project_root.clone() else {
+            gpu.scene_textures = SceneTextures::default();
+            return;
+        };
+
+        let (textures, errors) = SceneTextures::upload_for_project(
+            &mut gpu.scene_view_sprite_renderer,
+            gpu.renderer.device(),
+            gpu.renderer.queue(),
+            &project,
+            &root,
+        );
+        for error in &errors {
+            log::warn!("{error}");
+        }
+        gpu.scene_textures = textures;
     }
 
     /// Start playing the current project's scene.
@@ -632,7 +691,12 @@ impl EditorApp {
             .ok_or("The project has no directory")?
             .to_path_buf();
 
-        let (slice, scene_id, world) = start_play_session(&project, &root, &self.texture_sizes)?;
+        let textures = self
+            .gpu
+            .as_ref()
+            .map(|gpu| gpu.scene_textures.clone())
+            .unwrap_or_default();
+        let (slice, scene_id, world) = start_play_session(&project, &root, &textures)?;
 
         // The played scene replaces the edited one, so the scene view shows
         // the running game.
@@ -655,6 +719,17 @@ impl EditorApp {
         self.load_project_scene();
     }
 
+    /// The size of the world the scene view shows, in world units.
+    ///
+    /// This is the size of the project's game window, so the editor frames
+    /// the scene the same way the player does.
+    fn world_size(&self) -> (f32, f32) {
+        match &self.current_project {
+            Some(project) => (project.window.width as f32, project.window.height as f32),
+            None => (DEFAULT_WORLD_SIZE.0, DEFAULT_WORLD_SIZE.1),
+        }
+    }
+
     /// Reload the edited scene into the editor world.
     fn load_project_scene(&mut self) {
         let Some(project) = self.current_project.clone() else {
@@ -669,7 +744,12 @@ impl EditorApp {
         };
         self.world = GameWorld::new();
         self.entity_textures.clear();
-        let (world, spawned) = spawn_editor_scene(&project, &scene_id, &self.texture_sizes);
+        let textures = self
+            .gpu
+            .as_ref()
+            .map(|gpu| gpu.scene_textures.clone())
+            .unwrap_or_default();
+        let (world, spawned) = spawn_editor_scene(&project, &scene_id, &textures);
         self.world = world;
         for entity in spawned {
             if let Some(texture) = entity.texture {
@@ -720,69 +800,59 @@ impl EditorApp {
     }
 
     /// Save the current world state as a scene.
+    ///
+    /// The scene keeps its id and script, so saving does not break the game.
+    /// The scene is written into the project and the project is written to
+    /// disk, so an edit survives closing the editor.
     pub fn save_scene(&mut self) -> Result<(), String> {
-        // The scene keeps its id and script, so saving does not break the game.
-        let scene_id = self
-            .current_project
-            .as_ref()
-            .and_then(|p| p.default_scene_id())
-            .unwrap_or_else(|| "main_scene".to_string());
-        let script = self
-            .current_project
-            .as_ref()
-            .and_then(|p| p.scenes.get(&scene_id))
-            .and_then(|s| s.script.clone());
-
+        let scene = self.scene_from_world();
         if let Some(project) = &mut self.current_project {
-            use kiln_core::project::{Entity, Scene};
-            let mut entities = Vec::new();
-            let mut entity_id = 0;
-
-            // Collect entity data
-            let world = self.world.world();
-            let mut query = world.query::<(&SourceId, &Transform, &Sprite)>();
-            for (source_id, transform, sprite) in query.iter() {
-                entity_id += 1;
-                // The source id keeps the entity's identity, so the roles and
-                // textures of the scene survive a save.
-                let id = source_id.0.clone();
-                let texture = self.entity_textures.get(&id).cloned();
-                let role = self.entity_roles.get(&id).cloned();
-                let mut components = vec![
-                    kiln_core::project::Component::Transform {
-                        x: transform.position.x,
-                        y: transform.position.y,
-                        rotation: transform.rotation,
-                        scale: transform.scale.x,
-                    },
-                    kiln_core::project::Component::Sprite {
-                        color: sprite.color,
-                        texture,
-                    },
-                ];
-                if let Some(role) = role {
-                    components.push(kiln_core::project::Component::Role { role });
-                }
-                entities.push(Entity {
-                    id,
-                    name: format!("Entity_{}", entity_id),
-                    components,
-                });
-            }
-
-            let scene = Scene {
-                id: scene_id.clone(),
-                name: "Main Scene".to_string(),
-                entities,
-                nested_scenes: vec![],
-                script,
-            };
-
-            project.scenes.insert(scene_id, scene);
-            Ok(())
+            project.scenes.insert(scene.id.clone(), scene);
         } else {
-            Err("No project loaded".to_string())
+            return Err("No project loaded".to_string());
         }
+        self.save_project()
+    }
+
+    /// Build the scene data of the current world.
+    ///
+    /// The source id keeps the entity's identity, so the roles and textures
+    /// of the scene survive a save.
+    fn scene_from_world(&self) -> Scene {
+        scene_from_world(
+            &self.world,
+            &self.entity_textures,
+            &self.entity_roles,
+            self.current_project.as_ref(),
+        )
+    }
+
+    /// Undo the last scene edit.
+    pub fn undo(&mut self) -> Result<(), String> {
+        let current = self.scene_from_world();
+        let Some(previous) = self.history.undo(current) else {
+            return Err("Nothing to undo".to_string());
+        };
+        self.apply_scene(previous)
+    }
+
+    /// Redo the last undone scene edit.
+    pub fn redo(&mut self) -> Result<(), String> {
+        let current = self.scene_from_world();
+        let Some(next) = self.history.redo(current) else {
+            return Err("Nothing to redo".to_string());
+        };
+        self.apply_scene(next)
+    }
+
+    /// Apply a scene to the project and the editor world.
+    fn apply_scene(&mut self, scene: Scene) -> Result<(), String> {
+        let scene_id = scene.id.clone();
+        if let Some(project) = &mut self.current_project {
+            project.scenes.insert(scene_id, scene);
+        }
+        self.load_project_scene();
+        Ok(())
     }
 
     /// Save the running game to its save slot.
@@ -911,6 +981,11 @@ impl winit::application::ApplicationHandler for EditorApp {
             self.update_play(1.0 / 60.0);
         }
 
+        // The world size and the scene view rectangle are read before the GPU
+        // state is borrowed, so the scene can be drawn into the panel.
+        let world = self.world_size();
+        let scene_view_rect = self.scene_view_rect;
+
         let gpu = self.gpu.as_mut().unwrap();
         let size = gpu.window.inner_size();
         if size.width == 0 || size.height == 0 {
@@ -992,12 +1067,18 @@ impl winit::application::ApplicationHandler for EditorApp {
                 });
 
                 ui.menu_button("Edit", |ui| {
-                    if ui.button("Undo").clicked() {
-                        // TODO: Undo
+                    if ui
+                        .add_enabled(self.history.can_undo(), egui::Button::new("Undo"))
+                        .clicked()
+                    {
+                        menu_actions.push(MenuAction::Undo);
                         ui.close_menu();
                     }
-                    if ui.button("Redo").clicked() {
-                        // TODO: Redo
+                    if ui
+                        .add_enabled(self.history.can_redo(), egui::Button::new("Redo"))
+                        .clicked()
+                    {
+                        menu_actions.push(MenuAction::Redo);
                         ui.close_menu();
                     }
                     ui.separator();
@@ -1170,15 +1251,14 @@ impl winit::application::ApplicationHandler for EditorApp {
                     scene_save_requested: &mut self.scene_save_requested,
                     scene_load_requested: &mut self.scene_load_requested,
                     play: self.play.as_ref(),
+                    fps,
+                    history: &mut self.history,
                     entity_textures: &self.entity_textures,
-                    scene_textures: &mut self.scene_textures,
-                    project_root: self.project_root.as_deref(),
-                    ctx: self.egui_winit.egui_ctx(),
+                    entity_roles: &self.entity_roles,
                     console_log: &self.console_log,
-                    scene_view_rect: self.scene_view_rect,
+                    scene_view_rect: &mut self.scene_view_rect,
                 };
                 tree.show(ctx, &mut tab_viewer);
-                self.scene_view_rect = tab_viewer.scene_view_rect;
             });
 
             // Status bar
@@ -1284,77 +1364,95 @@ impl winit::application::ApplicationHandler for EditorApp {
             .end_pass(&mut encoder, egui_begin);
         gpu.renderer.profiler_mut().resolve(&mut encoder);
 
-        // Render scene sprites into the swapchain view using the GPU sprite
-        // renderer, clipped to the scene view panel rect so egui overlays on top.
-        if let Some(rect) = self.scene_view_rect {
-            let device = gpu.renderer.device();
-            let queue = gpu.renderer.queue();
+        // Render the scene view with the engine's sprite renderer.
+        //
+        // The scene is drawn into the scene-view panel: the panel's rectangle
+        // becomes a viewport, the world is projected with the same camera the
+        // player uses, and the HUD is drawn on top in screen space. The
+        // engine owns every pixel of the panel, so the editor shows what the
+        // player shows.
+        let panel = scene_view_rect
+            .map(|rect| scene_view::rect_to_pixels(rect, full_output.pixels_per_point));
+        if let Some(panel) = panel {
+            let viewport = scene_view::letterbox(panel.width, panel.height, world.0, world.1);
 
-            // Upload textures and push sprites to the sprite renderer.
-            gpu.scene_view_sprite_renderer.begin_frame();
-            for (source_id, transform, sprite) in self
-                .world
-                .world()
-                .query::<(&SourceId, &Transform, &Sprite)>()
-                .iter()
-            {
-                let path = match self.entity_textures.get(&source_id.0) {
-                    Some(p) => p.clone(),
-                    None => continue,
-                };
-                let texture_id = *self
-                    .scene_view_texture_ids
-                    .entry(path.clone())
-                    .or_insert_with(|| {
-                        let full_path = self.project_root.as_ref().unwrap().join(&path);
-                        let bytes = match std::fs::read(&full_path) {
-                            Ok(b) => b,
-                            Err(_) => return TextureId::WHITE,
-                        };
-                        match kiln_assets::decode_png(&bytes) {
-                            Ok(image) => gpu.scene_view_sprite_renderer.create_texture_rgba(
-                                device,
-                                queue,
-                                &path,
-                                image.width,
-                                image.height,
-                                &image.pixels,
-                            ),
-                            Err(_) => TextureId::WHITE,
+            if !viewport.is_empty() {
+                let queue = gpu.renderer.queue();
+
+                // The viewport is placed inside the panel, so the offset is
+                // the panel's origin plus the letterbox offset.
+                let origin_x = panel.x + viewport.x;
+                let origin_y = panel.y + viewport.y;
+
+                // Queue the world: the grid first, then the entities.
+                gpu.scene_view_sprite_renderer.begin_frame();
+                for line in scene_view::grid_lines(world.0, world.1, GRID_SPACING, GRID_COLOR) {
+                    gpu.scene_view_sprite_renderer.push(line);
+                }
+                for (transform, sprite) in
+                    self.world.world().query::<(&Transform, &Sprite)>().iter()
+                {
+                    gpu.scene_view_sprite_renderer.push_textured(
+                        sprite.texture,
+                        SpriteInstance {
+                            position: [transform.position.x, transform.position.y],
+                            size: sprite.size,
+                            color: sprite.color,
+                            uv_rect: sprite.uv_rect,
+                        },
+                    );
+                }
+
+                // Queue the HUD, which is drawn in screen space over the scene.
+                gpu.scene_view_overlay_renderer.begin_frame();
+                if let Some(play) = &self.play {
+                    let text = kiln_ui::TextRenderer::new();
+                    for (index, line) in play.slice.hud_lines().iter().enumerate() {
+                        let y = 16.0 + index as f32 * 20.0;
+                        let quads = text.render(line, 16.0, y, 16.0, [1.0, 1.0, 1.0, 1.0]);
+                        for quad in quads {
+                            gpu.scene_view_overlay_renderer.push(quad);
                         }
-                    });
-                gpu.scene_view_sprite_renderer.push_textured(
-                    texture_id,
-                    SpriteInstance {
-                        position: [transform.position.x, transform.position.y],
-                        size: sprite.size,
-                        color: sprite.color,
-                        uv_rect: sprite.uv_rect,
-                    },
-                );
-            }
+                    }
+                }
 
-            // Render sprites to the swapchain view, clipped to the scene view rect.
-            let target_size = [rect.width() as u32, rect.height() as u32];
-            let offset = [rect.min.x as u32, rect.min.y as u32];
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("scene_view_pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-            pass.set_scissor_rect(offset[0], offset[1], target_size[0], target_size[1]);
-            gpu.scene_view_sprite_renderer
-                .flush(&mut pass, &gpu.scene_view_camera, queue);
-            drop(pass);
+                let world_camera = scene_view::world_camera(world.0, world.1);
+                let overlay_camera = scene_view::overlay_camera(ViewportRect {
+                    x: origin_x,
+                    y: origin_y,
+                    width: viewport.width,
+                    height: viewport.height,
+                });
+
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("scene_view_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                pass.set_viewport(
+                    origin_x as f32,
+                    origin_y as f32,
+                    viewport.width as f32,
+                    viewport.height as f32,
+                    0.0,
+                    1.0,
+                );
+                pass.set_scissor_rect(origin_x, origin_y, viewport.width, viewport.height);
+                gpu.scene_view_sprite_renderer
+                    .flush(&mut pass, &world_camera, queue);
+                gpu.scene_view_overlay_renderer
+                    .flush(&mut pass, &overlay_camera, queue);
+                drop(pass);
+            }
         }
 
         gpu.renderer.queue().submit([encoder.finish()]);
@@ -1394,6 +1492,16 @@ impl winit::application::ApplicationHandler for EditorApp {
                 MenuAction::LoadScene => {
                     if let Err(e) = self.load_scene() {
                         eprintln!("Failed to load scene: {}", e);
+                    }
+                }
+                MenuAction::Undo => {
+                    if let Err(e) = self.undo() {
+                        self.console_log.push(format!("[INFO] {e}"));
+                    }
+                }
+                MenuAction::Redo => {
+                    if let Err(e) = self.redo() {
+                        self.console_log.push(format!("[INFO] {e}"));
                     }
                 }
             }
@@ -1459,9 +1567,13 @@ impl winit::application::ApplicationHandler for EditorApp {
             }
         }
 
-        // Update FPS counter
+        // Update the frame counter and the measured frame rate.
         self.frame_count += 1;
-        // TODO: Proper FPS timing
+        let elapsed = self.last_frame.elapsed();
+        if elapsed.as_secs_f32() > 0.0 {
+            self.fps = elapsed.as_secs_f32().recip();
+        }
+        self.last_frame = Instant::now();
     }
 }
 
@@ -1517,18 +1629,32 @@ struct TabViewer<'a> {
     scene_load_requested: &'a mut bool,
     /// The running game session, drawn over the scene view.
     play: Option<&'a PlaySession>,
+    /// The measured frame rate, in frames per second.
+    fps: f32,
+    /// The history of scene edits, used by undo and redo.
+    history: &'a mut SceneHistory,
     /// Asset path of each scene entity's texture, keyed by entity id.
     entity_textures: &'a HashMap<String, String>,
-    /// Textures loaded for the scene view, keyed by asset path.
-    scene_textures: &'a mut HashMap<String, egui::TextureHandle>,
-    /// Directory of the open project, where the assets live.
-    project_root: Option<&'a Path>,
-    /// The egui context, used to upload scene textures.
-    ctx: &'a egui::Context,
+    /// Gameplay role of each scene entity, keyed by entity id.
+    entity_roles: &'a HashMap<String, String>,
     /// Lines shown in the console panel.
     console_log: &'a [String],
-    /// Screen-space rectangle of the scene view panel from the last frame.
-    scene_view_rect: Option<egui::Rect>,
+    /// Screen-space rectangle of the scene view panel, set by the panel each
+    /// frame so the render loop can draw the scene into it.
+    scene_view_rect: &'a mut Option<egui::Rect>,
+}
+
+impl TabViewer<'_> {
+    /// Record the current scene, so the edit can be undone.
+    fn record_scene(&mut self) {
+        let scene = scene_from_world(
+            &*self.world,
+            self.entity_textures,
+            self.entity_roles,
+            self.current_project.as_ref(),
+        );
+        self.history.record(scene);
+    }
 }
 
 impl<'a> egui_dock::TabViewer for TabViewer<'a> {
@@ -1562,132 +1688,41 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         }
 
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.label(format!("FPS: {:.0}", 60.0));
+                            // While playing, the toolbar shows the scene that is
+                            // running, so it is clear what the view shows.
+                            if let Some(play) = &self.play {
+                                ui.label(format!("Playing: {}", play.scene_id));
+                            }
+                            ui.label(format!("FPS: {:.0}", self.fps));
                         });
                     });
 
                     ui.add_space(8.0);
 
-                    // Game view canvas
+                    // Game view canvas. The engine renders the scene into
+                    // this rectangle, so the panel only reserves the space
+                    // and draws the overlays on top.
                     let desired_size =
                         egui::vec2(ui.available_width(), ui.available_height() * 0.65);
                     let (rect, _response) =
                         ui.allocate_exact_size(desired_size, egui::Sense::click_and_drag());
 
-                    // Draw background with grid pattern
-                    ui.painter()
-                        .rect_filled(rect, 0.0, egui::Color32::from_rgb(18, 18, 20));
+                    // The engine draws the scene here, so the panel must not
+                    // paint over it. The rectangle is handed to the render
+                    // loop, which converts it to pixels and draws the scene
+                    // with the engine's sprite renderer.
+                    *self.scene_view_rect = Some(rect);
 
-                    // Draw grid lines
-                    let grid_size = 50.0;
-                    let painter = ui.painter();
-                    for x in (rect.min.x as i32..rect.max.x as i32).step_by(grid_size as usize) {
-                        painter.line_segment(
-                            [
-                                egui::pos2(x as f32, rect.min.y),
-                                egui::pos2(x as f32, rect.max.y),
-                            ],
-                            (
-                                1.0,
-                                egui::Color32::from_rgba_premultiplied(255, 255, 255, 15),
-                            ),
-                        );
-                    }
-                    for y in (rect.min.y as i32..rect.max.y as i32).step_by(grid_size as usize) {
-                        painter.line_segment(
-                            [
-                                egui::pos2(rect.min.x, y as f32),
-                                egui::pos2(rect.max.x, y as f32),
-                            ],
-                            (
-                                1.0,
-                                egui::Color32::from_rgba_premultiplied(255, 255, 255, 15),
-                            ),
-                        );
-                    }
+                    // The grid is drawn by the engine as world-space quads, so
+                    // it lines up with the world instead of the panel.
 
-                    // Draw sprites, using their texture when the project
-                    // provides one.
-                    let sprites: Vec<(String, Transform, Sprite)> = self
-                        .world
-                        .world()
-                        .query::<(&SourceId, &Transform, &Sprite)>()
-                        .iter()
-                        .map(|(id, t, s)| (id.0.clone(), *t, *s))
-                        .collect();
-
-                    for (source_id, transform, sprite) in sprites {
-                        let screen_x = rect.min.x + transform.position.x;
-                        let screen_y = rect.min.y + transform.position.y;
-                        let sprite_rect = egui::Rect::from_min_size(
-                            egui::pos2(screen_x, screen_y),
-                            egui::vec2(sprite.size[0], sprite.size[1]),
-                        );
-
-                        let color = egui::Color32::from_rgba_premultiplied(
-                            (sprite.color[0] * 255.0) as u8,
-                            (sprite.color[1] * 255.0) as u8,
-                            (sprite.color[2] * 255.0) as u8,
-                            (sprite.color[3] * 255.0) as u8,
-                        );
-
-                        let texture = self.entity_textures.get(&source_id).and_then(|path| {
-                            scene_texture(self.ctx, self.project_root, self.scene_textures, path)
-                        });
-                        match texture {
-                            Some(texture) => {
-                                painter.image(
-                                    texture.id(),
-                                    sprite_rect,
-                                    egui::Rect::from_min_max(
-                                        egui::pos2(0.0, 0.0),
-                                        egui::pos2(1.0, 1.0),
-                                    ),
-                                    color,
-                                );
-                            }
-                            None => {
-                                painter.rect_filled(sprite_rect, 2.0, color);
-                                painter.rect_stroke(
-                                    sprite_rect,
-                                    2.0,
-                                    egui::Stroke::new(
-                                        1.0_f32,
-                                        egui::Color32::from_rgba_premultiplied(255, 255, 255, 50),
-                                    ),
-                                );
-                            }
-                        }
-                    }
-
-                    // While playing, show the game's HUD over the scene.
+                    // The sprites and the HUD are drawn by the engine too, so
+                    // the editor shows the same pixels the player shows. The
+                    // panel only shows the error of a failed script, which
+                    // the engine cannot draw.
                     if let Some(play) = &self.play {
-                        let state = play.slice.state();
-                        painter.text(
-                            egui::pos2(rect.left() + 12.0, rect.top() + 12.0),
-                            egui::Align2::LEFT_TOP,
-                            format!("{} - SCORE {}", play.scene_id, state.score),
-                            egui::FontId::monospace(16.0),
-                            egui::Color32::WHITE,
-                        );
-                        if !state.status.is_empty() {
-                            painter.text(
-                                egui::pos2(rect.left() + 12.0, rect.top() + 34.0),
-                                egui::Align2::LEFT_TOP,
-                                &state.status,
-                                egui::FontId::monospace(14.0),
-                                egui::Color32::from_rgba_premultiplied(255, 220, 120, 255),
-                            );
-                        }
-                        painter.text(
-                            egui::pos2(rect.left() + 12.0, rect.bottom() - 40.0),
-                            egui::Align2::LEFT_BOTTOM,
-                            "ARROWS MOVE   F5 SAVE   F9 LOAD",
-                            egui::FontId::monospace(13.0),
-                            egui::Color32::from_rgba_premultiplied(200, 200, 210, 255),
-                        );
                         if let Some(error) = &play.error {
-                            painter.text(
+                            ui.painter().text(
                                 egui::pos2(rect.left() + 12.0, rect.bottom() - 20.0),
                                 egui::Align2::LEFT_BOTTOM,
                                 error,
@@ -1740,14 +1775,17 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 ui.vertical(|ui| {
                     ui.heading("Inspector");
 
-                    if let Some(entity) = self.selected_entity {
+                    // The selected entity is copied out, so the world can be
+                    // borrowed while the inspector edits it.
+                    let selected = *self.selected_entity;
+                    if let Some(entity) = selected {
                         ui.label(format!("Entity ID: {:?}", entity.id()));
                         ui.add_space(8.0);
 
                         // Read current values once
                         let world = self.world.world();
-                        let transform = world.get::<&Transform>(*entity).ok().map(|t| *t);
-                        let sprite = world.get::<&Sprite>(*entity).ok().map(|s| *s);
+                        let transform = world.get::<&Transform>(entity).ok().map(|t| *t);
+                        let sprite = world.get::<&Sprite>(entity).ok().map(|s| *s);
 
                         // Transform component
                         if let Some(mut transform) = transform {
@@ -1774,31 +1812,33 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         ui.label("Position");
                                         ui.add_space(16.0);
                                         ui.label("X:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut transform.position.x)
-                                                    .speed(1.0),
-                                            )
-                                            .changed()
-                                        {
+                                        let response = ui.add(
+                                            egui::DragValue::new(&mut transform.position.x)
+                                                .speed(1.0),
+                                        );
+                                        // A drag is one edit, so the scene is
+                                        // recorded when the drag starts.
+                                        if response.drag_started() {
+                                            self.record_scene();
+                                        }
+                                        if response.changed() {
                                             let world = self.world.world_mut();
-                                            if let Ok(mut t) = world.get::<&mut Transform>(*entity)
-                                            {
+                                            if let Ok(mut t) = world.get::<&mut Transform>(entity) {
                                                 t.position.x = transform.position.x;
                                             }
                                         }
                                         ui.add_space(8.0);
                                         ui.label("Y:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut transform.position.y)
-                                                    .speed(1.0),
-                                            )
-                                            .changed()
-                                        {
+                                        let response = ui.add(
+                                            egui::DragValue::new(&mut transform.position.y)
+                                                .speed(1.0),
+                                        );
+                                        if response.drag_started() {
+                                            self.record_scene();
+                                        }
+                                        if response.changed() {
                                             let world = self.world.world_mut();
-                                            if let Ok(mut t) = world.get::<&mut Transform>(*entity)
-                                            {
+                                            if let Ok(mut t) = world.get::<&mut Transform>(entity) {
                                                 t.position.y = transform.position.y;
                                             }
                                         }
@@ -1831,61 +1871,65 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         ui.label("Color");
                                         ui.add_space(16.0);
                                         ui.label("R:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut sprite.color[0])
-                                                    .speed(0.01)
-                                                    .range(0.0..=1.0),
-                                            )
-                                            .changed()
-                                        {
+                                        let response = ui.add(
+                                            egui::DragValue::new(&mut sprite.color[0])
+                                                .speed(0.01)
+                                                .range(0.0..=1.0),
+                                        );
+                                        if response.drag_started() {
+                                            self.record_scene();
+                                        }
+                                        if response.changed() {
                                             let world = self.world.world_mut();
-                                            if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
+                                            if let Ok(mut s) = world.get::<&mut Sprite>(entity) {
                                                 s.color[0] = sprite.color[0];
                                             }
                                         }
                                         ui.add_space(8.0);
                                         ui.label("G:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut sprite.color[1])
-                                                    .speed(0.01)
-                                                    .range(0.0..=1.0),
-                                            )
-                                            .changed()
-                                        {
+                                        let response = ui.add(
+                                            egui::DragValue::new(&mut sprite.color[1])
+                                                .speed(0.01)
+                                                .range(0.0..=1.0),
+                                        );
+                                        if response.drag_started() {
+                                            self.record_scene();
+                                        }
+                                        if response.changed() {
                                             let world = self.world.world_mut();
-                                            if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
+                                            if let Ok(mut s) = world.get::<&mut Sprite>(entity) {
                                                 s.color[1] = sprite.color[1];
                                             }
                                         }
                                         ui.add_space(8.0);
                                         ui.label("B:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut sprite.color[2])
-                                                    .speed(0.01)
-                                                    .range(0.0..=1.0),
-                                            )
-                                            .changed()
-                                        {
+                                        let response = ui.add(
+                                            egui::DragValue::new(&mut sprite.color[2])
+                                                .speed(0.01)
+                                                .range(0.0..=1.0),
+                                        );
+                                        if response.drag_started() {
+                                            self.record_scene();
+                                        }
+                                        if response.changed() {
                                             let world = self.world.world_mut();
-                                            if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
+                                            if let Ok(mut s) = world.get::<&mut Sprite>(entity) {
                                                 s.color[2] = sprite.color[2];
                                             }
                                         }
                                         ui.add_space(8.0);
                                         ui.label("A:");
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut sprite.color[3])
-                                                    .speed(0.01)
-                                                    .range(0.0..=1.0),
-                                            )
-                                            .changed()
-                                        {
+                                        let response = ui.add(
+                                            egui::DragValue::new(&mut sprite.color[3])
+                                                .speed(0.01)
+                                                .range(0.0..=1.0),
+                                        );
+                                        if response.drag_started() {
+                                            self.record_scene();
+                                        }
+                                        if response.changed() {
                                             let world = self.world.world_mut();
-                                            if let Ok(mut s) = world.get::<&mut Sprite>(*entity) {
+                                            if let Ok(mut s) = world.get::<&mut Sprite>(entity) {
                                                 s.color[3] = sprite.color[3];
                                             }
                                         }
