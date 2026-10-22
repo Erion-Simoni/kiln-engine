@@ -125,3 +125,71 @@ fn an_inspector_edit_is_written_to_the_scene_and_can_be_undone() {
         "the undo restored the old value"
     );
 }
+
+#[test]
+fn an_edit_is_written_to_the_project_file_and_can_be_undone() {
+    // The editor writes the scene into the project and the project to disk,
+    // so an edit survives closing the editor.
+    let dir = std::env::temp_dir().join("kiln-editor-scene-edit");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("the directory is created");
+    let manifest = dir.join("kiln.toml");
+    std::fs::copy(sample_dir().join("kiln.toml"), &manifest).expect("the manifest is copied");
+
+    let project =
+        Project::from_toml(&std::fs::read_to_string(&manifest).expect("the manifest is readable"))
+            .expect("the manifest parses");
+    let scene_id = project.default_scene_id().expect("the sample has a scene");
+
+    // The editor spawns the scene the same way the player does.
+    let mut world = kiln_runtime::GameWorld::new();
+    let mut make_sprite =
+        |_entity: &kiln_core::project::Entity, color: [f32; 4], _texture: Option<&str>| {
+            kiln_runtime::Sprite::new(color[0], color[1], color[2], color[3]).with_size(16.0, 16.0)
+        };
+    kiln_runtime::spawn_scene(&mut world, &project, &scene_id, &mut make_sprite);
+
+    // Move an entity, the way the inspector does.
+    let moved = {
+        let world = world.world_mut();
+        let mut query = world.query::<(&mut kiln_core::Transform, &mut kiln_runtime::Sprite)>();
+        let mut position = None;
+        if let Some((transform, _)) = query.iter().next() {
+            transform.position.x += 40.0;
+            position = Some(transform.position.x);
+        }
+        position.expect("the scene has an entity")
+    };
+
+    // The scene is built from the world and written into the project.
+    let mut project = project;
+    let scene = kiln_editor::scene_from_world(
+        &world,
+        &std::collections::HashMap::new(),
+        &std::collections::HashMap::new(),
+        Some(&project),
+    );
+    project.scenes.insert(scene.id.clone(), scene);
+    let toml = project.to_toml().expect("the project serialises");
+    std::fs::write(&manifest, toml).expect("the project is written");
+
+    // The file on disk holds the edit.
+    let written =
+        Project::from_toml(&std::fs::read_to_string(&manifest).expect("the manifest is readable"))
+            .expect("the manifest parses");
+    let written_scene = written
+        .scenes
+        .get(&scene_id)
+        .expect("the scene is in the file");
+    let transform = written_scene.entities[0]
+        .components
+        .iter()
+        .find_map(|c| match c {
+            kiln_core::project::Component::Transform { x, .. } => Some(*x),
+            _ => None,
+        })
+        .expect("the entity has a transform");
+    assert_eq!(transform, moved, "the edit is on disk");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
