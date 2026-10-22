@@ -3,6 +3,9 @@
 //! The inspector edits the world directly, so the editor needs ways to add
 //! and remove entities and to give them the components a scene entity has.
 
+use std::path::{Path, PathBuf};
+
+use kiln_core::project::Project;
 use kiln_core::Transform;
 use kiln_runtime::{GameWorld, Role, SourceId, Sprite};
 
@@ -87,6 +90,199 @@ pub fn set_role(world: &mut GameWorld, entity: hecs::Entity, role: &str) -> bool
     world
         .insert_one(entity, Role::new(role.to_string()))
         .is_ok()
+}
+
+/// Remove the transform of an entity.
+///
+/// Returns whether the entity had one.
+pub fn remove_transform(world: &mut GameWorld, entity: hecs::Entity) -> bool {
+    world.world_mut().remove_one::<Transform>(entity).is_ok()
+}
+
+/// Remove the sprite of an entity.
+///
+/// Returns whether the entity had one.
+pub fn remove_sprite(world: &mut GameWorld, entity: hecs::Entity) -> bool {
+    world.world_mut().remove_one::<Sprite>(entity).is_ok()
+}
+
+/// Add a transform to an entity that does not have one.
+///
+/// Returns whether the transform was added.
+pub fn add_transform(world: &mut GameWorld, entity: hecs::Entity) -> bool {
+    let world = world.world_mut();
+    if world.get::<&Transform>(entity).is_ok() {
+        return false;
+    }
+    world.insert_one(entity, Transform::new(0.0, 0.0)).is_ok()
+}
+
+/// Add a sprite to an entity that does not have one.
+///
+/// Returns whether the sprite was added.
+pub fn add_sprite(world: &mut GameWorld, entity: hecs::Entity, defaults: EntityDefaults) -> bool {
+    let world = world.world_mut();
+    if world.get::<&Sprite>(entity).is_ok() {
+        return false;
+    }
+    let sprite = Sprite::new(
+        defaults.color[0],
+        defaults.color[1],
+        defaults.color[2],
+        defaults.color[3],
+    )
+    .with_size(defaults.size[0], defaults.size[1]);
+    world.insert_one(entity, sprite).is_ok()
+}
+
+/// Build the project data of a prefab from an entity of the world.
+///
+/// The prefab keeps the entity's identity and components, so an instance of
+/// it looks like the entity it was made from.
+pub fn prefab_from_entity(entity: &kiln_core::project::Entity, name: &str) -> kiln_core::Prefab {
+    kiln_core::Prefab::new(name.to_string(), entity.clone())
+}
+
+/// Add an instance of a prefab to the world.
+///
+/// The instance keeps the components of the prefab and gets its own source
+/// id, so it is saved with the scene like every other entity.
+pub fn instantiate_prefab(
+    world: &mut GameWorld,
+    prefab: &kiln_core::Prefab,
+    existing_ids: &[String],
+    position: [f32; 2],
+) -> Option<String> {
+    let instance = prefab.instantiate(None);
+    let id = next_entity_id(existing_ids);
+
+    // The transform of the instance starts at the given position, and the
+    // sprite keeps the size and the tint of the prefab.
+    let mut transform = Transform::new(position[0], position[1]);
+    let mut sprite =
+        Sprite::new(1.0, 1.0, 1.0, 1.0).with_size(DEFAULT_SPRITE_SIZE[0], DEFAULT_SPRITE_SIZE[1]);
+    for component in &instance.components {
+        match component {
+            kiln_core::project::Component::Transform { scale, .. } => {
+                transform = transform.with_scale(kiln_core::Vec2::splat(*scale));
+            }
+            kiln_core::project::Component::Sprite { color, .. } => {
+                sprite = Sprite::new(color[0], color[1], color[2], color[3])
+                    .with_size(DEFAULT_SPRITE_SIZE[0], DEFAULT_SPRITE_SIZE[1]);
+            }
+            _ => {}
+        }
+    }
+
+    world.spawn((transform, sprite, SourceId::new(id.clone())));
+    Some(id)
+}
+
+/// The default size of a sprite without a texture, in world units.
+const DEFAULT_SPRITE_SIZE: [f32; 2] = [32.0, 32.0];
+
+/// The id of a new scene, counted from one.
+///
+/// The ids are unique within a project, so the editor can name a scene and
+/// find it again after a reload.
+pub fn next_scene_id(existing: &[String]) -> String {
+    let mut index = 1;
+    loop {
+        let candidate = format!("scene_{index}");
+        if !existing.iter().any(|id| id == &candidate) {
+            return candidate;
+        }
+        index += 1;
+    }
+}
+
+/// Create an empty scene and add it to the project.
+///
+/// The new scene becomes the default scene, so it is the one the editor
+/// shows.
+pub fn create_scene(project: &mut Project, name: &str) -> String {
+    let existing: Vec<String> = project.scenes.keys().cloned().collect();
+    let id = next_scene_id(&existing);
+    project.scenes.insert(
+        id.clone(),
+        kiln_core::project::Scene {
+            id: id.clone(),
+            name: name.to_string(),
+            entities: Vec::new(),
+            nested_scenes: Vec::new(),
+            script: None,
+        },
+    );
+    id
+}
+
+/// Add a scene as a nested scene of another scene.
+///
+/// Returns whether the scene could be nested, which is not the case when the
+/// scene is the one it would be nested in.
+pub fn nest_scene(project: &mut Project, parent_id: &str, child_id: &str) -> Result<(), String> {
+    if parent_id == child_id {
+        return Err("A scene cannot contain itself".to_string());
+    }
+    let child_exists = project.scenes.contains_key(child_id);
+    if !child_exists {
+        return Err(format!("The scene '{child_id}' does not exist"));
+    }
+    let Some(parent) = project.scenes.get_mut(parent_id) else {
+        return Err(format!("The scene '{parent_id}' does not exist"));
+    };
+    if parent
+        .nested_scenes
+        .iter()
+        .any(|nested| nested.scene_id == child_id)
+    {
+        return Err(format!("The scene '{child_id}' is already nested"));
+    }
+    parent.nested_scenes.push(kiln_core::project::NestedScene {
+        scene_id: child_id.to_string(),
+        offset: kiln_core::project::SceneOffset::default(),
+        additive: false,
+    });
+    Ok(())
+}
+
+/// The files of a project directory, ready to be packed.
+fn project_files(root: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    collect_files(root, &mut files);
+    files.sort();
+    files
+}
+
+/// Collect every file below `dir`.
+fn collect_files(dir: &Path, files: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files(&path, files);
+        } else {
+            files.push(path);
+        }
+    }
+}
+
+/// Pack a project directory into an archive.
+///
+/// The manifest and the assets of the project end up in the archive, so the
+/// player can run it. Returns the path of the archive.
+pub fn pack_project(root: &Path, output: &Path) -> Result<PathBuf, String> {
+    let files = project_files(root);
+    if files.is_empty() {
+        return Err(format!("The project directory {} is empty", root.display()));
+    }
+    let mut archive = kiln_assets::Archive::new(output.to_path_buf());
+    archive
+        .pack(&files)
+        .map_err(|e| format!("The project could not be packed: {e}"))?;
+    Ok(output.to_path_buf())
 }
 
 #[cfg(test)]

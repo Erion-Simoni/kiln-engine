@@ -49,6 +49,13 @@ const GRID_SPACING: f32 = 50.0;
 /// The colour of the scene view's grid lines.
 const GRID_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.06];
 
+/// The components an entity can have.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ComponentKind {
+    Transform,
+    Sprite,
+}
+
 /// The default size of a sprite without a texture, in world units.
 const DEFAULT_SPRITE_SIZE: [f32; 2] = [32.0, 32.0];
 
@@ -70,6 +77,10 @@ enum MenuAction {
     LoadScene,
     Undo,
     Redo,
+    ExportProject,
+    PackageProject,
+    OpenDocs,
+    About,
 }
 
 pub struct EditorApp {
@@ -96,6 +107,8 @@ pub struct EditorApp {
     graph: Graph,
     render_tier: RenderTier,
     show_welcome: bool,
+    /// Whether the about window is open.
+    show_about: bool,
     /// The measured frame rate, in frames per second.
     fps: f32,
     /// The time the previous frame was rendered, used to measure the frame
@@ -492,6 +505,7 @@ impl EditorApp {
             graph: Graph::new(),
             render_tier: RenderTier::default(),
             show_welcome: true,
+            show_about: false,
             fps: 60.0,
             last_frame: Instant::now(),
             frame_count: 0,
@@ -827,6 +841,78 @@ impl EditorApp {
         )
     }
 
+    /// Pack the project into an archive the player can run.
+    ///
+    /// The archive holds the manifest and the assets of the project, so it is
+    /// the exported game.
+    fn export_project(&mut self) {
+        let Some(root) = self.project_root.clone() else {
+            self.console_log
+                .push("[ERROR] Open a project to export it".to_string());
+            return;
+        };
+        let name = self
+            .current_project
+            .as_ref()
+            .map(|p| p.id.clone())
+            .unwrap_or_else(|| "game".to_string());
+        let output = root.join(format!("{name}.kar"));
+        match crate::editing::pack_project(&root, &output) {
+            Ok(path) => self
+                .console_log
+                .push(format!("[INFO] Exported the project to {}", path.display())),
+            Err(message) => self.console_log.push(format!("[ERROR] {message}")),
+        }
+    }
+
+    /// Pack the project with its version, the way a release is built.
+    fn package_project(&mut self) {
+        let Some(root) = self.project_root.clone() else {
+            self.console_log
+                .push("[ERROR] Open a project to package it".to_string());
+            return;
+        };
+        let name = self
+            .current_project
+            .as_ref()
+            .map(|p| p.id.clone())
+            .unwrap_or_else(|| "game".to_string());
+        let version = self
+            .current_project
+            .as_ref()
+            .map(|p| p.version.clone())
+            .unwrap_or_else(|| "0.1.0".to_string());
+        let output = root.join(format!("{name}-{version}.kar"));
+        match crate::editing::pack_project(&root, &output) {
+            Ok(path) => self.console_log.push(format!(
+                "[INFO] Packaged the project as {} (version {version})",
+                path.display()
+            )),
+            Err(message) => self.console_log.push(format!("[ERROR] {message}")),
+        }
+    }
+
+    /// Open the documentation of the project.
+    ///
+    /// The docs are part of the repository, so the editor shows where they
+    /// are instead of opening a browser.
+    fn open_docs(&mut self) {
+        let docs = self
+            .project_root
+            .as_ref()
+            .map(|root| root.join("docs"))
+            .unwrap_or_else(|| PathBuf::from("docs"));
+        if docs.is_dir() {
+            self.console_log
+                .push(format!("[INFO] The documentation is in {}", docs.display()));
+        } else {
+            self.console_log.push(format!(
+                "[INFO] The documentation is in {} (the folder does not exist yet)",
+                docs.display()
+            ));
+        }
+    }
+
     /// Undo the last scene edit.
     pub fn undo(&mut self) -> Result<(), String> {
         let current = self.scene_from_world();
@@ -1057,7 +1143,7 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     ui.separator();
                     if ui.button("Export...").clicked() {
-                        // TODO: Export dialog
+                        menu_actions.push(MenuAction::ExportProject);
                         ui.close_menu();
                     }
                     ui.separator();
@@ -1138,7 +1224,7 @@ impl winit::application::ApplicationHandler for EditorApp {
                         ui.close_menu();
                     }
                     if ui.button("Package").clicked() {
-                        // TODO: Package
+                        menu_actions.push(MenuAction::PackageProject);
                         ui.close_menu();
                     }
                 });
@@ -1152,11 +1238,11 @@ impl winit::application::ApplicationHandler for EditorApp {
 
                 ui.menu_button("Help", |ui| {
                     if ui.button("Documentation").clicked() {
-                        // TODO: Open docs
+                        menu_actions.push(MenuAction::OpenDocs);
                         ui.close_menu();
                     }
                     if ui.button("About Kiln").clicked() {
-                        // TODO: About dialog
+                        menu_actions.push(MenuAction::About);
                         ui.close_menu();
                     }
                 });
@@ -1220,7 +1306,28 @@ impl winit::application::ApplicationHandler for EditorApp {
                         });
                 });
             });
-        } else {
+        }
+
+        // The about window tells what the editor is and which version it is.
+        if self.show_about {
+            egui::Window::new("About Kiln")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(ctx, |ui| {
+                    ui.heading("Kiln");
+                    ui.label("A lightweight game engine for indie developers.");
+                    ui.add_space(8.0);
+                    ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
+                    ui.label("Renderer: wgpu");
+                    ui.add_space(8.0);
+                    if ui.button("Close").clicked() {
+                        self.show_about = false;
+                    }
+                });
+        }
+
+        if !self.show_welcome {
             // Main editor area
             egui::CentralPanel::default().show(ctx, |ui| {
                 let mut dock_style = egui_dock::Style::from_egui(ui.style());
@@ -1255,7 +1362,7 @@ impl winit::application::ApplicationHandler for EditorApp {
                     history: &mut self.history,
                     entity_textures: &self.entity_textures,
                     entity_roles: &self.entity_roles,
-                    console_log: &self.console_log,
+                    console_log: &mut self.console_log,
                     scene_view_rect: &mut self.scene_view_rect,
                 };
                 tree.show(ctx, &mut tab_viewer);
@@ -1504,6 +1611,18 @@ impl winit::application::ApplicationHandler for EditorApp {
                         self.console_log.push(format!("[INFO] {e}"));
                     }
                 }
+                MenuAction::ExportProject => {
+                    self.export_project();
+                }
+                MenuAction::PackageProject => {
+                    self.package_project();
+                }
+                MenuAction::OpenDocs => {
+                    self.open_docs();
+                }
+                MenuAction::About => {
+                    self.show_about = true;
+                }
             }
         }
 
@@ -1638,7 +1757,7 @@ struct TabViewer<'a> {
     /// Gameplay role of each scene entity, keyed by entity id.
     entity_roles: &'a HashMap<String, String>,
     /// Lines shown in the console panel.
-    console_log: &'a [String],
+    console_log: &'a mut Vec<String>,
     /// Screen-space rectangle of the scene view panel, set by the panel each
     /// frame so the render loop can draw the scene into it.
     scene_view_rect: &'a mut Option<egui::Rect>,
@@ -1654,6 +1773,218 @@ impl TabViewer<'_> {
             self.current_project.as_ref(),
         );
         self.history.record(scene);
+    }
+
+    /// Add an entity to the middle of the scene.
+    ///
+    /// The scene is recorded first, so the new entity can be undone.
+    fn add_entity(&mut self) {
+        self.record_scene();
+
+        let existing: Vec<String> = self.entity_textures.keys().cloned().collect();
+        let size = self.world_size();
+        let position = [size.0 / 2.0, size.1 / 2.0];
+        let (_, entity) = crate::editing::add_entity(
+            self.world,
+            &existing,
+            position,
+            crate::editing::EntityDefaults::default(),
+        );
+        *self.selected_entity = Some(entity);
+    }
+
+    /// The size of the world the scene view shows, in world units.
+    fn world_size(&self) -> (f32, f32) {
+        match self.current_project.as_ref() {
+            Some(project) => (project.window.width as f32, project.window.height as f32),
+            None => (1280.0, 720.0),
+        }
+    }
+
+    /// Remove a component from an entity.
+    fn remove_component(&mut self, entity: hecs::Entity, kind: ComponentKind) {
+        // The scene is recorded before the change, so the change can be
+        // undone. It is only kept when the component was really there.
+        let before = scene_from_world(
+            &*self.world,
+            self.entity_textures,
+            self.entity_roles,
+            self.current_project.as_ref(),
+        );
+        let removed = match kind {
+            ComponentKind::Transform => crate::editing::remove_transform(self.world, entity),
+            ComponentKind::Sprite => crate::editing::remove_sprite(self.world, entity),
+        };
+        if !removed {
+            return;
+        }
+        self.history.record(before);
+        *self.selected_entity = None;
+    }
+
+    /// Add a component to an entity.
+    fn add_component(&mut self, entity: hecs::Entity, kind: ComponentKind) {
+        let before = scene_from_world(
+            &*self.world,
+            self.entity_textures,
+            self.entity_roles,
+            self.current_project.as_ref(),
+        );
+        let added = match kind {
+            ComponentKind::Transform => crate::editing::add_transform(self.world, entity),
+            ComponentKind::Sprite => crate::editing::add_sprite(
+                self.world,
+                entity,
+                crate::editing::EntityDefaults::default(),
+            ),
+        };
+        if !added {
+            return;
+        }
+        self.history.record(before);
+    }
+
+    /// Create a prefab from the selected entity.
+    ///
+    /// The prefab keeps the entity's components, so an instance of it looks
+    /// like the entity it was made from.
+    fn create_prefab_from_selection(&mut self) {
+        let Some(entity) = *self.selected_entity else {
+            self.log("[INFO] Select an entity to make a prefab of");
+            return;
+        };
+
+        // The source id is the identity of the entity in the scene data, so
+        // the prefab is made from the entity the scene holds.
+        let source_id = {
+            let world = self.world.world();
+            world.get::<&SourceId>(entity).ok().map(|id| id.0.clone())
+        };
+        let Some(source_id) = source_id else {
+            self.log("[INFO] The selected entity has no scene data");
+            return;
+        };
+
+        let scene = scene_from_world(
+            self.world,
+            self.entity_textures,
+            self.entity_roles,
+            self.current_project.as_ref(),
+        );
+        let Some(source) = scene.entities.iter().find(|e| e.id == source_id).cloned() else {
+            self.log("[INFO] The selected entity has no scene data");
+            return;
+        };
+
+        let name = format!("Prefab_{}", source.id);
+        let prefab = crate::editing::prefab_from_entity(&source, &name);
+        let id = prefab.id.clone();
+        self.prefab_editor.add_prefab(prefab);
+        self.prefab_editor.select_prefab(&id);
+        self.log(&format!("[INFO] Created the prefab {name}"));
+    }
+
+    /// Add an instance of the selected prefab to the scene.
+    fn instantiate_selected_prefab(&mut self) {
+        let Some(prefab) = self.prefab_editor.selected_prefab().cloned() else {
+            self.log("[INFO] Select a prefab to instantiate it");
+            return;
+        };
+
+        let before = scene_from_world(
+            self.world,
+            self.entity_textures,
+            self.entity_roles,
+            self.current_project.as_ref(),
+        );
+        let existing: Vec<String> = self.entity_textures.keys().cloned().collect();
+        let size = self.world_size();
+        let position = [size.0 / 2.0, size.1 / 2.0];
+        let id = crate::editing::instantiate_prefab(self.world, &prefab, &existing, position);
+        match id {
+            Some(id) => {
+                self.history.record(before);
+                self.log(&format!("[INFO] Instantiated the prefab as {id}"));
+            }
+            None => self.log("[ERROR] The prefab could not be instantiated"),
+        }
+    }
+
+    /// Create an empty scene in the project.
+    fn create_scene(&mut self) {
+        let Some(project) = self.current_project.as_mut() else {
+            self.log("[INFO] Open a project to add a scene to it");
+            return;
+        };
+        let name = "New Scene".to_string();
+        let id = crate::editing::create_scene(project, &name);
+        self.log(&format!("[INFO] Created the scene {id}"));
+    }
+
+    /// Add another scene as a nested scene of the current one.
+    fn nest_scene(&mut self) {
+        let Some(project) = self.current_project.as_mut() else {
+            self.log("[INFO] Open a project to nest a scene in it");
+            return;
+        };
+        let Some(parent_id) = project.default_scene_id() else {
+            self.log("[INFO] The project has no scene to nest in");
+            return;
+        };
+        // The nested scene is the first scene that is not the parent.
+        let Some(child_id) = project.scenes.keys().find(|id| **id != parent_id).cloned() else {
+            self.log("[INFO] The project has no other scene to nest");
+            return;
+        };
+
+        match crate::editing::nest_scene(project, &parent_id, &child_id) {
+            Ok(()) => self.log(&format!(
+                "[INFO] Nested the scene {child_id} in {parent_id}"
+            )),
+            Err(message) => self.log(&format!("[ERROR] {message}")),
+        }
+    }
+
+    /// Import the assets of the project into the asset cache.
+    ///
+    /// The cache holds the hash of every imported file, so a later import
+    /// only picks up the files that changed.
+    fn import_assets(&mut self) {
+        let Some(dir) = self.asset_browser.root().map(|p| p.to_path_buf()) else {
+            self.log("[INFO] Open a project to import its assets");
+            return;
+        };
+        let cache_dir = dir.join(".kiln-cache");
+        let mut cache = kiln_assets::AssetCache::new(cache_dir);
+        if let Err(e) = cache.load() {
+            self.log(&format!("[ERROR] The asset cache could not be read: {e}"));
+            return;
+        }
+        let results = match cache.import_dir(&dir) {
+            Ok(results) => results,
+            Err(e) => {
+                self.log(&format!("[ERROR] The assets could not be imported: {e}"));
+                return;
+            }
+        };
+        if let Err(e) = cache.save() {
+            self.log(&format!("[ERROR] The asset cache could not be saved: {e}"));
+            return;
+        }
+
+        let imported = results
+            .iter()
+            .filter(|r| matches!(r, kiln_assets::ImportResult::Imported { .. }))
+            .count();
+        let skipped = results.len() - imported;
+        self.log(&format!(
+            "[INFO] Imported {imported} assets, {skipped} were unchanged"
+        ));
+    }
+
+    /// Add a line to the console.
+    fn log(&mut self, message: &str) {
+        self.console_log.push(message.to_string());
     }
 }
 
@@ -1741,7 +2072,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.heading("Entities");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button("+ Add Entity").clicked() {
-                                // TODO: Add entity
+                                self.add_entity();
                             }
                         });
                     });
@@ -1800,9 +2131,15 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         ui.with_layout(
                                             egui::Layout::right_to_left(egui::Align::Center),
                                             |ui| {
-                                                if ui.button("⋮").clicked() {
-                                                    // TODO: Component menu
-                                                }
+                                                ui.menu_button("⋮", |ui| {
+                                                    if ui.button("Remove Component").clicked() {
+                                                        self.remove_component(
+                                                            entity,
+                                                            ComponentKind::Transform,
+                                                        );
+                                                        ui.close_menu();
+                                                    }
+                                                });
                                             },
                                         );
                                     });
@@ -1859,9 +2196,15 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         ui.with_layout(
                                             egui::Layout::right_to_left(egui::Align::Center),
                                             |ui| {
-                                                if ui.button("⋮").clicked() {
-                                                    // TODO: Component menu
-                                                }
+                                                ui.menu_button("⋮", |ui| {
+                                                    if ui.button("Remove Component").clicked() {
+                                                        self.remove_component(
+                                                            entity,
+                                                            ComponentKind::Sprite,
+                                                        );
+                                                        ui.close_menu();
+                                                    }
+                                                });
                                             },
                                         );
                                     });
@@ -1962,8 +2305,25 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         }
 
                         ui.add_space(16.0);
-                        if ui.button("+ Add Component").clicked() {
-                            // TODO: Add component
+                        // The components that are missing can be added, so
+                        // an entity can be built up piece by piece.
+                        let has_transform = transform.is_some();
+                        let has_sprite = sprite.is_some();
+                        if !has_transform || !has_sprite {
+                            ui.horizontal(|ui| {
+                                if !has_transform {
+                                    if ui.button("+ Transform").clicked() {
+                                        self.add_component(entity, ComponentKind::Transform);
+                                    }
+                                }
+                                if !has_sprite {
+                                    if ui.button("+ Sprite").clicked() {
+                                        self.add_component(entity, ComponentKind::Sprite);
+                                    }
+                                }
+                            });
+                        } else {
+                            ui.label("The entity has every component.");
                         }
                     } else {
                         ui.add_space(32.0);
@@ -2137,6 +2497,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     ui.horizontal(|ui| {
                         ui.heading("Assets");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("Import").clicked() {
+                                self.import_assets();
+                            }
                             if ui.button("Refresh").clicked() {
                                 if let Some(dir) =
                                     self.asset_browser.root().map(|p| p.to_path_buf())
@@ -2233,7 +2596,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.heading("Console");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button("Clear").clicked() {
-                                // TODO: Clear console
+                                // The console starts over, so the log only
+                                // shows what happened since it was cleared.
+                                self.console_log.clear();
                             }
                         });
                     });
@@ -2252,8 +2617,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 ui.label("[INFO] WGPU backend initialized");
                             } else {
                                 egui::ScrollArea::vertical().show(ui, |ui| {
-                                    for line in self.console_log {
-                                        ui.label(line);
+                                    for line in self.console_log.iter() {
+                                        ui.label(line.as_str());
                                     }
                                 });
                             }
@@ -2521,13 +2886,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.spacing_mut().item_spacing = egui::vec2(8.0, 0.0);
 
                         if ui.button("Create Prefab from Selection").clicked() {
-                            // TODO: Create prefab from selected entity
+                            self.create_prefab_from_selection();
                         }
 
                         ui.separator();
 
                         if ui.button("Instantiate Prefab").clicked() {
-                            // TODO: Instantiate selected prefab
+                            self.instantiate_selected_prefab();
                         }
 
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -2558,11 +2923,20 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     let is_empty = prefab_ids.is_empty();
 
                                     for (prefab_id, prefab_name) in prefab_ids {
+                                        let selected =
+                                            self.prefab_editor.selected_prefab_id() == Some(prefab_id.as_str());
                                         ui.horizontal(|ui| {
-                                            ui.label(&prefab_name);
+                                            if selected {
+                                                ui.strong(&prefab_name);
+                                            } else {
+                                                ui.label(&prefab_name);
+                                            }
                                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                                 if ui.button("Edit").clicked() {
-                                                    // TODO: Edit prefab
+                                                    // Selecting the prefab shows
+                                                    // its data, so it can be
+                                                    // changed and instantiated.
+                                                    self.prefab_editor.select_prefab(&prefab_id);
                                                 }
                                                 if ui.button("Delete").clicked() {
                                                     self.prefab_editor.remove_prefab(&prefab_id);
@@ -2590,13 +2964,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.spacing_mut().item_spacing = egui::vec2(8.0, 0.0);
 
                         if ui.button("Create New Scene").clicked() {
-                            // TODO: Create new scene
+                            self.create_scene();
                         }
 
                         ui.separator();
 
                         if ui.button("Add Nested Scene").clicked() {
-                            // TODO: Add nested scene
+                            self.nest_scene();
                         }
 
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

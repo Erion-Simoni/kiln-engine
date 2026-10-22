@@ -30,6 +30,25 @@ impl PrefabEditorState {
         self.prefabs.get_mut(id)
     }
 
+    /// The prefab that is selected, if there is one.
+    pub fn selected_prefab(&self) -> Option<&Prefab> {
+        self.selected_prefab
+            .as_ref()
+            .and_then(|id| self.prefabs.get(id))
+    }
+
+    /// The id of the selected prefab, if there is one.
+    pub fn selected_prefab_id(&self) -> Option<&str> {
+        self.selected_prefab.as_deref()
+    }
+
+    /// Select a prefab, so it can be edited or instantiated.
+    pub fn select_prefab(&mut self, id: &str) {
+        if self.prefabs.contains_key(id) {
+            self.selected_prefab = Some(id.to_string());
+        }
+    }
+
     pub fn remove_prefab(&mut self, id: &str) {
         self.prefabs.remove(id);
         if self.selected_prefab.as_ref() == Some(&id.to_string()) {
