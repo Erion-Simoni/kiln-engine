@@ -104,9 +104,16 @@ pub fn get_device_capabilities() -> DeviceCapabilities {
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 pub fn get_device_capabilities() -> DeviceCapabilities {
-    // Desktop/web platforms use GPU-based detection from kiln-render
-    // This is a stub for compatibility
-    DeviceCapabilities::default()
+    // Desktop and web pick their render tier from the GPU in
+    // `kiln_render::RenderTier::auto_select`, so the adapter decides the
+    // quality. What the host can say here is the size of the machine, which
+    // is what the mobile heuristics use, so the core count is real here too.
+    DeviceCapabilities {
+        cpu_cores: std::thread::available_parallelism()
+            .map(|count| count.get() as u32)
+            .unwrap_or(1),
+        ..DeviceCapabilities::default()
+    }
 }
 
 #[cfg(test)]
@@ -175,6 +182,18 @@ mod tests {
         assert!(caps.gpu_vendor.is_empty());
         assert!(caps.gpu_model.is_empty());
         assert!(caps.device_model.is_empty());
+    }
+
+    #[test]
+    fn the_desktop_capabilities_report_the_real_core_count() {
+        // The desktop path fills in the core count of the machine, so the
+        // tier heuristics see the real host instead of a fixed number.
+        let caps = get_device_capabilities();
+        let cores = std::thread::available_parallelism()
+            .map(|count| count.get() as u32)
+            .unwrap_or(1);
+        assert_eq!(caps.cpu_cores, cores);
+        assert!(caps.cpu_cores >= 1);
     }
 
     #[test]
