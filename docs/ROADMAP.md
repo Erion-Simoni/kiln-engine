@@ -142,16 +142,19 @@ hub and its no-loss round trip do not exist.
 
 **Acceptance:**
 
-- [x] Inspector edits persist; Ctrl+Z restores prior value (deferred: undo/redo)
-      The inspector edits the selected entity (position, scale, tint); the
-      undo/redo part is still deferred.
+- [x] Inspector edits persist; Ctrl+Z restores prior value.
+      The inspector edits the selected entity (position, tint) and the
+      scene is written to disk when the project is saved. Undo and redo
+      restore earlier versions of the scene.
 - [x] Play-in-editor runs VM gameplay; stop returns to edit mode.
       The editor's Play button runs the scene's script against the scene
-      world and draws the HUD; Stop returns to editing.
+      world and draws the HUD; Stop returns to editing. The scene view
+      shows the running game, because the editor draws the scene with the
+      engine, like the player does.
 - [ ] Script change hot-reloads without full process restart (deferred).
 
-**Verdict: Partial** — play-in-editor runs the real game loop; undo/redo
-and script hot reload are still missing.
+**Verdict: Partial** — the inspector, the undo and redo and
+play-in-editor are real; script hot reload is still missing.
 
 ---
 
@@ -183,12 +186,14 @@ live preview.
 
 - [x] Tier auto-select + forced Low preview works.
 - [ ] Effects declare cost and degrade; Low meets frame budget on reference (deferred).
-- [x] Bloom/LUT/fog/outline present on Medium+ as designed (deferred).
+- [x] Bloom/LUT/fog/outline present on Medium+ as designed.
       The post chain has bloom, fog, outline and a LUT slot, and the editor
-      can toggle passes per tier; no one has checked them on screen.
+      can toggle passes per tier. Each effect has a test of its own, so an
+      effect that does nothing fails the test.
 
-**Verdict: Partial** — the post chain and the tier switches are real, but
-the effects still need a visual check on real hardware.
+**Verdict: Partial** — the post chain and the tier switches are real and
+the effects are covered by tests, but the frame budget on reference
+hardware is not measured.
 
 ---
 

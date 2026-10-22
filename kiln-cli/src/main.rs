@@ -332,11 +332,7 @@ fn main() -> Result<()> {
             requires,
             output,
         } => {
-            let files: Vec<PathBuf> = std::fs::read_dir(&source)?
-                .filter_map(|e| e.ok())
-                .filter(|e| e.path().is_file())
-                .map(|e| e.path())
-                .collect();
+            let files = collect_files(&source)?;
 
             println!("Creating DLC pack: {} (v{})", name, version);
             println!("DLC ID: {}", id);
