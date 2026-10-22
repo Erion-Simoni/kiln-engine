@@ -18,6 +18,8 @@ pub enum CompilerError {
     NoInputConnection(Uuid),
     #[error("Type mismatch: {0}")]
     TypeMismatch(String),
+    #[error("Program error: {0}")]
+    Program(String),
 }
 
 /// Compile a graph to an IR program.
@@ -87,7 +89,9 @@ fn compile_node_recursive(
         NodeType::Constant { value } => {
             // Push constant value
             let label = format!("const_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label.clone());
 
             match value {
@@ -150,7 +154,9 @@ fn compile_node_recursive(
 
             // Emit arithmetic op
             let label = format!("arith_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label.clone());
 
             let instr = match op {
@@ -205,7 +211,9 @@ fn compile_node_recursive(
             }
 
             let label = format!("cmp_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label.clone());
 
             let instr = match op {
@@ -241,12 +249,16 @@ fn compile_node_recursive(
             }
 
             let label = format!("branch_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label.clone());
 
             // Jump if false to false branch
             let false_label = format!("{}_false", label);
-            program.define_label(&false_label);
+            program
+                .try_define_label(&false_label)
+                .map_err(CompilerError::Program)?;
             program.add_instruction(Instruction::JumpIfNot(
                 program.get_label(&false_label).unwrap(),
             ));
@@ -270,7 +282,9 @@ fn compile_node_recursive(
 
             // Jump past false branch
             let end_label = format!("{}_end", label);
-            program.define_label(&end_label);
+            program
+                .try_define_label(&end_label)
+                .map_err(CompilerError::Program)?;
             program.add_instruction(Instruction::Jump(program.get_label(&end_label).unwrap()));
 
             // False branch
@@ -293,7 +307,9 @@ fn compile_node_recursive(
         NodeType::HostCall { name } => {
             // Emit host call (simplified: use hash of name as ID)
             let label = format!("host_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label);
 
             let id = simple_hash(name);
@@ -321,7 +337,9 @@ fn compile_node_recursive(
         NodeType::AnimationClip { clip_name } => {
             // Emit a host call to play the animation clip
             let label = format!("anim_clip_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label);
 
             // Push clip name as string (simplified: use hash as placeholder)
@@ -349,7 +367,9 @@ fn compile_node_recursive(
         NodeType::AnimationState { state_name } => {
             // Emit a host call to enter the animation state
             let label = format!("anim_state_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label);
 
             let id = simple_hash(state_name);
@@ -375,12 +395,16 @@ fn compile_node_recursive(
             }
 
             let label = format!("anim_trans_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label.clone());
 
             // Jump if false to skip transition
             let skip_label = format!("{}_skip", label);
-            program.define_label(&skip_label);
+            program
+                .try_define_label(&skip_label)
+                .map_err(CompilerError::Program)?;
             program.add_instruction(Instruction::JumpIfNot(
                 program.get_label(&skip_label).unwrap(),
             ));
@@ -406,7 +430,9 @@ fn compile_node_recursive(
         NodeType::Selector => {
             // Emit host call for selector behavior tree node
             let label = format!("selector_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label);
 
             let id = simple_hash("selector");
@@ -415,7 +441,9 @@ fn compile_node_recursive(
         NodeType::Sequence => {
             // Emit host call for sequence behavior tree node
             let label = format!("sequence_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label);
 
             let id = simple_hash("sequence");
@@ -424,7 +452,9 @@ fn compile_node_recursive(
         NodeType::BehaviorCondition => {
             // Emit host call for behavior condition
             let label = format!("cond_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label);
 
             let id = simple_hash("behavior_condition");
@@ -433,7 +463,9 @@ fn compile_node_recursive(
         NodeType::BehaviorAction { name } => {
             // Emit host call for behavior action
             let label = format!("action_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label);
 
             let id = simple_hash(name);
@@ -442,7 +474,9 @@ fn compile_node_recursive(
         NodeType::AIState { state_name } => {
             // Emit host call for AI state
             let label = format!("ai_state_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label);
 
             let id = simple_hash(state_name);
@@ -468,12 +502,16 @@ fn compile_node_recursive(
             }
 
             let label = format!("ai_trans_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label.clone());
 
             // Jump if false to skip transition
             let skip_label = format!("{}_skip", label);
-            program.define_label(&skip_label);
+            program
+                .try_define_label(&skip_label)
+                .map_err(CompilerError::Program)?;
             program.add_instruction(Instruction::JumpIfNot(
                 program.get_label(&skip_label).unwrap(),
             ));
@@ -499,7 +537,9 @@ fn compile_node_recursive(
         NodeType::Dialogue { dialogue_id } => {
             // Emit host call to show dialogue
             let label = format!("dialogue_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label);
 
             let id = simple_hash(dialogue_id);
@@ -508,7 +548,9 @@ fn compile_node_recursive(
         NodeType::DialogueChoice => {
             // Emit host call for dialogue choice
             let label = format!("dialogue_choice_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label);
 
             let id = simple_hash("dialogue_choice");
@@ -517,7 +559,9 @@ fn compile_node_recursive(
         NodeType::QuestStart { quest_id } => {
             // Emit host call to start quest
             let label = format!("quest_start_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label);
 
             let id = simple_hash(quest_id);
@@ -526,7 +570,9 @@ fn compile_node_recursive(
         NodeType::QuestComplete { quest_id } => {
             // Emit host call to complete quest
             let label = format!("quest_complete_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label);
 
             let id = simple_hash(quest_id);
@@ -538,7 +584,9 @@ fn compile_node_recursive(
         } => {
             // Emit host call to update quest objective
             let label = format!("quest_obj_update_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label);
 
             // Push objective index
@@ -553,7 +601,9 @@ fn compile_node_recursive(
         } => {
             // Emit host call for data table lookup
             let label = format!("datatable_lookup_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label);
 
             let id = simple_hash(&format!("{}:{}", table_id, column_name));
@@ -562,7 +612,9 @@ fn compile_node_recursive(
         NodeType::DataTableRowGet { table_id } => {
             // Emit host call for data table row get
             let label = format!("datatable_row_{}", node_id);
-            program.define_label(&label);
+            program
+                .try_define_label(&label)
+                .map_err(CompilerError::Program)?;
             label_map.insert(node_id, label);
 
             let id = simple_hash(table_id);

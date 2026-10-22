@@ -147,7 +147,7 @@ pub struct NestedScene {
 }
 
 /// Offset for nested scene loading
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct SceneOffset {
     #[serde(default)]
     pub x: f32,

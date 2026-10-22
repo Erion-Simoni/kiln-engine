@@ -398,11 +398,18 @@ pub fn scene_from_world(
         });
     }
 
+    // The nested scenes of the scene stay as they are: the world holds the
+    // entities of the nested scenes too, so they are not written again here.
+    let nested_scenes = project
+        .and_then(|p| p.scenes.get(&scene_id))
+        .map(|s| s.nested_scenes.clone())
+        .unwrap_or_default();
+
     Scene {
         id: scene_id,
         name: "Main Scene".to_string(),
         entities,
-        nested_scenes: vec![],
+        nested_scenes,
         script,
     }
 }
@@ -1765,6 +1772,9 @@ impl TabViewer<'_> {
     ///
     /// The scene is recorded first, so the new entity can be undone.
     fn add_entity(&mut self) {
+        if self.editing_locked() {
+            return;
+        }
         self.record_scene();
 
         let existing: Vec<String> = self.entity_textures.keys().cloned().collect();
@@ -1789,6 +1799,9 @@ impl TabViewer<'_> {
 
     /// Remove a component from an entity.
     fn remove_component(&mut self, entity: hecs::Entity, kind: ComponentKind) {
+        if self.editing_locked() {
+            return;
+        }
         // The scene is recorded before the change, so the change can be
         // undone. It is only kept when the component was really there.
         let before = scene_from_world(
@@ -1810,6 +1823,9 @@ impl TabViewer<'_> {
 
     /// Add a component to an entity.
     fn add_component(&mut self, entity: hecs::Entity, kind: ComponentKind) {
+        if self.editing_locked() {
+            return;
+        }
         let before = scene_from_world(
             &*self.world,
             self.entity_textures,
@@ -1828,6 +1844,14 @@ impl TabViewer<'_> {
             return;
         }
         self.history.record(before);
+    }
+
+    /// Whether the scene may not be edited right now.
+    ///
+    /// While the game is playing the world belongs to the running game, so
+    /// editing it would change the game instead of the scene.
+    fn editing_locked(&self) -> bool {
+        *self.is_playing
     }
 
     /// Create a prefab from the selected entity.
@@ -2045,7 +2069,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     ui.horizontal(|ui| {
                         ui.heading("Entities");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button("+ Add Entity").clicked() {
+                            if ui
+                                .add_enabled(
+                                    !self.editing_locked(),
+                                    egui::Button::new("+ Add Entity"),
+                                )
+                                .clicked()
+                            {
                                 self.add_entity();
                             }
                         });
@@ -2123,7 +2153,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         ui.label("Position");
                                         ui.add_space(16.0);
                                         ui.label("X:");
-                                        let response = ui.add(
+                                        let response = ui.add_enabled(
+                                            !self.editing_locked(),
                                             egui::DragValue::new(&mut transform.position.x)
                                                 .speed(1.0),
                                         );
@@ -2140,7 +2171,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         }
                                         ui.add_space(8.0);
                                         ui.label("Y:");
-                                        let response = ui.add(
+                                        let response = ui.add_enabled(
+                                            !self.editing_locked(),
                                             egui::DragValue::new(&mut transform.position.y)
                                                 .speed(1.0),
                                         );
@@ -2188,7 +2220,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         ui.label("Color");
                                         ui.add_space(16.0);
                                         ui.label("R:");
-                                        let response = ui.add(
+                                        let response = ui.add_enabled(
+                                            !self.editing_locked(),
                                             egui::DragValue::new(&mut sprite.color[0])
                                                 .speed(0.01)
                                                 .range(0.0..=1.0),
@@ -2204,7 +2237,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         }
                                         ui.add_space(8.0);
                                         ui.label("G:");
-                                        let response = ui.add(
+                                        let response = ui.add_enabled(
+                                            !self.editing_locked(),
                                             egui::DragValue::new(&mut sprite.color[1])
                                                 .speed(0.01)
                                                 .range(0.0..=1.0),
@@ -2220,7 +2254,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         }
                                         ui.add_space(8.0);
                                         ui.label("B:");
-                                        let response = ui.add(
+                                        let response = ui.add_enabled(
+                                            !self.editing_locked(),
                                             egui::DragValue::new(&mut sprite.color[2])
                                                 .speed(0.01)
                                                 .range(0.0..=1.0),
@@ -2236,7 +2271,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         }
                                         ui.add_space(8.0);
                                         ui.label("A:");
-                                        let response = ui.add(
+                                        let response = ui.add_enabled(
+                                            !self.editing_locked(),
                                             egui::DragValue::new(&mut sprite.color[3])
                                                 .speed(0.01)
                                                 .range(0.0..=1.0),

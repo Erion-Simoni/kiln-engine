@@ -193,3 +193,59 @@ fn an_edit_is_written_to_the_project_file_and_can_be_undone() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn saving_a_scene_keeps_its_nested_scenes() {
+    // A scene that holds another scene must not lose it when the editor
+    // writes the scene back.
+    let mut project = Project::from_toml(
+        &std::fs::read_to_string(sample_dir().join("kiln.toml")).expect("the manifest is readable"),
+    )
+    .expect("the manifest parses");
+    let scene_id = project.default_scene_id().expect("the sample has a scene");
+
+    // A second scene, nested in the first one.
+    project.scenes.insert(
+        "overlay".to_string(),
+        kiln_core::project::Scene {
+            id: "overlay".to_string(),
+            name: "Overlay".to_string(),
+            entities: Vec::new(),
+            nested_scenes: Vec::new(),
+            script: None,
+        },
+    );
+    project
+        .scenes
+        .get_mut(&scene_id)
+        .expect("the scene exists")
+        .nested_scenes
+        .push(kiln_core::project::NestedScene {
+            scene_id: "overlay".to_string(),
+            additive: false,
+            offset: kiln_core::project::SceneOffset::default(),
+        });
+
+    // The editor spawns the scene and writes it back.
+    let mut world = kiln_runtime::GameWorld::new();
+    let mut make_sprite =
+        |_entity: &kiln_core::project::Entity, color: [f32; 4], _texture: Option<&str>| {
+            kiln_runtime::Sprite::new(color[0], color[1], color[2], color[3]).with_size(16.0, 16.0)
+        };
+    kiln_runtime::spawn_scene(&mut world, &project, &scene_id, &mut make_sprite);
+
+    let saved = kiln_editor::scene_from_world(
+        &world,
+        &std::collections::HashMap::new(),
+        &std::collections::HashMap::new(),
+        Some(&project),
+    );
+
+    assert_eq!(
+        saved.nested_scenes.len(),
+        1,
+        "the nested scene survived the save: {:?}",
+        saved.nested_scenes
+    );
+    assert_eq!(saved.nested_scenes[0].scene_id, "overlay");
+}

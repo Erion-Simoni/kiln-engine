@@ -2,7 +2,7 @@
 
 use glam::Vec2;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Transform {
     pub position: Vec2,
     pub rotation: f32,
