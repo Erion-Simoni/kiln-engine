@@ -8,8 +8,8 @@
 //! and the player build the same world. This module only adds the player
 //! specific part: binding GPU textures to the sprites.
 
-use kiln_core::{Component, Entity, Project, Scene, SceneOffset, Transform};
-use kiln_runtime::{spawn_scene as spawn_scene_shared, GameWorld, Sprite, Tilemap};
+use kiln_core::{Entity, Project, Scene, SceneOffset};
+use kiln_runtime::{spawn_scene as spawn_scene_shared, GameWorld, Sprite};
 
 use crate::textures::TextureLibrary;
 
@@ -66,29 +66,9 @@ pub fn spawn_tilemaps(
     offset: SceneOffset,
     textures: &TextureLibrary,
 ) -> Vec<String> {
-    let mut spawned = Vec::new();
     let tileset_gpu = crate::textures::tileset_textures(project, textures);
-
-    for entity in &scene.entities {
-        let Some(map_id) = entity_tilemap_id(entity) else {
-            continue;
-        };
-        let Some(map) = project.tilemaps.get(&map_id) else {
-            log::warn!("tilemap '{map_id}' not found in project");
-            continue;
-        };
-
-        let transform = entity_transform(entity);
-        let mut tilemap = Tilemap::new(map.clone(), project.tilesets.clone(), tileset_gpu.clone());
-        tilemap.offset = [
-            transform.position.x + offset.x,
-            transform.position.y + offset.y,
-        ];
-        world.spawn((transform, tilemap));
-        spawned.push(map_id);
-    }
-
-    spawned
+    let mut resolve = |tileset_id: &str| tileset_gpu.get(tileset_id).copied();
+    kiln_runtime::spawn_tilemaps(world, project, scene, offset, &mut resolve)
 }
 
 /// Spawn the scene with the given id from `project`, binding GPU textures.
@@ -111,32 +91,4 @@ pub fn spawn_scene_by_id_with_textures(
         }
     };
     spawn_scene_shared(world, project, &scene.id, &mut make_sprite)
-}
-
-/// Read the transform of a scene entity, defaulting to the origin.
-fn entity_transform(entity: &Entity) -> Transform {
-    for component in &entity.components {
-        if let Component::Transform {
-            x,
-            y,
-            rotation,
-            scale,
-        } = component
-        {
-            return Transform::new(*x, *y)
-                .with_rotation(*rotation)
-                .with_scale(kiln_core::Vec2::splat(*scale));
-        }
-    }
-    Transform::default()
-}
-
-/// Read the tilemap id of a scene entity, if it has one.
-fn entity_tilemap_id(entity: &Entity) -> Option<String> {
-    for component in &entity.components {
-        if let Component::Tilemap { map } = component {
-            return Some(map.clone());
-        }
-    }
-    None
 }

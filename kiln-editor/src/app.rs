@@ -9,7 +9,7 @@ use kiln_render::{
     clear_view, execute_passes, Frame2dGraph, PassTiming, RenderTier, SpriteInstance,
     SpriteRenderer,
 };
-use kiln_runtime::{GameWorld, SourceId, Sprite};
+use kiln_runtime::{GameWorld, SourceId, Sprite, Tilemap};
 use kiln_ui::{Button, Label, List, Panel, Widget, WidgetId};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -370,10 +370,10 @@ pub fn scene_from_world(
     let mut entities = Vec::new();
     let mut entity_id = 0;
     let world = world.world_ref();
+
+    // Sprite entities: SourceId + Transform + Sprite.
     let mut query = world.query::<(&SourceId, &Transform, &Sprite)>();
-    eprintln!("DEBUG scene_from_world: query count = {}", query.iter().count());
     for (source_id, transform, sprite) in query.iter() {
-        eprintln!("DEBUG scene_from_world: entity id={} position.x={} position.y={}", source_id.0, transform.position.x, transform.position.y);
         entity_id += 1;
         let id = source_id.0.clone();
         let texture = entity_textures.get(&id).cloned();
@@ -388,6 +388,33 @@ pub fn scene_from_world(
             kiln_core::project::Component::Sprite {
                 color: sprite.color,
                 texture,
+            },
+        ];
+        if let Some(role) = role {
+            components.push(kiln_core::project::Component::Role { role });
+        }
+        entities.push(Entity {
+            id,
+            name: format!("Entity_{}", entity_id),
+            components,
+        });
+    }
+
+    // Tilemap entities: SourceId + Transform + Tilemap.
+    let mut query = world.query::<(&SourceId, &Transform, &Tilemap)>();
+    for (source_id, transform, tilemap) in query.iter() {
+        entity_id += 1;
+        let id = source_id.0.clone();
+        let role = entity_roles.get(&id).cloned();
+        let mut components = vec![
+            kiln_core::project::Component::Transform {
+                x: transform.position.x,
+                y: transform.position.y,
+                rotation: transform.rotation,
+                scale: transform.scale.x,
+            },
+            kiln_core::project::Component::Tilemap {
+                map: tilemap.map_id.clone(),
             },
         ];
         if let Some(role) = role {
@@ -419,7 +446,8 @@ pub fn scene_from_world(
 /// Spawn a project scene into a fresh world for the editor.
 ///
 /// The sprites are bound to the textures that were uploaded for the project,
-/// so the editor's scene view shows the same art as the player.
+/// so the editor's scene view shows the same art as the player. Tilemaps are
+/// spawned with the editor's texture resolver.
 fn spawn_editor_scene(
     project: &Project,
     scene_id: &str,
@@ -437,7 +465,22 @@ fn spawn_editor_scene(
                     .with_size(DEFAULT_SPRITE_SIZE[0], DEFAULT_SPRITE_SIZE[1]),
             }
         };
+    let scene = project
+        .scenes
+        .get(scene_id)
+        .ok_or_else(|| format!("Scene '{scene_id}' not found"))
+        .ok();
     let spawned = kiln_runtime::spawn_scene(&mut world, project, scene_id, &mut make_sprite);
+    if let Some(scene) = scene {
+        let mut resolve = |tileset_id: &str| textures.get(tileset_id).map(|tex| tex.id);
+        kiln_runtime::spawn_tilemaps(
+            &mut world,
+            project,
+            scene,
+            kiln_core::SceneOffset::default(),
+            &mut resolve,
+        );
+    }
     (world, spawned)
 }
 
@@ -719,10 +762,23 @@ impl EditorApp {
     /// This is the size of the project's game window, so the editor frames
     /// the scene the same way the player does.
     fn world_size(&self) -> (f32, f32) {
-        match &self.current_project {
+        let base = match &self.current_project {
             Some(project) => (project.window.width as f32, project.window.height as f32),
             None => (DEFAULT_WORLD_SIZE.0, DEFAULT_WORLD_SIZE.1),
+        };
+        let mut max_x = base.0;
+        let mut max_y = base.1;
+        for (_, tilemap) in self
+            .world
+            .world_ref()
+            .query::<(&Transform, &Tilemap)>()
+            .iter()
+        {
+            let [_, _, right, bottom] = tilemap.world_bounds();
+            max_x = max_x.max(right);
+            max_y = max_y.max(bottom);
         }
+        (max_x, max_y)
     }
 
     /// Reload the edited scene into the editor world.
@@ -1480,6 +1536,18 @@ impl winit::application::ApplicationHandler for EditorApp {
                 for line in scene_view::grid_lines(world.0, world.1, GRID_SPACING, GRID_COLOR) {
                     gpu.scene_view_sprite_renderer.push(line);
                 }
+                // Tilemaps are drawn first so sprites appear on top of them.
+                // Only the chunks inside the camera view are submitted.
+                // The tilemap's offset already accounts for its world position,
+                // so instances are drawn at their absolute world positions.
+                let world_camera = scene_view::world_camera(world.0, world.1);
+                let view_bounds = world_camera.view_bounds();
+                for (_, tilemap) in self.world.world().query::<(&Transform, &Tilemap)>().iter() {
+                    for (texture, instance) in tilemap.collect_visible(view_bounds) {
+                        gpu.scene_view_sprite_renderer
+                            .push_textured(texture, instance);
+                    }
+                }
                 for (transform, sprite) in
                     self.world.world().query::<(&Transform, &Sprite)>().iter()
                 {
@@ -1518,7 +1586,6 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                 }
 
-                let world_camera = scene_view::world_camera(world.0, world.1);
                 let overlay_camera = scene_view::overlay_camera(ViewportRect {
                     x: origin_x,
                     y: origin_y,

@@ -15,6 +15,9 @@ use std::collections::HashMap;
 /// A drawable tilemap instance in the world.
 #[derive(Debug, Clone)]
 pub struct Tilemap {
+    /// Id of the tilemap in [`kiln_core::Project::tilemaps`], used to
+    /// reconstruct the persisted scene entity when saving.
+    pub map_id: String,
     /// The tile data of this map.
     pub map: TileMapData,
     /// Tilesets by id, used to resolve each layer's tileset.
@@ -30,11 +33,13 @@ pub struct Tilemap {
 impl Tilemap {
     /// Create a runtime tilemap from data.
     pub fn new(
+        map_id: String,
         map: TileMapData,
         tilesets: HashMap<String, TileSet>,
         textures: HashMap<String, TextureId>,
     ) -> Self {
         Self {
+            map_id,
             map,
             tilesets,
             textures,
@@ -175,7 +180,7 @@ mod tests {
         let mut textures = HashMap::new();
         textures.insert("terrain".to_string(), TextureId(7));
 
-        Tilemap::new(map, tilesets, textures)
+        Tilemap::new("main".to_string(), map, tilesets, textures)
     }
 
     #[test]
