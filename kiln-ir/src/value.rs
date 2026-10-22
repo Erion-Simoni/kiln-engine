@@ -89,9 +89,9 @@ impl Value {
                 }
             }
             (Value::F64(x), Value::I64(y)) => {
-                // Check if the float is an exact integer
+                // Check if the float is an exact integer, then compare exactly.
                 if x.fract() == 0.0 && x >= i64::MIN as f64 && x <= i64::MAX as f64 {
-                    x == (y as f64)
+                    (x as i64) == y
                 } else {
                     x == (y as f64)
                 }

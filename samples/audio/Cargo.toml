@@ -6,5 +6,19 @@ rust-version.workspace = true
 license.workspace = true
 publish = false
 
+# This sample is its own workspace: the `audio` feature of `kiln-runtime`
+# needs a system audio backend (ALSA headers on Linux, WASAPI on Windows),
+# and a workspace member would force that backend onto every other crate.
+# Build it on its own:
+#
+#   cargo run --manifest-path samples/audio/Cargo.toml
+[workspace]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.87"
+license = "MIT OR Apache-2.0"
+
 [dependencies]
 kiln-runtime = { path = "../../kiln-runtime", features = ["audio"] }

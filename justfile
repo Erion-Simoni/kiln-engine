@@ -6,6 +6,9 @@ check:
     cargo fmt --all -- --check
     cargo clippy --workspace --all-targets -- -D warnings
     cargo check --workspace
+    # The audio sample is its own workspace, because it needs a system audio
+    # backend. It is checked on its own so the main workspace builds everywhere.
+    cargo check --manifest-path samples/audio/Cargo.toml
 
 # run tests with cargo-nextest
 test:
@@ -42,6 +45,10 @@ size:
 assets:
     cargo run --bin kiln-cli -- import --source assets --cache .kiln-cache
     cargo run --bin kiln-cli -- pack --source assets --output assets.kar
+
+# the audio sample needs a system audio backend, so it is its own workspace
+audio:
+    cargo run --manifest-path samples/audio/Cargo.toml
 
 # installers via cargo-dist
 package:

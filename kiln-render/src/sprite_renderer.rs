@@ -347,7 +347,10 @@ impl SpriteRenderer {
         let proj: [f32; 16] = camera.projection_matrix().to_cols_array();
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&proj));
 
-        self.pending.sort_unstable_by_key(|(tex, _)| tex.0);
+        // Sort by texture so each texture is one draw call. The sort is
+        // stable, so sprites of the same texture keep the order they were
+        // queued in, which is the order they are drawn in.
+        self.pending.sort_by_key(|(tex, _)| tex.0);
 
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);

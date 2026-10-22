@@ -25,7 +25,7 @@ pub use post::{PostConfig, PostFramebuffer, PostPipeline};
 pub use post_gpu::{PostGpuPipeline, PostUniforms};
 pub use profiler::{GpuProfiler, PassTiming};
 pub use renderer::Renderer;
-pub use screenshot::{render_graph_screenshot, GOLDEN_LOW_64_SHA256};
+pub use screenshot::{render_graph_screenshot, try_render_graph_screenshot, GOLDEN_LOW_64_SHA256};
 pub use sprite_renderer::{SpriteInstance, SpriteRenderer, MAX_SPRITES};
 pub use texture::{
     build_grid_atlas_rgba, create_rgba8_texture, uv_rect_pixels, TextureId, FULL_UV,

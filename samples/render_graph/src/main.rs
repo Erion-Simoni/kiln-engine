@@ -1,7 +1,8 @@
 //! M28 sample: render graph compile + GPU pass timings + screenshot hash.
 
 use kiln_render::{
-    clear_view, execute_passes, render_graph_screenshot, Frame2dGraph, PassEnableConfig, RenderTier,
+    clear_view, execute_passes, try_render_graph_screenshot, Frame2dGraph, PassEnableConfig,
+    RenderTier,
 };
 
 fn main() {
@@ -47,12 +48,16 @@ tiers = ["high"]
     );
 
     println!("\nOffscreen screenshot (Low, 64×64)…");
-    let (rgba, hash) = render_graph_screenshot(64, 64, RenderTier::Low, &cfg);
-    println!("  bytes: {}  sha256: {}", rgba.len(), hash);
-    println!(
-        "  pixel[0]: rgba({}, {}, {}, {})",
-        rgba[0], rgba[1], rgba[2], rgba[3]
-    );
+    match try_render_graph_screenshot(64, 64, RenderTier::Low, &cfg) {
+        Some((rgba, hash)) => {
+            println!("  bytes: {}  sha256: {}", rgba.len(), hash);
+            println!(
+                "  pixel[0]: rgba({}, {}, {}, {})",
+                rgba[0], rgba[1], rgba[2], rgba[3]
+            );
+        }
+        None => println!("  no GPU adapter; skipped."),
+    }
 
     // Timed graph execute (may be empty if TIMESTAMP_QUERY unsupported)
     demo_gpu_timings(&cfg);

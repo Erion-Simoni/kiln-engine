@@ -15,12 +15,15 @@ pub const GOLDEN_LOW_64_SHA256: &str =
     "d17424c3d09af2033da87d25f93284d553c367319acf9529f19efa8c08eb9478";
 
 /// Render the default 2D graph offscreen and return raw RGBA8 bytes + sha256 hex.
-pub fn render_graph_screenshot(
+///
+/// Returns `None` when the machine has no GPU adapter (headless CI, for
+/// example). There is nothing to screenshot without one.
+pub fn try_render_graph_screenshot(
     width: u32,
     height: u32,
     tier: RenderTier,
     config: &PassEnableConfig,
-) -> (Vec<u8>, String) {
+) -> Option<(Vec<u8>, String)> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::all(),
         ..Default::default()
@@ -29,8 +32,7 @@ pub fn render_graph_screenshot(
         power_preference: wgpu::PowerPreference::LowPower,
         compatible_surface: None,
         force_fallback_adapter: false,
-    }))
-    .expect("adapter");
+    }))?;
 
     let features = requested_profiler_features(&adapter);
     let (device, queue) = pollster::block_on(adapter.request_device(
@@ -181,7 +183,20 @@ pub fn render_graph_screenshot(
     readback.unmap();
 
     let hash = hex_sha256(&rgba);
-    (rgba, hash)
+    Some((rgba, hash))
+}
+
+/// Render the default 2D graph offscreen and return raw RGBA8 bytes + sha256 hex.
+///
+/// Panics when the machine has no GPU adapter. Use
+/// [`try_render_graph_screenshot`] when that is possible.
+pub fn render_graph_screenshot(
+    width: u32,
+    height: u32,
+    tier: RenderTier,
+    config: &PassEnableConfig,
+) -> (Vec<u8>, String) {
+    try_render_graph_screenshot(width, height, tier, config).expect("a GPU adapter")
 }
 
 fn hex_sha256(bytes: &[u8]) -> String {
@@ -211,7 +226,11 @@ mod tests {
     #[test]
     fn screenshot_low_tier_stable_hash() {
         let cfg = PassEnableConfig::default_2d();
-        let (rgba, hash) = render_graph_screenshot(64, 64, RenderTier::Low, &cfg);
+        let Some((rgba, hash)) = try_render_graph_screenshot(64, 64, RenderTier::Low, &cfg) else {
+            // No GPU adapter (headless CI): there is nothing to compare.
+            eprintln!("skipping screenshot test: no GPU adapter");
+            return;
+        };
         assert_eq!(rgba.len(), 64 * 64 * 4);
 
         // First run records; subsequent runs must match. If this fails after an
@@ -227,7 +246,11 @@ mod tests {
         let p = [rgba[0], rgba[1], rgba[2], rgba[3]];
         assert_eq!(p, expected_low_pixel(), "clear color mismatch");
 
-        let (rgba2, hash2) = render_graph_screenshot(64, 64, RenderTier::Low, &cfg);
+        let Some((rgba2, hash2)) = try_render_graph_screenshot(64, 64, RenderTier::Low, &cfg)
+        else {
+            eprintln!("skipping screenshot test: no GPU adapter");
+            return;
+        };
         assert_eq!(hash, hash2, "two renders must match (no visual regression)");
         assert_eq!(rgba, rgba2);
 

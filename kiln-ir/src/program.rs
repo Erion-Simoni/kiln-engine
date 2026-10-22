@@ -128,4 +128,27 @@ impl Program {
     pub fn set_local_slots(&mut self, slots: u16) {
         self.local_slots = slots;
     }
+
+    /// Check that every jump target points inside the instruction stream.
+    ///
+    /// Returns a human-readable error naming the first bad instruction.
+    pub fn validate_jump_targets(&self) -> Result<(), String> {
+        let len = self.instructions.len();
+        for (index, instr) in self.instructions.iter().enumerate() {
+            let label = match instr {
+                Instruction::Jump(l)
+                | Instruction::JumpIf(l)
+                | Instruction::JumpIfNot(l)
+                | Instruction::Call(l) => *l,
+                _ => continue,
+            };
+            if label.0 > len {
+                return Err(format!(
+                    "instruction {} jumps to {} which is past the end of the program ({} instructions)",
+                    index, label.0, len
+                ));
+            }
+        }
+        Ok(())
+    }
 }
