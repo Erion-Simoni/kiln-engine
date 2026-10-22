@@ -569,61 +569,30 @@ impl EditorApp {
     }
 
     /// Save the current project to its file path.
+    ///
+    /// The scene of the world is written into the project first, so the
+    /// edits of the inspector are not lost.
     pub fn save_project(&mut self) -> Result<(), String> {
         let path = self
             .project_path
             .as_ref()
-            .ok_or("No project file open. Use Save As first.")?;
+            .ok_or("No project file open. Use Save As first.")?
+            .clone();
 
-        // Update project with current world state
-        if let Some(project) = &mut self.current_project {
-            // Convert ECS world to project scenes
-            // For now, create a default scene if none exists
-            if project.scenes.is_empty() {
-                use kiln_core::project::{Entity, Scene};
-                let mut entities = Vec::new();
-                let mut entity_id = 0;
-
-                // Iterate over all entities in the world
-                let world = self.world.world();
-                let mut query = world.query::<(&Transform, &Sprite)>();
-                for (transform, sprite) in query.iter() {
-                    entity_id += 1;
-                    entities.push(Entity {
-                        id: entity_id.to_string(),
-                        name: format!("Entity_{}", entity_id),
-                        components: vec![
-                            kiln_core::project::Component::Transform {
-                                x: transform.position.x,
-                                y: transform.position.y,
-                                rotation: transform.rotation,
-                                scale: transform.scale.x, // Store uniform scale as single value
-                            },
-                            kiln_core::project::Component::Sprite {
-                                color: sprite.color,
-                                texture: None,
-                            },
-                        ],
-                    });
-                }
-
-                let scene = Scene {
-                    id: "main_scene".to_string(),
-                    name: "Main Scene".to_string(),
-                    entities,
-                    nested_scenes: vec![],
-                    script: None,
-                };
-
-                project.scenes.insert("main_scene".to_string(), scene);
+        // The world is what the editor shows, so it is what is written.
+        if self.current_project.is_some() {
+            let scene = self.scene_from_world();
+            if let Some(project) = &mut self.current_project {
+                project.scenes.insert(scene.id.clone(), scene);
             }
-
-            let toml_str = project.to_toml().map_err(|e| e.to_string())?;
-            std::fs::write(path, toml_str).map_err(|e| e.to_string())?;
-            Ok(())
-        } else {
-            Err("No project loaded".to_string())
         }
+
+        let Some(project) = &self.current_project else {
+            return Err("No project loaded".to_string());
+        };
+        let toml_str = project.to_toml().map_err(|e| e.to_string())?;
+        std::fs::write(&path, toml_str).map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     /// Save the current project to a new file path.
@@ -822,10 +791,7 @@ impl EditorApp {
     /// The scene is written into the project and the project is written to
     /// disk, so an edit survives closing the editor.
     pub fn save_scene(&mut self) -> Result<(), String> {
-        let scene = self.scene_from_world();
-        if let Some(project) = &mut self.current_project {
-            project.scenes.insert(scene.id.clone(), scene);
-        } else {
+        if self.current_project.is_none() {
             return Err("No project loaded".to_string());
         }
         self.save_project()

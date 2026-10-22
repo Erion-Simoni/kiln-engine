@@ -396,6 +396,8 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
   scene snapshots (`kiln_editor::SceneHistory`), records one before an
   edit, and restores the scene when undoing. The Edit menu enables the
   entries only when there is something to undo or redo.
+- Saving the project writes the scene of the world, so the edits of the
+  inspector are never lost.
 
 ### E-2: Help menu actions
 - [x] Implement Open docs
