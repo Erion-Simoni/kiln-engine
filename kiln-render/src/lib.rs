@@ -6,6 +6,8 @@ pub mod graph;
 pub mod particle_renderer;
 pub mod pass_config;
 pub mod post;
+#[cfg(test)]
+mod post_effects_test;
 pub mod post_gpu;
 pub mod profiler;
 pub mod renderer;
