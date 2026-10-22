@@ -5,6 +5,7 @@ pub mod access;
 pub mod device_tier;
 pub mod id;
 pub mod math;
+pub mod mesh;
 pub mod paths;
 pub mod prefab;
 pub mod project;
@@ -18,6 +19,7 @@ pub use device_tier::{
 };
 pub use id::*;
 pub use math::*;
+pub use mesh::{AlphaMode, Material, Mesh, MeshBounds, MeshHandle, Model, PrimitiveTopology, SubMesh, Vertex, VertexFormat};
 pub use paths::{cache_dir, save_dir, settings_dir};
 pub use prefab::{ComponentOverride, Prefab, PrefabInstance, PrefabOverride};
 pub use project::{
