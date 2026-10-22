@@ -49,6 +49,9 @@ const GRID_SPACING: f32 = 50.0;
 /// The colour of the scene view's grid lines.
 const GRID_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.06];
 
+/// The colour behind the scene view.
+const BACKGROUND_COLOR: [f32; 4] = [0.07, 0.07, 0.08, 1.0];
+
 /// The components an entity can have.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ComponentKind {
@@ -1491,8 +1494,14 @@ impl winit::application::ApplicationHandler for EditorApp {
                 let origin_x = panel.x + viewport.x;
                 let origin_y = panel.y + viewport.y;
 
-                // Queue the world: the grid first, then the entities.
+                // Queue the world: the background first, then the grid, then
+                // the entities.
                 gpu.scene_view_sprite_renderer.begin_frame();
+                gpu.scene_view_sprite_renderer.push(scene_view::background(
+                    world.0,
+                    world.1,
+                    BACKGROUND_COLOR,
+                ));
                 for line in scene_view::grid_lines(world.0, world.1, GRID_SPACING, GRID_COLOR) {
                     gpu.scene_view_sprite_renderer.push(line);
                 }
@@ -1514,9 +1523,20 @@ impl winit::application::ApplicationHandler for EditorApp {
                 gpu.scene_view_overlay_renderer.begin_frame();
                 if let Some(play) = &self.play {
                     let text = kiln_ui::TextRenderer::new();
-                    for (index, line) in play.slice.hud_lines().iter().enumerate() {
+                    let mut lines = play.slice.hud_lines();
+                    // A script that failed says so in the same place the
+                    // player would show it.
+                    if let Some(error) = &play.error {
+                        lines.push(format!("ERROR: {error}"));
+                    }
+                    for (index, line) in lines.iter().enumerate() {
                         let y = 16.0 + index as f32 * 20.0;
-                        let quads = text.render(line, 16.0, y, 16.0, [1.0, 1.0, 1.0, 1.0]);
+                        let color = if line.starts_with("ERROR:") {
+                            [1.0, 0.35, 0.35, 1.0]
+                        } else {
+                            [1.0, 1.0, 1.0, 1.0]
+                        };
+                        let quads = text.render(line, 16.0, y, 16.0, color);
                         for quad in quads {
                             gpu.scene_view_overlay_renderer.push(quad);
                         }
@@ -2049,19 +2069,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                     // The sprites and the HUD are drawn by the engine too, so
                     // the editor shows the same pixels the player shows. The
-                    // panel only shows the error of a failed script, which
-                    // the engine cannot draw.
-                    if let Some(play) = &self.play {
-                        if let Some(error) = &play.error {
-                            ui.painter().text(
-                                egui::pos2(rect.left() + 12.0, rect.bottom() - 20.0),
-                                egui::Align2::LEFT_BOTTOM,
-                                error,
-                                egui::FontId::monospace(13.0),
-                                egui::Color32::from_rgba_premultiplied(255, 90, 90, 255),
-                            );
-                        }
-                    }
+                    // panel itself draws nothing over the canvas.
 
                     // Entity list for selection
                     ui.add_space(8.0);

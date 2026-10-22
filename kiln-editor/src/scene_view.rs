@@ -221,6 +221,13 @@ pub fn texture_paths(project: &Project) -> Vec<String> {
     paths
 }
 
+/// The background of the scene view, as a world-space quad.
+///
+/// The quad covers the whole world region, so it fills the viewport exactly.
+pub fn background(world_w: f32, world_h: f32, color: [f32; 4]) -> SpriteInstance {
+    SpriteInstance::colored([world_w / 2.0, world_h / 2.0], [world_w, world_h], color)
+}
+
 /// The grid lines of the scene view, as world-space quads.
 ///
 /// The lines sit on the world grid, so they line up with the world however the

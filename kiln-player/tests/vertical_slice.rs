@@ -194,3 +194,62 @@ fn sample_world(game: &loader::LoadedGame) -> GameWorld {
     spawn_scene(&mut world, &game.project, &game.scene_id, &mut make_sprite);
     world
 }
+
+#[test]
+fn the_sample_runs_from_a_packed_archive() {
+    // The player is usually started with `--archive`, so the sample has to
+    // survive being packed into an archive and loaded back.
+    let dir = std::env::temp_dir().join("kiln-vertical-slice-archive");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("the directory is created");
+
+    let sample = sample_dir();
+    let mut archive = kiln_assets::Archive::new(dir.join("sample.kar"));
+    let files: Vec<PathBuf> = [
+        "kiln.toml",
+        "scripts/main.ks",
+        "art/hero.png",
+        "art/coin.png",
+        "art/ground.png",
+    ]
+    .iter()
+    .map(|name| sample.join(name))
+    .collect();
+    archive.pack(&files).expect("the sample packs");
+
+    // The archive holds the manifest and the assets, so the game loads and
+    // plays the same way it does from a directory.
+    let game = loader::load(&dir.join("sample.kar"), None).expect("the archive loads");
+    assert_eq!(game.project.name, "Kiln Vertical Slice");
+    assert_eq!(game.scene_id, "main");
+
+    let scene = game.project.scenes.get(&game.scene_id).unwrap();
+    let script_path = scene.script.as_ref().expect("the scene has a script");
+    let source = String::from_utf8(
+        game.assets
+            .get(script_path)
+            .expect("the script is in the archive")
+            .clone(),
+    )
+    .expect("the script is text");
+    let mut session = SliceSession::new(&source).expect("the script compiles");
+
+    let mut world = GameWorld::new();
+    let mut make_sprite =
+        |_entity: &kiln_core::project::Entity, color: [f32; 4], _texture: Option<&str>| {
+            Sprite::new(color[0], color[1], color[2], color[3]).with_size(16.0, 16.0)
+        };
+    spawn_scene(&mut world, &game.project, &game.scene_id, &mut make_sprite);
+
+    for _ in 0..300 {
+        session
+            .step(&mut world, (1.0, 0.0), 1.0 / 60.0)
+            .expect("the script runs");
+    }
+    assert!(
+        session.state().score > 0,
+        "the player collected a coin from the archive"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

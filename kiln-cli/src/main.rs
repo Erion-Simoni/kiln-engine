@@ -3,11 +3,62 @@ use clap::{Parser, Subcommand};
 use kiln_assets::{Archive, AssetCache};
 use kiln_updater::{dlc::DlcMetadata, generate_patch};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+
+/// Collect every file below a directory, recursively.
+///
+/// The project of a game holds its art and its scripts in folders, so the
+/// whole tree is packed.
+fn collect_files(dir: &Path) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for entry in walkdir::WalkDir::new(dir) {
+        let entry = entry.map_err(|e| anyhow::anyhow!("{e}"))?;
+        if entry.file_type().is_file() {
+            files.push(entry.path().to_path_buf());
+        }
+    }
+    files.sort();
+    Ok(files)
+}
+
+/// Find a project template by name.
+///
+/// The templates live in the repository, so the CLI looks for them next to
+/// the working directory, in the directory of the executable and in the
+/// repository itself. That way `kiln-cli init` works from anywhere.
+fn find_template(name: &str) -> Result<PathBuf> {
+    let file_name = format!("{name}.ron");
+    let mut candidates = vec![PathBuf::from("templates").join(&file_name)];
+
+    if let Ok(exe) = std::env::current_exe() {
+        // The templates live in the repository, so the search walks up from
+        // the executable: `target/debug/kiln-cli` sits three levels below
+        // the repository root.
+        for dir in exe.ancestors().take(4) {
+            candidates.push(dir.join("templates").join(&file_name));
+        }
+    }
+
+    for candidate in &candidates {
+        if candidate.is_file() {
+            return Ok(candidate.clone());
+        }
+    }
+
+    anyhow::bail!(
+        "The template '{}' was not found. Looked in: {}",
+        name,
+        candidates
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
 
 fn generate_steam_vdf() -> String {
     r#""appbuild"
@@ -169,18 +220,19 @@ fn main() -> Result<()> {
             println!("Output directory: {}", output_dir.display());
 
             // Map template name to file
-            let template_file = match template.as_str() {
-                "empty_2d" => "templates/empty_2d.ron",
-                "platformer" => "templates/platformer.ron",
-                "topdown" => "templates/topdown.ron",
+            let template_name = match template.as_str() {
+                "empty_2d" => "empty_2d",
+                "platformer" => "platformer",
+                "topdown" => "topdown",
                 _ => anyhow::bail!(
                     "Unknown template: {}. Available: empty_2d, platformer, topdown",
                     template
                 ),
             };
+            let template_file = find_template(template_name)?;
 
             // Read template
-            let template_content = fs::read_to_string(template_file)?;
+            let template_content = fs::read_to_string(&template_file)?;
 
             // Parse as RON
             let mut project: kiln_core::Project = ron::from_str(&template_content)?;
@@ -226,11 +278,9 @@ fn main() -> Result<()> {
             output,
             version,
         } => {
-            let files: Vec<PathBuf> = std::fs::read_dir(&source)?
-                .filter_map(|e| e.ok())
-                .filter(|e| e.path().is_file())
-                .map(|e| e.path())
-                .collect();
+            // The whole project is packed, so the art and the scripts end
+            // up in the archive and the player can run it.
+            let files = collect_files(&source)?;
 
             println!("Packing {} files into: {}", files.len(), output.display());
             let mut archive = Archive::new(output);

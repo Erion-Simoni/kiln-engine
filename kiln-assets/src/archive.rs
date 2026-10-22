@@ -53,6 +53,57 @@ impl Archive {
         }
     }
 
+    /// The directory the files share, if they share one.
+    ///
+    /// The paths in the archive are relative to it, so the folders of a
+    /// project survive the round trip.
+    fn common_root(files: &[PathBuf]) -> Option<PathBuf> {
+        let mut root: Option<PathBuf> = None;
+        for path in files {
+            let parent = match path.parent() {
+                Some(parent) if !parent.as_os_str().is_empty() => parent.to_path_buf(),
+                _ => continue,
+            };
+            root = Some(match root {
+                None => parent,
+                Some(current) => {
+                    let shared: Vec<_> = current
+                        .components()
+                        .zip(parent.components())
+                        .take_while(|(a, b)| a == b)
+                        .map(|(a, _)| a)
+                        .collect();
+                    if shared.is_empty() {
+                        return None;
+                    }
+                    shared.iter().collect()
+                }
+            });
+        }
+        root
+    }
+
+    /// The path a file gets inside the archive.
+    ///
+    /// The path relative to the common root of the files is kept, so a
+    /// project that holds `scripts/main.ks` and `art/hero.png` keeps both
+    /// folders in the archive and the manifest can still find them. A file
+    /// outside the common root keeps only its file name.
+    fn archive_entry_path(path: &Path, root: Option<&Path>) -> String {
+        let relative = root.and_then(|root| path.strip_prefix(root).ok());
+        let chosen = relative.unwrap_or_else(|| path.file_name().map(Path::new).unwrap_or(path));
+
+        let text = chosen.to_string_lossy().replace('\\', "/");
+        if text.is_empty() {
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown")
+                .to_string()
+        } else {
+            text
+        }
+    }
+
     /// Pack files into the archive (V1 format for backward compatibility).
     pub fn pack(&mut self, files: &[PathBuf]) -> Result<(), ArchiveError> {
         self.pack_with_version(files, None)
@@ -98,6 +149,10 @@ impl Archive {
         let mut entries: Vec<ArchiveEntry> = Vec::new();
         let mut data_offset = writer.stream_position()?;
 
+        // The files share a root, which is what the paths in the archive are
+        // relative to. A project directory therefore keeps its folders.
+        let root = Self::common_root(files);
+
         // Write file data
         for path in files {
             let file = File::open(path)?;
@@ -105,15 +160,10 @@ impl Archive {
             let size = metadata.len();
 
             let entry = ArchiveEntry {
-                path: path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("unknown")
-                    .to_string(),
+                path: Self::archive_entry_path(path, root.as_deref()),
                 offset: data_offset,
                 size,
             };
-
             let mut reader = BufReader::new(file);
             io::copy(&mut reader, &mut writer)?;
 
@@ -511,6 +561,44 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::TempDir;
+
+    #[test]
+    fn a_packed_project_keeps_its_folders() {
+        // A project holds `kiln.toml`, `scripts/main.ks` and `art/hero.png`,
+        // and the manifest finds the other two by their path, so the archive
+        // has to keep the folders.
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path().join("project");
+        fs::create_dir_all(root.join("scripts")).unwrap();
+        fs::create_dir_all(root.join("art")).unwrap();
+        fs::write(root.join("kiln.toml"), b"id = \"x\"").unwrap();
+        fs::write(root.join("scripts/main.ks"), b"move_player(1.0, 0.0);").unwrap();
+        fs::write(root.join("art/hero.png"), b"png").unwrap();
+
+        let archive_path = temp_dir.path().join("project.kar");
+        let mut archive = Archive::new(archive_path.clone());
+        let files = vec![
+            root.join("kiln.toml"),
+            root.join("scripts/main.ks"),
+            root.join("art/hero.png"),
+        ];
+        archive.pack(&files).unwrap();
+
+        let loaded = Archive::load(&archive_path).unwrap();
+        let names = loaded.list();
+        assert!(
+            names.contains(&"scripts/main.ks"),
+            "the script keeps its folder: {names:?}"
+        );
+        assert!(
+            names.contains(&"art/hero.png"),
+            "the art keeps its folder: {names:?}"
+        );
+        assert!(
+            loaded.extract("scripts/main.ks").is_ok(),
+            "the script is found by its path"
+        );
+    }
 
     #[test]
     fn pack_and_extract() {

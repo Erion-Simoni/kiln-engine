@@ -16,3 +16,4 @@ anyhow = { workspace = true }
 serde_json = { workspace = true }
 ron = { workspace = true }
 uuid = { workspace = true }
+walkdir = { workspace = true }
