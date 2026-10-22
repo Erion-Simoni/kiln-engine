@@ -90,10 +90,9 @@ fn an_inspector_edit_is_written_to_the_scene_and_can_be_undone() {
         let world = world.world_mut();
         let mut query = world.query::<(&mut kiln_core::Transform, &mut kiln_runtime::Sprite)>();
         let mut position = None;
-        for (transform, _) in query.iter() {
+        if let Some((transform, _)) = query.iter().next() {
             transform.position.x += 25.0;
             position = Some(transform.position.x);
-            break;
         }
         position.expect("the scene has an entity")
     };

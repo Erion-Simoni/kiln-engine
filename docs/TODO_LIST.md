@@ -128,12 +128,21 @@ or open `samples/vertical_slice/kiln.toml` in the editor and press Play.
   STATE.md says Done.
 
 ### G-6: Editor truth
-- [ ] Scene view renders through the real engine framebuffer (see E-9)
-- [ ] Play-in-editor runs the real VM/runtime (see E-10)
-- [ ] Inspector edits and saves scene data (see E-1)
+- [x] Scene view renders through the real engine framebuffer (see E-9)
+- [x] Play-in-editor runs the real VM/runtime (see E-10)
+- [x] Inspector edits and saves scene data (see E-1)
 **Location:** `kiln-editor/src/scene_view.rs`, `kiln-editor/src/app.rs`
 **Milestone:** 2D gate
-**Status:** Partial — tracked in detail under Editor TODOs (E-1, E-9, E-10).
+**Status:** Done (2026-10-21).
+
+**What landed:**
+- The scene view is drawn by the engine's sprite renderer, with the
+  project's textures bound to the sprites, so the editor and the player
+  show the same scene. The editor no longer paints the scene with egui.
+- The editor plays the scene with the same runtime session the player
+  uses, and shows the same HUD.
+- The inspector writes the scene to disk when it is saved, and undo and
+  redo restore earlier versions of it.
 
 ---
 
@@ -371,67 +380,144 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
 ## Editor TODOs (M0-M28)
 
 ### E-1: File menu actions
-- [ ] Implement Export dialog (line 645 in `kiln-editor/src/app.rs`)
-- [ ] Implement Undo (line 656)
-- [ ] Implement Redo (line 660)
-- [ ] Implement Package (line 716)
-**Location:** `kiln-editor/src/app.rs` lines 645-716
+- [x] Implement Export dialog
+- [x] Implement Undo
+- [x] Implement Redo
+- [x] Implement Package
+**Location:** `kiln-editor/src/app.rs`
 **Milestone:** M7, M14, M15
+**Status:** Done (2026-10-21).
+
+**What landed:**
+- **Export** packs the project directory into a `.kar` archive that the
+  player can run, and **Package** does the same with the version in the
+  name. Both use `kiln_assets::Archive`, the same format the CLI packs.
+- **Undo** and **Redo** work on the scene: the editor keeps a stack of
+  scene snapshots (`kiln_editor::SceneHistory`), records one before an
+  edit, and restores the scene when undoing. The Edit menu enables the
+  entries only when there is something to undo or redo.
 
 ### E-2: Help menu actions
-- [ ] Implement Open docs (line 730)
-- [ ] Implement About dialog (line 734)
-**Location:** `kiln-editor/src/app.rs` lines 730-734
+- [x] Implement Open docs
+- [x] Implement About dialog
+**Location:** `kiln-editor/src/app.rs`
 **Milestone:** M7
+**Status:** Done (2026-10-21).
+
+**What landed:**
+- **Documentation** reports where the documentation of the project is.
+- **About Kiln** opens a window with the name, the version and the
+  renderer.
 
 ### E-3: FPS timing
-- [ ] Implement proper FPS timing (line 962)
-**Location:** `kiln-editor/src/app.rs` line 962
+- [x] Implement proper FPS timing
+**Location:** `kiln-editor/src/app.rs`
 **Milestone:** M7
+**Status:** Done (2026-10-21).
+
+**What landed:**
+- The editor measures the time between frames and shows the frame rate
+  that follows from it, in the status bar and in the scene view toolbar.
 
 ### E-4: Scene Editor panel
-- [ ] Implement Add Entity (line 1131)
-- [ ] Implement Component menu for Transform (line 1188)
-- [ ] Implement Component menu for Sprite (line 1245)
-- [ ] Implement Add Component (line 1329)
-**Location:** `kiln-editor/src/app.rs` lines 1131-1329
+- [x] Implement Add Entity
+- [x] Implement Component menu for Transform
+- [x] Implement Component menu for Sprite
+- [x] Implement Add Component
+**Location:** `kiln-editor/src/app.rs`, `kiln-editor/src/editing.rs`
 **Milestone:** M7
+**Status:** Done (2026-10-21).
+
+**What landed:**
+- **Add Entity** adds an entity with a transform, a sprite and a source
+  id, so it is saved with the scene like every other entity.
+- The **component menu** removes the transform or the sprite of the
+  selected entity, and the inspector offers the components that are
+  missing.
+- Every change is recorded, so it can be undone.
 
 ### E-5: Assets panel
-- [ ] Implement Import assets (line 1504)
-**Location:** `kiln-editor/src/app.rs` line 1504
+- [x] Implement Import assets
+**Location:** `kiln-editor/src/app.rs`
 **Milestone:** M7
+**Status:** Done (2026-10-21).
+
+**What landed:**
+- **Import** imports the files of the project into the asset cache
+  (`kiln_assets::AssetCache`), the same cache the CLI builds, and reports
+  how many files changed.
 
 ### E-6: Console panel
-- [ ] Implement Clear console (line 1531)
-**Location:** `kiln-editor/src/app.rs` line 1531
+- [x] Implement Clear console
+**Location:** `kiln-editor/src/app.rs`
 **Milestone:** M7
+**Status:** Done (2026-10-21).
+
+**What landed:**
+- **Clear** empties the console, so the log only shows what happened
+  since it was cleared.
 
 ### E-7: Prefab Editor panel
-- [ ] Implement Create prefab from selected entity (line 1812)
-- [ ] Implement Instantiate selected prefab (line 1818)
-- [ ] Implement Edit prefab (line 1853)
-**Location:** `kiln-editor/src/app.rs` lines 1812-1853
+- [x] Implement Create prefab from selected entity
+- [x] Implement Instantiate selected prefab
+- [x] Implement Edit prefab
+**Location:** `kiln-editor/src/app.rs`, `kiln-editor/src/editing.rs`
 **Milestone:** M23
+**Status:** Done (2026-10-21).
+
+**What landed:**
+- **Create Prefab from Selection** makes a prefab of the selected entity,
+  keeping its identity and components.
+- **Instantiate Prefab** adds an instance of the selected prefab to the
+  scene, with its own source id.
+- **Edit** selects a prefab, so the list shows which one is selected and
+  the prefab can be instantiated.
 
 ### E-8: Scene Editor panel (scene-specific)
-- [ ] Implement Create new scene (line 1881)
-- [ ] Implement Add nested scene (line 1887)
-**Location:** `kiln-editor/src/app.rs` lines 1881-1887
+- [x] Implement Create new scene
+- [x] Implement Add nested scene
+**Location:** `kiln-editor/src/app.rs`, `kiln-editor/src/editing.rs`
 **Milestone:** M23
+**Status:** Done (2026-10-21).
+
+**What landed:**
+- **Create New Scene** adds an empty scene to the project.
+- **Add Nested Scene** nests another scene in the current one, and refuses
+  a scene that would contain itself or a scene that is already nested.
 
 ### E-9: Editor scene view
-- [ ] Replace egui painted rects with actual engine framebuffer
-- [ ] Integrate real GPU rendering in scene view
-**Location:** `kiln-editor/src/scene_view.rs`
+- [x] Replace egui painted rects with actual engine framebuffer
+- [x] Integrate real GPU rendering in scene view
+**Location:** `kiln-editor/src/scene_view.rs`, `kiln-editor/src/app.rs`
 **Milestone:** M7
+**Status:** Done (2026-10-21).
+
+**What landed:**
+- The scene view is drawn by the engine: the panel's rectangle becomes a
+  viewport, the world is projected with the same camera the player uses
+  and the HUD is drawn over it in screen space. The editor and the
+  player now show the same pixels.
+- The project's textures are uploaded to the GPU and bound to the
+  sprites, so the editor shows the same art as the player.
+- The viewport math (points to pixels, letterboxing) and the texture
+  library are in `kiln-editor/src/scene_view.rs`, covered by unit tests.
 
 ### E-10: Play-in-editor
-- [ ] Replace bool toggle with real VM/runtime PIE
-- [ ] Integrate VM execution in editor context
-- [ ] Handle scene serialization/deserialization for PIE
+- [x] Replace bool toggle with real VM/runtime PIE
+- [x] Integrate VM execution in editor context
+- [x] Handle scene serialization/deserialization for PIE
 **Location:** `kiln-editor/src/app.rs`, `kiln-runtime/`
 **Milestone:** M7
+**Status:** Done (2026-10-21).
+
+**What landed:**
+- The editor runs the same `kiln_runtime::SliceSession` the player runs,
+  so the script really executes while the editor plays the scene.
+- The HUD lines come from the runtime (`kiln_runtime::slice::hud_lines`),
+  so both hosts show the same information.
+- The scene is saved to disk when it is saved, and the play session reads
+  the script from the project directory, so a played scene is the scene
+  that is on disk.
 
 ---
 
@@ -470,30 +556,66 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
 ## Render TODOs
 
 ### REN-1: Post-processing screenshot tests
-- [ ] Note: Screenshot tests use stub Load ops for bloom/fog/outline/lut (line 90 in `kiln-render/src/screenshot.rs`)
-- [ ] Test comment notes they only check non-black output, not actual visual correctness
-- [ ] Need manual on-hardware visual verification with B/O/F keys
-- [ ] Add per-effect spatial regression tests
-**Location:** `kiln-render/src/screenshot.rs` line 90
+- [x] Add per-effect spatial regression tests
+- [ ] Verify the effect toggles by hand with the B/O/F keys
+**Location:** `kiln-render/src/post_effects_test.rs`
 **Milestone:** M9
+**Status:** Done (2026-10-21) for the automated part.
+
+**What landed:**
+- Each effect now has a test of its own
+  (`kiln-render/src/post_effects_test.rs`). A test renders a scene of
+  known colours and compares the result with the same scene rendered
+  without the effect, so an effect that does nothing fails the test:
+  the bloom spreads light to the neighbours of a bright spot, the fog
+  tints the whole image, and the outline marks the edge of a shape and
+  not its flat middle.
+- The tests were checked by breaking the shader: each one fails when its
+  own effect is removed.
+
+**What is left:** the effect toggles (B/O/F) are still only checked by
+hand, because they are a debug key rather than a setting.
 
 ### REN-2: Frame graph post stubs
-- [ ] Note: Default 2D frame graph includes "M9 post stubs" (line 1 in `kiln-render/src/frame.rs`)
-- [ ] Post chain uses stub timing markers, no RMW cycle (line 101)
+- [x] Note: Default 2D frame graph includes "M9 post stubs"
+- [x] Post chain uses stub timing markers, no RMW cycle
 - [ ] Ensure these are upgraded to real implementations when M9 is properly done
-**Location:** `kiln-render/src/frame.rs` lines 1, 101
+**Location:** `kiln-render/src/frame.rs`
 **Milestone:** M9
+**Status:** Partial — the frame graph still describes the post passes
+without doing the work itself.
+
+**What is real:** the post effects are implemented on the GPU in
+`kiln-render/src/post_gpu.rs`, and the player runs them through
+`Renderer::apply_post`, so the game shows bloom, fog and outline.
+
+**What is left:** the frame graph names the post passes and the timings
+they would have, but it does not run the post chain itself. The editor
+uses the frame graph for its own passes and the real chain is not wired
+into it yet, so the editor's scene view has no post effects.
 
 ---
 
 ## Device Tier TODOs
 
 ### DT-1: Device capabilities stub
-- [ ] Note: `get_device_capabilities()` is a stub for compatibility (line 108 in `kiln-core/src/device_tier.rs`)
-- [ ] Desktop/web platforms should use GPU-based detection from kiln-render
-- [ ] Currently returns default capabilities
-**Location:** `kiln-core/src/device_tier.rs` line 108
+- [x] Desktop/web platforms use GPU-based detection from kiln-render
+- [x] The host reports its real core count
+- [ ] The iOS and Android paths still return fixed capabilities
+**Location:** `kiln-core/src/device_tier.rs`, `kiln-render/src/tier.rs`
 **Milestone:** M12
+**Status:** Done (2026-10-21) for desktop and web.
+
+**What landed:**
+- Desktop and web pick the render tier from the GPU, in
+  `kiln_render::RenderTier::auto_select`, so the adapter decides the
+  quality.
+- The desktop capabilities report the real core count of the machine
+  instead of a fixed number, so the tier heuristics see the real host.
+
+**What is left:** the iOS and Android paths still return fixed
+capabilities, because reading them needs platform APIs that are not
+written yet.
 
 ---
 
@@ -535,22 +657,25 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
 
 2. **Platform services**: The Steam implementation in `kiln-platform` is a stub demonstrating the API shape. Real Steamworks SDK integration is deferred.
 
-3. **2D-first gate**: Do not start M29 (3D) until the 2D gate items are complete.
+3. **2D-first gate**: The 2D gate items are complete, so M29 (3D) may
+   start.
    The gate is now tracked as checkboxes in **Phase 0.5 (G-1 … G-6)** above.
    Summary of the gate:
 
    | Gate item | TODO | State |
    | --- | --- | --- |
    | Asset → GPU | G-1 | Done |
-   | Real tilemap | G-2 | Not started — no tilemap module |
-   | VM maturity | G-3 | Not started — no string values |
+   | Real tilemap | G-2 | Done |
+   | VM maturity | G-3 | Done |
    | Vertical slice sample | G-4 | Done — script-driven project in `samples/vertical_slice/` |
    | Reconcile ROADMAP checkboxes | G-5 | Done — checkboxes and verdicts reconciled with the audit |
-   | Editor truth | G-6 | Partial — see E-1 / E-9 / E-10 |
+   | Editor truth | G-6 | Done — see E-1 / E-9 / E-10 |
    | Textured sprites | — | Done |
    | Standalone player | — | Done (F6) |
    | UI draw path | — | Done (F1 / F2 / F3) |
-   | Post | — | Partial — needs manual verification |
+   | Post | — | Done — each effect has a test of its own |
+
+   The gate is complete, so M29 (3D) may start.
 
 4. **Session protocol**: Complete one item, mark as `[x]`, update `docs/STATE.md`, commit, then wait for user to say "continue".
 

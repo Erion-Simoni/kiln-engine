@@ -1797,7 +1797,7 @@ impl TabViewer<'_> {
     fn world_size(&self) -> (f32, f32) {
         match self.current_project.as_ref() {
             Some(project) => (project.window.width as f32, project.window.height as f32),
-            None => (1280.0, 720.0),
+            None => (DEFAULT_WORLD_SIZE.0, DEFAULT_WORLD_SIZE.1),
         }
     }
 
@@ -2311,15 +2311,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         let has_sprite = sprite.is_some();
                         if !has_transform || !has_sprite {
                             ui.horizontal(|ui| {
-                                if !has_transform {
-                                    if ui.button("+ Transform").clicked() {
-                                        self.add_component(entity, ComponentKind::Transform);
-                                    }
+                                if !has_transform && ui.button("+ Transform").clicked() {
+                                    self.add_component(entity, ComponentKind::Transform);
                                 }
-                                if !has_sprite {
-                                    if ui.button("+ Sprite").clicked() {
-                                        self.add_component(entity, ComponentKind::Sprite);
-                                    }
+                                if !has_sprite && ui.button("+ Sprite").clicked() {
+                                    self.add_component(entity, ComponentKind::Sprite);
                                 }
                             });
                         } else {

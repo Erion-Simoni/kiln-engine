@@ -810,3 +810,64 @@ when a program starts running.
   own scope.
 - Variables live in the VM, so they are reset for every run of a program —
   a per-frame script has to keep its state in the host (the slice state).
+
+---
+
+## ADR-0032: The editor draws the scene with the engine (accepted)
+
+**Date:** 2026-10-21
+**Status:** accepted
+
+**Decision:** The editor's scene view is drawn by the engine's sprite
+renderer, not painted with egui. The panel's rectangle (in egui points) is
+converted to physical pixels, letterboxed against the world's aspect ratio and
+used as a viewport. The world is projected with the same camera the player
+uses and the HUD is drawn over it in screen space. The project's textures are
+uploaded to the GPU and bound to the sprites.
+
+**Alternatives:**
+- Keep painting the scene with egui: the editor and the player then show the
+  same scene differently. The editor had no GPU textures (so the art was
+  missing) and it flipped the vertical axis, so an entity was not where the
+  player put it.
+- Render the editor's scene into an offscreen texture and show it as an egui
+  image: that needs a copy of the texture every frame and a second sampling
+  path, for the same result.
+
+**Consequences:**
+- The editor and the player show the same pixels, so what the editor shows is
+  what the game shows.
+- The editor needs the project's textures on the GPU, so the textures are
+  uploaded when a project is opened and bound to the sprites at spawn time.
+- The editor's scene view has no post effects, because the frame graph still
+  names the post passes without running the post chain. The player runs the
+  real chain through `Renderer::apply_post`.
+- The viewport math (points to pixels, letterboxing) lives in
+  `kiln-editor/src/scene_view.rs` and is covered by unit tests.
+
+---
+
+## ADR-0033: Scene edits are undone from scene snapshots (accepted)
+
+**Date:** 2026-10-21
+**Status:** accepted
+
+**Decision:** Undo and redo work on the scene. The editor keeps a stack of
+scene snapshots, records one before an edit, and restores the scene when
+undoing. The scene is written to disk when it is saved.
+
+**Alternatives:**
+- Undo each field edit separately: the inspector edits the world directly, so
+  a field-level history would need a record per control and a way to apply it
+  again, which is more code for the same result.
+- Undo at the file level: the editor would have to write the project file
+  after every change, which makes every edit slow and leaves the project file
+  in states the user never asked for.
+
+**Consequences:**
+- One drag of a value is one undo step, because the scene is recorded when
+  the drag starts.
+- The scene data is the unit of undo, so a change that spans two components
+  is undone as one step.
+- The scene is saved from the world, so the world stays the source of truth
+  while editing and the scene data is what is written to disk.

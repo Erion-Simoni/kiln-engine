@@ -334,14 +334,18 @@ fn bloom_spreads_light_to_the_neighbours() {
     let height = 16u32;
     let center = (8u32, 8u32);
 
-    let mut bloom = PostConfig::default();
-    bloom.bloom_threshold = 0.5;
-    bloom.bloom_intensity = 1.0;
-    bloom.fog_density = 0.0;
-    bloom.outline_thickness = 0.0;
+    let bloom = PostConfig {
+        bloom_threshold: 0.5,
+        bloom_intensity: 1.0,
+        fog_density: 0.0,
+        outline_thickness: 0.0,
+        ..PostConfig::default()
+    };
 
-    let mut plain = bloom;
-    plain.bloom_intensity = 0.0;
+    let plain = PostConfig {
+        bloom_intensity: 0.0,
+        ..bloom
+    };
 
     let scene = vec![(center.0, center.1, [1.0, 1.0, 1.0])];
 
@@ -370,14 +374,18 @@ fn fog_tints_the_whole_image() {
     let width = 8u32;
     let height = 8u32;
 
-    let mut fog = PostConfig::default();
-    fog.bloom_intensity = 0.0;
-    fog.outline_thickness = 0.0;
-    fog.fog_density = 0.5;
-    fog.fog_color = [1.0, 0.0, 0.0];
+    let fog = PostConfig {
+        bloom_intensity: 0.0,
+        outline_thickness: 0.0,
+        fog_density: 0.5,
+        fog_color: [1.0, 0.0, 0.0],
+        ..PostConfig::default()
+    };
 
-    let mut plain = fog;
-    plain.fog_density = 0.0;
+    let plain = PostConfig {
+        fog_density: 0.0,
+        ..fog
+    };
 
     // A green scene, so the red fog colour shows up as red.
     let scene = vec![(4u32, 4u32, [0.0, 1.0, 0.0])];
@@ -409,15 +417,19 @@ fn outline_marks_the_edge_of_a_shape() {
     let height = 16u32;
     let middle = (8u32, 8u32);
 
-    let mut outline = PostConfig::default();
-    outline.bloom_intensity = 0.0;
-    outline.fog_density = 0.0;
-    outline.outline_thickness = 1.0;
-    outline.outline_threshold = 0.1;
-    outline.outline_color = [1.0, 0.0, 0.0, 1.0];
+    let outline = PostConfig {
+        bloom_intensity: 0.0,
+        fog_density: 0.0,
+        outline_thickness: 1.0,
+        outline_threshold: 0.1,
+        outline_color: [1.0, 0.0, 0.0, 1.0],
+        ..PostConfig::default()
+    };
 
-    let mut plain = outline;
-    plain.outline_thickness = 0.0;
+    let plain = PostConfig {
+        outline_thickness: 0.0,
+        ..outline
+    };
 
     // A white block in the middle of a black image.
     let mut scene = Vec::new();

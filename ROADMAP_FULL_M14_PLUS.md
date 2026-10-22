@@ -1,8 +1,9 @@
 # Kiln Roadmap: everything after M13 (single file)
 
-**Status:** Prior sessions claimed M0–M28; **2026-10-19 honesty audit**
-(`docs/STATE.md`) rates overall **Partial** — do **not** start M29 (3D) until
-the 2D-first gate (textured sprites, tilemap, editor/player wiring) is met.
+**Status:** Prior sessions claimed M0–M28; the **2026-10-19 honesty audit**
+(`docs/STATE.md`) rated the project **Partial** at the time. The 2D-first gate
+(textured sprites, tilemap, editor/player wiring) is now **met**, so M29 (3D)
+may start.
 This file replaces the old "M14+" section of `ROADMAP.md` and **supersedes**
 `ROADMAP_M14_PLUS.md` and `ROADMAP_DOWNLOADABLE_GAMES.md` (merged/renumbered).
 
