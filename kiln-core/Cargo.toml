@@ -12,3 +12,4 @@ toml = { workspace = true }
 uuid = { workspace = true }
 dirs = { workspace = true }
 ron = { workspace = true }
+hecs = { workspace = true }

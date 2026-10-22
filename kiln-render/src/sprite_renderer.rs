@@ -352,6 +352,13 @@ impl SpriteRenderer {
         // queued in, which is the order they are drawn in.
         self.pending.sort_by_key(|(tex, _)| tex.0);
 
+        let proj: [f32; 16] = camera.projection_matrix().to_cols_array();
+        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&proj));
+
+        // Collect all instances into a single buffer upload.
+        let all: Vec<SpriteInstance> = self.pending.iter().map(|(_, inst)| *inst).collect();
+        queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&all));
+
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.quad_vertices.slice(..));
@@ -365,17 +372,15 @@ impl SpriteRenderer {
                 i += 1;
             }
             let count = i - start;
-            let mut instances = Vec::with_capacity(count);
-            for (_, inst) in &self.pending[start..i] {
-                instances.push(*inst);
-            }
-
-            queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instances));
 
             let slot = &self.textures[tex_id.0 as usize];
             render_pass.set_bind_group(1, &slot.bind_group, &[]);
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-            render_pass.draw_indexed(0..QUAD_INDICES.len() as u32, 0, 0..count as u32);
+            render_pass.draw_indexed(
+                0..QUAD_INDICES.len() as u32,
+                0,
+                start as u32..(start + count) as u32,
+            );
             self.last_draw_calls += 1;
         }
     }

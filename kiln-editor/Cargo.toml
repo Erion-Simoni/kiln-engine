@@ -12,6 +12,14 @@ repository = "https://github.com/kiln-engine/kiln"
 name = "kiln-editor"
 path = "src/main.rs"
 
+[[test]]
+name = "vertical_slice"
+path = "tests/vertical_slice.rs"
+
+[[test]]
+name = "scene_view_test"
+path = "src/scene_view_test.rs"
+
 [dependencies]
 kiln-core = { workspace = true }
 kiln-render = { workspace = true }

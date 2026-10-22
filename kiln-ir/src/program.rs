@@ -14,6 +14,40 @@ impl fmt::Display for Label {
     }
 }
 
+/// A problem found while building or validating a [`Program`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProgramError {
+    /// A label name was defined twice.
+    DuplicateLabel(String),
+    /// A jump or call points past the end of the program.
+    InvalidJumpTarget {
+        /// Index of the instruction holding the bad jump.
+        instruction: usize,
+        /// The target the jump points at.
+        target: Label,
+        /// Number of instructions in the program.
+        length: usize,
+    },
+}
+
+impl fmt::Display for ProgramError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ProgramError::DuplicateLabel(name) => write!(f, "Duplicate label: {name}"),
+            ProgramError::InvalidJumpTarget {
+                instruction,
+                target,
+                length,
+            } => write!(
+                f,
+                "Invalid jump target {target} at instruction {instruction} (program has {length} instructions)"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ProgramError {}
+
 /// Bytecode instruction.
 #[derive(Debug, Clone)]
 pub enum Instruction {
@@ -93,26 +127,16 @@ impl Program {
 
     /// Define a named label at the current instruction position.
     ///
-    /// Returns whether the name was free. A duplicate label silently
-    /// overwrites the first definition, which makes the jumps that used it
-    /// target the wrong instruction, so the caller is told about it.
-    pub fn try_define_label(&mut self, name: &str) -> Result<Label, String> {
+    /// Returns an error when the name is already defined, because a duplicate
+    /// label silently overwrites the first definition and makes jumps target
+    /// the wrong instruction.
+    pub fn define_label(&mut self, name: &str) -> Result<Label, ProgramError> {
         if self.labels.contains_key(name) {
-            return Err(format!("the label '{name}' is defined twice"));
+            return Err(ProgramError::DuplicateLabel(name.to_string()));
         }
         let label = Label(self.instructions.len());
         self.labels.insert(name.to_string(), label);
         Ok(label)
-    }
-
-    pub fn define_label(&mut self, name: &str) -> Label {
-        // The name is kept even when it is a duplicate, so the caller that
-        // ignores the error still gets a program it can run.
-        self.try_define_label(name).unwrap_or_else(|_| {
-            let label = Label(self.instructions.len());
-            self.labels.insert(name.to_string(), label);
-            label
-        })
     }
 
     pub fn get_label(&self, name: &str) -> Option<Label> {
@@ -150,7 +174,7 @@ impl Program {
     /// Check that every jump target points inside the instruction stream.
     ///
     /// Returns a human-readable error naming the first bad instruction.
-    pub fn validate_jump_targets(&self) -> Result<(), String> {
+    pub fn validate_jump_targets(&self) -> Result<(), ProgramError> {
         let len = self.instructions.len();
         for (index, instr) in self.instructions.iter().enumerate() {
             let label = match instr {
@@ -161,10 +185,11 @@ impl Program {
                 _ => continue,
             };
             if label.0 > len {
-                return Err(format!(
-                    "instruction {} jumps to {} which is past the end of the program ({} instructions)",
-                    index, label.0, len
-                ));
+                return Err(ProgramError::InvalidJumpTarget {
+                    instruction: index,
+                    target: label,
+                    length: len,
+                });
             }
         }
         Ok(())
@@ -179,7 +204,7 @@ mod tests {
     fn a_label_points_at_the_current_instruction() {
         let mut program = Program::new();
         program.add_instruction(Instruction::PushConst(Value::I64(1)));
-        let label = program.define_label("start");
+        let label = program.define_label("start").expect("label is free");
         assert_eq!(label, Label(1));
         assert_eq!(program.get_label("start"), Some(Label(1)));
     }
@@ -187,13 +212,11 @@ mod tests {
     #[test]
     fn a_duplicate_label_is_reported() {
         let mut program = Program::new();
-        program
-            .try_define_label("start")
-            .expect("the first label is free");
+        program.define_label("start").expect("the first label is free");
         let err = program
-            .try_define_label("start")
+            .define_label("start")
             .expect_err("the duplicate is reported");
-        assert!(err.contains("start"), "the error names the label: {err}");
+        assert!(matches!(err, ProgramError::DuplicateLabel(_)));
     }
 
     #[test]
@@ -203,7 +226,7 @@ mod tests {
         let err = program
             .validate_jump_targets()
             .expect_err("the bad jump is reported");
-        assert!(err.contains("9"), "the error names the target: {err}");
+        assert!(matches!(err, ProgramError::InvalidJumpTarget { .. }));
     }
 
     #[test]

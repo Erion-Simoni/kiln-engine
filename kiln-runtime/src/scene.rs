@@ -62,57 +62,86 @@ pub fn spawn_scene(
     )
 }
 
-/// Spawn a scene and its nested scenes.
-fn spawn_scene_inner(
+/// Spawn a list of scene entities into the world.
+///
+/// This is the same work [`spawn_scene`] does for one scene's entities, but
+/// takes the entities directly instead of looking them up in a project.
+/// The editor uses it to rebuild a world from an undo snapshot.
+pub fn spawn_entities(
     world: &mut GameWorld,
-    project: &Project,
-    scene: &Scene,
+    entities: &[Entity],
     offset: SceneOffset,
-    visited: &mut Vec<String>,
     make_sprite: &mut SpriteFactory<'_>,
 ) -> Vec<SpawnedEntity> {
     let mut spawned = Vec::new();
 
-    for entity in &scene.entities {
+    for entity in entities {
         let transform = entity_transform(entity);
+        eprintln!("DEBUG spawn_entities: entity id={} transform.position.x={} transform.position.y={}", entity.id, transform.position.x, transform.position.y);
         let color = entity_sprite_color(entity);
         let texture_path = entity_sprite_texture(entity);
-        let role = entity_role(entity);
+        let role_name = entity_role(entity);
 
         let position = [
             transform.position.x + offset.x,
             transform.position.y + offset.y,
         ];
-        let runtime_transform = Transform::new(position[0], position[1])
-            .with_rotation(transform.rotation)
-            .with_scale(transform.scale);
+        let runtime_transform =
+            Transform::new(position[0], position[1])
+                .with_rotation(transform.rotation)
+                .with_scale(transform.scale);
         let source_id = SourceId::new(entity.id.clone());
 
-        match color {
-            Some(rgba) => {
-                let sprite = make_sprite(entity, rgba, texture_path.as_deref());
-                match &role {
-                    Some(role) => {
-                        world.spawn((
-                            runtime_transform,
-                            sprite,
-                            Role::new(role.clone()),
-                            source_id,
-                        ));
-                    }
-                    None => {
-                        world.spawn((runtime_transform, sprite, source_id));
-                    }
+        let sprite = match color {
+                Some(rgba) => Some(make_sprite(entity, rgba, texture_path.as_deref())),
+                None => None,
+            };
+
+            eprintln!("DEBUG spawn_entities: entity id={} sprite={:?}", entity.id, sprite.is_some());
+            
+            if let Some(ref s) = sprite {
+                eprintln!("DEBUG spawn_entities: entity id={} sprite.texture={:?}", entity.id, s.texture);
+            }
+
+        let sprite = color.map(|rgba| make_sprite(entity, rgba, texture_path.as_deref()));
+
+        eprintln!("DEBUG spawn_entities: entity id={} sprite={:?}", entity.id, sprite.is_some());
+        
+        if let Some(ref s) = sprite {
+            eprintln!("DEBUG spawn_entities: entity id={} sprite.texture={:?}", entity.id, s.texture);
+        }
+
+        match &role_name {
+            Some(role_name_str) => {
+                if let Some(sprite) = sprite {
+                    world.spawn((
+                        runtime_transform,
+                        sprite,
+                        Role::new(role_name_str.clone()),
+                        source_id,
+                    ));
+                } else {
+                    world.spawn((
+                        runtime_transform,
+                        Role::new(role_name_str.clone()),
+                        source_id,
+                    ));
                 }
             }
-            None => match &role {
-                Some(role) => {
-                    world.spawn((runtime_transform, Role::new(role.clone()), source_id));
+            None => {
+                if let Some(sprite) = sprite {
+                    world.spawn((
+                        runtime_transform,
+                        sprite,
+                        source_id,
+                    ));
+                } else {
+                    world.spawn((
+                        runtime_transform,
+                        source_id,
+                    ));
                 }
-                None => {
-                    world.spawn((runtime_transform, source_id));
-                }
-            },
+            }
         }
 
         spawned.push(SpawnedEntity {
@@ -122,9 +151,23 @@ fn spawn_scene_inner(
             scale: transform.scale,
             color,
             texture: texture_path,
-            role,
+            role: role_name,
         });
     }
+
+    spawned
+}
+
+/// Spawn a scene and its nested scenes.
+fn spawn_scene_inner(
+    world: &mut GameWorld,
+    project: &Project,
+    scene: &Scene,
+    offset: SceneOffset,
+    visited: &mut Vec<String>,
+    make_sprite: &mut SpriteFactory<'_>,
+) -> Vec<SpawnedEntity> {
+    let mut spawned = spawn_entities(world, &scene.entities, offset, make_sprite);
 
     for nested in &scene.nested_scenes {
         if visited.contains(&nested.scene_id) {

@@ -7,8 +7,6 @@ pub mod history;
 pub mod panels;
 pub mod prefab_editor;
 pub mod scene_view;
-#[cfg(test)]
-mod scene_view_test;
 pub mod tilemap_editor;
 
 pub use app::{scene_from_world, EditorApp};

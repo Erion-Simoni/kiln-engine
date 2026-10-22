@@ -6,7 +6,7 @@
 
 use kiln_render::{SpriteInstance, SpriteRenderer, TextureId};
 
-use crate::scene_view::world_camera;
+use kiln_editor::scene_view::world_camera;
 
 /// Render a sprite with the scene view's camera and read the result back.
 ///

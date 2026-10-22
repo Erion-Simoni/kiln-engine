@@ -371,7 +371,9 @@ pub fn scene_from_world(
     let mut entity_id = 0;
     let world = world.world_ref();
     let mut query = world.query::<(&SourceId, &Transform, &Sprite)>();
+    eprintln!("DEBUG scene_from_world: query count = {}", query.iter().count());
     for (source_id, transform, sprite) in query.iter() {
+        eprintln!("DEBUG scene_from_world: entity id={} position.x={} position.y={}", source_id.0, transform.position.x, transform.position.y);
         entity_id += 1;
         let id = source_id.0.clone();
         let texture = entity_textures.get(&id).cloned();
