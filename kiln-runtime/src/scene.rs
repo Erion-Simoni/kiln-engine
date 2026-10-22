@@ -77,7 +77,10 @@ pub fn spawn_entities(
 
     for entity in entities {
         let transform = entity_transform(entity);
-        eprintln!("DEBUG spawn_entities: entity id={} transform.position.x={} transform.position.y={}", entity.id, transform.position.x, transform.position.y);
+        eprintln!(
+            "DEBUG spawn_entities: entity id={} transform.position.x={} transform.position.y={}",
+            entity.id, transform.position.x, transform.position.y
+        );
         let color = entity_sprite_color(entity);
         let texture_path = entity_sprite_texture(entity);
         let role_name = entity_role(entity);
@@ -86,29 +89,42 @@ pub fn spawn_entities(
             transform.position.x + offset.x,
             transform.position.y + offset.y,
         ];
-        let runtime_transform =
-            Transform::new(position[0], position[1])
-                .with_rotation(transform.rotation)
-                .with_scale(transform.scale);
+        let runtime_transform = Transform::new(position[0], position[1])
+            .with_rotation(transform.rotation)
+            .with_scale(transform.scale);
         let source_id = SourceId::new(entity.id.clone());
 
         let sprite = match color {
-                Some(rgba) => Some(make_sprite(entity, rgba, texture_path.as_deref())),
-                None => None,
-            };
+            Some(rgba) => Some(make_sprite(entity, rgba, texture_path.as_deref())),
+            None => None,
+        };
 
-            eprintln!("DEBUG spawn_entities: entity id={} sprite={:?}", entity.id, sprite.is_some());
-            
-            if let Some(ref s) = sprite {
-                eprintln!("DEBUG spawn_entities: entity id={} sprite.texture={:?}", entity.id, s.texture);
-            }
+        eprintln!(
+            "DEBUG spawn_entities: entity id={} sprite={:?}",
+            entity.id,
+            sprite.is_some()
+        );
+
+        if let Some(ref s) = sprite {
+            eprintln!(
+                "DEBUG spawn_entities: entity id={} sprite.texture={:?}",
+                entity.id, s.texture
+            );
+        }
 
         let sprite = color.map(|rgba| make_sprite(entity, rgba, texture_path.as_deref()));
 
-        eprintln!("DEBUG spawn_entities: entity id={} sprite={:?}", entity.id, sprite.is_some());
-        
+        eprintln!(
+            "DEBUG spawn_entities: entity id={} sprite={:?}",
+            entity.id,
+            sprite.is_some()
+        );
+
         if let Some(ref s) = sprite {
-            eprintln!("DEBUG spawn_entities: entity id={} sprite.texture={:?}", entity.id, s.texture);
+            eprintln!(
+                "DEBUG spawn_entities: entity id={} sprite.texture={:?}",
+                entity.id, s.texture
+            );
         }
 
         match &role_name {
@@ -130,16 +146,9 @@ pub fn spawn_entities(
             }
             None => {
                 if let Some(sprite) = sprite {
-                    world.spawn((
-                        runtime_transform,
-                        sprite,
-                        source_id,
-                    ));
+                    world.spawn((runtime_transform, sprite, source_id));
                 } else {
-                    world.spawn((
-                        runtime_transform,
-                        source_id,
-                    ));
+                    world.spawn((runtime_transform, source_id));
                 }
             }
         }

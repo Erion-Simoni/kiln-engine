@@ -10,6 +10,8 @@ pub mod settings;
 pub mod slice;
 pub mod sprite;
 pub mod tilemap;
+pub mod tilemap_collision;
+pub mod tilemap_scene;
 pub mod world;
 
 #[cfg(feature = "audio")]
@@ -27,6 +29,8 @@ pub use settings::*;
 pub use slice::*;
 pub use sprite::*;
 pub use tilemap::*;
+pub use tilemap_collision::{entity_box, first_solid_hit, move_with_collision};
+pub use tilemap_scene::{spawn_tilemaps, TilesetTextureResolver};
 pub use world::*;
 
 #[cfg(feature = "audio")]

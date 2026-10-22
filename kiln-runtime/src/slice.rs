@@ -330,8 +330,17 @@ impl SliceSession {
         match command {
             SliceCommand::MovePlayer { dx, dy } => {
                 if let Some(player) = find_player(world) {
-                    let x = player.x as f64 + dx;
-                    let y = player.y as f64 + dy;
+                    // The move is checked against the solid tiles, so the
+                    // player slides along a wall instead of walking through
+                    // it.
+                    let target = crate::tilemap_collision::move_with_collision(
+                        world,
+                        [player.x, player.y],
+                        player.size,
+                        [dx as f32, dy as f32],
+                    );
+                    let x = target[0] as f64;
+                    let y = target[1] as f64;
                     set_player_position(world, &player.source_id, x, y);
                     // Remember the position, so a save keeps it.
                     self.state.player_x = x;
@@ -373,6 +382,8 @@ struct WorldEntity {
     source_id: String,
     x: f32,
     y: f32,
+    /// Size of the entity's sprite, used as its collision box.
+    size: [f32; 2],
 }
 
 /// Find the player entity, if the world has one.
@@ -383,16 +394,18 @@ fn find_player(world: &mut GameWorld) -> Option<WorldEntity> {
 /// Find all entities with the given role.
 fn find_entities(world: &mut GameWorld, role: &str) -> Vec<WorldEntity> {
     let mut found = Vec::new();
-    for (source_id, entity_role, transform) in
-        world
-            .world_mut()
-            .query_mut::<(&SourceId, &Role, &kiln_core::Transform)>()
-    {
+    for (source_id, entity_role, transform, sprite) in world.world_mut().query_mut::<(
+        &SourceId,
+        &Role,
+        &kiln_core::Transform,
+        &crate::sprite::Sprite,
+    )>() {
         if entity_role.as_str() == role {
             found.push(WorldEntity {
                 source_id: source_id.0.clone(),
                 x: transform.position.x,
                 y: transform.position.y,
+                size: sprite.size,
             });
         }
     }

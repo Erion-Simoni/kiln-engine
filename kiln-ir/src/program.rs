@@ -212,7 +212,9 @@ mod tests {
     #[test]
     fn a_duplicate_label_is_reported() {
         let mut program = Program::new();
-        program.define_label("start").expect("the first label is free");
+        program
+            .define_label("start")
+            .expect("the first label is free");
         let err = program
             .define_label("start")
             .expect_err("the duplicate is reported");
