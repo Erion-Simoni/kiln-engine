@@ -345,11 +345,10 @@ game has been published to a store and the Steam backend is a stub.
 
 **Goal (epics, split into future milestones):**
 
-- 3D meshes/materials under same tier system (`3d` feature).
+- 3D meshes/materials under the same tier system (`3d` feature). **M29 is in progress:** the `3d` feature and mesh/material types landed in `kiln-core` (commit `4556431`); glTF import, depth buffer, perspective camera, frustum culling, 3D scene view with gizmos, and the `3d`-off size check remain (see `ROADMAP_FULL_M14_PLUS.md`).
 - WASM plugin API (`kiln-plugin-api`) for nodes/importers/panels.
 - Android/iOS export spikes → dedicated milestones when started.
 
 Each M14+ slice gets its own session goal, crates, and acceptance list before work begins.
 
-**Verdict: Not started** — these are plans. The detailed M14+ milestones
-live in `ROADMAP_FULL_M14_PLUS.md`.
+**Verdict: In progress** — M29 (3D core) has started; M30–M61 are still plans. The detailed M14+ milestones live in `ROADMAP_FULL_M14_PLUS.md`.

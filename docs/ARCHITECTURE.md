@@ -118,11 +118,10 @@ Pinned ecosystem versions (verified crates.io / docs, 2026-10-18):
 
 | Dep | Version | Notes |
 | --- | --- | --- |
-| `wgpu` | **30.0.1** | WebGPU + WebGL2/GL fallback; MSRV 1.87 |
-| `winit` | **0.30.13** | Stable; 0.31 still beta |
-| `egui` / `eframe` | **0.37.0** latest; **pin 0.36.x for M6–M8** if using snarl/dock |
-| `egui-snarl` | **0.12.0** | Requires **egui ^0.36**; MSRV 1.92 |
-| `egui_dock` | **0.21.1** | Requires **egui ^0.36** |
+| `wgpu` | **22.1** | WebGPU + WebGL2/GL fallback; MSRV 1.87 |
+| `winit` | **0.30.13** | Stable |
+| `egui` | **0.29** | Pure-Rust immediate-mode UI for the editor shell |
+| `egui_dock` | **0.14** | Docking for editor panels; requires egui ^0.29 |
 | `wasm-bindgen` | **0.2.129** | |
 | `web-sys` | **0.3.106** | |
 | `glam` | **0.34.1** | |
@@ -132,10 +131,10 @@ Pinned ecosystem versions (verified crates.io / docs, 2026-10-18):
 | `rhai` | **1.26.1** | Candidate script frontend |
 | `meshopt` | **0.7.0** | Mesh compression |
 | `cargo-dist` | **0.32.0** on crates.io; **0.33.0** via GitHub installer | Packaging |
-| `trunk` | **0.21.14** | Web dev serve candidate |
-| `wasm-pack` | **0.15.0** | Alt web tooling |
 
-**Node-graph UI proposal:** prefer `egui-snarl` for M8 unless custom UX wins; accept **egui 0.36 pin** until snarl/dock catch 0.37 (ADR-0004).
+**Node-graph UI:** a custom egui-based graph is used; `egui-snarl` was
+considered but requires egui ^0.36, so it is not pinned (revisit if the
+editor upgrades egui).
 
 ## Render tiers
 

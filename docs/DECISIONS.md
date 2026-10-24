@@ -871,3 +871,38 @@ undoing. The scene is written to disk when it is saved.
   is undone as one step.
 - The scene is saved from the world, so the world stays the source of truth
   while editing and the scene data is what is written to disk.
+
+---
+
+## ADR-0034: 3D types are feature-gated in `kiln-core` behind `3d` (accepted)
+
+**Date:** 2026-10-24
+**Status:** accepted
+
+**Decision:** 3D mesh and material types (`Mesh`, `Material`, `Vertex`,
+`SubMesh`, `MeshBounds`, `PrimitiveTopology`, `VertexFormat`, `AlphaMode`,
+`Model`, `MeshHandle`) live in `kiln-core/src/mesh.rs` and are compiled only
+when the `3d` Cargo feature is enabled (`3d = ["glam/serde"]`). The feature is
+off by default, so a 2D-only build (including web) pulls in no 3D code and the
+binary size is unchanged. The types are the shared data layer between the asset
+pipeline (`kiln-assets`), the renderer (`kiln-render`) and the runtime
+(`kiln-runtime`). When `3d` is off, the types still exist as transparent
+stubs so the public API surface is stable.
+
+**Alternatives:**
+- Always compile 3D types: every 2D web/desktop build would pay for mesh and
+  PBR material code it never uses, breaking the size budget.
+- Put 3D types in a separate `kiln-3d` crate: adds a crate boundary and a new
+  dependency graph for data that the 2D path also references (e.g. a future
+  `Model` component); kept simple by gating inside `kiln-core` instead.
+- Put 3D types directly in `kiln-render`: would couple the asset pipeline and
+  runtime to the render crate; `kiln-core` is the right shared layer.
+
+**Consequences:**
+- M29 (3D core) can add glTF import, depth buffer, perspective camera and
+  frustum culling behind `3d` without touching the 2D default build.
+- The `3d`-off build-size check in M29's acceptance verifies the 2D web build
+  is unchanged.
+- Any new crate added for 3D (e.g. a glTF loader) still needs its own ADR
+  entry (size, license, maintenance) per rule 5.
+

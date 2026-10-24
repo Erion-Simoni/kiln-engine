@@ -1,12 +1,20 @@
 # Kiln Session Handoff
 
-**Current milestone:** the 2D gate (G-1 … G-6) is **complete**. The
-honesty audit below is kept for the record, but the items it listed as
-stubs have been implemented since. **M29 (3D) may start.**
+**Current milestone:** M0–M28 and the 2D-first gate (G-1 … G-6) are
+**complete**. M29 (3D foundation) **is in progress**: commit `4556431` added a
+feature-gated `3d` feature with mesh/material types (`Mesh`, `Material`,
+`Vertex`, `SubMesh`, `MeshBounds`, `PrimitiveTopology`, `VertexFormat`,
+`AlphaMode`, `Model`, `MeshHandle`) to `kiln-core`.
 
-**Do not start M29 (3D) until the 2D gate below is met** — the gate is
-met, so M29 may start. Everything the audit called "partial" that is
-still partial is listed under **Known issues**.
+**Do not start M30 (PBR lighting) until M29's 3D core acceptance is met** —
+M29 is not done yet. What remains for M29: glTF import, depth buffer,
+perspective camera, frustum culling, 3D editor scene view with gizmos, and
+the `3d`-off 2D web build-size check. See `ROADMAP_FULL_M14_PLUS.md` for the
+M29 plan and the "Prepare before M29" section, and `docs/ARCHITECTURE.md` for
+the layers.
+
+Everything the audit called "partial" that is still partial is listed under
+**Known issues**.
 
 ---
 
@@ -114,12 +122,14 @@ None.
 
 ## Next steps
 
-The 2D gate is done, so the next milestone is **M29 (3D)**. Before
-starting it, read `ROADMAP_FULL_M14_PLUS.md` for the M29 plan and
-`docs/ARCHITECTURE.md` for the layers.
+Continue **M29 (3D foundation)**. First finish the "Prepare before M29"
+checklist in `ROADMAP_FULL_M14_PLUS.md` (feature gate, glTF import ADR,
+renderer scope, editor scene view, size baseline, old-hardware target), then
+work through the M29 acceptance items in order: glTF import → depth buffer /
+perspective camera / frustum culling → 3D editor scene view with gizmos →
+`3d`-off size check.
 
-Known gaps that are worth picking up on the way (none of them block
-M29):
+Known gaps worth picking up on the way (none of them block M29):
 
 - The frame graph still names the post passes without running the post
   chain, so the editor's scene view has no post effects. The player
@@ -147,4 +157,5 @@ M29):
 - The audio sample needs a system audio backend, so it is built on its
   own: `cargo check --manifest-path samples/audio/Cargo.toml`
 
-**Blocked:** None — the 2D gate is complete, so M29 may start.
+**Blocked:** None — M29 (3D foundation) is in progress. The 2D gate is
+complete, so M29 may proceed; M30 is blocked on M29's acceptance.

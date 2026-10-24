@@ -2,8 +2,13 @@
 
 **Status:** Prior sessions claimed M0–M28; the **2026-10-19 honesty audit**
 (`docs/STATE.md`) rated the project **Partial** at the time. The 2D-first gate
-(textured sprites, tilemap, editor/player wiring) is now **met**, so M29 (3D)
-may start.
+(textured sprites, tilemap, editor/player wiring) is **met**, and M29 (3D)
+**is in progress**: commit `4556431` added a feature-gated `3d` feature with
+mesh/material types (`Mesh`, `Material`, `Vertex`, `SubMesh`, `MeshBounds`,
+`PrimitiveTopology`, `VertexFormat`, `AlphaMode`, `Model`, `MeshHandle`) to
+`kiln-core`. What remains for M29 is glTF import, depth buffer, perspective
+camera, frustum culling, the 3D editor scene view with gizmos, and the
+`3d`-off build-size check. See the "Prepare before M29" section below.
 This file replaces the old "M14+" section of `ROADMAP.md` and **supersedes**
 `ROADMAP_M14_PLUS.md` and `ROADMAP_DOWNLOADABLE_GAMES.md` (merged/renumbered).
 
@@ -347,6 +352,35 @@ pass switches are real and tested.
 
 # Phase 4: 3D foundation (M29 to M39)
 
+## Prepare before M29 (3D core)
+
+Before the 3D work continues, finish these prerequisites so the M29 acceptance
+items are testable and the 2D build is not regressed:
+
+- [ ] **Feature gate is watertight.** `kiln-core` has the `3d` feature
+    (`glam/serde`). Confirm `cargo check --workspace` (no features) and
+    `cargo check --features 3d` both build clean, and that nothing in the 2D
+    path pulls in 3D code. A 2D web game must never pay for 3D code.
+- [ ] **glTF import approach decided (ADR needed).** glTF 2.0 import needs
+    mesh/material/texture/hierarchy loading with meshopt compression. Any new
+    crate (e.g. a glTF loader) requires an ADR entry in `docs/DECISIONS.md`
+    with size/license/maintenance notes before it is added.
+- [ ] **Renderer pieces scoped.** Depth buffer, perspective camera and
+    frustum culling go in `kiln-render` behind the `3d` feature; each needs a
+    testable acceptance (command/screenshot/automated check) per milestone
+    rule.
+- [ ] **Editor scene view planned.** The 3D editor scene view with gizmos
+    builds on the existing engine-drawn scene view (ADR-0032) — decide how
+    gizmos are drawn and how the viewport switches between 2D ortho and
+    3D perspective.
+- [ ] **Size baseline recorded.** Measure the 2D web WASM size with `3d` off
+    now (`just size`), so the M29 acceptance "`3d` off: 2D web build size
+    unchanged" has a number to compare against.
+- [ ] **Old-hardware test target.** Pick a reference Low/Medium GPU and plan
+    to test the 3D paths on it (not only the dev machine), per Principle 8.
+
+---
+
 ## M29 — 3D core
 **Crates:** `kiln-render` (feature `3d`), `kiln-assets`.
 **Acceptance:**
@@ -355,7 +389,10 @@ pass switches are real and tested.
 - [ ] 3D scene view in the editor with gizmos.
 - [ ] `3d` off: 2D web build size unchanged (measured).
 
-**Verdict: Not started** — planned; no code yet.
+**Verdict: In progress** — `kiln-core` now has the feature-gated `3d` feature
+and mesh/material types (commit `4556431`); glTF import, depth buffer,
+perspective camera, frustum culling, 3D scene view with gizmos and the
+`3d`-off size check remain.
 ## M30 — PBR lighting (clustered forward)
 **Crates:** `kiln-render`.
 **Acceptance:**

@@ -659,9 +659,8 @@ written yet.
 
 2. **Platform services**: The Steam implementation in `kiln-platform` is a stub demonstrating the API shape. Real Steamworks SDK integration is deferred.
 
-3. **2D-first gate**: The 2D gate items are complete, so M29 (3D) may
-   start.
-   The gate is now tracked as checkboxes in **Phase 0.5 (G-1 … G-6)** above.
+3. **2D-first gate**: The 2D gate items are complete, so M29 (3D) **is in progress**.
+   The gate is tracked as checkboxes in **Phase 0.5 (G-1 … G-6)** above.
    Summary of the gate:
 
    | Gate item | TODO | State |
@@ -677,7 +676,10 @@ written yet.
    | UI draw path | — | Done (F1 / F2 / F3) |
    | Post | — | Done — each effect has a test of its own |
 
-   The gate is complete, so M29 (3D) may start.
+   M29 (3D core) has started: the `3d` feature and mesh/material types landed
+   in `kiln-core` (commit `4556431`). See `ROADMAP_FULL_M14_PLUS.md` for the
+   M29 plan and the "Prepare before M29" checklist. M30 is blocked on M29's
+   acceptance.
 
 4. **Session protocol**: Complete one item, mark as `[x]`, update `docs/STATE.md`, commit, then wait for user to say "continue".
 

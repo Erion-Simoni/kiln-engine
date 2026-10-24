@@ -2,12 +2,12 @@
 
 A lightweight standalone desktop game engine: editor + runtime + CLI.
 
-**Status:** In implementation. The 2D gate (G-1 through G-5) is complete —
+**Status:** M0–M28 and the 2D-first gate (G-1 through G-6) are complete —
 textured sprites, real tilemaps, VM maturity, a vertical-slice sample, and
-roadmap reconciliation all ship in `samples/vertical_slice/`. G-6 (editor
-truth: GPU scene view, inspector save/load, undo, PIE viewport) is next.
-**Do not start M29 (3D) until G-6 is done.** See `docs/ROADMAP.md` for
-milestones and `docs/STATE.md` for the current session handoff.
+roadmap reconciliation all ship in `samples/vertical_slice/`. M29 (3D
+foundation) is in progress: the `3d` feature and mesh/material types landed
+in `kiln-core` (commit `4556431`). See `docs/ROADMAP.md` for milestones and
+`docs/STATE.md` for the current session handoff.
 
 ## Goals
 
@@ -67,9 +67,9 @@ New to Kiln? Start with the [Tutorial](docs/TUTORIAL.md) to build your first gam
 
 ## Technology
 
-- Rust workspace, stable toolchain
-- Rendering: wgpu (WebGPU + WebGL2 fallback)
-- UI: egui (pure-Rust native, no Electron)
+- Rust workspace, stable toolchain (rust 1.87)
+- Rendering: wgpu 22.1 (WebGPU + WebGL2 fallback)
+- UI: egui 0.29 (pure-Rust native, no Electron)
 - ECS: hecs 0.11.2
 - Scripting: KilnScript (custom language)
 

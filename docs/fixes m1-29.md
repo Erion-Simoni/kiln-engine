@@ -2,8 +2,9 @@
 
 Created 2026-10-19 from a code audit (grep for TODO/stub, file reads, `cargo check`).
 Goal: M1–M28 must be real, working 2D engine features with no stubs.
-**M29 (3D core) is intentionally NOT started** — it is out of scope for a 2D engine
-and `STATE.md` blocks it until the 2D gate is met. It is listed so the range is covered.
+**M29 (3D core) is in progress, not out of scope:** commit `4556431` added a
+feature-gated `3d` feature with mesh/material types to `kiln-core`, so M29
+work has begun. The 2D gate is complete and M29 is unblocked.
 
 Status legend: `[ ]` open · `[x]` fixed + tested · `[~]` partly fixed · `[-]` deferred (reason given)
 
@@ -24,7 +25,7 @@ Status legend: `[ ]` open · `[x]` fixed + tested · `[~]` partly fixed · `[-]`
 | F11 | M28 | Frame-graph post passes are timing-only clears | `kiln-render/src/frame.rs` | [-] tied to F5 |
 | F12 | M11 Audio | Audio device management minimal (ADR-0014) | `kiln-runtime/src/audio.rs` | [-] ADR deferred |
 | F13 | Docs | ROADMAP checkboxes overstate completion | `docs/ROADMAP.md`, `ROADMAP_FULL_M14_PLUS.md` | [ ] |
-| F14 | M29 | 3D core | — | [-] out of 2D scope |
+| F14 | M29 | 3D core | `kiln-core` (`3d` feature) | [~] started — mesh/material types landed; glTF, depth buffer, camera, culling, editor 3D view remain |
 | F15 | R0/M0 | `cargo clippy -D warnings` fails on `kiln-core` (7 errors: derived-Default, `iter_map_values`, collapsible `if let`, `from_str` name clash) | `kiln-core/src/{project,prefab,device_tier}.rs` | [ ] |
 
 ## Fix log (in order)

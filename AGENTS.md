@@ -1,22 +1,32 @@
 # Kiln — Agent Brief
 
-Standalone desktop game engine (editor + runtime + CLI). Light like Godot's install story; art-directed looks; tiny web/native exports. **Planning docs only until M0 is approved.**
+Standalone desktop game engine (editor + runtime + CLI). Light like Godot's install story; art-directed looks; tiny web/native exports. **M0–M28 and the 2D-first gate (G-1 … G-6) are complete; M29 (3D foundation) is in progress** — the `3d` feature and mesh/material types landed in `kiln-core` (commit `4556431`).
 
 ## Crate map (planned)
 
 | Crate | Job |
 | --- | --- |
-| `kiln-core` | Math, time, shared types, ECS glue |
-| `kiln-render` | wgpu renderer, tiers, post, 2D→3D |
+| `kiln-core` | Math, time, shared types, ECS glue, feature-gated 3D mesh/material types |
+| `kiln-render` | wgpu renderer, tiers, post, 2D batching → 3D, frame graph, GPU timestamps |
 | `kiln-assets` | Import, hash cache, packed archives |
 | `kiln-ir` | Gameplay IR + bytecode VM |
 | `kiln-script` | Text language frontend → IR |
 | `kiln-graph` | Node-graph model + compile → IR |
-| `kiln-runtime` | Loop, scene, input, audio hooks |
-| `kiln-editor` | Native desktop editor app |
+| `kiln-runtime` | Loop, scene, input, schedule/jobs, optional audio/physics/threads |
+| `kiln-editor` | Native desktop editor app (egui shell, scene view, PIE, undo) |
 | `kiln-cli` | Headless build/export/pack |
 | `kiln-web` | WASM export shell |
 | `kiln-plugin-api` | Sandboxed WASM plugin ABI |
+| `kiln-player` | Thin standalone game launcher |
+| `kiln-platform` | Platform services (store, Steam, device capabilities) |
+| `kiln-ui` | UI widgets and renderer |
+| `kiln-input` | Input handling |
+| `kiln-anim` | Animation |
+| `kiln-vfx` | VFX / particles |
+| `kiln-save` | Save/load |
+| `kiln-updater` | Auto-updater (feature-gated stubs) |
+| `kiln-ai` | AI |
+| `kiln-gameplay` | Gameplay |
 | `samples/` | Tutorial + sample games |
 
 ## Commands (placeholders until M0)
@@ -56,7 +66,7 @@ just package  # installers via cargo-dist
 ## Do not
 
 - Use Electron. Prefer pure-Rust native; Tauri only via ADR.
-- Add engine/runtime crates until M0 is approved.
+- Add engine/runtime crates until M0 is approved. (All crates now exist; new ones need an ADR.)
 - Start M(n+1) in the same session as M(n).
 - Bypass budgets in `docs/BUDGETS.md` without an ADR.
 - Commit secrets, large binaries, or generated `target/` artifacts.
