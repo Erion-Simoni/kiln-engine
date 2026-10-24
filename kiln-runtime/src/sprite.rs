@@ -1,6 +1,8 @@
 //! Sprite component for 2D rendering
 
+use kiln_anim::Clip;
 use kiln_render::{TextureId, FULL_UV};
+use std::collections::HashMap;
 
 /// CPU-side sprite drawn via [`kiln_render::SpriteRenderer`].
 #[derive(Debug, Clone, Copy)]
@@ -42,5 +44,64 @@ impl Sprite {
 impl Default for Sprite {
     fn default() -> Self {
         Self::new(1.0, 1.0, 1.0, 1.0)
+    }
+}
+
+/// Animation player that drives sprite animation over time.
+///
+/// Tracks a set of named animation clips and advances the current frame
+/// based on elapsed time. The current frame's UV rect can be read and
+/// applied to a sprite's `uv_rect` each frame.
+#[derive(Debug)]
+pub struct AnimationPlayer {
+    clips: HashMap<String, Clip>,
+    current_clip: Option<String>,
+    elapsed: f32,
+}
+
+impl AnimationPlayer {
+    pub fn new() -> Self {
+        Self {
+            clips: HashMap::new(),
+            current_clip: None,
+            elapsed: 0.0,
+        }
+    }
+
+    /// Add a clip to the player.
+    pub fn add_clip(&mut self, clip: Clip) {
+        self.clips.insert(clip.name.clone(), clip);
+    }
+
+    /// Start playing the named clip from the beginning.
+    pub fn play(&mut self, clip_name: &str) {
+        self.current_clip = Some(clip_name.to_string());
+        self.elapsed = 0.0;
+    }
+
+    /// Stop the current clip.
+    pub fn stop(&mut self) {
+        self.current_clip = None;
+        self.elapsed = 0.0;
+    }
+
+    /// Advance the animation by `dt` seconds.
+    pub fn update(&mut self, dt: f32) {
+        self.elapsed += dt;
+    }
+
+    /// Get the current frame's UV rect (pixel coordinates), if a clip is playing.
+    pub fn current_uv_rect(&self) -> Option<[u32; 4]> {
+        let clip_name = self.current_clip.as_ref()?;
+        let clip = self.clips.get(clip_name)?;
+        let (frame_idx, _) = clip.frame_at_time(self.elapsed).ok()?;
+        let frame = &clip.frames[frame_idx];
+        Some(frame.rect)
+    }
+}
+
+impl Default for AnimationPlayer {
+    fn default() -> Self {
+        Self::new()
     }
 }

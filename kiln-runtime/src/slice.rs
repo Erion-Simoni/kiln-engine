@@ -9,6 +9,7 @@
 //! The same runtime drives the standalone player and the editor, so a game
 //! behaves identically in both.
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use kiln_ir::{HostContext, Program, Value, Vm, VmError};
@@ -17,7 +18,14 @@ use kiln_save::SaveSlotManager;
 use kiln_script::{Diagnostic, KilnScriptFrontend, LanguageFrontend};
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "audio")]
+use crate::audio::AudioEngine;
+
 use crate::world::{GameWorld, Role, SourceId};
+use crate::sprite::AnimationPlayer;
+
+#[cfg(feature = "physics")]
+use crate::physics::PhysicsWorld;
 
 /// The builtin functions a slice script can call.
 ///
@@ -35,6 +43,11 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("set_status", 9, 1),
     ("get_status", 10, 0),
     ("get_delta_time", 11, 0),
+    ("play_sound", 12, 1),
+    ("stop_sound", 13, 1),
+    ("play_music", 14, 1),
+    ("stop_music", 15, 0),
+    ("set_volume", 16, 1),
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -138,6 +151,11 @@ pub fn load_state(dir: &Path, slot: u32) -> Result<SliceState, SaveSlotError> {
 pub struct SliceHost {
     facts: SliceFacts,
     commands: Vec<SliceCommand>,
+    #[cfg(feature = "audio")]
+    audio: Option<AudioEngine>,
+    #[cfg(feature = "physics")]
+    physics: Option<PhysicsWorld>,
+    animation_players: HashMap<String, AnimationPlayer>,
 }
 
 impl SliceHost {
@@ -146,6 +164,11 @@ impl SliceHost {
         Self {
             facts,
             commands: Vec::new(),
+            #[cfg(feature = "audio")]
+            audio: AudioEngine::new().ok(),
+            #[cfg(feature = "physics")]
+            physics: PhysicsWorld::new().ok(),
+            animation_players: HashMap::new(),
         }
     }
 
