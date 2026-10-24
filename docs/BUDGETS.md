@@ -255,12 +255,12 @@ strip = true
 
 **Measurement:**
 ```bash
-cargo run -p render-graph-sample --release
+cargo run -p render_graph --release
 cargo test -p kiln-render --lib screenshot_low_tier_stable_hash
 ```
 
-**Current status (M28, release, Windows desktop, TIMESTAMP_QUERY available):**
-- High-tier stub passes (clear/load): main ~32 µs, bloom/fog/outline/lut/composite ~18 µs each
+**Current status (M28, release, desktop, TIMESTAMP_QUERY available):**
+- High-tier passes (clear/load): main ~32 µs, bloom/fog/outline/lut/composite ~18 µs each
 - Low-tier screenshot golden sha256 `d17424c3…9478` (64×64 RGBA8, clear 51/102/153/255)
 - Re-run sample on reference Low/Medium GPUs to refresh; editor Settings → GPU Pass Timings
 

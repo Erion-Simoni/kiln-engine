@@ -1,122 +1,169 @@
-# Kiln Tutorial — Building Your First Game
+# Kiln Tutorial — Building Your First 2D Game
 
-This tutorial walks you through building a simple coin collector game using Kiln. The game demonstrates the core engine features: rendering, ECS, input handling, and the game loop.
+This tutorial walks you through building a simple coin collector game using Kiln. The recommended way to make a Kiln game is **data-driven**: you create a project with `kiln-cli init`, author your scene in `kiln.toml`, add your art as PNG files, and write your game rules in **KilnScript** (a small text language that compiles to the engine's IR bytecode and runs on the same VM as node graphs). No Rust code is required for a complete 2D game.
 
 ## Prerequisites
 
 - Rust 1.87 or later
 - Just (install via `cargo install just`)
-- Basic Rust knowledge
 
-## Game Overview
+## What You'll Build
 
-**Coin Collector** is a simple 2D game where:
-- You control a blue square with arrow keys
+**Coin Collector** — a simple 2D game where:
+- You control a hero sprite with arrow keys or WASD
 - Collect gold coins that appear on screen
-- Win by collecting 10 coins
-- Gameplay takes 1-2 minutes
+- A HUD shows your score; press F5 to save, F9 to load
+- Gameplay takes 1–2 minutes
 
-The sample is located in `samples/collector/`.
+The finished sample lives in `samples/vertical_slice/`.
 
-## Step 1: Project Structure
+## Step 1: Create a New Project
 
-First, let's understand the Kiln workspace structure:
+Use `kiln-cli init` to scaffold a new project from the `empty_2d` template:
 
-```
-kiln/
-├── kiln-core/      # Math, time, shared types
-├── kiln-render/    # wgpu renderer, sprite batching
-├── kiln-runtime/   # Game loop, ECS world, input
-├── samples/
-│   └── collector/  # Our game
+```bash
+cargo run --bin kiln-cli -- init --name mygame --template empty_2d
 ```
 
-The sample's `Cargo.toml` depends on:
-- `kiln-core` for `Transform` component
-- `kiln-render` for rendering and camera
-- `kiln-runtime` for game loop, ECS, and sprite component
+This creates a `mygame/` directory with:
 
-## Step 2: Setting Up the Window
+```
+mygame/
+  kiln.toml          # Project manifest (window, scenes, entities)
+  art/               # Your PNG assets go here
+  scripts/           # Your KilnScript goes here
+```
 
-Every Kiln game starts with a window and event loop using `winit`:
+The `empty_2d.ron` template lives in `templates/` at the repo root.
 
-```rust
-use winit::{
-    event_loop::EventLoop,
-    window::Window,
-};
+## Step 2: Add Your Art
 
-fn main() {
-    let event_loop = EventLoop::new().expect("event loop");
-    let mut app = CollectorApp::default();
-    let _ = event_loop.run_app(&mut app);
+Drop PNG images into your project directory (e.g. `mygame/art/`). Kiln decodes any PNG colour type (grayscale, palette, RGB, RGBA, 16-bit, `tRNS`) into straight RGBA8 and uploads it to the GPU as a sprite texture.
+
+Reference assets by their project-relative path with `/` separators (e.g. `art/hero.png`). This works identically on Windows, macOS and Linux.
+
+## Step 3: Author Your Scene in `kiln.toml`
+
+The project manifest declares your window, scenes, entities and their components. Here's a minimal scene with a player and three coins:
+
+```toml
+id = "mygame"
+name = "My Game"
+version = "0.1.0"
+
+[window]
+width = 640
+height = 480
+vsync = true
+
+[scenes.main]
+id = "main"
+name = "Main"
+script = "scripts/main.ks"
+
+[[scenes.main.entities]]
+id = "player"
+name = "Player"
+components = [
+  { type = "Transform", x = 120.0, y = 200.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [1.0, 1.0, 1.0, 1.0], texture = "art/hero.png" },
+  { type = "Role", role = "player" },
+]
+
+[[scenes.main.entities]]
+id = "coin1"
+name = "Coin 1"
+components = [
+  { type = "Transform", x = 240.0, y = 260.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [1.0, 1.0, 1.0, 1.0], texture = "art/coin.png" },
+  { type = "Role", role = "coin" },
+]
+
+[[scenes.main.entities]]
+id = "coin2"
+name = "Coin 2"
+components = [
+  { type = "Transform", x = 400.0, y = 180.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [1.0, 1.0, 1.0, 1.0], texture = "art/coin.png" },
+  { type = "Role", role = "coin" },
+]
+```
+
+Component reference:
+- **`Transform`** — `x`, `y` (world position), `rotation` (radians), `scale` (uniform).
+- **`Sprite`** — `color` ([r, g, b, a]), `texture` (optional asset path; omitted = solid colour quad).
+- **`Role`** — `role` (a gameplay name like `"player"` or `"coin"`, used by scripts to find entities by purpose).
+
+## Step 4: Write Your Game Rules in KilnScript
+
+KilnScript runs once per frame. It reads *facts* about the frame (input axes, elapsed time, score, nearby pickups) and emits *commands* (move the player, collect a pickup, set the status message). The engine applies the commands after the script returns.
+
+Create `mygame/scripts/main.ks`:
+
+```ks
+// KilnScript: collect the coins.
+// Runs once per frame. The engine gives input, delta time and world state;
+// the script decides what happens.
+
+let speed = 120.0;
+let dt = get_delta_time();
+let dx = get_input_x() * speed * dt;
+let dy = get_input_y() * speed * dt;
+move_player(dx, dy);
+
+if collect_coin() {
+    add_score(10);
+    set_status("PICKED UP A COIN");
+}
+
+if get_coin_count() == 0 {
+    set_status("ALL COINS COLLECTED");
 }
 ```
 
-The `CollectorApp` implements `winit::application::ApplicationHandler` to handle window events.
+Available builtins:
+- `get_input_x()` / `get_input_y()` — input axis, -1 to 1 (arrow keys / WASD)
+- `get_delta_time()` — seconds since the last frame
+- `get_score()` / `add_score(n)` — read and add to the score
+- `get_coin_count()` / `collect_coin()` — remaining pickups / collect one in reach
+- `move_player(dx, dy)` — move the player by delta
+- `set_status(msg)` / `get_status()` — show a message on the HUD
+- `print(...)` — print to the console
 
-## Step 3: GPU Initialization
+The pickup radius is 24 world units; a coin counts as collected when the player's box overlaps it.
 
-When the window is created, we initialize the GPU renderer:
+## Step 5: Run Your Game
 
-```rust
-fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    let window = Arc::new(
-        event_loop.create_window(
-            winit::window::WindowAttributes::default()
-                .with_title("Kiln — Coin Collector Sample")
-                .with_inner_size(winit::dpi::LogicalSize::new(800u32, 600u32)),
-        ).expect("window"),
-    );
-    pollster::block_on(self.init_gpu(window));
-}
+Run it in the standalone player:
+
+```bash
+cargo run -p kiln-player -- --archive mygame
 ```
 
-The `init_gpu` method creates:
-- A wgpu instance and surface
-- A `Renderer` for wgpu integration
-- A `SpriteRenderer` for 2D sprite batching
+Or open it in the editor: open `mygame/kiln.toml` (File → Open Project) and press **Play** in the scene view.
 
-## Step 4: Game State
+Controls:
+| Key | Action |
+|-----|--------|
+| Arrow keys / WASD | Move the hero |
+| F5 | Save the game |
+| F9 | Load the game |
 
-We track game state in a simple struct:
+## Step 6: Save and Load
 
-```rust
-#[derive(Clone)]
-struct GameState {
-    player_pos: (f32, f32),
-    coins: Vec<(f32, f32)>,
-    score: u32,
-    input_held: (bool, bool, bool, bool), // up, down, left, right
-    game_over: bool,
-}
-```
+The slice state (score, elapsed time, player position, collected coins) is serialised to JSON and written to your platform's save folder (AppData on Windows, Application Support on macOS, XDG on Linux). Press F5 to save, F9 to load — both work in the player and the editor.
 
-For production games, you'd use the ECS world more extensively. This sample keeps it simple for learning.
+## What's Next?
 
-## Step 5: Input Handling
+- **Tilemaps:** See `docs/TILEMAPS.md` for chunked tilemaps with solid-tile collision.
+- **KilnScript reference:** See `docs/KILNSCRIPT.md` for the full language reference.
+- **Node graphs:** Visual node graphs compile to the same IR as KilnScript (`kiln-graph` crate).
+- **Post-processing:** Bloom, fog, outline and LUT grading in `kiln-render` (tier-dependent).
+- **UI:** `kiln-ui` provides buttons, labels, lists and nine-slice panels for in-game HUDs.
+- **Save system:** `kiln-save` provides versioned save slots with migration.
+- **Packaging:** `kiln-cli export --platform <windows|macos|linux>` produces a standalone game; see `docs/PACKAGING.md`.
 
-Arrow keys update the input state:
-
-```rust
-fn handle_key(&mut self, event: KeyEvent) {
-    use winit::keyboard::Key::Named;
-    match event.logical_key {
-        Named(NamedKey::ArrowUp)    => self.state.input_held.0 = event.state.is_pressed(),
-        Named(NamedKey::ArrowDown)  => self.state.input_held.1 = event.state.is_pressed(),
-        Named(NamedKey::ArrowLeft)  => self.state.input_held.2 = event.state.is_pressed(),
-        Named(NamedKey::ArrowRight) => self.state.input_held.3 = event.state.is_pressed(),
-        _ => {}
-    }
-}
-```
-
-## Step 6: Game Loop Update
-
-The fixed timestep game loop ensures consistent physics:
-
-```rust
-fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+See `docs/ARCHITECTURE.md` for the full crate map and `docs/ROADMAP.md` for planned features.ctiveEventLoop) {
     self.game_loop.tick(|dt| {
         // Update player position based on input
         const SPEED: f32 = 200.0;

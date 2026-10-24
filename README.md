@@ -61,9 +61,14 @@ New to Kiln? Start with the [Tutorial](docs/TUTORIAL.md) to build your first gam
 - **AGENTS.md** - Agent brief and coding rules
 - **docs/ARCHITECTURE.md** - Crate map, data flow, IR design
 - **docs/ROADMAP.md** - Milestones M0-M61+
+- **ROADMAP_FULL_M14_PLUS.md** - M14+ milestones (M29+ detail)
 - **docs/DECISIONS.md** - Architecture decision records
 - **docs/BUDGETS.md** - Size and performance budgets
 - **docs/STATE.md** - Session handoff (current status)
+- **docs/TUTORIAL.md** - Build your first game
+- **docs/GETTING_STARTED.md** - Make a 2D game from scratch
+- **docs/KILNSCRIPT.md** - KilnScript language reference
+- **docs/TILEMAPS.md** - Chunked tilemaps with collision
 
 ## Technology
 

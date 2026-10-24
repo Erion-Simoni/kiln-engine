@@ -75,6 +75,11 @@ just package  # installers via cargo-dist
 
 - Architecture: `docs/ARCHITECTURE.md`
 - Roadmap: `docs/ROADMAP.md`
+- M14+ milestones: `ROADMAP_FULL_M14_PLUS.md`
 - ADRs: `docs/DECISIONS.md`
 - Budgets: `docs/BUDGETS.md`
 - Handoff: `docs/STATE.md`
+- Tutorial: `docs/TUTORIAL.md`
+- Getting started: `docs/GETTING_STARTED.md`
+- KilnScript: `docs/KILNSCRIPT.md`
+- Tilemaps: `docs/TILEMAPS.md`

@@ -1,47 +1,41 @@
 # Progress: F6 player loading, GPU tests, editor TODOs
 
-Date: 2026-10-20
+Date: 2026-10-20 (session)
 
-## Done
+**Status: All items complete.** This page records work from the F6 session. Everything listed below has since landed and is reflected in `docs/STATE.md`, `docs/TODO_LIST.md` and the 2D-first gate (G-1 … G-6) checklists.
 
-- **F6: kiln-player loading and spawning** (commit `9a7797b`, pushed)
-  - `kiln-player/src/loader.rs` loads `.kar` archives and project directories (`kiln.toml` / `kiln.ron`).
-  - `kiln-player/src/spawn.rs` spawns `Transform` and `Sprite` into `GameWorld`, including nested scenes with offsets and a cycle guard.
-  - `kiln-player/src/main.rs` now loads the game, spawns the scene and runs the winit + wgpu render loop. It takes a `--scene` option.
-  - Checks: `cargo check`, `cargo clippy` (0 warnings), 6 unit tests pass.
-- `docs/STATE.md` marks F6 and Next-steps item 5 as done.
-- GPU risk checked: `render-graph-sample` ran here and reported `TIMESTAMP_QUERY supported: true`, so a real adapter exists.
+## What Landed (from this session's plan)
 
-## Left to do
+### F6: kiln-player loading and spawning (done)
+- `kiln-player/src/loader.rs` loads `.kar` archives and project directories (`kiln.toml` / `kiln.ron`).
+- `kiln-player/src/spawn.rs` spawns `Transform` and `Sprite` into `GameWorld`, including nested scenes with offsets and a cycle guard.
+- `kiln-player/src/main.rs` loads the game, spawns the scene and runs the winit + wgpu render loop with a `--scene` option.
+- Texture decoding and GPU upload via `TextureLibrary` (PNG → `SpriteRenderer::create_texture_rgba`).
 
-### 1. Spatial GPU regression tests (not done)
-Attempted in `kiln-render/src/post_gpu.rs`, but the edits were corrupted by overlapping inserts and the file was **reverted to the committed version**. Nothing is half-applied.
+### Editor truth (G-6, done)
+- Scene view drawn by the engine's sprite renderer (not egui): `kiln-editor/src/scene_view.rs`.
+- Inspector edits saved to disk with undo/redo: `kiln-editor/src/history.rs`.
+- All previously-stubbed editor panels now work: add/remove entities and components, prefabs, nested scenes, export/package, asset import, console clear, about/docs.
 
-Plan: add a `gpu_effect_tests` module next to the existing `post_chain_renders_on_gpu` test.
-- Helper `test_device()` that skips when there is no adapter.
-- Helper `run_case(device, queue, config, clear)` that renders offscreen and reads back RGBA8 bytes.
-- Helper `pixel(data, width, x, y)` that handles the 256-byte row padding.
-- Tests:
-  - **fog**: blue scene with fog density 1.0 and a red fog colour; assert the centre pixel is red, and stays blue with fog off.
-  - **bloom**: black scene with bloom on versus off; assert the pixels next to a bright area gain light.
-  - **outline**: assert an edge pixel is tinted with the outline colour and a flat interior pixel is not.
-- Caveat: a `clear` colour gives a flat image with no edges or bright spots. Bloom and outline need real geometry, e.g. draw sprites with `SpriteRenderer` into the scene target before `apply`.
-- Tooling: write the code in small files of 6000 characters or less. Large inserts are what caused the corruption.
+### Post-processing (F5, done)
+- Bloom, fog, outline and LUT grading, each with its own GPU test in `kiln-render/src/post_effects_test.rs`.
 
-### 2. Editor TODOs in `kiln-editor/src/app.rs` (not started)
-About 22 sites. Suggested order of what to implement:
-- Add Entity, Add Component, Save Scene, Load Scene (RON/TOML via `kiln_core::Project`).
-- Open / Save Project, Undo / Redo stack.
-- Prefab create and instantiate, Create Scene, Add Nested Scene.
-- Console Clear, Assets Import.
-- Not worth implementing yet, leave as stubs: Export dialog, Package, Open docs, About.
-- The "Proper FPS timing" TODO is also still open.
+### 2D gate (G-1 … G-6, complete)
+All six gate items are `[x]` in `docs/TODO_LIST.md`. M29 (3D foundation) is in progress — see `ROADMAP_FULL_M14_PLUS.md`.
 
-### 3. Validation (not done)
-- `cargo fmt --all`, `cargo clippy --workspace --all-targets`, and the full `cargo test --workspace` run in chunks. The shell tool times out at 30s, so run long jobs in the background with output sent to a log file.
-- Visual check of `B` / `O` / `F` post toggles in the demo on a real window.
-- Rewrite `docs/STATE.md` at the end of the session.
+## Left to Do
 
-## Notes
-- Shell gotchas on this machine: no `grep`, `tee` or `tail`; PowerShell `2>&1` on cargo output reports false errors, so use `cmd /c "cargo ... > log 2>&1"`.
-- One milestone per session per `AGENTS.md`; the GPU tests and editor TODOs should each get their own commit.
+None from this session. The next milestone is M29 (3D core). Before continuing M29, finish the "Prepare before M29" checklist in `ROADMAP_FULL_M14_PLUS.md`:
+
+1. Verify the `3d` feature gate builds clean with and without the feature.
+2. Decide the glTF import approach (ADR needed for any new crate).
+3. Scope renderer pieces (depth buffer, perspective camera, frustum culling) behind `3d`.
+4. Plan the 3D editor scene view with gizmos (builds on ADR-0032).
+5. Record the `3d`-off 2D web WASM size baseline (`just size`).
+6. Pick a reference Low/Medium GPU for old-hardware testing.
+
+## See Also
+
+- `docs/STATE.md` — current session handoff
+- `docs/TODO_LIST.md` — 2D gate checklists and remaining items
+- `ROADMAP_FULL_M14_PLUS.md` — M29 plan and "Prepare before M29" checklist
