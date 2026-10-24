@@ -4,6 +4,7 @@ pub mod app;
 pub mod assets;
 pub mod editing;
 pub mod history;
+pub mod hierarchy;
 pub mod panels;
 pub mod prefab_editor;
 pub mod scene_view;

@@ -23,6 +23,7 @@ use winit::{
 
 use crate::assets::{AssetBrowser, AssetKind};
 use crate::history::SceneHistory;
+use crate::hierarchy::HierarchyPanel;
 use crate::prefab_editor::PrefabEditorState;
 use crate::scene_view::{self, SceneTextures, ViewportRect};
 use crate::tilemap_editor::TilemapEditorState;
@@ -125,6 +126,7 @@ pub struct EditorApp {
     prefab_editor: PrefabEditorState,
     gameplay_editor: GameplayEditorState,
     tilemap_editor: TilemapEditorState,
+    hierarchy_panel: HierarchyPanel,
     project_path: Option<PathBuf>,
     current_project: Option<Project>,
     asset_browser: AssetBrowser,
@@ -147,6 +149,7 @@ enum Tab {
     Assets,
     Console,
     Settings,
+    Hierarchy,
     UIDesigner,
     PrefabEditor,
     SceneEditor,
@@ -569,6 +572,7 @@ impl EditorApp {
             prefab_editor: PrefabEditorState::new(),
             gameplay_editor: GameplayEditorState::new(),
             tilemap_editor: TilemapEditorState::new(),
+            hierarchy_panel: HierarchyPanel::new(),
             project_path: None,
             current_project: None,
             asset_browser: AssetBrowser::new(),
@@ -1250,6 +1254,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                         self.dock_state.add_window(vec![Tab::TilemapEditor]);
                         ui.close_menu();
                     }
+                    if ui.button("Hierarchy").clicked() {
+                        self.dock_state.add_window(vec![Tab::Hierarchy]);
+                        ui.close_menu();
+                    }
                 });
 
                 ui.menu_button("Project", |ui| {
@@ -1387,6 +1395,7 @@ impl winit::application::ApplicationHandler for EditorApp {
                     gameplay_editor: &mut self.gameplay_editor,
                     asset_browser: &mut self.asset_browser,
                     tilemap_editor: &mut self.tilemap_editor,
+                    hierarchy_panel: &mut self.hierarchy_panel,
                     current_project: &mut self.current_project,
                     play_toggle_requested: &mut self.play_toggle_requested,
                     scene_save_requested: &mut self.scene_save_requested,
@@ -1804,6 +1813,7 @@ struct TabViewer<'a> {
     gameplay_editor: &'a mut GameplayEditorState,
     asset_browser: &'a mut AssetBrowser,
     tilemap_editor: &'a mut TilemapEditorState,
+    hierarchy_panel: &'a mut HierarchyPanel,
     current_project: &'a mut Option<Project>,
     play_toggle_requested: &'a mut bool,
     scene_save_requested: &'a mut bool,
@@ -3196,6 +3206,28 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     }
                 });
             }
+            Tab::Hierarchy => {
+                ui.vertical(|ui| {
+                    if let Some(project) = self.current_project.as_mut() {
+                        let scene_id = project
+                            .scenes
+                            .keys()
+                            .next()
+                            .map(|s| s.clone())
+                            .unwrap_or_default();
+                        crate::hierarchy::render_hierarchy_panel(
+                            ui,
+                            &mut self.hierarchy_panel,
+                            project,
+                            &scene_id,
+                        );
+                    } else {
+                        ui.heading("Hierarchy");
+                        ui.add_space(8.0);
+                        ui.label("Open a project to view entities.");
+                    }
+                });
+            }
         }
     }
 
@@ -3212,6 +3244,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::SceneEditor => "Scene Editor".into(),
             Tab::GameplayEditor => "Gameplay Editor".into(),
             Tab::TilemapEditor => "Tilemap Editor".into(),
+            Tab::Hierarchy => "Hierarchy".into(),
         }
     }
 }
