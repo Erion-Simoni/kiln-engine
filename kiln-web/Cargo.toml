@@ -7,8 +7,6 @@ license.workspace = true
 
 [features]
 default = []
-# Documents intent; Workers path is always compiled and auto-falls back when
-# the page is not cross-origin isolated. No SharedArrayBuffer atomics pool yet.
 threads = []
 
 [dependencies]
@@ -27,8 +25,30 @@ web-sys = { version = "0.3.106", features = [
     "Response",
     "Headers",
     "ReadableStream",
+    "HtmlCanvasElement",
+    "Element",
+    "Node",
+    "EventTarget",
+    "KeyboardEvent",
+    "WheelEvent",
+    "MouseEvent",
+    "AddEventListenerOptions",
 ] }
 console_error_panic_hook = "0.1.7"
+pollster = { workspace = true }
+wgpu = { workspace = true }
+glam = { workspace = true }
+bytemuck = { workspace = true }
+kiln-core = { workspace = true }
+kiln-runtime = { workspace = true }
+kiln-assets = { workspace = true }
+kiln-render = { workspace = true }
+log = { workspace = true }
+getrandom = { workspace = true }
+getrandom_02 = { workspace = true }
+wasm-bindgen-futures = "0.4"
+uuid = { workspace = true, features = ["rng-getrandom"] }
+raw-window-handle = "0.6"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -7,7 +7,9 @@ use crate::tier::RenderTier;
 
 /// Renderer with tier support, post-processing, and optional GPU profiling.
 pub struct Renderer {
-    _adapter: Adapter,
+    /// GPU adapter (kept alive for the device's lifetime; `None` on web where
+    /// the adapter is not needed after device creation).
+    _adapter: Option<Adapter>,
     device: Device,
     queue: Queue,
     surface_config: SurfaceConfiguration,
@@ -79,7 +81,7 @@ impl Renderer {
         let profiler = GpuProfiler::new(&device, &queue, 32);
 
         Self {
-            _adapter: adapter,
+            _adapter: Some(adapter),
             device,
             queue,
             surface_config,
@@ -240,5 +242,60 @@ impl Renderer {
 
     pub fn poll_profiler(&mut self) {
         self.profiler.poll_timings(&self.device);
+    }
+
+    /// Return the current surface configuration (useful for web where the
+    /// surface is created externally).
+    pub fn surface_config(&self) -> SurfaceConfiguration {
+        self.surface_config.clone()
+    }
+
+    /// Construct a `Renderer` from an existing device, queue, and surface
+    /// format. Used by the web frontend where the `wgpu::Surface` is created
+    /// from an HTML canvas element outside this crate.
+    pub async fn new_from_parts(
+        device: Device,
+        queue: Queue,
+        surface_format: wgpu::TextureFormat,
+        tier: RenderTier,
+        width: u32,
+        height: u32,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let surface_config = SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+            width,
+            height,
+            present_mode: wgpu::PresentMode::AutoVsync,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            view_formats: vec![],
+            desired_maximum_frame_latency: 2,
+        };
+
+        let post_pipeline = if tier != RenderTier::Low {
+            Some(PostPipeline::new(&device, tier, surface_format))
+        } else {
+            None
+        };
+
+        let post_framebuffer = if tier != RenderTier::Low {
+            Some(PostFramebuffer::new(&device, width, height, tier))
+        } else {
+            None
+        };
+
+        let profiler = GpuProfiler::new(&device, &queue, 32);
+
+        Ok(Self {
+            _adapter: None,
+            device,
+            queue,
+            surface_config,
+            tier,
+            post_pipeline,
+            post_framebuffer,
+            profiler,
+            pass_config: PassEnableConfig::default_2d(),
+        })
     }
 }

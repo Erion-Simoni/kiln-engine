@@ -17,3 +17,6 @@ uuid = { workspace = true }
 dirs = { workspace = true }
 ron = { workspace = true }
 hecs = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { workspace = true }

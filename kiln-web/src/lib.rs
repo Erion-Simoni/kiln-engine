@@ -1,5 +1,5 @@
-//! Kiln web runtime
-//! WASM export shell for browser
+//! Kiln web runtime — WASM export for browser.
+//! Stub implementation — surface creation needs wgpu wasm32 support.
 
 mod threading;
 
@@ -7,20 +7,18 @@ use wasm_bindgen::prelude::*;
 
 pub use threading::{can_use_web_workers, is_cross_origin_isolated, run_background_job};
 
-// Initialize console error panic hook for better error messages in browser
 #[wasm_bindgen(start)]
 pub fn start() {
     console_error_panic_hook::set_once();
 }
 
-/// Placeholder for web runtime entry point
-/// Full game loop and wgpu integration will be added in future milestones
+/// Entry point called from JavaScript.
+/// Currently a stub — wgpu surface creation from HTML canvas on wasm32
+/// needs platform-specific setup not yet implemented.
 #[wasm_bindgen]
-pub fn run() {
-    let isolated = is_cross_origin_isolated();
-    let workers = can_use_web_workers();
+pub async fn run(_canvas_id: &str, _project_path: &str) {
     web_sys::console::log_1(
-        &format!("Kiln web runtime: crossOriginIsolated={isolated}, workers={workers}").into(),
+        &"Kiln web runtime: surface creation stub — implement wgpu wasm32 surface creation to enable web export"
+            .into(),
     );
-    let _ = run_background_job(1000);
 }

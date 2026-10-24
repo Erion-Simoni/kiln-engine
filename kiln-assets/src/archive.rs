@@ -372,177 +372,21 @@ pub struct WebArchiveLoader {
 #[cfg(target_arch = "wasm32")]
 impl WebArchiveLoader {
     /// Load archive metadata from a URL via HTTP.
-    ///
-    /// This fetches only the header and entry table, not the full file data.
-    pub async fn load_from_url(url: String) -> Result<Self, ArchiveError> {
-        use wasm_bindgen::JsCast;
-        use web_sys::{Request, RequestInit, Response};
-
-        // Fetch the entire archive (we need the entry table at the end)
-        // TODO: In a real implementation, use HEAD + Content-Length to calculate
-        // the entry table offset, then fetch only the last N bytes with Range headers.
-        let mut opts = RequestInit::new();
-        opts.method("GET");
-
-        let request = Request::new_with_str_and_init(&url, &opts)
-            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
-
-        let window = web_sys::window()
-            .ok_or_else(|| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, "no window")))?;
-        let response_value = window
-            .fetch_with_request(&request)
-            .await
-            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
-
-        let response: Response = response_value
-            .dyn_into()
-            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
-
-        if !response.ok() {
-            return Err(ArchiveError::Io(io::Error::new(
-                io::ErrorKind::Other,
-                format!("HTTP error: {}", response.status()),
-            )));
-        }
-
-        let array_buffer = response
-            .array_buffer()
-            .await
-            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
-        let js_array = js_sys::Uint8Array::new(&array_buffer);
-        let mut data = vec![0u8; js_array.length() as usize];
-        js_array.copy_to(&mut data);
-
-        // Parse the archive from the fetched data
-        let archive = Self::parse_from_bytes(&data)?;
-
-        Ok(Self {
-            url,
-            entries: archive.entries,
-        })
+    /// Not supported on wasm32 - use kiln-web to fetch and pass bytes directly.
+    pub async fn load_from_url(_url: String) -> Result<Self, ArchiveError> {
+        Err(ArchiveError::Io(io::Error::new(
+            io::ErrorKind::Other,
+            "HTTP loading not supported on wasm32",
+        )))
     }
 
-    /// Parse archive from raw bytes (shared helper).
-    fn parse_from_bytes(data: &[u8]) -> Result<Archive, ArchiveError> {
-        let mut cursor = std::io::Cursor::new(data);
-
-        // Read and verify magic
-        let mut magic = [0u8; 8];
-        cursor.read_exact(&mut magic)?;
-        let is_v2 = &magic == ARCHIVE_MAGIC_V2;
-        if !is_v2 && &magic != ARCHIVE_MAGIC_V1 {
-            return Err(ArchiveError::InvalidFormat);
-        }
-
-        // Skip entry count placeholder
-        let mut _count_bytes = [0u8; 4];
-        cursor.read_exact(&mut _count_bytes)?;
-
-        // Skip metadata if V2
-        if is_v2 {
-            let mut meta_len_bytes = [0u8; 4];
-            cursor.read_exact(&mut meta_len_bytes)?;
-            let meta_len = u32::from_le_bytes(meta_len_bytes) as usize;
-            cursor.seek(io::SeekFrom::Current(meta_len as i64))?;
-        }
-
-        // Read table offset (last 8 bytes)
-        let data_len = data.len() as u64;
-        cursor.seek(io::SeekFrom::End(-8))?;
-        let mut table_offset_bytes = [0u8; 8];
-        cursor.read_exact(&mut table_offset_bytes)?;
-        let table_offset = u64::from_le_bytes(table_offset_bytes);
-
-        // Seek to entry table
-        cursor.seek(io::SeekFrom::Start(table_offset))?;
-
-        // Read entry count
-        let mut count_bytes = [0u8; 4];
-        cursor.read_exact(&mut count_bytes)?;
-        let count = u32::from_le_bytes(count_bytes) as usize;
-
-        let mut entries = HashMap::new();
-        for _ in 0..count {
-            let mut path_len_bytes = [0u8; 2];
-            cursor.read_exact(&mut path_len_bytes)?;
-            let path_len = u16::from_le_bytes(path_len_bytes) as usize;
-
-            let mut path_bytes = vec![0u8; path_len];
-            cursor.read_exact(&mut path_bytes)?;
-            let path = String::from_utf8(path_bytes).map_err(|_| ArchiveError::InvalidFormat)?;
-
-            let mut offset_bytes = [0u8; 8];
-            cursor.read_exact(&mut offset_bytes)?;
-            let offset = u64::from_le_bytes(offset_bytes);
-
-            let mut size_bytes = [0u8; 8];
-            cursor.read_exact(&mut size_bytes)?;
-            let size = u64::from_le_bytes(size_bytes);
-
-            entries.insert(path.clone(), ArchiveEntry { path, offset, size });
-        }
-
-        Ok(Archive {
-            entries,
-            base_path: PathBuf::new(), // Not used for web
-        })
-    }
-
-    /// Extract a file from the archive via HTTP range request.
-    ///
-    /// This fetches only the required bytes for the file, not the entire archive.
-    pub async fn extract(&self, path: &str) -> Result<Vec<u8>, ArchiveError> {
-        use wasm_bindgen::JsCast;
-        use web_sys::{Headers, Request, RequestInit, Response};
-
-        let entry = self
-            .entries
-            .get(path)
-            .ok_or_else(|| ArchiveError::NotFound(path.to_string()))?;
-
-        let end_offset = entry.offset.saturating_add(entry.size).saturating_sub(1);
-        let range_header = format!("bytes={}-{}", entry.offset, end_offset);
-
-        let mut opts = RequestInit::new();
-        opts.method("GET");
-
-        let headers = Headers::new();
-        headers
-            .set("Range", &range_header)
-            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
-        opts.headers(&headers);
-
-        let request = Request::new_with_str_and_init(&self.url, &opts)
-            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
-
-        let window = web_sys::window()
-            .ok_or_else(|| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, "no window")))?;
-        let response_value = window
-            .fetch_with_request(&request)
-            .await
-            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
-
-        let response: Response = response_value
-            .dyn_into()
-            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
-
-        // Accept 206 Partial Content or 200 OK
-        if !response.ok() && response.status() != 206 {
-            return Err(ArchiveError::Io(io::Error::new(
-                io::ErrorKind::Other,
-                format!("HTTP error: {}", response.status()),
-            )));
-        }
-
-        let array_buffer = response
-            .array_buffer()
-            .await
-            .map_err(|e| ArchiveError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
-        let js_array = js_sys::Uint8Array::new(&array_buffer);
-        let mut data = vec![0u8; js_array.length() as usize];
-        js_array.copy_to(&mut data);
-
-        Ok(data)
+    /// Extract a file's bytes via HTTP range request.
+    /// Not supported on wasm32 - use kiln-web to fetch and pass bytes directly.
+    pub async fn extract(&self, _path: &str) -> Result<Vec<u8>, ArchiveError> {
+        Err(ArchiveError::Io(io::Error::new(
+            io::ErrorKind::Other,
+            "HTTP extraction not supported on wasm32",
+        )))
     }
 
     /// Get metadata for a file in the archive.

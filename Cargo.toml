@@ -53,6 +53,8 @@ serde_json   = "1.0"
 toml         = "0.8"
 ron          = "0.8"
 uuid         = { version = "1.0", features = ["v4", "serde"] }
+getrandom    = { version = "0.4", features = ["wasm_js"] }
+getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
 bytemuck     = { version = "1.0", features = ["derive"] }
 log          = "0.4"
 env_logger   = "0.11"
