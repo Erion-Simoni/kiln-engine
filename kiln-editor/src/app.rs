@@ -24,6 +24,7 @@ use winit::{
 use crate::assets::{AssetBrowser, AssetKind};
 use crate::history::SceneHistory;
 use crate::hierarchy::HierarchyPanel;
+use crate::inspector::InspectorPanel;
 use crate::prefab_editor::PrefabEditorState;
 use crate::scene_view::{self, SceneTextures, ViewportRect};
 use crate::tilemap_editor::TilemapEditorState;
@@ -127,6 +128,7 @@ pub struct EditorApp {
     gameplay_editor: GameplayEditorState,
     tilemap_editor: TilemapEditorState,
     hierarchy_panel: HierarchyPanel,
+    inspector_panel: InspectorPanel,
     project_path: Option<PathBuf>,
     current_project: Option<Project>,
     asset_browser: AssetBrowser,
@@ -573,6 +575,7 @@ impl EditorApp {
             gameplay_editor: GameplayEditorState::new(),
             tilemap_editor: TilemapEditorState::new(),
             hierarchy_panel: HierarchyPanel::new(),
+            inspector_panel: InspectorPanel::new(),
             project_path: None,
             current_project: None,
             asset_browser: AssetBrowser::new(),
@@ -1256,6 +1259,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     if ui.button("Hierarchy").clicked() {
                         self.dock_state.add_window(vec![Tab::Hierarchy]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Inspector").clicked() {
+                        self.dock_state.add_window(vec![Tab::Inspector]);
                         ui.close_menu();
                     }
                 });

@@ -3,7 +3,6 @@
 
 #[cfg(feature = "physics")]
 use rapier2d::prelude::*;
-use std::collections::HashMap;
 
 /// Physics world wrapper
 #[cfg(feature = "physics")]
@@ -20,7 +19,6 @@ pub struct PhysicsWorld {
     multibody_joint_set: MultibodyJointSet,
     ccd_solver: CCDSolver,
     soft_body_set: SoftBodySet,
-    named_bodies: HashMap<String, RigidBodyHandle>,
 }
 
 #[cfg(feature = "physics")]
@@ -40,7 +38,6 @@ impl PhysicsWorld {
             multibody_joint_set: MultibodyJointSet::new(),
             ccd_solver: CCDSolver::new(),
             soft_body_set: SoftBodySet::new(),
-            named_bodies: HashMap::new(),
         }
     }
 
@@ -98,46 +95,6 @@ impl PhysicsWorld {
         } else {
             false
         }
-    }
-
-    /// Register a named body for lookup by name
-    pub fn register_body(&mut self, entity_id: &str, handle: RigidBodyHandle) {
-        self.named_bodies.insert(entity_id.to_string(), handle);
-    }
-
-    /// Apply force to a named rigid body
-    pub fn apply_force(&mut self, entity_id: &str, fx: f32, fy: f32) {
-        if let Some(handle) = self.named_bodies.get(entity_id) {
-            if let Some(body) = self.rigid_body_set.get_mut(*handle) {
-                body.apply_force(Vec2::new(fx, fy), true);
-            }
-        }
-    }
-
-    /// Raycast from (x1, y1) to (x2, y2). Returns true if anything is hit.
-    pub fn raycast(&self, x1: f32, y1: f32, x2: f32, y2: f32) -> bool {
-        let origin = Point2::new(x1, y1);
-        let direction = Vector2::new(x2 - x1, y2 - y1);
-        let distance = direction.norm();
-        if distance == 0.0 {
-            return false;
-        }
-        let direction = direction / distance;
-        let ray = Ray::new(origin, direction);
-        let mut hit = false;
-        self.physics_pipeline.cast_ray(
-            &self.rigid_body_set,
-            &self.collider_set,
-            ray,
-            distance,
-            true,
-            QueryFilter::default(),
-            |_hit| {
-                hit = true;
-                false
-            },
-        );
-        hit
     }
 }
 
