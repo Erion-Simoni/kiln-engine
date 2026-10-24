@@ -906,3 +906,40 @@ stubs so the public API surface is stable.
 - Any new crate added for 3D (e.g. a glTF loader) still needs its own ADR
   entry (size, license, maintenance) per rule 5.
 
+---
+
+## ADR-0035: glTF 2.0 import approach for M29 (accepted)
+
+**Date:** 2026-10-24
+**Status:** accepted
+
+**Decision:** M29 glTF 2.0 import will be implemented as a new feature-gated
+loader crate (tentatively `kiln-gltf`, behind its own Cargo feature) rather
+than baking a glTF dependency into `kiln-assets` or `kiln-core`. The loader
+parses glTF JSON + binary buffers, extracts meshes/materials/textures/
+hierarchy, and converts them into `kiln-core` mesh types (`Mesh`,
+`Material`, `SubMesh`) behind the `3d` feature. meshopt compression is
+supported via the `meshopt` crate (already in `Cargo.toml`).
+
+**Rationale:** glTF is a large, complex format. Pulling `gltf` + dependencies
+into `kiln-assets` unconditionally would bloat every 2D build and break the
+web size budget. A separate feature-gated crate keeps the cost opt-in.
+
+**Alternatives considered:**
+- Embed glTF parsing in `kiln-assets`: rejected — unconditional size cost.
+- Use `bevy_gltf` / `rapier_gltf`: rejected — heavy, pulls in game-engine
+  and physics dependencies we don't need.
+- Write a minimal custom glTF subset parser: accepted as the implementation
+  approach within `kiln-gltf` (only the subset M29 needs: meshes, PBR
+  materials, textures, node hierarchy).
+
+**Consequences:**
+- `kiln-gltf` needs its own dependency size justification in this ADR.
+- The `meshopt` crate (already pinned at 0.7.0 in `Cargo.toml`) is reused
+  for mesh compression — no new dependency.
+- M29 acceptance includes "glTF 2.0 import (meshes, materials, textures,
+  hierarchy) with meshopt."
+- Any future extension of `kiln-gltf` beyond M29's subset needs a follow-up
+  ADR.
+
+
