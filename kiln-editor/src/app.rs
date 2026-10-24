@@ -28,6 +28,7 @@ use crate::inspector::InspectorPanel;
 use crate::prefab_editor::PrefabEditorState;
 use crate::scene_view::{self, SceneTextures, ViewportRect};
 use crate::tilemap_editor::TilemapEditorState;
+use crate::graph_editor::GraphEditorState;
 
 /// A running game session in the editor.
 ///
@@ -128,6 +129,7 @@ pub struct EditorApp {
     gameplay_editor: GameplayEditorState,
     tilemap_editor: TilemapEditorState,
     hierarchy_panel: HierarchyPanel,
+    graph_editor: GraphEditorState,
     inspector_panel: InspectorPanel,
     project_path: Option<PathBuf>,
     current_project: Option<Project>,
@@ -575,6 +577,7 @@ impl EditorApp {
             gameplay_editor: GameplayEditorState::new(),
             tilemap_editor: TilemapEditorState::new(),
             hierarchy_panel: HierarchyPanel::new(),
+            graph_editor: GraphEditorState::new(),
             inspector_panel: InspectorPanel::new(),
             project_path: None,
             current_project: None,
@@ -1403,6 +1406,8 @@ impl winit::application::ApplicationHandler for EditorApp {
                     asset_browser: &mut self.asset_browser,
                     tilemap_editor: &mut self.tilemap_editor,
                     hierarchy_panel: &mut self.hierarchy_panel,
+                    inspector_panel: &mut self.inspector_panel,
+                    graph_editor: &mut self.graph_editor,
                     current_project: &mut self.current_project,
                     play_toggle_requested: &mut self.play_toggle_requested,
                     scene_save_requested: &mut self.scene_save_requested,
@@ -1821,6 +1826,8 @@ struct TabViewer<'a> {
     asset_browser: &'a mut AssetBrowser,
     tilemap_editor: &'a mut TilemapEditorState,
     hierarchy_panel: &'a mut HierarchyPanel,
+    inspector_panel: &'a mut InspectorPanel,
+    graph_editor: &'a mut GraphEditorState,
     current_project: &'a mut Option<Project>,
     play_toggle_requested: &'a mut bool,
     scene_save_requested: &'a mut bool,
@@ -3211,6 +3218,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.add_space(8.0);
                         ui.label("Open a project to author tilemaps.");
                     }
+                });
+            }
+            Tab::GraphEditor => {
+                ui.vertical(|ui| {
+                    crate::graph_editor::render_graph_editor(ui, &mut self.graph_editor);
                 });
             }
             Tab::Hierarchy => {

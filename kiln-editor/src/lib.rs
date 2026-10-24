@@ -6,6 +6,7 @@ pub mod editing;
 pub mod history;
 pub mod hierarchy;
 pub mod inspector;
+pub mod graph_editor;
 pub mod panels;
 pub mod prefab_editor;
 pub mod scene_view;

@@ -27,6 +27,7 @@ kiln-runtime = { workspace = true }
 kiln-assets = { workspace = true }
 kiln-graph = { workspace = true }
 kiln-ui = { workspace = true }
+uuid = { workspace = true }
 kiln-ai = { workspace = true }
 kiln-gameplay = { workspace = true }
 winit = { workspace = true }
