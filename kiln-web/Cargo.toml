@@ -15,6 +15,7 @@ js-sys = "0.3"
 web-sys = { version = "0.3.106", features = [
     "console",
     "Window",
+    "Document",
     "Worker",
     "Blob",
     "BlobPropertyBag",
@@ -36,7 +37,7 @@ web-sys = { version = "0.3.106", features = [
 ] }
 console_error_panic_hook = "0.1.7"
 pollster = { workspace = true }
-wgpu = { workspace = true }
+wgpu = { workspace = true, features = ["webgpu"] }
 glam = { workspace = true }
 bytemuck = { workspace = true }
 kiln-core = { workspace = true }
@@ -48,7 +49,6 @@ getrandom = { workspace = true }
 getrandom_02 = { workspace = true }
 wasm-bindgen-futures = "0.4"
 uuid = { workspace = true, features = ["rng-getrandom"] }
-raw-window-handle = "0.6"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
