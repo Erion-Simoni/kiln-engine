@@ -20,6 +20,16 @@ Constraints that shape every design choice: **tiny binaries**, **old-hardware ti
 | `kiln-editor` | winit + egui shell, panels, PIE, undo | runtime, graph, script, assets |
 | `kiln-cli` | `build` / `export` / `pack` / CI entrypoints | runtime, assets, ir |
 | `kiln-web` | wasm-bindgen shell, canvas, WebGPU/WebGL2 | runtime |
+| `kiln-player` | Thin standalone game launcher (loads `.kar` or project dir) | runtime |
+| `kiln-ui` | In-game UI widgets, text renderer, nine-slice panels | render |
+| `kiln-input` | Action maps, key/gamepad bindings | core |
+| `kiln-save` | Versioned save slots with migration | core |
+| `kiln-anim` | Spritesheet clips, tween easing curves | core |
+| `kiln-vfx` | CPU + GPU particle systems | render |
+| `kiln-gameplay` | Data tables, dialogue, quests | runtime |
+| `kiln-ai` | Navmesh, grid pathfinding | runtime |
+| `kiln-platform` | Platform services (achievements, leaderboards, cloud saves, IAP) | core |
+| `kiln-updater` | Delta patching, in-game updates (feature-gated stubs) | core |
 | `kiln-plugin-api` | Stable ABI + host imports for sandboxed WASM plugins | core (thin) |
 | `samples/` | Vertical-slice games and tutorial project | (consumers) |
 
@@ -165,14 +175,16 @@ Start **2D / 2.5D** lit sprites + tilemaps; add **3D** after the 2D vertical sli
 
 ## Project file format
 
-Human-readable, **git-friendly**, mergeable text (proposal: **RON** or **TOML** for manifests; YAML discouraged for merge noise).
+The project manifest is `kiln.toml` — see `docs/PROJECT_FORMAT.md` for the complete schema reference.
+
+The format is human-readable, **git-friendly**, mergeable text (TOML). YAML is discouraged for merge noise.
 
 ```text
 my_game/
   kiln.toml              # project id, features, export defaults
   scenes/*.ron           # entity/prefab trees (stable IDs)
   graphs/*.kgraph        # node graphs (RON/JSON + layout)
-  scripts/*.ks / *.rhai  # text gameplay
+  scripts/*.ks           # KilnScript gameplay
   assets/                # sources; .kiln-cache/ gitignored
   packs/                 # optional checked-in small packs for samples
 ```

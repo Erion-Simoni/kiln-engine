@@ -159,3 +159,30 @@ Known gaps worth picking up on the way (none of them block M29):
 
 **Blocked:** None — M29 (3D foundation) is in progress. The 2D gate is
 complete, so M29 may proceed; M30 is blocked on M29's acceptance.
+
+---
+
+## Documentation (complete)
+
+The following docs fully describe the engine so any AI agent can work on it
+without reading every source file:
+
+| Doc | Purpose |
+|-----|---------|
+| `docs/ARCHITECTURE.md` | Crate map, data flow, IR design, dependency versions |
+| `docs/API_REFERENCE.md` | Complete public API for every crate |
+| `docs/PROJECT_FORMAT.md` | Complete `kiln.toml` schema reference |
+| `docs/ENGINE_OVERVIEW.md` | How crates fit together, frame lifecycle, data flow |
+| `docs/KILNSCRIPT.md` | KilnScript language reference |
+| `docs/TILEMAPS.md` | Chunked tilemaps with collision |
+| `docs/TUTORIAL.md` | Build your first game step by step |
+| `docs/GETTING_STARTED.md` | Make a 2D game from scratch |
+| `docs/BUDGETS.md` | Size and performance budgets |
+| `docs/DECISIONS.md` | Architecture decision records (ADR-0001 … ADR-0034) |
+| `ROADMAP_FULL_M14_PLUS.md` | M14+ milestones, M29 plan, "Prepare before M29" checklist |
+| `docs/ROADMAP.md` | Milestones M0–M61+ |
+| `docs/PACKAGING.md` | Packaging, signing, storefront distribution |
+| `docs/ANDROID.md` / `docs/IOS.md` | Mobile export guides |
+| `docs/PROGRESS_F6_NEXT.md` | F6 session record, pre-M29 checklist |
+| `docs/fixes m1-29.md` | M1–M29 fixes log |
+| `docs/STATE.md` | This file — session handoff |
