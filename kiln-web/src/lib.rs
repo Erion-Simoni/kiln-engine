@@ -12,11 +12,13 @@ use kiln_render::{
     camera::Camera, sprite_renderer::SpriteInstance, Renderer, SpriteRenderer, TextureId,
 };
 use kiln_runtime::{GameLoop, GameWorld, SliceSession};
+use kiln_ui::TextRenderer;
 use log::{error, info, warn};
+use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
-use web_sys::HtmlCanvasElement;
+use web_sys::{HtmlCanvasElement, HtmlImageElement};
 
-pub use threading::{can_use_web_workers, is_cross_origin_isolated, run_background_job};
+use image::GenericImageView;
 
 #[wasm_bindgen(start)]
 pub fn start() {
@@ -153,7 +155,7 @@ impl App {
         let project = load_project(project_path).await?;
 
         let textures =
-            load_textures(renderer.device(), renderer.queue(), &mut sprite_renderer, &project)?;
+            load_textures(renderer.device(), renderer.queue(), &mut sprite_renderer, &project, project_path).await?;
 
         let mut world = GameWorld::new();
         let scene_id = project
@@ -166,14 +168,14 @@ impl App {
 
         let mut slice = None;
         if let Some(script_path) = &scene.script {
-            let script_source = load_script(script_path).await?;
+            let script_source = load_script(script_path, project_path).await?;
             let mut session =
                 SliceSession::new(&script_source)
                     .map_err(|e| format!("Script compile error: {:?}", e))?;
             slice = Some(session);
         }
 
-        spawn_scene_entities(&mut world, scene, &textures, &sprite_renderer)?;
+        spawn_scene_entities(&mut world, &project, scene, &textures, &sprite_renderer)?;
 
         Ok(Self {
             surface,
@@ -248,28 +250,19 @@ impl App {
 
         let target_view = self.renderer.scene_target().unwrap_or(&view);
 
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("web_main_pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: target_view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.08,
-                        g: 0.08,
-                        b: 0.10,
-                        a: 1.0,
-                    }),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        });
-
+        // Collect sprite instances from the ECS world (CPU gather pass).
         self.sprite_renderer.begin_frame();
+
+        // Tilemaps are drawn first so entities appear on top of them.
+        // Only the chunks inside the camera view are submitted.
+        let view_bounds = self.camera.view_bounds();
         let world = self.world.world_ref();
+        for (_, tilemap) in world.query::<(&Transform, &kiln_runtime::Tilemap)>().iter() {
+            for (texture, instance) in tilemap.collect_visible(view_bounds) {
+                self.sprite_renderer.push_textured(texture, instance);
+            }
+        }
+
         for (transform, sprite) in world.query::<(&Transform, &kiln_runtime::Sprite)>().iter() {
             let mut instance = SpriteInstance {
                 position: [transform.position.x, transform.position.y],
@@ -284,12 +277,71 @@ impl App {
             }
         }
 
-        self.sprite_renderer
-            .flush(&mut pass, &self.camera, self.renderer.queue());
-        drop(pass);
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("web_main_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.08,
+                            g: 0.08,
+                            b: 0.10,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            self.sprite_renderer
+                .flush(&mut pass, &self.camera, self.renderer.queue());
+        }
 
         if self.renderer.has_post() {
             self.renderer.apply_post(&mut encoder, &view);
+        }
+
+        // Render HUD if slice has HUD lines
+        if let Some(slice) = &self.slice {
+            let lines = slice.hud_lines();
+            if !lines.is_empty() {
+                let text = TextRenderer::new();
+                let mut hud_instances = Vec::new();
+                for (index, line) in lines.iter().enumerate() {
+                    let y = 16.0 + index as f32 * 20.0;
+                    let quads = text.render(line, 16.0, y, 16.0, [1.0, 1.0, 1.0, 1.0]);
+                    hud_instances.extend(quads);
+                }
+                if !hud_instances.is_empty() {
+                    self.sprite_renderer.begin_frame();
+                    for instance in hud_instances {
+                        self.sprite_renderer.push(instance);
+                    }
+                    let size = self.renderer.surface_config();
+                    let hud_camera = Camera::new_top_left(size.width as f32, size.height as f32);
+                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("web_hud_pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    });
+                    self.sprite_renderer
+                        .flush(&mut pass, &hud_camera, self.renderer.queue());
+                }
+            }
         }
 
         self.renderer.finish_profiler_frame(&mut encoder);
@@ -325,12 +377,17 @@ async fn load_project(path: &str) -> Result<kiln_core::Project, Box<dyn std::err
     Ok(project)
 }
 
-async fn load_script(path: &str) -> Result<String, Box<dyn std::error::Error>> {
+async fn load_script(path: &str, project_path: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let window = web_sys::window().ok_or("No window")?;
     let opts = web_sys::RequestInit::new();
     opts.set_method("GET");
-    let request = web_sys::Request::new_with_str_and_init(path, &opts)
+    let full_path = if path.starts_with("http") {
+        path.to_string()
+    } else {
+        format!("{}/{}", project_path_dir(project_path), path)
+    };
+    let request = web_sys::Request::new_with_str_and_init(&full_path, &opts)
         .map_err(|e| format!("Request creation failed: {:?}", e))?;
-    let window = web_sys::window().ok_or("No window")?;
     let promise = window.fetch_with_request(&request);
     let resp_value = wasm_bindgen_futures::JsFuture::from(promise)
         .await
@@ -345,34 +402,146 @@ async fn load_script(path: &str) -> Result<String, Box<dyn std::error::Error>> {
     Ok(text.as_string().ok_or("Script text is not valid UTF-8")?)
 }
 
-fn load_textures(
-    _device: &wgpu::Device,
-    _queue: &wgpu::Queue,
-    _sprite_renderer: &mut SpriteRenderer,
+/// Load all PNG textures referenced by the project and upload them to the GPU.
+async fn load_textures(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    sprite_renderer: &mut SpriteRenderer,
     project: &kiln_core::Project,
-) -> Result<std::collections::HashMap<String, TextureId>, Box<dyn std::error::Error>> {
-    let mut textures = std::collections::HashMap::new();
+    project_path: &str,
+) -> Result<HashMap<String, TextureId>, Box<dyn std::error::Error>> {
+    let mut texture_paths = Vec::new();
+    
+    // Collect all unique texture paths from the project
     for scene in project.scenes.values() {
         for entity in &scene.entities {
             for component in &entity.components {
                 if let kiln_core::project::Component::Sprite { texture, .. } = component {
                     if let Some(path) = texture {
-                        if textures.contains_key(path) {
-                            continue;
+                        if !texture_paths.contains(path) {
+                            texture_paths.push(path.clone());
                         }
-                        textures.insert(path.clone(), TextureId::WHITE);
                     }
                 }
             }
         }
     }
+    
+    let mut textures = HashMap::new();
+    
+    // Load each texture
+    for path in &texture_paths {
+        // Assume assets are served from the same base path as the project
+        // The path in the project is like "art/hero.png", so we need to fetch it
+        let full_path = if path.starts_with("http") {
+            path.clone()
+        } else {
+            format!("{}/{}", project_path_dir(project_path), path)
+        };
+        
+        match load_png_texture(device, queue, sprite_renderer, &full_path).await {
+            Ok(tex_id) => {
+                info!("Loaded texture: {} -> {:?}", path, tex_id);
+                textures.insert(path.clone(), tex_id);
+            }
+            Err(e) => {
+                warn!("Failed to load texture {}: {}", path, e);
+                // Fall back to white texture
+                textures.insert(path.clone(), TextureId::WHITE);
+            }
+        }
+    }
+    
     Ok(textures)
 }
 
+/// Extract the directory portion of the project path for loading assets.
+fn project_path_dir(project_path: &str) -> String {
+    if let Some(idx) = project_path.rfind('/') {
+        project_path[..idx].to_string()
+    } else {
+        ".".to_string()
+    }
+}
+
+/// Load a project file from the given path.
+async fn load_project(project_path: &str) -> Result<kiln_core::Project, Box<dyn std::error::Error>> {
+    let window = web_sys::window().ok_or("No window")?;
+    let opts = web_sys::RequestInit::new();
+    opts.set_method("GET");
+    let request = web_sys::Request::new_with_str_and_init(project_path, &opts)
+        .map_err(|e| format!("Request creation failed: {:?}", e))?;
+    let promise = window.fetch_with_request(&request);
+    let resp_value = wasm_bindgen_futures::JsFuture::from(promise)
+        .await
+        .map_err(|e| format!("Fetch await failed: {}", e.as_string().unwrap_or_else(|| "unknown".to_string())))?;
+    let resp: web_sys::Response = resp_value
+        .dyn_into()
+        .map_err(|e| format!("Response cast failed: {:?}", e))?;
+    let text_promise = resp.text().map_err(|e| format!("{:?}", e))?;
+    let text = wasm_bindgen_futures::JsFuture::from(text_promise)
+        .await
+        .map_err(|e| format!("Text await failed: {}", e.as_string().unwrap_or_else(|| "unknown".to_string())))?;
+    let text = text.as_string().ok_or("Project text is not valid UTF-8")?;
+    let project = kiln_core::Project::from_toml(&text)
+        .map_err(|e| format!("TOML parse failed: {}", e))?;
+    Ok(project)
+}
+
+/// Load a single PNG texture from a URL and upload it to the GPU.
+async fn load_png_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    sprite_renderer: &mut SpriteRenderer,
+    url: &str,
+) -> Result<TextureId, Box<dyn std::error::Error>> {
+    let window = web_sys::window().ok_or("No window")?;
+    let opts = web_sys::RequestInit::new();
+    opts.set_method("GET");
+    opts.set_mode(web_sys::RequestMode::Cors);
+    
+    let request = web_sys::Request::new_with_str_and_init(url, &opts)
+        .map_err(|e| format!("Request creation failed: {:?}", e))?;
+    let promise = window.fetch_with_request(&request);
+    let resp_value = wasm_bindgen_futures::JsFuture::from(promise)
+        .await
+        .map_err(|e| format!("Fetch await failed: {}", e.as_string().unwrap_or_else(|| "unknown".to_string())))?;
+    let resp: web_sys::Response = resp_value
+        .dyn_into()
+        .map_err(|e| format!("Response cast failed: {:?}", e))?;
+    
+    if !resp.ok() {
+        return Err(format!("HTTP error: {}", resp.status()).into());
+    }
+    
+    let array_buffer_promise = resp.array_buffer()
+        .map_err(|e| format!("Array buffer failed: {:?}", e))?;
+    let array_buffer = wasm_bindgen_futures::JsFuture::from(array_buffer_promise)
+        .await
+        .map_err(|e| format!("Array buffer await failed: {}", e.as_string().unwrap_or_else(|| "unknown".to_string())))?;
+    let array_buffer: js_sys::ArrayBuffer = array_buffer
+        .dyn_into()
+        .map_err(|e| format!("ArrayBuffer cast failed: {:?}", e))?;
+    let bytes = js_sys::Uint8Array::new(&array_buffer).to_vec();
+    
+    // Decode PNG
+    let image = image::load_from_memory(&bytes)
+        .map_err(|e| format!("PNG decode failed: {}", e))?;
+    let rgba = image.to_rgba8();
+    let (width, height) = image.dimensions();
+    
+    // Upload to sprite renderer
+    let tex_id = sprite_renderer.create_texture_rgba(device, queue, &url, width, height, &rgba);
+    
+    Ok(tex_id)
+}
+
+/// Spawn all entities from a scene, including tilemaps.
 fn spawn_scene_entities(
     world: &mut GameWorld,
+    project: &kiln_core::Project,
     scene: &kiln_core::project::Scene,
-    textures: &std::collections::HashMap<String, TextureId>,
+    textures: &HashMap<String, TextureId>,
     _sprite_renderer: &SpriteRenderer,
 ) -> Result<(), Box<dyn std::error::Error>> {
     for entity in &scene.entities {
@@ -400,6 +569,20 @@ fn spawn_scene_entities(
 
         world.world_mut().spawn((transform, sprite));
     }
+
+    // Spawn tilemaps using the runtime's function with a texture resolver.
+    // Create a resolver that maps tileset IDs to TextureIds.
+    let mut resolve = |tileset_id: &str| {
+        // Look up the tileset in the project and get its texture path
+        project.tilesets.get(tileset_id).and_then(|ts| {
+            textures.get(&ts.texture).copied()
+        })
+    };
+    
+    if let Err(e) = kiln_runtime::spawn_tilemaps(world, project, scene, kiln_core::SceneOffset::default(), &mut resolve) {
+        warn!("Failed to spawn tilemaps: {}", e);
+    }
+
     Ok(())
 }
 

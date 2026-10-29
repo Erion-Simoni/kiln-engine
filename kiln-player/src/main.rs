@@ -19,6 +19,19 @@ use winit::event_loop::EventLoop;
 use winit::keyboard::{Key, NamedKey};
 use winit::window::Window;
 
+/// The current state of the player application.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MenuState {
+    /// Main menu: Start, Load, Settings, Quit.
+    Main,
+    /// Save slot selection for loading a game.
+    LoadGame,
+    /// In-game: the actual game is running.
+    Playing,
+    /// Settings menu.
+    Settings,
+}
+
 /// Kiln Player - run standalone games
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -125,6 +138,12 @@ struct PlayerApp {
     save_dir: PathBuf,
     /// The save slot the game state is stored in.
     save_slot: u32,
+    /// Current menu state.
+    menu_state: MenuState,
+    /// Selected index in the current menu.
+    menu_selected: usize,
+    /// Whether the GPU has been initialized (game started).
+    gpu_initialized: bool,
 }
 
 impl PlayerApp {
@@ -155,10 +174,15 @@ impl PlayerApp {
             window_height: height,
             save_dir,
             save_slot: 0,
+            menu_state: MenuState::Main,
+            menu_selected: 0,
+            gpu_initialized: false,
         }
     }
 
-    async fn init_gpu(&mut self, window: Arc<Window>) {
+    /// Initialize GPU resources (renderer, sprite renderers) without spawning the scene.
+    /// This is called on startup so the menu can render.
+    async fn init_gpu_only(&mut self, window: Arc<Window>) {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
@@ -169,23 +193,36 @@ impl PlayerApp {
             .expect("create surface");
 
         let renderer = Renderer::new(&instance, &surface, size.width, size.height).await;
-        // The scene may be rendered into an intermediate HDR target when
-        // post-processing is enabled, so target that format.
         let mut sprite_renderer =
             SpriteRenderer::new(renderer.device(), renderer.queue(), renderer.scene_format());
         sprite_renderer.upload_quad(renderer.queue());
 
-        // The HUD is drawn directly to the swap chain, so it uses the surface
-        // format and a renderer of its own.
         let hud_sprite_renderer =
             SpriteRenderer::new(renderer.device(), renderer.queue(), renderer.format());
         hud_sprite_renderer.upload_quad(renderer.queue());
 
+        self.gpu = Some(GpuState {
+            window,
+            surface,
+            renderer,
+            sprite_renderer,
+            hud_sprite_renderer,
+        });
+        self.gpu_initialized = true;
+    }
+
+    /// Spawn the scene entities and load the gameplay script.
+    /// Called when the user selects "Start Game" from the menu.
+    fn spawn_scene_and_load_slice(&mut self) {
+        let Some(gpu) = self.gpu.as_mut() else {
+            return;
+        };
+
         // Decode the project's PNG assets and upload them as GPU textures.
         let (textures, errors) = TextureLibrary::upload_for_project(
-            &mut sprite_renderer,
-            renderer.device(),
-            renderer.queue(),
+            &mut gpu.sprite_renderer,
+            gpu.renderer.device(),
+            gpu.renderer.queue(),
             &self.project,
             &self.assets,
         );
@@ -217,16 +254,15 @@ impl PlayerApp {
             info!("Spawned {} tilemaps", maps.len());
         }
 
-        self.gpu = Some(GpuState {
-            window,
-            surface,
-            renderer,
-            sprite_renderer,
-            hud_sprite_renderer,
-        });
-
         // The scene script needs the spawned entities, so it is loaded last.
         self.load_slice();
+    }
+
+    /// Initialize GPU and spawn scene (legacy combined function, kept for reference).
+    /// Now split into `init_gpu_only` + `spawn_scene_and_load_slice`.
+    async fn init_gpu(&mut self, window: Arc<Window>) {
+        self.init_gpu_only(window).await;
+        self.spawn_scene_and_load_slice();
     }
 
     /// Compile the scene's gameplay script, if it has one.
@@ -317,17 +353,103 @@ impl PlayerApp {
             if !self.held.contains(&event.logical_key) {
                 self.held.push(event.logical_key.clone());
             }
-            match event.logical_key {
-                Key::Named(NamedKey::Escape) => {}
-                Key::Named(NamedKey::F5) => self.save_game(),
-                Key::Named(NamedKey::F9) => self.load_game(),
-                Key::Named(NamedKey::Space) => self.camera.zoom(1.1),
-                Key::Named(NamedKey::Shift) => self.camera.zoom(1.0 / 1.1),
-                _ => {}
+
+            // Handle menu navigation
+            match self.menu_state {
+                MenuState::Main => self.handle_main_menu(event.logical_key.clone()),
+                MenuState::LoadGame => self.handle_load_game_menu(event.logical_key.clone()),
+                MenuState::Settings => self.handle_settings_menu(event.logical_key.clone()),
+                MenuState::Playing => self.handle_playing_keys(event.logical_key.clone()),
             }
         } else {
             self.held.retain(|key| *key != event.logical_key);
         }
+    }
+
+    /// Handle key input when in the main menu.
+    fn handle_main_menu(&mut self, key: Key) {
+        match key {
+            Key::Named(NamedKey::ArrowUp) | Key::Character(c) if c.as_str() == "w" || c.as_str() == "W" => {
+                if self.menu_selected > 0 {
+                    self.menu_selected -= 1;
+                }
+            }
+            Key::Named(NamedKey::ArrowDown) | Key::Character(c) if c.as_str() == "s" || c.as_str() == "S" => {
+                if self.menu_selected < 3 {
+                    self.menu_selected += 1;
+                }
+            }
+            Key::Named(NamedKey::Enter) => {
+                match self.menu_selected {
+                    0 => self.start_game(), // Start Game
+                    1 => { self.menu_state = MenuState::LoadGame; self.menu_selected = 0; } // Load Game
+                    2 => { self.menu_state = MenuState::Settings; self.menu_selected = 0; } // Settings
+                    3 => { std::process::exit(0); } // Quit
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Handle key input when in the load game menu.
+    fn handle_load_game_menu(&mut self, key: Key) {
+        match key {
+            Key::Named(NamedKey::ArrowUp) | Key::Character(c) if c.as_str() == "w" || c.as_str() == "W" => {
+                if self.menu_selected > 0 {
+                    self.menu_selected -= 1;
+                }
+            }
+            Key::Named(NamedKey::ArrowDown) | Key::Character(c) if c.as_str() == "s" || c.as_str() == "S" => {
+                if self.menu_selected < 9 {
+                    self.menu_selected += 1;
+                }
+            }
+            Key::Named(NamedKey::Enter) => {
+                self.save_slot = self.menu_selected;
+                self.load_game();
+                self.start_game();
+            }
+            Key::Named(NamedKey::Escape) => {
+                self.menu_state = MenuState::Main;
+                self.menu_selected = 1; // Select "Load Game" when returning
+            }
+            _ => {}
+        }
+    }
+
+    /// Handle key input when in the settings menu.
+    fn handle_settings_menu(&mut self, key: Key) {
+        match key {
+            Key::Named(NamedKey::Escape) => {
+                self.menu_state = MenuState::Main;
+                self.menu_selected = 2; // Select "Settings" when returning
+            }
+            _ => {}
+        }
+    }
+
+    /// Handle key input when playing the game.
+    fn handle_playing_keys(&mut self, key: Key) {
+        match key {
+            Key::Named(NamedKey::Escape) => {
+                self.menu_state = MenuState::Main;
+                self.menu_selected = 0;
+            }
+            Key::Named(NamedKey::F5) => self.save_game(),
+            Key::Named(NamedKey::F9) => self.load_game(),
+            Key::Named(NamedKey::Space) => self.camera.zoom(1.1),
+            Key::Named(NamedKey::Shift) => self.camera.zoom(1.0 / 1.1),
+            _ => {}
+        }
+    }
+
+    /// Initialize GPU and start the game.
+    fn start_game(&mut self) {
+        // If GPU not initialized yet, the menu would have initialized it already.
+        // Spawn the scene and load the slice.
+        self.spawn_scene_and_load_slice();
+        self.menu_state = MenuState::Playing;
     }
 
     fn update(&mut self) {
@@ -350,6 +472,20 @@ impl PlayerApp {
     }
 
     fn render(&mut self) {
+        // If we're in Playing state but GPU isn't initialized yet, initialize it now.
+        if self.menu_state == MenuState::Playing && !self.gpu_initialized {
+            // The GPU will be initialized in resumed(), but we need to wait for it.
+            // For now, just return and let the next frame handle it.
+            return;
+        }
+
+        // If in a menu state, render the menu (requires GPU).
+        if self.menu_state != MenuState::Playing {
+            self.render_menu();
+            return;
+        }
+
+        // Game rendering (original logic).
         let Some(gpu) = self.gpu.as_mut() else {
             return;
         };
@@ -469,6 +605,7 @@ impl PlayerApp {
         gpu.window.request_redraw();
     }
 
+
     /// Build the HUD text of the current frame.
     ///
     /// Returns `None` when the project has no gameplay script, so nothing is
@@ -484,6 +621,134 @@ impl PlayerApp {
         }
         Some(instances)
     }
+
+    /// Render the menu (main menu, load game, settings).
+    fn render_menu(&mut self) {
+        let Some(gpu) = self.gpu.as_mut() else {
+            return;
+        };
+
+        let size = gpu.window.inner_size();
+        if size.width == 0 || size.height == 0 {
+            return;
+        }
+        gpu.renderer.resize(&gpu.surface, size.width, size.height);
+
+        let frame = match gpu.surface.get_current_texture() {
+            Ok(f) => f,
+            Err(e) => {
+                log::warn!("frame error: {e}");
+                return;
+            }
+        };
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        // Build menu text using TextRenderer.
+        let text = TextRenderer::new();
+        let mut instances = Vec::new();
+
+        match self.menu_state {
+            MenuState::Main => {
+                let options = ["Start Game", "Load Game", "Settings", "Quit"];
+                let title = &self.project.name;
+                let title_quads = text.render(title, 16.0, 50.0, 32.0, [1.0, 1.0, 1.0, 1.0]);
+                instances.extend(title_quads);
+
+                for (i, opt) in options.iter().enumerate() {
+                    let y = 150.0 + i as f32 * 40.0;
+                    let color = if i == self.menu_selected {
+                        [1.0, 1.0, 0.0, 1.0] // Yellow for selected
+                    } else {
+                        [1.0, 1.0, 1.0, 1.0] // White for normal
+                    };
+                    let prefix = if i == self.menu_selected { "> " } else { "  " };
+                    let quads = text.render(&format!("{}{}", prefix, opt), 16.0, y, 24.0, color);
+                    instances.extend(quads);
+                }
+            }
+            MenuState::LoadGame => {
+                let title_quads = text.render("Load Game - Select Slot", 16.0, 50.0, 32.0, [1.0, 1.0, 1.0, 1.0]);
+                instances.extend(title_quads);
+
+                for i in 0..10 {
+                    let y = 150.0 + i as f32 * 35.0;
+                    let color = if i == self.menu_selected {
+                        [1.0, 1.0, 0.0, 1.0]
+                    } else {
+                        [1.0, 1.0, 1.0, 1.0]
+                    };
+                    let prefix = if i == self.menu_selected { "> " } else { "  " };
+                    // Check if save exists
+                    let save_path = self.save_dir.join(format!("slot_{}.json", i));
+                    let exists = save_path.exists();
+                    let label = if exists { "Slot {} (saved)" } else { "Slot {} (empty)" };
+                    let quads = text.render(&format!("{}{}", prefix, label.replace("{}", &i.to_string())), 16.0, y, 20.0, color);
+                    instances.extend(quads);
+                }
+                let esc_text = text.render("ESC - Back", 16.0, 150.0 + 10.0 * 35.0 + 20.0, 18.0, [0.7, 0.7, 0.7, 1.0]);
+                instances.extend(esc_text);
+            }
+            MenuState::Settings => {
+                let title_quads = text.render("Settings", 16.0, 50.0, 32.0, [1.0, 1.0, 1.0, 1.0]);
+                instances.extend(title_quads);
+
+                let esc_text = text.render("ESC - Back", 16.0, 150.0, 20.0, [0.7, 0.7, 0.7, 1.0]);
+                instances.extend(esc_text);
+
+                let info_text = text.render("Settings UI not yet implemented.", 16.0, 200.0, 20.0, [0.7, 0.7, 0.7, 1.0]);
+                instances.extend(info_text);
+            }
+            MenuState::Playing => {}
+        }
+
+        if instances.is_empty() {
+            return;
+        }
+
+        let gpu = self.gpu.as_mut().unwrap();
+        let mut encoder =
+            gpu.renderer
+                .device()
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("menu_encoder"),
+                });
+
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("menu_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.08,
+                            g: 0.08,
+                            b: 0.10,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            gpu.hud_sprite_renderer.begin_frame();
+            for instance in instances {
+                gpu.hud_sprite_renderer.push(instance);
+            }
+            let hud_camera = Camera::new_top_left(size.width as f32, size.height as f32);
+            gpu.hud_sprite_renderer
+                .flush(&mut pass, &hud_camera, gpu.renderer.queue());
+        }
+
+        gpu.renderer.queue().submit([encoder.finish()]);
+        frame.present();
+        gpu.window.request_redraw();
+    }
+
 }
 
 impl winit::application::ApplicationHandler for PlayerApp {
@@ -500,7 +765,8 @@ impl winit::application::ApplicationHandler for PlayerApp {
                 )
                 .expect("window"),
         );
-        pollster::block_on(self.init_gpu(window));
+        // Initialize GPU only (for menu rendering). Scene is spawned when user starts game.
+        pollster::block_on(self.init_gpu_only(window));
     }
 
     fn window_event(

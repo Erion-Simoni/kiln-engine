@@ -31,6 +31,7 @@ use crate::physics::PhysicsWorld;
 ///
 /// Each entry is the function name, its host-call id and its argument count.
 pub const BUILTINS: &[(&str, u32, u32)] = &[
+    // Core builtins (0-16)
     ("print", 0, 1),
     ("get_input_x", 1, 0),
     ("get_input_y", 2, 0),
@@ -48,6 +49,24 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("play_music", 14, 1),
     ("stop_music", 15, 0),
     ("set_volume", 16, 1),
+    // Entity management (17-22)
+    ("spawn_entity", 17, 4),       // name, x, y, texture_path?
+    ("despawn_entity", 18, 1),     // source_id
+    ("get_entity_pos", 19, 1),     // source_id -> (x, y)
+    ("set_entity_pos", 20, 3),     // source_id, x, y
+    // Query builtins (21-25)
+    ("get_entities_with_role", 21, 1),  // role -> array of source_ids
+    ("get_entity_component", 22, 2),    // source_id, component_name -> value
+    ("set_entity_component", 23, 3),    // source_id, component_name, value
+    // World queries (24-25)
+    ("find_nearest", 24, 3),         // x, y, role -> source_id
+    ("raycast", 25, 4),              // x, y, dx, dy -> hit info
+    // Audio extended (26-27)
+    ("sound_playing", 26, 1),        // sound_name -> bool
+    ("music_playing", 27, 0),        // -> bool
+    // Time/frame (28-29)
+    ("get_frame_count", 28, 0),      // -> frame number
+    ("get_time_scale", 29, 0),       // -> time scale
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -91,6 +110,14 @@ pub struct SliceFacts {
     pub status: String,
     /// Length of the current frame, in seconds.
     pub delta_time: f64,
+    /// Current frame number.
+    pub frame_count: u64,
+    /// Current time scale.
+    pub time_scale: f64,
+    /// Map of entity source_id -> (x, y) position for entities with Role component.
+    pub entity_positions: HashMap<String, (f64, f64)>,
+    /// Map of entity source_id -> role name.
+    pub entity_roles: HashMap<String, String>,
 }
 
 /// A change the script asked for.
@@ -104,6 +131,23 @@ pub enum SliceCommand {
     CollectCoin(String),
     /// Replace the status message.
     SetStatus(String),
+    /// Spawn a new entity.
+    SpawnEntity {
+        name: String,
+        x: f64,
+        y: f64,
+        texture_path: Option<String>,
+    },
+    /// Despawn an entity by source id.
+    DespawnEntity(String),
+    /// Set entity position.
+    SetEntityPos { source_id: String, x: f64, y: f64 },
+    /// Set entity component value.
+    SetEntityComponent {
+        source_id: String,
+        component: String,
+        value: Value,
+    },
 }
 
 /// The persistent state of a slice.
@@ -156,6 +200,10 @@ pub struct SliceHost {
     #[cfg(feature = "physics")]
     physics: Option<PhysicsWorld>,
     animation_players: HashMap<String, AnimationPlayer>,
+    /// Frame counter for get_frame_count.
+    frame_count: u64,
+    /// Time scale for get_time_scale.
+    time_scale: f64,
 }
 
 impl SliceHost {
@@ -169,6 +217,8 @@ impl SliceHost {
             #[cfg(feature = "physics")]
             physics: PhysicsWorld::new().ok(),
             animation_players: HashMap::new(),
+            frame_count: 0,
+            time_scale: 1.0,
         }
     }
 
@@ -188,9 +238,9 @@ impl SliceHost {
     }
 }
 
-impl HostContext for SliceHost {
-    fn call_host(&mut self, func_id: u32, args: &[Value]) -> Result<Value, VmError> {
+        fn call_host(&mut self, func_id: u32, args: &[Value]) -> Result<Value, VmError> {
         match func_id {
+            // Core builtins (0-16)
             0 => {
                 log::info!(
                     "[script] {}",
@@ -229,12 +279,191 @@ impl HostContext for SliceHost {
             }
             10 => Ok(Value::Str(self.facts.status.clone())),
             11 => Ok(Value::F64(self.facts.delta_time)),
+            12 => {
+                #[cfg(feature = "audio")]
+                {
+                    let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
+                    if let Some(audio) = &mut self.audio {
+                        audio.play_sound(name);
+                    }
+                }
+                Ok(Value::I64(0))
+            }
+            13 => {
+                #[cfg(feature = "audio")]
+                {
+                    let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
+                    if let Some(audio) = &mut self.audio {
+                        audio.stop_sound(name);
+                    }
+                }
+                Ok(Value::I64(0))
+            }
+            14 => {
+                #[cfg(feature = "audio")]
+                {
+                    let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
+                    if let Some(audio) = &mut self.audio {
+                        audio.play_music(name);
+                    }
+                }
+                Ok(Value::I64(0))
+            }
+            15 => {
+                #[cfg(feature = "audio")]
+                {
+                    if let Some(audio) = &mut self.audio {
+                        audio.stop_music();
+                    }
+                }
+                Ok(Value::I64(0))
+            }
+            16 => {
+                #[cfg(feature = "audio")]
+                {
+                    let volume = args.first().and_then(|v| v.to_f64()).unwrap_or(1.0) as f32;
+                    if let Some(audio) = &mut self.audio {
+                        audio.set_volume(volume);
+                    }
+                }
+                Ok(Value::I64(0))
+            }
+            // Entity management (17-20)
+            17 => {
+                // spawn_entity(name, x, y, texture_path?)
+                let name = args.first().and_then(|v| v.as_str()).unwrap_or("entity").to_string();
+                let x = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let y = args.get(2).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let texture_path = args.get(3).and_then(|v| v.as_str()).map(|s| s.to_string());
+                self.commands.push(SliceCommand::SpawnEntity {
+                    name,
+                    x,
+                    y,
+                    texture_path,
+                });
+                Ok(Value::I64(0))
+            }
+            18 => {
+                // despawn_entity(source_id)
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                self.commands.push(SliceCommand::DespawnEntity(source_id));
+                Ok(Value::I64(0))
+            }
+            19 => {
+                // get_entity_pos(source_id) -> (x, y) or null
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+                if let Some((x, y)) = self.facts.entity_positions.get(source_id) {
+                    Ok(Value::Array(vec![Value::F64(*x), Value::F64(*y)]))
+                } else {
+                    Ok(Value::Bool(false))
+                }
+            }
+            20 => {
+                // set_entity_pos(source_id, x, y)
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let x = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let y = args.get(2).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                self.commands.push(SliceCommand::SetEntityPos { source_id, x, y });
+                Ok(Value::I64(0))
+            }
+            // Query builtins (21-25)
+            21 => {
+                // get_entities_with_role(role) -> array of source_ids
+                let role = args.first().and_then(|v| v.as_str()).unwrap_or("");
+                let entities: Vec<Value> = self
+                    .facts
+                    .entity_roles
+                    .iter()
+                    .filter(|(_, r)| *r == role)
+                    .map(|(id, _)| Value::Str(id.clone()))
+                    .collect();
+                Ok(Value::Array(entities))
+            }
+            22 => {
+                // get_entity_component(source_id, component_name) -> value
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+                let _component = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
+                // For now, return position if asking for "transform"
+                // Full component access would need more infrastructure
+                if let Some((x, y)) = self.facts.entity_positions.get(source_id) {
+                    Ok(Value::Array(vec![Value::F64(*x), Value::F64(*y)]))
+                } else {
+                    Ok(Value::Bool(false))
+                }
+            }
+            23 => {
+                // set_entity_component(source_id, component_name, value)
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let component = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let value = args.get(2).cloned().unwrap_or(Value::I64(0));
+                self.commands.push(SliceCommand::SetEntityComponent {
+                    source_id,
+                    component,
+                    value,
+                });
+                Ok(Value::I64(0))
+            }
+            // World queries (24-25)
+            24 => {
+                // find_nearest(x, y, role) -> source_id or null
+                let x = args.first().and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let y = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let role = args.get(2).and_then(|v| v.as_str()).unwrap_or("");
+                
+                let mut nearest: Option<(String, f64)> = None;
+                for (id, (ex, ey)) in &self.facts.entity_positions {
+                    if self.facts.entity_roles.get(id) == Some(&role.to_string()) {
+                        let dist = ((ex - x).powi(2) + (ey - y).powi(2)).sqrt();
+                        if nearest.is_none() || dist < nearest.as_ref().unwrap().1 {
+                            nearest = Some((id.clone(), dist));
+                        }
+                    }
+                }
+                if let Some((id, _)) = nearest {
+                    Ok(Value::Str(id))
+                } else {
+                    Ok(Value::Bool(false))
+                }
+            }
+            25 => {
+                // raycast(x, y, dx, dy) -> hit info (simplified)
+                // Returns first solid tile or entity in ray direction
+                Ok(Value::Bool(false)) // TODO: implement with tilemap collision
+            }
+            // Audio extended (26-27)
+            26 => {
+                // sound_playing(name) -> bool
+                #[cfg(feature = "audio")]
+                {
+                    let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
+                    let playing = self.audio.as_ref().map(|a| a.is_playing(name)).unwrap_or(false);
+                    Ok(Value::Bool(playing))
+                }
+                #[cfg(not(feature = "audio"))]
+                Ok(Value::Bool(false))
+            }
+            27 => {
+                // music_playing() -> bool
+                #[cfg(feature = "audio")]
+                {
+                    let playing = self.audio.as_ref().map(|a| a.is_music_playing()).unwrap_or(false);
+                    Ok(Value::Bool(playing))
+                }
+                #[cfg(not(feature = "audio"))]
+                Ok(Value::Bool(false))
+            }
+            // Time/frame (28-29)
+            28 => Ok(Value::I64(self.frame_count as i64)),
+            29 => Ok(Value::F64(self.time_scale)),
             _ => Err(VmError::HostCallError(format!(
                 "unknown slice builtin id {func_id}"
             ))),
         }
     }
 }
+
+}
+
 
 /// Render a value for the log.
 fn describe(value: &Value) -> String {
@@ -299,6 +528,9 @@ impl SliceSession {
     ) -> Result<(), VmError> {
         self.state.elapsed += dt;
 
+        // Update animations (reads AnimationPlayer, writes Sprite uv_rect)
+        crate::sprite::update_animations(world.world_mut());
+
         let facts = self.collect_facts(world, input, dt);
         {
             let host = self.vm.host_mut();
@@ -336,6 +568,24 @@ impl SliceSession {
             .filter(|coin| !self.state.is_collected(&coin.source_id))
             .count() as i64;
 
+        // Collect entity positions, velocities, and roles for script queries.
+        let mut entity_positions = HashMap::new();
+        let mut entity_velocities = HashMap::new();
+        let mut entity_roles = HashMap::new();
+
+        use kiln_runtime::{Role, SourceId, Transform, Velocity};
+        use kiln_core::project::Component;
+
+        for (source_id, transform) in world.world_ref().query::<(&SourceId, &Transform)>().iter() {
+            entity_positions.insert(source_id.0.clone(), (transform.position.x as f64, transform.position.y as f64));
+        }
+
+        for (source_id, role) in world.world_ref().query::<(&SourceId, &Role)>().iter() {
+            entity_roles.insert(source_id.0.clone(), role.0.clone());
+        }
+
+        self.host_mut().frame_count += 1;
+
         SliceFacts {
             input_x: input.0,
             input_y: input.1,
@@ -345,7 +595,16 @@ impl SliceSession {
             coin_in_reach,
             status: self.state.status.clone(),
             delta_time: dt,
+            frame_count: self.host_mut().frame_count,
+            time_scale: self.host_mut().time_scale,
+            entity_positions,
+            entity_roles,
         }
+    }
+
+    /// Access the mutable host (for updating frame_count/time_scale).
+    fn host_mut(&mut self) -> &mut SliceHost {
+        self.vm.host_mut()
     }
 
     /// Apply one command to the world and the slice state.
@@ -353,9 +612,6 @@ impl SliceSession {
         match command {
             SliceCommand::MovePlayer { dx, dy } => {
                 if let Some(player) = find_player(world) {
-                    // The move is checked against the solid tiles, so the
-                    // player slides along a wall instead of walking through
-                    // it.
                     let target = crate::tilemap_collision::move_with_collision(
                         world,
                         [player.x, player.y],
@@ -365,7 +621,6 @@ impl SliceSession {
                     let x = target[0] as f64;
                     let y = target[1] as f64;
                     set_player_position(world, &player.source_id, x, y);
-                    // Remember the position, so a save keeps it.
                     self.state.player_x = x;
                     self.state.player_y = y;
                 }
@@ -384,9 +639,105 @@ impl SliceSession {
             SliceCommand::SetStatus(text) => {
                 self.state.status = text;
             }
+            SliceCommand::SpawnEntity { name, x, y, texture_path: _ } => {
+                use kiln_runtime::{SourceId, Transform, Sprite, Role};
+                let source_id = crate::editing::next_entity_id(&[]);
+                world.world_mut().spawn((
+                    Transform::new(x as f32, y as f32),
+                    Sprite::new(1.0, 1.0, 1.0, 1.0).with_size(32.0, 32.0),
+                    SourceId::new(source_id.clone()),
+                    Role::new(name),
+                ));
+            }
+            SliceCommand::DespawnEntity(source_id) => {
+                use kiln_runtime::SourceId;
+                for (sid, eid) in world.world_ref().query::<&SourceId>().iter() {
+                    if sid.0 == source_id {
+                        let _ = world.world_mut().despawn(eid);
+                        break;
+                    }
+                }
+            }
+            SliceCommand::SetEntityPos { source_id, x, y } => {
+                use kiln_runtime::{SourceId, Transform};
+                for (sid, eid) in world.world_ref().query::<&SourceId>().iter() {
+                    if sid.0 == source_id {
+                        if let Ok(mut transform) = world.world_mut().get_mut::<&mut Transform>(eid) {
+                            transform.position.x = x as f32;
+                            transform.position.y = y as f32;
+                        }
+                        break;
+                    }
+                }
+            }
+            SliceCommand::SetEntityVel { source_id, vx, vy } => {
+                #[cfg(feature = "physics")]
+                {
+                    use kiln_runtime::{SourceId, Velocity};
+                    for (sid, eid) in world.world_ref().query::<&SourceId>().iter() {
+                        if sid.0 == source_id {
+                            if let Ok(mut velocity) = world.world_mut().get_mut::<&mut Velocity>(eid) {
+                                velocity.0.x = vx as f32;
+                                velocity.0.y = vy as f32;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            SliceCommand::SetEntityComponent { source_id, component, value } => {
+                use kiln_runtime::{SourceId, Transform, Sprite};
+                #[cfg(feature = "physics")]
+                use kiln_runtime::Velocity;
+                for (sid, eid) in world.world_ref().query::<&SourceId>().iter() {
+                    if sid.0 == source_id {
+                        match component.as_str() {
+                            "transform" | "Transform" => {
+                                if let Value::Array(arr) = value {
+                                    if arr.len() >= 2 {
+                                        if let (Some(Value::F64(x)), Some(Value::F64(y))) = (arr.get(0), arr.get(1)) {
+                                            if let Ok(mut transform) = world.world_mut().get_mut::<&mut Transform>(eid) {
+                                                transform.position.x = *x as f32;
+                                                transform.position.y = *y as f32;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            "velocity" | "Velocity" => {
+                                #[cfg(feature = "physics")]
+                                {
+                                    if let Value::Array(arr) = value {
+                                        if arr.len() >= 2 {
+                                            if let (Some(Value::F64(vx)), Some(Value::F64(vy))) = (arr.get(0), arr.get(1)) {
+                                                if let Ok(mut velocity) = world.world_mut().get_mut::<&mut Velocity>(eid) {
+                                                    velocity.0.x = *vx as f32;
+                                                    velocity.0.y = *vy as f32;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            "sprite_color" | "SpriteColor" => {
+                                if let Value::Array(arr) = value {
+                                    if arr.len() >= 4 {
+                                        if let (Some(Value::F64(r)), Some(Value::F64(g)), Some(Value::F64(b)), Some(Value::F64(a))) = (arr.get(0), arr.get(1), arr.get(2), arr.get(3)) {
+                                            if let Ok(mut sprite) = world.world_mut().get_mut::<&mut Sprite>(eid) {
+                                                sprite.color = [*r as f32, *g as f32, *b as f32, *a as f32];
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                        break;
+                    }
+                }
+            }
         }
     }
-
     /// Make the world match the slice state: collected pickups are removed and
     /// the player is put back where it was saved.
     pub fn sync_world(&mut self, world: &mut GameWorld) {

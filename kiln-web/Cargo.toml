@@ -44,11 +44,13 @@ kiln-core = { workspace = true }
 kiln-runtime = { workspace = true }
 kiln-assets = { workspace = true }
 kiln-render = { workspace = true }
+kiln-ui = { workspace = true }
 log = { workspace = true }
 getrandom = { workspace = true }
 getrandom_02 = { workspace = true }
 wasm-bindgen-futures = "0.4"
 uuid = { workspace = true, features = ["rng-getrandom"] }
+image = { version = "0.25", features = ["png"] }
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -3,11 +3,12 @@
 //! The inspector edits the world directly, so the editor needs ways to add
 //! and remove entities and to give them the components a scene entity has.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use kiln_core::project::Project;
 use kiln_core::Transform;
-use kiln_runtime::{GameWorld, Role, SourceId, Sprite};
+use kiln_runtime::{GameWorld, Role, SourceId, Sprite, Tilemap};
 
 /// The components a new scene entity gets.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -133,6 +134,48 @@ pub fn add_sprite(world: &mut GameWorld, entity: hecs::Entity, defaults: EntityD
     )
     .with_size(defaults.size[0], defaults.size[1]);
     world.insert_one(entity, sprite).is_ok()
+}
+
+/// Add a role component to an entity that does not have one.
+///
+/// Returns whether the role was added.
+pub fn add_role(world: &mut GameWorld, entity: hecs::Entity) -> bool {
+    let world = world.world_mut();
+    if world.get::<&Role>(entity).is_ok() {
+        return false;
+    }
+    world.insert_one(entity, Role::new("")).is_ok()
+}
+
+/// Remove the role of an entity.
+///
+/// Returns whether the entity had one.
+pub fn remove_role(world: &mut GameWorld, entity: hecs::Entity) -> bool {
+    world.world_mut().remove_one::<Role>(entity).is_ok()
+}
+
+/// Add a tilemap component to an entity that does not have one.
+///
+/// Returns whether the tilemap was added.
+pub fn add_tilemap(world: &mut GameWorld, entity: hecs::Entity) -> bool {
+    let world = world.world_mut();
+    if world.get::<&kiln_runtime::Tilemap>(entity).is_ok() {
+        return false;
+    }
+    // Create an empty tilemap - it will be configured by the user
+    world.insert_one(entity, kiln_runtime::Tilemap::new(
+        "".to_string(),
+        kiln_core::TileMap::default(),
+        HashMap::new(),
+        HashMap::new(),
+    )).is_ok()
+}
+
+/// Remove the tilemap of an entity.
+///
+/// Returns whether the entity had one.
+pub fn remove_tilemap(world: &mut GameWorld, entity: hecs::Entity) -> bool {
+    world.world_mut().remove_one::<kiln_runtime::Tilemap>(entity).is_ok()
 }
 
 /// Build the project data of a prefab from an entity of the world.

@@ -8,6 +8,17 @@ use hecs::Entity;
 use kiln_core::project::{Component, Project, Scene};
 use kiln_runtime::world::Role;
 
+/// Action requested by the hierarchy panel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HierarchyAction {
+    /// User wants to add a new entity with the given name.
+    AddEntity(String),
+    /// User wants to remove the entity with the given project ID.
+    RemoveEntity(String),
+    /// User selected an entity (for syncing with inspector).
+    SelectEntity(String),
+}
+
 /// A node in the hierarchy tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HierarchyNode {
@@ -123,8 +134,8 @@ pub fn render_hierarchy_panel(
     state: &mut HierarchyPanel,
     project: &mut Project,
     scene_id: &str,
-) -> Option<String> {
-    let mut selected_entity: Option<String> = None;
+) -> Option<HierarchyAction> {
+    let mut action = None;
 
     ui.heading("Hierarchy");
 
@@ -169,7 +180,7 @@ pub fn render_hierarchy_panel(
                     .clicked()
                 {
                     state.select(&node.entity_id);
-                    selected_entity = Some(node.entity_id.clone());
+                    action = Some(HierarchyAction::SelectEntity(node.entity_id.clone()));
                 }
 
                 // Role badge
@@ -189,8 +200,7 @@ pub fn render_hierarchy_panel(
         }
         if ui.button("- Remove Selected").clicked() {
             if let Some(id) = &state.selected_id {
-                // Removal handled by caller
-                let _ = id;
+                action = Some(HierarchyAction::RemoveEntity(id.clone()));
             }
         }
     });
@@ -206,8 +216,7 @@ pub fn render_hierarchy_panel(
                 ui.horizontal(|ui| {
                     if ui.button("Create").clicked() {
                         if !state.new_entity_name.is_empty() {
-                            // Entity creation handled by caller
-                            let _ = &state.new_entity_name;
+                            action = Some(HierarchyAction::AddEntity(state.new_entity_name.clone()));
                         }
                         state.show_add_dialog = false;
                         state.new_entity_name.clear();
@@ -220,7 +229,7 @@ pub fn render_hierarchy_panel(
             });
     }
 
-    selected_entity
+    action
 }
 
 /// Get the role of an entity in a scene, if any.

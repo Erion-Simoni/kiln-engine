@@ -1,13 +1,13 @@
 //! Main editor application.
 
 use hecs;
-use kiln_core::project::{Entity, Scene};
-use kiln_core::{project::Project, Transform};
+use kiln_core::project::{Component, Entity, Scene};
+use kiln_core::{project::{Project, Scene}, Transform};
 use kiln_gameplay::{DataTable, Dialogue, Quest};
 use kiln_graph::{ArithmeticOp, ConstantValue, Graph, Node, NodeType};
 use kiln_render::{
-    clear_view, execute_passes, Frame2dGraph, PassTiming, RenderTier, SpriteInstance,
-    SpriteRenderer,
+    clear_view, execute_passes, Frame2dGraph, PassTiming, PostConfig, PostFramebuffer,
+    PostPipeline, RenderTier, SpriteInstance, SpriteRenderer,
 };
 use kiln_runtime::{GameWorld, SourceId, Sprite, Tilemap};
 use kiln_ui::{Button, Label, List, Panel, Widget, WidgetId};
@@ -21,11 +21,14 @@ use winit::{
     window::Window,
 };
 
+use crate::anim_editor::AnimationEditorState;
 use crate::assets::{AssetBrowser, AssetKind};
+use crate::build_panel::BuildPanel;
 use crate::history::SceneHistory;
 use crate::hierarchy::HierarchyPanel;
 use crate::inspector::InspectorPanel;
 use crate::prefab_editor::PrefabEditorState;
+use crate::project_hub::ProjectHubState;
 use crate::scene_view::{self, SceneTextures, ViewportRect};
 use crate::tilemap_editor::TilemapEditorState;
 use crate::graph_editor::GraphEditorState;
@@ -60,6 +63,8 @@ const BACKGROUND_COLOR: [f32; 4] = [0.07, 0.07, 0.08, 1.0];
 enum ComponentKind {
     Transform,
     Sprite,
+    Role,
+    Tilemap,
 }
 
 /// The default size of a sprite without a texture, in world units.
@@ -129,6 +134,11 @@ pub struct EditorApp {
     gameplay_editor: GameplayEditorState,
     tilemap_editor: TilemapEditorState,
     hierarchy_panel: HierarchyPanel,
+    anim_editor: AnimationEditorState,
+    build_panel: BuildPanel,
+    project_hub: ProjectHubState,
+    /// Mapping from project entity ID (source_id) to hecs Entity for selection sync.
+    entity_id_to_hecs: HashMap<String, hecs::Entity>,
     graph_editor: GraphEditorState,
     inspector_panel: InspectorPanel,
     project_path: Option<PathBuf>,
@@ -159,6 +169,9 @@ enum Tab {
     SceneEditor,
     GameplayEditor,
     TilemapEditor,
+    AnimationEditor,
+    BuildPanel,
+    ProjectHub,
 }
 
 struct GpuState {
@@ -174,6 +187,10 @@ struct GpuState {
     scene_view_overlay_renderer: SpriteRenderer,
     /// Textures of the open project, uploaded to the scene view renderer.
     scene_textures: SceneTextures,
+    /// Post-processing framebuffer for the scene view (separate from main renderer).
+    scene_view_post_framebuffer: Option<PostFramebuffer>,
+    /// Post-processing pipeline for the scene view.
+    scene_view_post_pipeline: Option<PostPipeline>,
 }
 
 /// UI designer state for the visual UI editor.
@@ -577,6 +594,10 @@ impl EditorApp {
             gameplay_editor: GameplayEditorState::new(),
             tilemap_editor: TilemapEditorState::new(),
             hierarchy_panel: HierarchyPanel::new(),
+            anim_editor: AnimationEditorState::new(),
+            build_panel: BuildPanel::new(),
+            project_hub: ProjectHubState::new(),
+            entity_id_to_hecs: HashMap::new(),
             graph_editor: GraphEditorState::new(),
             inspector_panel: InspectorPanel::new(),
             project_path: None,
@@ -619,6 +640,17 @@ impl EditorApp {
         scene_view_sprite_renderer.upload_quad(renderer.queue());
         scene_view_overlay_renderer.upload_quad(renderer.queue());
 
+        // Create post-processing framebuffer and pipeline for the scene view.
+        // Only create them if the tier supports post-processing (not Low).
+        let (scene_view_post_framebuffer, scene_view_post_pipeline) = if renderer.tier() != RenderTier::Low {
+            let config = PostConfig::for_tier(renderer.tier());
+            let fb = PostFramebuffer::new(renderer.device(), size.width, size.height, renderer.tier());
+            let pipe = PostPipeline::new(renderer.device(), renderer.tier(), renderer.format());
+            (Some(fb), Some(pipe))
+        } else {
+            (None, None)
+        };
+
         self.gpu = Some(GpuState {
             window,
             surface,
@@ -627,6 +659,8 @@ impl EditorApp {
             scene_view_sprite_renderer,
             scene_view_overlay_renderer,
             scene_textures: SceneTextures::default(),
+            scene_view_post_framebuffer,
+            scene_view_post_pipeline,
         });
     }
 
@@ -690,6 +724,92 @@ impl EditorApp {
         self.load_project_scene();
 
         Ok(())
+    }
+
+    /// Create a new project from a template.
+    pub fn create_project(
+        &mut self,
+        name: String,
+        path: PathBuf,
+        template: String,
+    ) -> Result<(), String> {
+        // Create project directory
+        std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+
+        // Create project file
+        let project = match template.as_str() {
+            "empty_2d" => self.create_empty_2d_project(name, &path)?,
+            "platformer" => self.create_platformer_project(name, &path)?,
+            "topdown" => self.create_topdown_project(name, &path)?,
+            _ => return Err(format!("Unknown template: {}", template)),
+        };
+
+        // Write project file
+        let project_file = path.join("kiln.toml");
+        std::fs::write(&project_file, project.to_toml().map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+
+        // Create asset directories
+        std::fs::create_dir_all(path.join("art")).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(path.join("scripts")).map_err(|e| e.to_string())?;
+
+        // Create a basic script file
+        let script_file = path.join("scripts/main.ks");
+        std::fs::write(&script_file, "// Game script\nlet speed = 100.0;\nlet dt = get_delta_time();\nlet dx = get_input_x() * speed * dt;\nlet dy = get_input_y() * speed * dt;\nmove_player(dx, dy);\n").map_err(|e| e.to_string())?;
+
+        // Load the new project
+        self.load_project(path)
+    }
+
+    /// Create an empty 2D project.
+    fn create_empty_2d_project(&self, name: String, path: &Path) -> Result<Project, String> {
+        let project_dir = path.file_name().unwrap().to_string_lossy().to_string();
+        Ok(Project {
+            id: project_dir,
+            name,
+            version: "0.1.0".to_string(),
+            publisher: "Kiln".to_string(),
+            icon: "".to_string(),
+            features: Vec::new(),
+            window: Default::default(),
+            mobile: Default::default(),
+            scenes: {
+                let mut scenes = HashMap::new();
+                scenes.insert(
+                    "main".to_string(),
+                    Scene {
+                        id: "main".to_string(),
+                        name: "Main".to_string(),
+                        script: Some("scripts/main.ks".to_string()),
+                        entities: Vec::new(),
+                        nested_scenes: Vec::new(),
+                    },
+                );
+                scenes
+            },
+            tilemaps: HashMap::new(),
+            tilesets: HashMap::new(),
+        })
+    }
+
+    /// Create a platformer project template.
+    fn create_platformer_project(&self, name: String, path: &Path) -> Result<Project, String> {
+        // For now, same as empty but with platformer script
+        let mut project = self.create_empty_2d_project(name, path)?;
+        if let Some(scene) = project.scenes.get_mut("main") {
+            scene.script = Some("scripts/main.ks".to_string());
+        }
+        Ok(project)
+    }
+
+    /// Create a top-down project template.
+    fn create_topdown_project(&self, name: String, path: &Path) -> Result<Project, String> {
+        // For now, same as empty but with top-down script
+        let mut project = self.create_empty_2d_project(name, path)?;
+        if let Some(scene) = project.scenes.get_mut("main") {
+            scene.script = Some("scripts/main.ks".to_string());
+        }
+        Ok(project)
     }
 
     /// Upload the open project's textures to the scene view renderer.
@@ -796,21 +916,34 @@ impl EditorApp {
         let Some(project) = self.current_project.clone() else {
             self.world = GameWorld::new();
             self.entity_textures.clear();
+            self.entity_roles.clear();
+            self.entity_id_to_hecs.clear();
+            self.hierarchy_panel.clear_selection();
             return;
         };
         let Some(scene_id) = project.default_scene_id() else {
             self.world = GameWorld::new();
             self.entity_textures.clear();
+            self.entity_roles.clear();
+            self.entity_id_to_hecs.clear();
+            self.hierarchy_panel.clear_selection();
             return;
         };
         self.world = GameWorld::new();
         self.entity_textures.clear();
+        self.entity_roles.clear();
+        self.entity_id_to_hecs.clear();
         let textures = self
             .gpu
             .as_ref()
             .map(|gpu| gpu.scene_textures.clone())
             .unwrap_or_default();
         let (world, spawned) = spawn_editor_scene(&project, &scene_id, &textures);
+        // Build mapping from project entity ID (SourceId) to hecs Entity.
+        for (hecs_entity, source_id) in world.world_ref().query::<&SourceId>().iter() {
+            self.entity_id_to_hecs
+                .insert(source_id.0.clone(), hecs_entity);
+        }
         self.world = world;
         for entity in spawned {
             if let Some(texture) = entity.texture {
@@ -821,6 +954,8 @@ impl EditorApp {
                 self.entity_roles.insert(entity.source_id, role);
             }
         }
+        // Rebuild hierarchy panel with the current scene.
+        self.hierarchy_panel.rebuild(&project, &scene_id);
     }
 
     /// Advance the running game by one frame.
@@ -1077,6 +1212,10 @@ impl winit::application::ApplicationHandler for EditorApp {
             WindowEvent::Resized(size) => {
                 if size.width > 0 && size.height > 0 {
                     gpu.renderer.resize(&gpu.surface, size.width, size.height);
+                    // Also resize the scene view post framebuffer if it exists.
+                    if let Some(fb) = gpu.scene_view_post_framebuffer.as_mut() {
+                        fb.resize(gpu.renderer.device(), size.width, size.height, gpu.renderer.tier());
+                    }
                 }
             }
             _ => {}
@@ -1238,6 +1377,18 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     if ui.button("Graph Editor").clicked() {
                         self.dock_state.add_window(vec![Tab::GraphEditor]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Animation Editor").clicked() {
+                        self.dock_state.add_window(vec![Tab::AnimationEditor]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Build / Export").clicked() {
+                        self.dock_state.add_window(vec![Tab::BuildPanel]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Project Hub").clicked() {
+                        self.dock_state.add_window(vec![Tab::ProjectHub]);
                         ui.close_menu();
                     }
                     if ui.button("UI Designer").clicked() {
@@ -1540,33 +1691,22 @@ impl winit::application::ApplicationHandler for EditorApp {
 
             if !viewport.is_empty() {
                 let queue = gpu.renderer.queue();
-
-                // The viewport is placed inside the panel, so the offset is
-                // the panel's origin plus the letterbox offset.
                 let origin_x = panel.x + viewport.x;
                 let origin_y = panel.y + viewport.y;
 
-                // Queue the world: the background first, then the grid, then
-                // the entities.
+                // Queue the world: background, grid, tilemaps, sprites.
                 gpu.scene_view_sprite_renderer.begin_frame();
                 gpu.scene_view_sprite_renderer.push(scene_view::background(
-                    world.0,
-                    world.1,
-                    BACKGROUND_COLOR,
+                    world.0, world.1, BACKGROUND_COLOR,
                 ));
                 for line in scene_view::grid_lines(world.0, world.1, GRID_SPACING, GRID_COLOR) {
                     gpu.scene_view_sprite_renderer.push(line);
                 }
-                // Tilemaps are drawn first so sprites appear on top of them.
-                // Only the chunks inside the camera view are submitted.
-                // The tilemap's offset already accounts for its world position,
-                // so instances are drawn at their absolute world positions.
                 let world_camera = scene_view::world_camera(world.0, world.1);
                 let view_bounds = world_camera.view_bounds();
                 for (_, tilemap) in self.world.world().query::<(&Transform, &Tilemap)>().iter() {
                     for (texture, instance) in tilemap.collect_visible(view_bounds) {
-                        gpu.scene_view_sprite_renderer
-                            .push_textured(texture, instance);
+                        gpu.scene_view_sprite_renderer.push_textured(texture, instance);
                     }
                 }
                 for (transform, sprite) in
@@ -1583,13 +1723,60 @@ impl winit::application::ApplicationHandler for EditorApp {
                     );
                 }
 
-                // Queue the HUD, which is drawn in screen space over the scene.
+                // Determine render target: post framebuffer if available, else main view.
+                let (scene_target_view, use_post) = if let Some(fb) = gpu.scene_view_post_framebuffer.as_ref() {
+                    (fb.color_view(), true)
+                } else {
+                    (&view, false)
+                };
+
+                // Render scene to target (post framebuffer or main view).
+                {
+                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("scene_view_pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: scene_target_view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color {
+                                    r: BACKGROUND_COLOR[0] as f64,
+                                    g: BACKGROUND_COLOR[1] as f64,
+                                    b: BACKGROUND_COLOR[2] as f64,
+                                    a: BACKGROUND_COLOR[3] as f64,
+                                }),
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    });
+                    pass.set_viewport(origin_x as f32, origin_y as f32,
+                        viewport.width as f32, viewport.height as f32, 0.0, 1.0);
+                    pass.set_scissor_rect(origin_x, origin_y, viewport.width, viewport.height);
+                    gpu.scene_view_sprite_renderer.flush(&mut pass, &world_camera, queue);
+                }
+
+                // Apply post-processing if available.
+                if use_post {
+                    if let Some(pipeline) = gpu.scene_view_post_pipeline.as_mut() {
+                        if let Some(fb) = gpu.scene_view_post_framebuffer.as_ref() {
+                            pipeline.apply(
+                                gpu.renderer.device(),
+                                gpu.renderer.queue(),
+                                &mut encoder,
+                                fb,
+                                &view,
+                            );
+                        }
+                    }
+                }
+
+                // Render HUD overlay on top.
                 gpu.scene_view_overlay_renderer.begin_frame();
                 if let Some(play) = &self.play {
                     let text = kiln_ui::TextRenderer::new();
                     let mut lines = play.slice.hud_lines();
-                    // A script that failed says so in the same place the
-                    // player would show it.
                     if let Some(error) = &play.error {
                         lines.push(format!("ERROR: {error}"));
                     }
@@ -1608,40 +1795,31 @@ impl winit::application::ApplicationHandler for EditorApp {
                 }
 
                 let overlay_camera = scene_view::overlay_camera(ViewportRect {
-                    x: origin_x,
-                    y: origin_y,
-                    width: viewport.width,
-                    height: viewport.height,
+                    x: origin_x, y: origin_y, width: viewport.width, height: viewport.height,
                 });
+                {
+                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("scene_view_overlay_pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    });
+                    pass.set_viewport(origin_x as f32, origin_y as f32,
+                        viewport.width as f32, viewport.height as f32, 0.0, 1.0);
+                    pass.set_scissor_rect(origin_x, origin_y, viewport.width, viewport.height);
+                    gpu.scene_view_overlay_renderer.flush(&mut pass, &overlay_camera, queue);
+                }
+            }
+        }
 
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("scene_view_pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
-                pass.set_viewport(
-                    origin_x as f32,
-                    origin_y as f32,
-                    viewport.width as f32,
-                    viewport.height as f32,
-                    0.0,
-                    1.0,
-                );
-                pass.set_scissor_rect(origin_x, origin_y, viewport.width, viewport.height);
-                gpu.scene_view_sprite_renderer
-                    .flush(&mut pass, &world_camera, queue);
-                gpu.scene_view_overlay_renderer
-                    .flush(&mut pass, &overlay_camera, queue);
-                drop(pass);
             }
         }
 
@@ -1906,6 +2084,8 @@ impl TabViewer<'_> {
         let removed = match kind {
             ComponentKind::Transform => crate::editing::remove_transform(self.world, entity),
             ComponentKind::Sprite => crate::editing::remove_sprite(self.world, entity),
+            ComponentKind::Role => crate::editing::remove_role(self.world, entity),
+            ComponentKind::Tilemap => crate::editing::remove_tilemap(self.world, entity),
         };
         if !removed {
             return;
@@ -1932,6 +2112,8 @@ impl TabViewer<'_> {
                 entity,
                 crate::editing::EntityDefaults::default(),
             ),
+            ComponentKind::Role => crate::editing::add_role(self.world, entity),
+            ComponentKind::Tilemap => crate::editing::add_tilemap(self.world, entity),
         };
         if !added {
             return;
@@ -2412,13 +2594,21 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         // an entity can be built up piece by piece.
                         let has_transform = transform.is_some();
                         let has_sprite = sprite.is_some();
-                        if !has_transform || !has_sprite {
+                        let has_role = world.get::<&Role>(entity).is_ok();
+                        let has_tilemap = world.get::<&Tilemap>(entity).is_ok();
+                        if !has_transform || !has_sprite || !has_role || !has_tilemap {
                             ui.horizontal(|ui| {
                                 if !has_transform && ui.button("+ Transform").clicked() {
                                     self.add_component(entity, ComponentKind::Transform);
                                 }
                                 if !has_sprite && ui.button("+ Sprite").clicked() {
                                     self.add_component(entity, ComponentKind::Sprite);
+                                }
+                                if !has_role && ui.button("+ Role").clicked() {
+                                    self.add_component(entity, ComponentKind::Role);
+                                }
+                                if !has_tilemap && ui.button("+ Tilemap").clicked() {
+                                    self.add_component(entity, ComponentKind::Tilemap);
                                 }
                             });
                         } else {
@@ -3225,6 +3415,57 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     crate::graph_editor::render_graph_editor(ui, &mut self.graph_editor);
                 });
             }
+            Tab::AnimationEditor => {
+                ui.vertical(|ui| {
+                    if let Some(project) = self.current_project.as_mut() {
+                        crate::anim_editor::render_animation_editor(
+                            ui,
+                            &mut self.anim_editor,
+                            project,
+                            1.0 / 60.0, // dt
+                        );
+                    } else {
+                        ui.heading("Animation Editor");
+                        ui.add_space(8.0);
+                        ui.label("Open a project to author animations.");
+                    }
+                });
+            }
+            Tab::BuildPanel => {
+                ui.vertical(|ui| {
+                    if let Some(project) = self.current_project.as_mut() {
+                        crate::build_panel::BuildPanel::render(
+                            &mut self.build_panel,
+                            ui,
+                            project,
+                        );
+                    } else {
+                        ui.heading("Build / Export");
+                        ui.add_space(8.0);
+                        ui.label("Open a project to build and export.");
+                    }
+                });
+            }
+            Tab::ProjectHub => {
+                ui.vertical(|ui| {
+                    crate::project_hub::render_project_hub(
+                        ui,
+                        &mut self.project_hub,
+                        &mut |path| {
+                            // Open project callback
+                            if let Err(e) = self.load_project(path) {
+                                eprintln!("Failed to load project: {}", e);
+                            }
+                        },
+                        &mut |name, path, template| {
+                            // Create project callback
+                            if let Err(e) = self.create_project(name, path, template) {
+                                eprintln!("Failed to create project: {}", e);
+                            }
+                        },
+                    );
+                });
+            }
             Tab::Hierarchy => {
                 ui.vertical(|ui| {
                     if let Some(project) = self.current_project.as_mut() {
@@ -3234,12 +3475,76 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             .next()
                             .map(|s| s.clone())
                             .unwrap_or_default();
-                        crate::hierarchy::render_hierarchy_panel(
+                        // Render hierarchy panel and handle actions.
+                        if let Some(action) = crate::hierarchy::render_hierarchy_panel(
                             ui,
                             &mut self.hierarchy_panel,
                             project,
                             &scene_id,
-                        );
+                        ) {
+                            match action {
+                                crate::hierarchy::HierarchyAction::SelectEntity(project_id) => {
+                                    // Sync selection: project entity ID -> hecs Entity
+                                    if let Some(&hecs_entity) = self.entity_id_to_hecs.get(&project_id) {
+                                        self.selected_entity = Some(hecs_entity);
+                                    }
+                                }
+                                crate::hierarchy::HierarchyAction::AddEntity(name) => {
+                                    self.record_scene();
+                                    // Use all known project entity IDs for unique naming.
+                                    let existing: Vec<String> = self.entity_id_to_hecs.keys().cloned().collect();
+                                    let size = self.world_size();
+                                    let position = [size.0 / 2.0, size.1 / 2.0];
+                                    let (source_id, entity) = crate::editing::add_entity(
+                                        self.world,
+                                        &existing,
+                                        position,
+                                        crate::editing::EntityDefaults::default(),
+                                    );
+                                    // Update the project with the new entity
+                                    if let Some(scene) = project.scenes.get_mut(&scene_id) {
+                                        scene.entities.push(kiln_core::project::Entity {
+                                            id: source_id.clone(),
+                                            name: name,
+                                            components: vec![
+                                                kiln_core::project::Component::Transform {
+                                                    x: position[0],
+                                                    y: position[1],
+                                                    rotation: 0.0,
+                                                    scale: 1.0,
+                                                },
+                                                kiln_core::project::Component::Sprite {
+                                                    color: [1.0, 1.0, 1.0, 1.0],
+                                                    texture: None,
+                                                },
+                                                kiln_core::project::Component::Role {
+                                                    role: "".to_string(),
+                                                },
+                                            ],
+                                        });
+                                    }
+                                    *self.selected_entity = Some(entity);
+                                    self.entity_id_to_hecs.insert(source_id, entity);
+                                    self.hierarchy_panel.rebuild(project, &scene_id);
+                                }
+                                crate::hierarchy::HierarchyAction::RemoveEntity(project_id) => {
+                                    if let Some(&hecs_entity) = self.entity_id_to_hecs.get(&project_id) {
+                                        self.record_scene();
+                                        if crate::editing::remove_entity(self.world, hecs_entity) {
+                                            *self.selected_entity = None;
+                                        }
+                                        // Remove from project
+                                        if let Some(scene) = project.scenes.get_mut(&scene_id) {
+                                            scene.entities.retain(|e| e.id != project_id);
+                                        }
+                                        self.entity_id_to_hecs.remove(&project_id);
+                                        self.entity_textures.remove(&project_id);
+                                        self.entity_roles.remove(&project_id);
+                                        self.hierarchy_panel.rebuild(project, &scene_id);
+                                    }
+                                }
+                            }
+                        }
                     } else {
                         ui.heading("Hierarchy");
                         ui.add_space(8.0);

@@ -27,6 +27,7 @@ kiln-runtime = { workspace = true }
 kiln-assets = { workspace = true }
 kiln-graph = { workspace = true }
 kiln-ui = { workspace = true }
+kiln-ir = { workspace = true }
 uuid = { workspace = true }
 kiln-ai = { workspace = true }
 kiln-gameplay = { workspace = true }
@@ -42,3 +43,4 @@ egui-winit = "0.29"
 egui-wgpu = "0.29"
 glam = { workspace = true }
 hecs = { workspace = true }
+dirs = { workspace = true }

@@ -55,6 +55,9 @@ impl Default for Sprite {
 #[derive(Debug)]
 pub struct AnimationPlayer {
     clips: HashMap<String, Clip>,
+    /// Texture dimensions for each clip (width, height) - used to convert
+    /// pixel UV rects to normalized UV rects.
+    clip_textures: HashMap<String, (u32, u32)>,
     current_clip: Option<String>,
     elapsed: f32,
 }
@@ -63,6 +66,7 @@ impl AnimationPlayer {
     pub fn new() -> Self {
         Self {
             clips: HashMap::new(),
+            clip_textures: HashMap::new(),
             current_clip: None,
             elapsed: 0.0,
         }
@@ -70,6 +74,13 @@ impl AnimationPlayer {
 
     /// Add a clip to the player.
     pub fn add_clip(&mut self, clip: Clip) {
+        // Store texture dimensions from the first frame
+        if let Some(first_frame) = clip.frames.first() {
+            self.clip_textures.insert(
+                clip.name.clone(),
+                (first_frame.rect[2], first_frame.rect[3]),
+            );
+        }
         self.clips.insert(clip.name.clone(), clip);
     }
 
@@ -90,18 +101,42 @@ impl AnimationPlayer {
         self.elapsed += dt;
     }
 
-    /// Get the current frame's UV rect (pixel coordinates), if a clip is playing.
-    pub fn current_uv_rect(&self) -> Option<[u32; 4]> {
+    /// Get the current frame's normalized UV rect (0.0 to 1.0), if a clip is playing.
+    /// Returns [u0, v0, u1, v1] in normalized texture coordinates.
+    pub fn current_uv_rect(&self) -> Option<[f32; 4]> {
         let clip_name = self.current_clip.as_ref()?;
         let clip = self.clips.get(clip_name)?;
         let (frame_idx, _) = clip.frame_at_time(self.elapsed).ok()?;
         let frame = &clip.frames[frame_idx];
-        Some(frame.rect)
+        
+        // Get texture dimensions for this clip
+        let (tex_w, tex_h) = self.clip_textures.get(clip_name)?;
+        let tex_w = *tex_w as f32;
+        let tex_h = *tex_h as f32;
+        
+        let [x, y, w, h] = frame.rect;
+        Some([
+            x as f32 / tex_w,
+            y as f32 / tex_h,
+            (x + w) as f32 / tex_w,
+            (y + h) as f32 / tex_h,
+        ])
     }
 }
 
 impl Default for AnimationPlayer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// System to update animations and apply UV rects to sprites.
+/// Reads AnimationPlayer and Sprite, writes Sprite (uv_rect).
+pub fn update_animations(world: &mut hecs::World) {
+    for (_, (anim, sprite)) in world.query_mut::<(&mut AnimationPlayer, &mut Sprite)>().iter() {
+        anim.update(1.0 / 60.0); // Fixed timestep
+        if let Some(uv_rect) = anim.current_uv_rect() {
+            sprite.uv_rect = uv_rect;
+        }
     }
 }
