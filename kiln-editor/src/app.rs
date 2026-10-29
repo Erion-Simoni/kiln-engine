@@ -28,6 +28,7 @@ use crate::history::SceneHistory;
 use crate::hierarchy::HierarchyPanel;
 use crate::inspector::InspectorPanel;
 use crate::prefab_editor::PrefabEditorState;
+use crate::profiler_panel::ProfilerPanel;
 use crate::project_hub::ProjectHubState;
 use crate::scene_view::{self, SceneTextures, ViewportRect};
 use crate::tilemap_editor::TilemapEditorState;
@@ -137,6 +138,7 @@ pub struct EditorApp {
     anim_editor: AnimationEditorState,
     build_panel: BuildPanel,
     project_hub: ProjectHubState,
+    profiler_panel: ProfilerPanel,
     /// Mapping from project entity ID (source_id) to hecs Entity for selection sync.
     entity_id_to_hecs: HashMap<String, hecs::Entity>,
     graph_editor: GraphEditorState,
@@ -172,6 +174,7 @@ enum Tab {
     AnimationEditor,
     BuildPanel,
     ProjectHub,
+    ProfilerPanel,
 }
 
 struct GpuState {
@@ -597,6 +600,7 @@ impl EditorApp {
             anim_editor: AnimationEditorState::new(),
             build_panel: BuildPanel::new(),
             project_hub: ProjectHubState::new(),
+            profiler_panel: ProfilerPanel::new(),
             entity_id_to_hecs: HashMap::new(),
             graph_editor: GraphEditorState::new(),
             inspector_panel: InspectorPanel::new(),
@@ -1389,6 +1393,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     if ui.button("Project Hub").clicked() {
                         self.dock_state.add_window(vec![Tab::ProjectHub]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Profiler").clicked() {
+                        self.dock_state.add_window(vec![Tab::ProfilerPanel]);
                         ui.close_menu();
                     }
                     if ui.button("UI Designer").clicked() {
@@ -3466,6 +3474,18 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     );
                 });
             }
+            Tab::ProfilerPanel => {
+                ui.vertical(|ui| {
+                    if let Some(gpu) = self.gpu.as_ref() {
+                        self.profiler_panel.update(&gpu.renderer.profiler());
+                        self.profiler_panel.render(ui, &gpu.renderer.profiler());
+                    } else {
+                        ui.heading("Profiler");
+                        ui.add_space(8.0);
+                        ui.label("GPU not initialized. Open a project to view profiler data.");
+                    }
+                });
+            }
             Tab::Hierarchy => {
                 ui.vertical(|ui| {
                     if let Some(project) = self.current_project.as_mut() {
@@ -3569,6 +3589,10 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::GameplayEditor => "Gameplay Editor".into(),
             Tab::TilemapEditor => "Tilemap Editor".into(),
             Tab::Hierarchy => "Hierarchy".into(),
+            Tab::AnimationEditor => "Animation Editor".into(),
+            Tab::BuildPanel => "Build / Export".into(),
+            Tab::ProjectHub => "Project Hub".into(),
+            Tab::ProfilerPanel => "Profiler".into(),
         }
     }
 }
