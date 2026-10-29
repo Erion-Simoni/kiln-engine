@@ -17,6 +17,7 @@ pub mod project_hub;
 pub mod profiler_panel;
 pub mod debugger_panel;
 pub mod vfx_editor;
+pub mod audio_editor;
 
 pub use app::{scene_from_world, EditorApp};
 pub use assets::{AssetBrowser, AssetEntry, AssetKind};
@@ -31,3 +32,4 @@ pub use project_hub::{ProjectHubState, render_project_hub};
 pub use profiler_panel::ProfilerPanel;
 pub use debugger_panel::DebuggerPanel;
 pub use vfx_editor::VfxEditorState;
+pub use audio_editor::AudioEditorState;

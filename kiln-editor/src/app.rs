@@ -28,6 +28,7 @@ use crate::history::SceneHistory;
 use crate::hierarchy::HierarchyPanel;
 use crate::inspector::InspectorPanel;
 use crate::prefab_editor::PrefabEditorState;
+use crate::audio_editor::AudioEditorState;
 use crate::vfx_editor::VfxEditorState;
 use crate::debugger_panel::DebuggerPanel;
 use crate::profiler_panel::ProfilerPanel;
@@ -143,6 +144,7 @@ pub struct EditorApp {
     profiler_panel: ProfilerPanel,
     debugger_panel: DebuggerPanel,
     vfx_editor: VfxEditorState,
+    audio_editor: AudioEditorState,
     /// Mapping from project entity ID (source_id) to hecs Entity for selection sync.
     entity_id_to_hecs: HashMap<String, hecs::Entity>,
     graph_editor: GraphEditorState,
@@ -181,6 +183,7 @@ enum Tab {
     ProfilerPanel,
     DebuggerPanel,
     VfxEditor,
+    AudioEditor,
 }
 
 struct GpuState {
@@ -609,6 +612,7 @@ impl EditorApp {
             profiler_panel: ProfilerPanel::new(),
             debugger_panel: DebuggerPanel::new(),
             vfx_editor: VfxEditorState::new(),
+            audio_editor: AudioEditorState::new(),
             entity_id_to_hecs: HashMap::new(),
             graph_editor: GraphEditorState::new(),
             inspector_panel: InspectorPanel::new(),
@@ -1413,6 +1417,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     if ui.button("VFX Editor").clicked() {
                         self.dock_state.add_window(vec![Tab::VfxEditor]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Audio Editor").clicked() {
+                        self.dock_state.add_window(vec![Tab::AudioEditor]);
                         ui.close_menu();
                     }
                     if ui.button("UI Designer").clicked() {
@@ -3523,6 +3531,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     self.vfx_editor.render(ui);
                 });
             }
+            Tab::AudioEditor => {
+                ui.vertical(|ui| {
+                    self.audio_editor.render(ui);
+                });
+            }
             Tab::Hierarchy => {
                 ui.vertical(|ui| {
                     if let Some(project) = self.current_project.as_mut() {
@@ -3632,6 +3645,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::ProfilerPanel => "Profiler".into(),
             Tab::DebuggerPanel => "Debugger".into(),
             Tab::VfxEditor => "VFX Editor".into(),
+            Tab::AudioEditor => "Audio Editor".into(),
         }
     }
 }
