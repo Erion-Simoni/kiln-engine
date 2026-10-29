@@ -185,6 +185,26 @@ impl<H: HostContext> Vm<H> {
         &mut self.host
     }
 
+    /// Get the current instruction pointer (program counter).
+    pub fn instruction_pointer(&self) -> usize {
+        self.ip
+    }
+
+    /// Get the current stack (for debugging).
+    pub fn stack(&self) -> &[Value] {
+        &self.stack
+    }
+
+    /// Get the local variables (for debugging).
+    pub fn locals(&self) -> &[Value] {
+        &self.locals
+    }
+
+    /// Get the call stack (for debugging).
+    pub fn call_stack(&self) -> &[usize] {
+        &self.call_stack
+    }
+
     /// Execute a bytecode program.
     ///
     /// The VM will run instructions sequentially until the program ends, a
@@ -223,7 +243,7 @@ impl<H: HostContext> Vm<H> {
     ///
     /// Returns `true` to continue execution, `false` when the program should
     /// halt (a `Return` instruction).
-    fn step(&mut self, program: &Program) -> Result<bool, VmError> {
+    pub fn step(&mut self, program: &Program) -> Result<bool, VmError> {
         let instr = program
             .instructions()
             .get(self.ip)

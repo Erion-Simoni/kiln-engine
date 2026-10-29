@@ -28,6 +28,7 @@ use crate::history::SceneHistory;
 use crate::hierarchy::HierarchyPanel;
 use crate::inspector::InspectorPanel;
 use crate::prefab_editor::PrefabEditorState;
+use crate::debugger_panel::DebuggerPanel;
 use crate::profiler_panel::ProfilerPanel;
 use crate::project_hub::ProjectHubState;
 use crate::scene_view::{self, SceneTextures, ViewportRect};
@@ -139,6 +140,7 @@ pub struct EditorApp {
     build_panel: BuildPanel,
     project_hub: ProjectHubState,
     profiler_panel: ProfilerPanel,
+    debugger_panel: DebuggerPanel,
     /// Mapping from project entity ID (source_id) to hecs Entity for selection sync.
     entity_id_to_hecs: HashMap<String, hecs::Entity>,
     graph_editor: GraphEditorState,
@@ -175,6 +177,7 @@ enum Tab {
     BuildPanel,
     ProjectHub,
     ProfilerPanel,
+    DebuggerPanel,
 }
 
 struct GpuState {
@@ -601,6 +604,7 @@ impl EditorApp {
             build_panel: BuildPanel::new(),
             project_hub: ProjectHubState::new(),
             profiler_panel: ProfilerPanel::new(),
+            debugger_panel: DebuggerPanel::new(),
             entity_id_to_hecs: HashMap::new(),
             graph_editor: GraphEditorState::new(),
             inspector_panel: InspectorPanel::new(),
@@ -1397,6 +1401,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     if ui.button("Profiler").clicked() {
                         self.dock_state.add_window(vec![Tab::ProfilerPanel]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Debugger").clicked() {
+                        self.dock_state.add_window(vec![Tab::DebuggerPanel]);
                         ui.close_menu();
                     }
                     if ui.button("UI Designer").clicked() {
@@ -3486,6 +3494,22 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     }
                 });
             }
+            Tab::DebuggerPanel => {
+                ui.vertical(|ui| {
+                    if let Some(gpu) = self.gpu.as_ref() {
+                        // Debugger would need access to the SliceSession/VM
+                        // For now, show placeholder
+                        ui.heading("KilnScript Debugger");
+                        ui.add_space(8.0);
+                        ui.label("Debugger panel - requires SliceSession integration");
+                        ui.label("Breakpoints, stepping, and variable inspection coming soon");
+                    } else {
+                        ui.heading("Debugger");
+                        ui.add_space(8.0);
+                        ui.label("GPU not initialized. Open a project to use debugger.");
+                    }
+                });
+            }
             Tab::Hierarchy => {
                 ui.vertical(|ui| {
                     if let Some(project) = self.current_project.as_mut() {
@@ -3593,6 +3617,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::BuildPanel => "Build / Export".into(),
             Tab::ProjectHub => "Project Hub".into(),
             Tab::ProfilerPanel => "Profiler".into(),
+            Tab::DebuggerPanel => "Debugger".into(),
         }
     }
 }
