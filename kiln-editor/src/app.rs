@@ -28,6 +28,7 @@ use crate::history::SceneHistory;
 use crate::hierarchy::HierarchyPanel;
 use crate::inspector::InspectorPanel;
 use crate::prefab_editor::PrefabEditorState;
+use crate::vfx_editor::VfxEditorState;
 use crate::debugger_panel::DebuggerPanel;
 use crate::profiler_panel::ProfilerPanel;
 use crate::project_hub::ProjectHubState;
@@ -141,6 +142,7 @@ pub struct EditorApp {
     project_hub: ProjectHubState,
     profiler_panel: ProfilerPanel,
     debugger_panel: DebuggerPanel,
+    vfx_editor: VfxEditorState,
     /// Mapping from project entity ID (source_id) to hecs Entity for selection sync.
     entity_id_to_hecs: HashMap<String, hecs::Entity>,
     graph_editor: GraphEditorState,
@@ -178,6 +180,7 @@ enum Tab {
     ProjectHub,
     ProfilerPanel,
     DebuggerPanel,
+    VfxEditor,
 }
 
 struct GpuState {
@@ -605,6 +608,7 @@ impl EditorApp {
             project_hub: ProjectHubState::new(),
             profiler_panel: ProfilerPanel::new(),
             debugger_panel: DebuggerPanel::new(),
+            vfx_editor: VfxEditorState::new(),
             entity_id_to_hecs: HashMap::new(),
             graph_editor: GraphEditorState::new(),
             inspector_panel: InspectorPanel::new(),
@@ -1405,6 +1409,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     if ui.button("Debugger").clicked() {
                         self.dock_state.add_window(vec![Tab::DebuggerPanel]);
+                        ui.close_menu();
+                    }
+                    if ui.button("VFX Editor").clicked() {
+                        self.dock_state.add_window(vec![Tab::VfxEditor]);
                         ui.close_menu();
                     }
                     if ui.button("UI Designer").clicked() {
@@ -3510,6 +3518,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     }
                 });
             }
+            Tab::VfxEditor => {
+                ui.vertical(|ui| {
+                    self.vfx_editor.render(ui);
+                });
+            }
             Tab::Hierarchy => {
                 ui.vertical(|ui| {
                     if let Some(project) = self.current_project.as_mut() {
@@ -3618,6 +3631,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::ProjectHub => "Project Hub".into(),
             Tab::ProfilerPanel => "Profiler".into(),
             Tab::DebuggerPanel => "Debugger".into(),
+            Tab::VfxEditor => "VFX Editor".into(),
         }
     }
 }
