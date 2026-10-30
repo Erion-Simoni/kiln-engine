@@ -23,7 +23,7 @@ path = "src/scene_view_test.rs"
 [dependencies]
 kiln-core = { workspace = true }
 kiln-render = { workspace = true }
-kiln-runtime = { workspace = true }
+kiln-runtime = { workspace = true, features = ["physics"] }
 kiln-assets = { workspace = true }
 kiln-graph = { workspace = true }
 kiln-ui = { workspace = true }
@@ -43,4 +43,5 @@ egui-winit = "0.29"
 egui-wgpu = "0.29"
 glam = { workspace = true }
 hecs = { workspace = true }
+dirs = { workspace = true }
 dirs = { workspace = true }

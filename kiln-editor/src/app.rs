@@ -28,6 +28,7 @@ use crate::history::SceneHistory;
 use crate::hierarchy::HierarchyPanel;
 use crate::inspector::InspectorPanel;
 use crate::prefab_editor::PrefabEditorState;
+use crate::physics_editor::PhysicsEditorState;
 use crate::audio_editor::AudioEditorState;
 use crate::vfx_editor::VfxEditorState;
 use crate::debugger_panel::DebuggerPanel;
@@ -145,6 +146,7 @@ pub struct EditorApp {
     debugger_panel: DebuggerPanel,
     vfx_editor: VfxEditorState,
     audio_editor: AudioEditorState,
+    physics_editor: PhysicsEditorState,
     /// Mapping from project entity ID (source_id) to hecs Entity for selection sync.
     entity_id_to_hecs: HashMap<String, hecs::Entity>,
     graph_editor: GraphEditorState,
@@ -184,6 +186,7 @@ enum Tab {
     DebuggerPanel,
     VfxEditor,
     AudioEditor,
+    PhysicsEditor,
 }
 
 struct GpuState {
@@ -613,6 +616,7 @@ impl EditorApp {
             debugger_panel: DebuggerPanel::new(),
             vfx_editor: VfxEditorState::new(),
             audio_editor: AudioEditorState::new(),
+            physics_editor: PhysicsEditorState::new(),
             entity_id_to_hecs: HashMap::new(),
             graph_editor: GraphEditorState::new(),
             inspector_panel: InspectorPanel::new(),
@@ -1421,6 +1425,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     if ui.button("Audio Editor").clicked() {
                         self.dock_state.add_window(vec![Tab::AudioEditor]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Physics Editor").clicked() {
+                        self.dock_state.add_window(vec![Tab::PhysicsEditor]);
                         ui.close_menu();
                     }
                     if ui.button("UI Designer").clicked() {
@@ -3536,6 +3544,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     self.audio_editor.render(ui);
                 });
             }
+            Tab::PhysicsEditor => {
+                ui.vertical(|ui| {
+                    self.physics_editor.render(ui);
+                });
+            }
             Tab::Hierarchy => {
                 ui.vertical(|ui| {
                     if let Some(project) = self.current_project.as_mut() {
@@ -3646,6 +3659,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::DebuggerPanel => "Debugger".into(),
             Tab::VfxEditor => "VFX Editor".into(),
             Tab::AudioEditor => "Audio Editor".into(),
+            Tab::PhysicsEditor => "Physics Editor".into(),
         }
     }
 }
