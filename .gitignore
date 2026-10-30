@@ -37,3 +37,6 @@ web/pkg/
 
 # Logs
 *.log
+
+# Nested workspaces
+kiln-engine/
