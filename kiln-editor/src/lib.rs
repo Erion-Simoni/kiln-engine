@@ -19,6 +19,7 @@ pub mod debugger_panel;
 pub mod vfx_editor;
 pub mod audio_editor;
 pub mod physics_editor;
+pub mod ui_layout_editor;
 
 pub use app::{scene_from_world, EditorApp};
 pub use assets::{AssetBrowser, AssetEntry, AssetKind};
@@ -35,3 +36,4 @@ pub use debugger_panel::DebuggerPanel;
 pub use vfx_editor::VfxEditorState;
 pub use audio_editor::AudioEditorState;
 pub use physics_editor::PhysicsEditorState;
+pub use ui_layout_editor::UiLayoutEditorState;
