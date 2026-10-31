@@ -73,6 +73,10 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("get_entity_role", 32, 1),      // source_id -> role string
     ("add_component", 33, 3),        // source_id, component_type, value_json
     ("remove_component", 34, 2),     // source_id, component_type
+    // Animation API (35-37)
+    ("play_animation", 35, 2),       // source_id, clip_name
+    ("stop_animation", 36, 1),       // source_id
+    ("set_animation_speed", 37, 2),  // source_id, speed
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -170,6 +174,20 @@ pub enum SliceCommand {
     RemoveComponent {
         source_id: String,
         component_type: String,
+    },
+    /// Play an animation clip on an entity.
+    PlayAnimation {
+        source_id: String,
+        clip_name: String,
+    },
+    /// Stop the current animation on an entity.
+    StopAnimation {
+        source_id: String,
+    },
+    /// Set animation playback speed on an entity.
+    SetAnimationSpeed {
+        source_id: String,
+        speed: f64,
     },
 }
 
@@ -577,6 +595,26 @@ impl SliceHost {
                 });
                 Ok(Value::I64(0))
             }
+            35 => {
+                // play_animation(source_id, clip_name)
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let clip_name = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                self.commands.push(SliceCommand::PlayAnimation { source_id, clip_name });
+                Ok(Value::I64(0))
+            }
+            36 => {
+                // stop_animation(source_id)
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                self.commands.push(SliceCommand::StopAnimation { source_id });
+                Ok(Value::I64(0))
+            }
+            37 => {
+                // set_animation_speed(source_id, speed)
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let speed = args.get(1).and_then(|v| v.to_f64()).unwrap_or(1.0);
+                self.commands.push(SliceCommand::SetAnimationSpeed { source_id, speed });
+                Ok(Value::I64(0))
+            }
             _ => Err(VmError::HostCallError(format!(
                 "unknown slice builtin id {func_id}"
             ))),
@@ -943,6 +981,50 @@ impl SliceSession {
                                 let _ = eid;
                             }
                             _ => {}
+                        }
+                        break;
+                    }
+                }
+            }
+            SliceCommand::PlayAnimation { source_id, clip_name } => {
+                use crate::sprite::AnimationPlayer;
+                use kiln_runtime::SourceId;
+                for (sid, eid) in world.world_ref().query::<&SourceId>().iter() {
+                    if sid.0 == source_id {
+                        if let Ok(mut anim) = world.world_mut().get_mut::<&mut AnimationPlayer>(eid) {
+                            anim.play(&clip_name);
+                        } else {
+                            let mut anim = AnimationPlayer::new();
+                            anim.play(&clip_name);
+                            let _ = world.world_mut().insert_one(eid, anim);
+                        }
+                        break;
+                    }
+                }
+            }
+            SliceCommand::StopAnimation { source_id } => {
+                use crate::sprite::AnimationPlayer;
+                use kiln_runtime::SourceId;
+                for (sid, eid) in world.world_ref().query::<&SourceId>().iter() {
+                    if sid.0 == source_id {
+                        if let Ok(mut anim) = world.world_mut().get_mut::<&mut AnimationPlayer>(eid) {
+                            anim.stop();
+                        }
+                        break;
+                    }
+                }
+            }
+            SliceCommand::SetAnimationSpeed { source_id, speed } => {
+                use crate::sprite::AnimationPlayer;
+                use kiln_runtime::SourceId;
+                for (sid, eid) in world.world_ref().query::<&SourceId>().iter() {
+                    if sid.0 == source_id {
+                        if let Ok(mut anim) = world.world_mut().get_mut::<&mut AnimationPlayer>(eid) {
+                            anim.set_speed(speed as f32);
+                        } else {
+                            let mut anim = AnimationPlayer::new();
+                            anim.set_speed(speed as f32);
+                            let _ = world.world_mut().insert_one(eid, anim);
                         }
                         break;
                     }

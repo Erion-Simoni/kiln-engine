@@ -60,6 +60,8 @@ pub struct AnimationPlayer {
     clip_textures: HashMap<String, (u32, u32)>,
     current_clip: Option<String>,
     elapsed: f32,
+    /// Playback speed multiplier (1.0 = normal speed).
+    speed: f32,
 }
 
 impl AnimationPlayer {
@@ -69,6 +71,7 @@ impl AnimationPlayer {
             clip_textures: HashMap::new(),
             current_clip: None,
             elapsed: 0.0,
+            speed: 1.0,
         }
     }
 
@@ -98,7 +101,12 @@ impl AnimationPlayer {
 
     /// Advance the animation by `dt` seconds.
     pub fn update(&mut self, dt: f32) {
-        self.elapsed += dt;
+        self.elapsed += dt * self.speed;
+    }
+
+    /// Set the playback speed multiplier (1.0 = normal speed).
+    pub fn set_speed(&mut self, speed: f32) {
+        self.speed = speed.max(0.0);
     }
 
     /// Get the current frame's normalized UV rect (0.0 to 1.0), if a clip is playing.
