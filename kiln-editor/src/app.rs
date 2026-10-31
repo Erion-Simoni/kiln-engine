@@ -192,8 +192,10 @@ enum GizmoMode {
 struct GizmoState {
     mode: GizmoMode,
     active_axis: Option<GizmoAxis>,
-    drag_start_pos: Option<(f32, f32)>,
-    drag_start_transform: Option<(f32, f32, f32)>,
+    /// Screen-space position where the drag started (pixels, top-left origin).
+    drag_start_screen_pos: Option<(f64, f64)>,
+    /// World-space position where the drag started.
+    drag_start_world_pos: Option<(f32, f32)>,
 }
 
 /// Gizmo axis for translate/rotate/scale operations.
@@ -208,6 +210,20 @@ impl Default for GizmoMode {
     fn default() -> Self {
         GizmoMode::Translate
     }
+}
+
+/// Convert screen-space mouse position to world-space using the camera.
+fn screen_to_world(
+    camera: &Camera,
+    screen_x: f64,
+    screen_y: f64,
+    viewport_width: f64,
+    viewport_height: f64,
+) -> (f32, f32) {
+    let world_x = camera.position[0] + screen_x as f32 / camera.zoom;
+    // Y grows up in world space, down in screen space
+    let world_y = camera.position[1] + (viewport_height as f32 - screen_y as f32) / camera.zoom;
+    (world_x, world_y)
 }
 
 /// A scene tab entry for the scene tabs bar.
@@ -1381,6 +1397,82 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                 }
             }
+            WindowEvent::MouseInput {
+                state,
+                button: winit::event::MouseButton::Left,
+                ..
+            } => {
+                // Gizmo drag start/stop on the scene view canvas
+                if self.gizmo.mode == GizmoMode::Translate {
+                    if let Some(rect) = self.scene_view_rect {
+                        let mouse_over = self.mouse_x >= rect.min.x
+                            && self.mouse_x < rect.max.x
+                            && self.mouse_y >= rect.min.y
+                            && self.mouse_y < rect.max.y;
+                        if mouse_over {
+                            if state.is_pressed() {
+                                // Start drag
+                                if let Some(entity) = self.selected_entity {
+                                    let (wx, wy) = screen_to_world(
+                                        &self.camera,
+                                        self.mouse_x,
+                                        self.mouse_y,
+                                        size.width as f64,
+                                        size.height as f64,
+                                    );
+                                    self.gizmo.drag_start_screen_pos =
+                                        Some((self.mouse_x, self.mouse_y));
+                                    self.gizmo.drag_start_world_pos = Some((wx, wy));
+                                    // Record current transform for undo
+                                    if let Some((_, transform)) = self
+                                        .world
+                                        .world()
+                                        .query::<(hecs::Entity, &Transform)>()
+                                        .iter()
+                                        .find(|(e, _)| *e == entity)
+                                    {
+                                        self.gizmo.drag_start_transform = Some((
+                                            transform.position.x,
+                                            transform.position.y,
+                                            transform.rotation,
+                                        ));
+                                    }
+                                }
+                            } else {
+                                // End drag - record history
+                                if let Some(entity) = self.selected_entity {
+                                    let before = scene_from_world(
+                                        &*self.world,
+                                        self.entity_textures,
+                                        self.entity_roles,
+                                        self.current_project.as_ref(),
+                                    );
+                                    if let Ok(mut transform) = self
+                                        .world
+                                        .world_mut()
+                                        .get_mut::<&mut Transform>(entity)
+                                    {
+                                        // Record the change for undo
+                                        let after = scene_from_world(
+                                            &*self.world,
+                                            self.entity_textures,
+                                            self.entity_roles,
+                                            self.current_project.as_ref(),
+                                        );
+                                        // Only record if something changed
+                                        if before != after {
+                                            self.history.record(before);
+                                        }
+                                    }
+                                    self.gizmo.drag_start_screen_pos = None;
+                                    self.gizmo.drag_start_world_pos = None;
+                                    self.gizmo.drag_start_transform = None;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             _ => {}
         }
 
@@ -1422,6 +1514,31 @@ impl winit::application::ApplicationHandler for EditorApp {
         let size = gpu.window.inner_size();
         if size.width == 0 || size.height == 0 {
             return;
+        }
+
+        // Apply gizmo drag to selected entity (translate mode)
+        if self.gizmo.mode == GizmoMode::Translate {
+            if let Some((start_world_x, start_world_y)) = self.gizmo.drag_start_world_pos {
+                if let Some(entity) = self.selected_entity {
+                    let (current_world_x, current_world_y) = screen_to_world(
+                        &self.camera,
+                        self.mouse_x,
+                        self.mouse_y,
+                        size.width as f64,
+                        size.height as f64,
+                    );
+                    let dx = current_world_x - start_world_x;
+                    let dy = current_world_y - start_world_y;
+                    if dx != 0.0 || dy != 0.0 {
+                        if let Ok(mut transform) =
+                            self.world.world_mut().get_mut::<&mut Transform>(entity)
+                        {
+                            transform.position.x += dx;
+                            transform.position.y += dy;
+                        }
+                    }
+                }
+            }
         }
 
         // Apply tier change if needed
