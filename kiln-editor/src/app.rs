@@ -27,7 +27,10 @@ use crate::build_panel::BuildPanel;
 use crate::history::SceneHistory;
 use crate::hierarchy::HierarchyPanel;
 use crate::inspector::InspectorPanel;
-use crate::prefab_editor::PrefabEditorState;
+use crate::prefab_editor_panel::PrefabEditorPanel;
+use crate::plugin_manager_panel::PluginManagerPanel;
+use crate::preferences::PreferencesPanel;
+use crate::version_control_panel::VersionControlPanel;
 use crate::ui_layout_editor::UiLayoutEditorState;
 use crate::physics_editor::PhysicsEditorState;
 use crate::audio_editor::AudioEditorState;
@@ -136,7 +139,6 @@ pub struct EditorApp {
     /// The history of scene edits, used by undo and redo.
     history: SceneHistory,
     ui_designer: UIDesignerState,
-    prefab_editor: PrefabEditorState,
     gameplay_editor: GameplayEditorState,
     tilemap_editor: TilemapEditorState,
     hierarchy_panel: HierarchyPanel,
@@ -149,6 +151,10 @@ pub struct EditorApp {
     audio_editor: AudioEditorState,
     physics_editor: PhysicsEditorState,
     ui_layout_editor: UiLayoutEditorState,
+    preferences: PreferencesPanel,
+    prefab_editor: PrefabEditorPanel,
+    version_control: VersionControlPanel,
+    plugin_manager: PluginManagerPanel,
     /// Mapping from project entity ID (source_id) to hecs Entity for selection sync.
     entity_id_to_hecs: HashMap<String, hecs::Entity>,
     graph_editor: GraphEditorState,
@@ -164,6 +170,21 @@ pub struct EditorApp {
     scene_save_requested: bool,
     /// Set by the scene toolbar, handled after the UI pass.
     scene_load_requested: bool,
+    /// Scene tabs for the scene tabs bar.
+    scene_tabs: Vec<SceneTab>,
+    /// Currently active scene tab index.
+    active_scene_tab: Option<usize>,
+}
+
+/// A scene tab entry for the scene tabs bar.
+#[derive(Debug, Clone)]
+struct SceneTab {
+    /// The scene ID.
+    scene_id: String,
+    /// Whether this tab is the active one.
+    is_active: bool,
+    /// Whether the scene has unsaved changes.
+    dirty: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -190,6 +211,49 @@ enum Tab {
     AudioEditor,
     PhysicsEditor,
     UiLayoutEditor,
+    Preferences,
+    PluginManagerPanel,
+    PrefabEditorPanel,
+    VersionControl,
+}
+}
+
+/// A scene tab entry for the scene tabs bar.
+#[derive(Debug, Clone)]
+struct SceneTab {
+    /// The scene ID.
+    scene_id: String,
+    /// Whether this tab is the active one.
+    is_active: bool,
+    /// Whether the scene has unsaved changes.
+    dirty: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+enum Tab {
+    SceneView,
+    Inspector,
+    GraphEditor,
+    Assets,
+    Console,
+    Settings,
+    Hierarchy,
+    UIDesigner,
+    PrefabEditor,
+    SceneEditor,
+    GameplayEditor,
+    TilemapEditor,
+    AnimationEditor,
+    BuildPanel,
+    ProjectHub,
+    ProfilerPanel,
+    DebuggerPanel,
+    VfxEditor,
+    AudioEditor,
+    PhysicsEditor,
+    UiLayoutEditor,
+    Preferences,
 }
 
 struct GpuState {
@@ -608,7 +672,6 @@ impl EditorApp {
             frame_count: 0,
             history: SceneHistory::new(),
             ui_designer: UIDesignerState::new(),
-            prefab_editor: PrefabEditorState::new(),
             gameplay_editor: GameplayEditorState::new(),
             tilemap_editor: TilemapEditorState::new(),
             hierarchy_panel: HierarchyPanel::new(),
@@ -621,6 +684,10 @@ impl EditorApp {
             audio_editor: AudioEditorState::new(),
             physics_editor: PhysicsEditorState::new(),
             ui_layout_editor: UiLayoutEditorState::new(),
+            preferences: PreferencesPanel::new(),
+            prefab_editor: PrefabEditorPanel::new(),
+            version_control: VersionControlPanel::new(),
+            plugin_manager: PluginManagerPanel::new(),
             entity_id_to_hecs: HashMap::new(),
             graph_editor: GraphEditorState::new(),
             inspector_panel: InspectorPanel::new(),
@@ -631,6 +698,8 @@ impl EditorApp {
             play_toggle_requested: false,
             scene_save_requested: false,
             scene_load_requested: false,
+            scene_tabs: Vec::new(),
+            active_scene_tab: None,
         })
     }
 
@@ -743,6 +812,23 @@ impl EditorApp {
         // Upload the project's textures to the GPU, so the scene view can
         // draw the same art the player draws.
         self.upload_scene_textures();
+
+        // Initialize scene tabs from project scenes
+        self.scene_tabs.clear();
+        if let Some(project) = &self.current_project {
+            for (scene_id, _) in &project.scenes {
+                self.scene_tabs.push(SceneTab {
+                    scene_id: scene_id.clone(),
+                    is_active: false,
+                    dirty: false,
+                });
+            }
+            // Activate the first scene tab by default
+            if !self.scene_tabs.is_empty() {
+                self.scene_tabs[0].is_active = true;
+                self.active_scene_tab = Some(0);
+            }
+        }
 
         // Clear current world and load scene entities
         self.load_project_scene();
@@ -1217,6 +1303,24 @@ impl winit::application::ApplicationHandler for EditorApp {
                 .expect("window"),
         );
         pollster::block_on(self.init_gpu(window));
+
+        // Auto-reopen last project if enabled and no project is currently open
+        if self.project_hub.auto_reopen_last && self.current_project.is_none() {
+            if let Some(last_project) = self.project_hub.last_project() {
+                let path = last_project.path.clone();
+                if path.exists() {
+                    if let Err(e) = self.load_project(path) {
+                        eprintln!("Failed to auto-reopen last project: {}", e);
+                    } else {
+                        // Add back to recent projects since we just opened it
+                        self.project_hub.add_recent(
+                            last_project.path.clone(),
+                            last_project.name.clone(),
+                        );
+                    }
+                }
+            }
+        }
     }
 
     fn window_event(
@@ -1376,8 +1480,7 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     ui.separator();
                     if ui.button("Preferences...").clicked() {
-                        // Open Settings tab
-                        self.dock_state.add_window(vec![Tab::Settings]);
+                        self.dock_state.add_window(vec![Tab::Preferences]);
                         ui.close_menu();
                     }
                 });
@@ -1437,6 +1540,18 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     if ui.button("UI Layout Editor").clicked() {
                         self.dock_state.add_window(vec![Tab::UiLayoutEditor]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Preferences").clicked() {
+                        self.dock_state.add_window(vec![Tab::Preferences]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Version Control").clicked() {
+                        self.dock_state.add_window(vec![Tab::VersionControl]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Plugin Manager").clicked() {
+                        self.dock_state.add_window(vec![Tab::PluginManagerPanel]);
                         ui.close_menu();
                     }
                     if ui.button("UI Designer").clicked() {
@@ -2361,15 +2476,42 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         });
                     });
 
-                    ui.add_space(8.0);
+                    // Scene tabs bar
+                    if !self.scene_tabs.is_empty() {
+                        ui.add_space(4.0);
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = egui::vec2(4.0, 0.0);
+                            
+                            // Add scene button
+                            if ui.button("+").clicked() {
+                                let scene_id = self.next_scene_id();
+                                self.add_scene_tab(scene_id.clone());
+                                self.active_scene_tab = Some(self.scene_tabs.len() - 1);
+                            }
+                            
+                            for (idx, tab) in self.scene_tabs.iter().enumerate() {
+                                let is_active = self.active_scene_tab == Some(idx);
+                                let mut selected = is_active;
+                                
+                                let mut tab_ui = ui.add(egui::SelectableLabel::new(
+                                    selected, 
+                                    format!("{}{}", if tab.dirty { "*" } else { "" }, tab.scene_id)
+                                ));
+                                
+                                if tab_ui.clicked() {
+                                    self.active_scene_tab = Some(idx);
+                                    self.switch_scene_tab(idx);
+                                }
+                                
+                                // Close on right-click
+                                if tab_ui.secondary_clicked() {
+                                    self.close_scene_tab(idx);
+                                }
+                            }
+                        });
+                    }
 
-                    // Game view canvas. The engine renders the scene into
-                    // this rectangle, so the panel only reserves the space
-                    // and draws the overlays on top.
-                    let desired_size =
-                        egui::vec2(ui.available_width(), ui.available_height() * 0.65);
-                    let (rect, _response) =
-                        ui.allocate_exact_size(desired_size, egui::Sense::click_and_drag());
+                    ui.add_space(8.0);
 
                     // The engine draws the scene here, so the panel must not
                     // paint over it. The rectangle is handed to the render
@@ -3501,8 +3643,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         &mut self.project_hub,
                         &mut |path| {
                             // Open project callback
-                            if let Err(e) = self.load_project(path) {
+                            if let Err(e) = self.load_project(path.clone()) {
                                 eprintln!("Failed to load project: {}", e);
+                            } else {
+                                // Add to recent projects
+                                self.project_hub.add_recent(path, self.current_project.as_ref().map(|p| p.name.clone()).unwrap_or_else(|| "Unknown".to_string()));
                             }
                         },
                         &mut |name, path, template| {
@@ -3560,6 +3705,21 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::UiLayoutEditor => {
                 ui.vertical(|ui| {
                     self.ui_layout_editor.render(ui);
+                });
+            }
+            Tab::Preferences => {
+                ui.vertical(|ui| {
+                    self.preferences.render(ui);
+                });
+            }
+            Tab::PluginManagerPanel => {
+                ui.vertical(|ui| {
+                    self.plugin_manager.render(ui, context);
+                });
+            }
+            Tab::VersionControl => {
+                ui.vertical(|ui| {
+                    self.version_control.render(ui);
                 });
             }
             Tab::Hierarchy => {
@@ -3674,6 +3834,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::AudioEditor => "Audio Editor".into(),
             Tab::PhysicsEditor => "Physics Editor".into(),
             Tab::UiLayoutEditor => "UI Layout Editor".into(),
+            Tab::Preferences => "Preferences".into(),
+            Tab::PluginManagerPanel => "Plugin Manager".into(),
+            Tab::VersionControl => "Version Control".into(),
         }
     }
 }
@@ -3800,5 +3963,59 @@ impl<'a> TabViewer<'a> {
                     self.ui_designer.remove_widget(widget_id);
                 }
             });
+    
+
+    /// Generate a unique scene ID.
+    fn next_scene_id(&self) -> String {
+        let mut index = 1;
+        loop {
+            let candidate = format!("scene_{}", index);
+            if !self.scene_tabs.iter().any(|t| t.scene_id == candidate) {
+                return candidate;
+            }
+            index += 1;
+        }
     }
+    
+    /// Add a new scene tab.
+    fn add_scene_tab(&mut self, scene_id: String) {
+        self.scene_tabs.push(SceneTab {
+            scene_id,
+            is_active: false,
+            dirty: false,
+        });
+    }
+    
+    /// Switch to a scene tab.
+    fn switch_scene_tab(&mut self, index: usize) {
+        if index < self.scene_tabs.len() {
+            for (i, tab) in self.scene_tabs.iter_mut().enumerate() {
+                tab.is_active = i == index;
+            }
+            self.active_scene_tab = Some(index);
+            // TODO: Load the scene data for this tab
+        }
+    }
+    
+    /// Close a scene tab.
+    fn close_scene_tab(&mut self, index: usize) {
+        if index < self.scene_tabs.len() {
+            // TODO: Check for unsaved changes
+            self.scene_tabs.remove(index);
+            if let Some(active) = self.active_scene_tab {
+                if active >= index && active > 0 {
+                    self.active_scene_tab = Some(active - 1);
+                } else if active >= index {
+                    self.active_scene_tab = self.scene_tabs.first().map(|_| 0);
+                }
+            } else if !self.scene_tabs.is_empty() {
+                self.active_scene_tab = Some(0);
+            } else {
+                self.active_scene_tab = None;
+            }
+        }
+    }
+}
+
+}
 }

@@ -21,7 +21,7 @@ kiln-save = { path = "../kiln-save" }
 kiln-ir = { path = "../kiln-ir" }
 kiln-script = { path = "../kiln-script" }
 hecs = { workspace = true }
-winit = { workspace = true }
+winit = { workspace = true, features = ["android-activity"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }

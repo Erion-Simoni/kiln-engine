@@ -31,7 +31,7 @@ kiln-ir = { workspace = true }
 uuid = { workspace = true }
 kiln-ai = { workspace = true }
 kiln-gameplay = { workspace = true }
-winit = { workspace = true }
+winit = { workspace = true, features = ["android-activity"] }
 wgpu = { workspace = true }
 pollster = { workspace = true }
 log = { workspace = true }
@@ -44,4 +44,6 @@ egui-wgpu = "0.29"
 glam = { workspace = true }
 hecs = { workspace = true }
 dirs = { workspace = true }
-dirs = { workspace = true }
+android-activity = { workspace = true }
+kiln-plugin-api = { path = "../kiln-plugin-api" }
+git2         = { workspace = true }
