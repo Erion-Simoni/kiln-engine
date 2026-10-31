@@ -388,10 +388,15 @@ impl SliceHost {
             return false;
         };
         action.bindings.iter().any(|binding| {
-            if let kiln_input::BindingType::Key(key) = &binding.binding_type {
-                self.pressed_keys.contains(key)
-            } else {
-                false
+            match &binding.binding_type {
+                kiln_input::BindingType::Key(key) => {
+                    self.pressed_keys.contains(key)
+                }
+                kiln_input::BindingType::GamepadButton(btn) => {
+                    self.pressed_keys
+                        .contains(&format!("GamepadBtn{}", btn))
+                }
+                kiln_input::BindingType::GamepadAxis { .. } => false,
             }
         })
     }
@@ -401,19 +406,38 @@ impl SliceHost {
         let Some(action) = self.action_map.get_action(name) else {
             return 0.0;
         };
-        // Simple axis: check if any binding maps to a negative/positive direction key.
-        // This is a basic implementation; full axis support would need gamepad input.
+        // Simple axis: check if any binding maps to a negative/positive direction.
         let mut value = 0.0;
         for binding in &action.bindings {
-            if let kiln_input::BindingType::Key(key) = &binding.binding_type {
-                if self.pressed_keys.contains(key) {
-                    // Map common keys to axis directions
-                    match key.as_str() {
-                        "KeyA" | "ArrowLeft" | "a" | "A" => value -= 1.0,
-                        "KeyD" | "ArrowRight" | "d" | "D" => value += 1.0,
-                        "KeyS" | "ArrowDown" | "s" | "S" => value -= 1.0,
-                        "KeyW" | "ArrowUp" | "w" | "W" => value += 1.0,
-                        _ => {}
+            match &binding.binding_type {
+                kiln_input::BindingType::Key(key) => {
+                    if self.pressed_keys.contains(key) {
+                        // Map common keys to axis directions
+                        match key.as_str() {
+                            "KeyA" | "ArrowLeft" | "a" | "A" => value -= 1.0,
+                            "KeyD" | "ArrowRight" | "d" | "D" => value += 1.0,
+                            "KeyS" | "ArrowDown" | "s" | "S" => value -= 1.0,
+                            "KeyW" | "ArrowUp" | "w" | "W" => value += 1.0,
+                            _ => {}
+                        }
+                    }
+                }
+                kiln_input::BindingType::GamepadAxis { axis, threshold } => {
+                    // Gamepad axis values are tracked in pressed_keys as
+                    // "GamepadAxis{axis}:{value}" when the absolute value
+                    // exceeds the threshold.
+                    let key = format!("GamepadAxis{}", axis);
+                    if let Some(val_str) = self.pressed_keys.iter().find(|k| {
+                        k.starts_with(&key)
+                    }) {
+                        if let Some(val) = val_str
+                            .strip_prefix(&format!("GamepadAxis{}:", axis))
+                            .and_then(|v| v.parse::<f64>().ok())
+                        {
+                            if val.abs() >= *threshold as f64 {
+                                value += val.signum();
+                            }
+                        }
                     }
                 }
             }

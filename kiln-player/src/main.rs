@@ -635,25 +635,57 @@ impl PlayerApp {
                     // Check connected gamepads for button/axis state
                     let gilrs = gp.gilrs();
                     for (_id, gamepad) in gilrs.gamepads() {
-                        // Map gamepad buttons to actions
+                        // Map gamepad buttons to pressed_keys
                         use gilrs::ev::code::*;
-                        if gamepad.is_pressed(Button::South) {
-                            // A / Cross button -> jump
-                            // Action state is checked in get_action builtin
+                        // Button::South = A/Cross (index 0)
+                        // Button::East = B/Circle (index 1)
+                        // Button::North = X/Square (index 2)
+                        // Button::West = Y/Triangle (index 3)
+                        // Button::LeftTrigger = LT (index 4)
+                        // Button::RightTrigger = RT (index 5)
+                        // Button::LeftBumper = LB (index 6)
+                        // Button::RightBumper = RB (index 7)
+                        // Button::LeftStick = L3 (index 8)
+                        // Button::RightStick = R3 (index 9)
+                        // Button::DpadUp = D-pad up (index 10)
+                        // Button::DpadDown = D-pad down (index 11)
+                        // Button::DpadLeft = D-pad left (index 12)
+                        // Button::DpadRight = D-pad right (index 13)
+                        // Button::Start = Start (index 14)
+                        // Button::Select = Select/Back (index 15)
+                        // Button::Home = Home (index 16)
+                        for btn_idx in 0..17u8 {
+                            if gamepad.is_pressed(Button::from_index(btn_idx)) {
+                                pressed_keys.push(format!("GamepadBtn{}", btn_idx));
+                            }
                         }
-                        if gamepad.is_pressed(Button::East) {
-                            // B / Circle button -> fire
+                        // Left stick axis
+                        let lx = gamepad.value(Axis::LeftStickX);
+                        let ly = gamepad.value(Axis::LeftStickY);
+                        if lx.abs() > 0.1 {
+                            pressed_keys.push(format!("GamepadAxis0:{:.2}", lx));
                         }
-                        if gamepad.is_pressed(Button::North) {
-                            // X / Square button
+                        if ly.abs() > 0.1 {
+                            pressed_keys.push(format!("GamepadAxis1:{:.2}", ly));
                         }
-                        if gamepad.is_pressed(Button::West) {
-                            // Y / Triangle button
+                        // Right stick axis
+                        let rx = gamepad.value(Axis::RightStickX);
+                        let ry = gamepad.value(Axis::RightStickY);
+                        if rx.abs() > 0.1 {
+                            pressed_keys.push(format!("GamepadAxis2:{:.2}", rx));
                         }
-                        // Left stick axis for movement
-                        let lx = gamepad.value(Abs::LeftStickX);
-                        let ly = gamepad.value(Abs::LeftStickY);
-                        let _ = (lx, ly);
+                        if ry.abs() > 0.1 {
+                            pressed_keys.push(format!("GamepadAxis3:{:.2}", ry));
+                        }
+                        // Left/right triggers
+                        let lt = gamepad.value(Axis::LeftTrigger);
+                        let rt = gamepad.value(Axis::RightTrigger);
+                        if lt.abs() > 0.1 {
+                            pressed_keys.push(format!("GamepadAxis4:{:.2}", lt));
+                        }
+                        if rt.abs() > 0.1 {
+                            pressed_keys.push(format!("GamepadAxis5:{:.2}", rt));
+                        }
                     }
                 }
             }
