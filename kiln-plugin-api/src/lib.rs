@@ -200,6 +200,7 @@ impl Default for PluginRegistry {
             load_order: Vec::new(),
         }
     }
+}
 
 impl PluginRegistry {
     /// Register a plugin.
