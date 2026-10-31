@@ -211,9 +211,12 @@ pub fn instantiate_prefab(
             kiln_core::project::Component::Transform { scale, .. } => {
                 transform = transform.with_scale(kiln_core::Vec2::splat(*scale));
             }
-            kiln_core::project::Component::Sprite { color, .. } => {
+            kiln_core::project::Component::Sprite { color, animation_clip, .. } => {
                 sprite = Sprite::new(color[0], color[1], color[2], color[3])
                     .with_size(DEFAULT_SPRITE_SIZE[0], DEFAULT_SPRITE_SIZE[1]);
+                if let Some(clip) = animation_clip {
+                    sprite = sprite.with_animation_clip(clip);
+                }
             }
             _ => {}
         }

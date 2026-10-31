@@ -20,6 +20,10 @@ pub struct Sprite {
     /// Optional material reference for custom shader rendering.
     #[serde(default)]
     pub material: Option<String>,
+    /// Optional name of an animation clip from `animation_clips` to play
+    /// on this sprite.
+    #[serde(default)]
+    pub animation_clip: Option<String>,
 }
 
 impl Sprite {
@@ -51,6 +55,12 @@ impl Sprite {
     /// Set the sorting layer (default 0.0).
     pub fn with_layer(mut self, layer: f32) -> Self {
         self.layer = layer;
+        self
+    }
+
+    /// Set the animation clip to play on this sprite.
+    pub fn with_animation_clip(mut self, clip_name: impl Into<String>) -> Self {
+        self.animation_clip = Some(clip_name.into());
         self
     }
 }

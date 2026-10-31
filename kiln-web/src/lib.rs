@@ -892,13 +892,16 @@ fn spawn_scene_entities(
                         .with_rotation(*rotation)
                         .with_scale(glam::Vec2::splat(*scale));
                 }
-                kiln_core::project::Component::Sprite { color, texture } => {
+                kiln_core::project::Component::Sprite { color, texture, layer, material, animation_clip } => {
                     sprite = kiln_runtime::Sprite::new(color[0], color[1], color[2], color[3]);
                     if let Some(path) = texture {
                         if let Some(&tex_id) = textures.get(path) {
                             sprite = sprite.with_texture(tex_id);
                         }
                     }
+                    sprite.layer = layer;
+                    sprite.material = material.clone();
+                    sprite.animation_clip = animation_clip.clone();
                 }
                 _ => {}
             }

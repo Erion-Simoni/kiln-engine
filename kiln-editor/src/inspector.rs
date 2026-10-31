@@ -130,7 +130,7 @@ fn render_component(
                 changed |= cols[1].add(egui::DragValue::new(scale).speed(0.01).clamp_range(0.001..=100.0)).changed();
             });
         }
-        Component::Sprite { color, texture, layer } => {
+        Component::Sprite { color, texture, layer, material, animation_clip } => {
             ui.add_space(4.0);
             
             // Color editor
@@ -169,6 +169,47 @@ fn render_component(
                 // Asset picker button
                 if ui.small_button("📁").on_hover_text("Browse assets").clicked() {
                     // TODO: Open asset browser modal
+                }
+            });
+            
+            // Animation clip picker
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.label("Animation Clip:");
+                let current = animation_clip.as_deref().unwrap_or("(none)");
+                let mut clip_name = current.to_string();
+                if ui.text_edit_singleline(&mut clip_name).changed() {
+                    if clip_name.is_empty() || clip_name == "(none)" {
+                        *animation_clip = None;
+                    } else {
+                        *animation_clip = Some(clip_name);
+                    }
+                    changed = true;
+                }
+                
+                // Asset picker button
+                if ui.small_button("📁").on_hover_text("Browse animations").clicked() {
+                    // TODO: Open animation clip browser
+                }
+            });
+            
+            // Material picker
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.label("Material:");
+                let current = material.as_deref().unwrap_or("(none)");
+                let mut mat_name = current.to_string();
+                if ui.text_edit_singleline(&mut mat_name).changed() {
+                    if mat_name.is_empty() || mat_name == "(none)" {
+                        *material = None;
+                    } else {
+                        *material = Some(mat_name);
+                    }
+                    changed = true;
+                }
+                
+                if ui.small_button("📁").on_hover_text("Browse materials").clicked() {
+                    // TODO: Open material browser
                 }
             });
             

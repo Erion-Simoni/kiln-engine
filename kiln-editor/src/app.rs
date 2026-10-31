@@ -549,6 +549,9 @@ pub fn scene_from_world(
             kiln_core::project::Component::Sprite {
                 color: sprite.color,
                 texture,
+                layer: sprite.layer,
+                material: sprite.material.clone(),
+                animation_clip: sprite.animation_clip.clone(),
             },
         ];
         if let Some(role) = role {
