@@ -1,6 +1,7 @@
 //! Project file format
 
 use crate::tilemap::{TileMap, TileSet};
+use kiln_anim::Clip;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -26,6 +27,9 @@ pub struct Project {
     /// Tilesets of the project, keyed by their id.
     #[serde(default)]
     pub tilesets: HashMap<String, TileSet>,
+    /// Animation clips of the project, keyed by their id.
+    #[serde(default)]
+    pub animation_clips: HashMap<String, Clip>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -189,6 +193,10 @@ pub enum Component {
         /// Preserves painter order for transparent sprites across textures.
         #[serde(default)]
         layer: f32,
+        /// Optional name of an animation clip from `animation_clips` to play
+        /// on this sprite.
+        #[serde(default)]
+        animation_clip: Option<String>,
     },
     /// A tilemap instance placed in the scene.
     Tilemap {

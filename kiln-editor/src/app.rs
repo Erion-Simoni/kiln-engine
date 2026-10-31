@@ -3805,6 +3805,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             ui,
                             &mut self.anim_editor,
                             project,
+                            &mut project.animation_clips,
                             1.0 / 60.0, // dt
                         );
                     } else {

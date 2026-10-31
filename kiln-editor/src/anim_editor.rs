@@ -81,6 +81,7 @@ pub fn render_animation_editor(
     ui: &mut Ui,
     state: &mut AnimationEditorState,
     project: &mut kiln_core::Project,
+    animation_clips: &mut HashMap<String, Clip>,
     dt: f32,
 ) {
     ui.heading("Animation Editor");
@@ -132,7 +133,11 @@ pub fn render_animation_editor(
                 ui.horizontal(|ui| {
                     if ui.button("Create").clicked() {
                         if !state.new_clip_name.is_empty() && !state.spritesheet_path.is_empty() {
-                            state.add_clip(state.new_clip_name.clone(), state.spritesheet_path.clone());
+                            let clip_name = state.new_clip_name.clone();
+                            let texture_path = state.spritesheet_path.clone();
+                            state.add_clip(clip_name.clone(), texture_path.clone());
+                            // Sync to project
+                            animation_clips.insert(clip_name, state.clips[&clip_name].clone());
                             state.show_new_clip_dialog = false;
                             state.new_clip_name.clear();
                         }
@@ -147,6 +152,18 @@ pub fn render_animation_editor(
 
     // Main editor area
     if let Some(clip) = state.selected_clip_mut() {
+        // Sync clip texture from project if changed
+        if let Some(project_clip) = animation_clips.get(&clip.name) {
+            if clip.texture != project_clip.texture {
+                clip.texture = project_clip.texture.clone();
+            }
+            if clip.loops != project_clip.loops {
+                clip.loops = project_clip.loops;
+            }
+            if clip.frames != project_clip.frames {
+                clip.frames = project_clip.frames.clone();
+            }
+        }
         ui.columns(2, |cols| {
             // Left column: frames list and properties
             cols[0].vertical(|ui| {
@@ -272,6 +289,15 @@ pub fn render_animation_editor(
                 }
             });
         });
+
+        // Sync clip changes back to project
+        if let Some(clip) = state.selected_clip() {
+            if let Some(project_clip) = animation_clips.get_mut(&clip.name) {
+                *project_clip = clip.clone();
+            } else {
+                animation_clips.insert(clip.name.clone(), clip.clone());
+            }
+        }
 
         // Update preview time
         state.update_preview(dt);

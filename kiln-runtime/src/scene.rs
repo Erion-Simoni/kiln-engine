@@ -9,6 +9,7 @@ use kiln_core::project::{Component, Entity, Project, Scene, SceneOffset};
 use kiln_core::Transform;
 
 use crate::world::{GameWorld, Role, SourceId};
+use crate::sprite::AnimationPlayer;
 
 /// Default sprite size in pixels, used when an entity has no texture.
 pub const DEFAULT_SPRITE_SIZE: [f32; 2] = [32.0, 32.0];
@@ -130,12 +131,21 @@ pub fn spawn_entities(
         match &role_name {
             Some(role_name_str) => {
                 if let Some(sprite) = sprite {
-                    world.spawn((
+                    let entity = world.world_mut().spawn((
                         runtime_transform,
                         sprite,
                         Role::new(role_name_str.clone()),
                         source_id,
                     ));
+                    // If the sprite references an animation clip, load it
+                    if let Some(clip_name) = &sprite.animation_clip {
+                        if let Some(clip) = project.animation_clips.get(clip_name) {
+                            let mut anim = AnimationPlayer::new();
+                            anim.add_clip(clip.clone());
+                            anim.play(clip_name);
+                            let _ = world.world_mut().insert_one(entity, anim);
+                        }
+                    }
                 } else {
                     world.spawn((
                         runtime_transform,
@@ -146,7 +156,20 @@ pub fn spawn_entities(
             }
             None => {
                 if let Some(sprite) = sprite {
-                    world.spawn((runtime_transform, sprite, source_id));
+                    let entity = world.world_mut().spawn((
+                        runtime_transform,
+                        sprite,
+                        source_id,
+                    ));
+                    // If the sprite references an animation clip, load it
+                    if let Some(clip_name) = &sprite.animation_clip {
+                        if let Some(clip) = project.animation_clips.get(clip_name) {
+                            let mut anim = AnimationPlayer::new();
+                            anim.add_clip(clip.clone());
+                            anim.play(clip_name);
+                            let _ = world.world_mut().insert_one(entity, anim);
+                        }
+                    }
                 } else {
                     world.spawn((runtime_transform, source_id));
                 }
