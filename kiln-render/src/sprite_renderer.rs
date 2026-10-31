@@ -372,7 +372,7 @@ impl SpriteRenderer {
         // sprites are batched into one draw call. The sort is stable, so
         // submission order is preserved within each (layer, texture) group.
         self.pending
-            .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal).then_with(|| a.0.cmp(&b.0)));
+            .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal).then_with(|| a.0.0.cmp(&b.0.0)));
 
         let proj: [f32; 16] = camera.projection_matrix().to_cols_array();
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&proj));
