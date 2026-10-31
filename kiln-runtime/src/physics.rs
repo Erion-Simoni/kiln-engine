@@ -96,6 +96,38 @@ impl PhysicsWorld {
             false
         }
     }
+
+    /// Raycast from origin in direction, returning the first hit body index and distance.
+    pub fn raycast(
+        &self,
+        origin: [f32; 2],
+        direction: [f32; 2],
+        max_distance: f32,
+    ) -> Option<(u32, f32)> {
+        use rapier2d::math::Vector;
+        let origin = Vector::new(origin[0], origin[1]);
+        let dir = Vector::new(direction[0], direction[1]).normalize();
+        let mut hit_info = None;
+        let mut max_toi = max_distance;
+
+        let _ = self.physics_pipeline.cast_ray(
+            &self.rigid_body_set,
+            &self.collider_set,
+            origin,
+            dir,
+            max_toi,
+            true,
+            rapier2d::prelude::QueryFilter::default(),
+            &mut |handle, toi| {
+                if toi < max_toi {
+                    max_toi = toi;
+                    hit_info = Some((handle.index() as u32, toi));
+                }
+            },
+        );
+
+        hit_info
+    }
 }
 
 #[cfg(feature = "physics")]
@@ -124,6 +156,91 @@ impl PhysicsWorld {
 impl Default for PhysicsWorld {
     fn default() -> Self {
         PhysicsWorld
+    }
+}
+
+/// Sync physics bodies with ECS transforms.
+///
+/// Call this once per frame after `PhysicsWorld::step()`. It:
+/// 1. Creates rapier2d bodies for ECS entities that have `RigidBody2D` +
+///    `Collider2D` but no `PhysicsBody` handle yet.
+/// 2. Steps the physics simulation.
+/// 3. Writes physics body positions back to ECS `Transform` components.
+#[cfg(feature = "physics")]
+pub fn sync_physics_with_ecs(
+    physics: &mut PhysicsWorld,
+    world: &mut hecs::World,
+) {
+    use crate::world::{
+        Collider2D, ColliderShape, PhysicsBody, RigidBody2D, RigidBodyType, SourceId, Transform,
+    };
+
+    // Register new bodies: entities with RigidBody2D + Collider2D but no PhysicsBody
+    let to_register: Vec<(hecs::Entity, RigidBody2D, Collider2D, Option<SourceId>)> = world
+        .query::<(&RigidBody2D, &Collider2D, Option<&SourceId>)>()
+        .iter()
+        .filter_map(|(e, (rb, col, sid))| {
+            if world.get::<PhysicsBody>(e).is_err() {
+                Some((e, *rb, *col, sid.cloned()))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    for (entity, rb, col, source_id) in to_register {
+        let body_builder = match rb.body_type {
+            RigidBodyType::Static => rapier2d::prelude::RigidBodyBuilder::static(),
+            RigidBodyType::Dynamic => rapier2d::prelude::RigidBodyBuilder::dynamic(),
+            RigidBodyType::Kinematic => rapier2d::prelude::RigidBodyBuilder::kinematic(),
+        }
+        .translation(rapier2d::math::Vector::new(
+            rb.linear_velocity[0],
+            rb.linear_velocity[1],
+        ))
+        .linear_velocity(rapier2d::math::Vector::new(rb.linear_velocity[0], rb.linear_velocity[1]))
+        .angular_velocity(rb.angular_velocity)
+        .gravity_scale(rb.gravity_scale)
+        .can_sleep(rb.can_sleep);
+
+        let handle = physics.create_rigid_body(body_builder);
+
+        let collider_builder = match col.shape {
+            ColliderShape::Circle { radius } => rapier2d::prelude::ColliderBuilder::ball(radius)
+                .friction(col.friction)
+                .restitution(col.restitution)
+                .density(col.density)
+                .sensor(col.is_sensor),
+            ColliderShape::Rectangle {
+                half_width,
+                half_height,
+            } => rapier2d::prelude::ColliderBuilder::cuboid(half_width, half_height)
+                .friction(col.friction)
+                .restitution(col.restitution)
+                .density(col.density)
+                .sensor(col.is_sensor),
+        };
+
+        physics.create_collider(collider_builder, handle);
+
+        let _ = world.insert_one(entity, PhysicsBody { handle: handle.index() as u32 });
+    }
+
+    // Step the simulation
+    physics.step();
+
+    // Sync physics positions back to ECS transforms
+    for (entity, physics_body, transform) in
+        world.query_mut::<(&mut PhysicsBody, &mut Transform)>().iter()
+    {
+        if let Some(body) = physics
+            .rigid_body_set
+            .get(rapier2d::prelude::RigidBodyHandle::from_index(physics_body.handle as usize))
+        {
+            let pos = body.translation();
+            transform.position.x = pos.x;
+            transform.position.y = pos.y;
+        }
     }
 }
 
