@@ -372,6 +372,9 @@ pub struct SliceHost {
     /// Audio files registered for playback via script.
     #[cfg(feature = "audio")]
     registered_audio: HashMap<String, String>,
+    /// Custom audio player callback for platforms without rodio (e.g., WASM).
+    #[cfg(feature = "audio")]
+    audio_player: Option<Box<dyn Fn(&str) + Send + Sync>>,
 }
 
 impl SliceHost {
@@ -399,6 +402,8 @@ impl SliceHost {
             time_scale: 1.0,
             #[cfg(feature = "audio")]
             registered_audio: HashMap::new(),
+            #[cfg(feature = "audio")]
+            audio_player: None,
         }
     }
 
@@ -451,6 +456,12 @@ impl SliceHost {
         if let Some(audio) = &mut self.audio {
             audio.register_sound(name, path);
         }
+    }
+
+    /// Set a custom audio player callback for platforms without rodio (e.g., WASM).
+    #[cfg(feature = "audio")]
+    pub fn set_audio_player(&mut self, player: Box<dyn Fn(&str) + Send + Sync>) {
+        self.audio_player = Some(player);
     }
 
     /// Play a registered audio file by name (used for editor preview).
@@ -580,10 +591,13 @@ impl SliceHost {
             10 => Ok(Value::Str(self.facts.status.clone())),
             11 => Ok(Value::F64(self.facts.delta_time)),
             12 => {
+                // play_sound(name) -> void
                 #[cfg(feature = "audio")]
                 {
                     let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
-                    if let Some(audio) = &mut self.audio {
+                    if let Some(player) = &self.audio_player {
+                        player(name);
+                    } else if let Some(audio) = &mut self.audio {
                         audio.play_sound(name);
                     }
                 }
