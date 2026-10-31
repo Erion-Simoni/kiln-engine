@@ -92,6 +92,10 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     // Save/load (46-47)
     ("save_game", 46, 1),        // slot_id -> bool
     ("load_game", 47, 1),        // slot_id -> bool
+    // Animation clip creation (48-50)
+    ("create_animation_clip", 48, 3),  // source_id, clip_name, texture_path -> void
+    ("add_animation_frame", 49, 6),    // source_id, clip_name, x, y, w, h, duration -> void
+    ("set_animation_loop", 50, 2),     // source_id, clip_name, loops -> void
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -230,6 +234,28 @@ pub enum SliceCommand {
     /// Load a save slot.
     LoadGame {
         slot: u32,
+    },
+    /// Create a new animation clip on an entity.
+    CreateAnimationClip {
+        source_id: String,
+        clip_name: String,
+        texture_path: String,
+    },
+    /// Add a frame to an animation clip.
+    AddAnimationFrame {
+        source_id: String,
+        clip_name: String,
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+        duration: f64,
+    },
+    /// Set whether an animation clip loops.
+    SetAnimationLoop {
+        source_id: String,
+        clip_name: String,
+        loops: bool,
     },
 }
 
@@ -881,6 +907,51 @@ impl SliceHost {
                 self.commands.push(SliceCommand::LoadGame { slot });
                 Ok(Value::Bool(true))
             }
+            // Animation clip creation (48-50)
+            48 => {
+                // create_animation_clip(source_id, clip_name, texture_path) -> void
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let clip_name = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let texture_path = args.get(2).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                self.commands.push(SliceCommand::CreateAnimationClip {
+                    source_id,
+                    clip_name,
+                    texture_path,
+                });
+                Ok(Value::I64(0))
+            }
+            49 => {
+                // add_animation_frame(source_id, clip_name, x, y, w, h, duration) -> void
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let clip_name = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let x = args.get(2).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let y = args.get(3).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let w = args.get(4).and_then(|v| v.to_f64()).unwrap_or(32.0);
+                let h = args.get(5).and_then(|v| v.to_f64()).unwrap_or(32.0);
+                let duration = args.get(6).and_then(|v| v.to_f64()).unwrap_or(0.1);
+                self.commands.push(SliceCommand::AddAnimationFrame {
+                    source_id,
+                    clip_name,
+                    x,
+                    y,
+                    w,
+                    h,
+                    duration,
+                });
+                Ok(Value::I64(0))
+            }
+            50 => {
+                // set_animation_loop(source_id, clip_name, loops) -> void
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let clip_name = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let loops = args.get(2).and_then(|v| v.as_bool()).unwrap_or(true);
+                self.commands.push(SliceCommand::SetAnimationLoop {
+                    source_id,
+                    clip_name,
+                    loops,
+                });
+                Ok(Value::I64(0))
+            }
             _ => Err(VmError::HostCallError(format!(
                 "unknown slice builtin id {func_id}"
             ))),
@@ -1374,6 +1445,93 @@ impl SliceSession {
                 if let Some(dir) = &self.save_dir {
                     if let Ok(loaded) = load_state(dir, *slot) {
                         self.state = loaded;
+                    }
+                }
+            }
+            SliceCommand::CreateAnimationClip {
+                source_id,
+                clip_name,
+                texture_path,
+            } => {
+                use crate::sprite::AnimationPlayer;
+                use kiln_anim::Clip;
+                use kiln_runtime::SourceId;
+                for (sid, eid) in world.world_ref().query::<&SourceId>().iter() {
+                    if sid.0 == source_id {
+                        if let Ok(mut anim) = world.world_mut().get_mut::<&mut AnimationPlayer>(eid) {
+                            anim.add_clip(Clip::new(clip_name, texture_path));
+                        } else {
+                            let mut anim = AnimationPlayer::new();
+                            anim.add_clip(Clip::new(clip_name, texture_path));
+                            let _ = world.world_mut().insert_one(eid, anim);
+                        }
+                        break;
+                    }
+                }
+            }
+            SliceCommand::AddAnimationFrame {
+                source_id,
+                clip_name,
+                x,
+                y,
+                w,
+                h,
+                duration,
+            } => {
+                use crate::sprite::AnimationPlayer;
+                use kiln_anim::{Clip, Frame};
+                use kiln_runtime::SourceId;
+                for (sid, eid) in world.world_ref().query::<&SourceId>().iter() {
+                    if sid.0 == source_id {
+                        if let Ok(mut anim) = world.world_mut().get_mut::<&mut AnimationPlayer>(eid) {
+                            if let Some(clip) = anim.clips_mut().get_mut(&clip_name) {
+                                clip.add_frame(Frame {
+                                    rect: [x as u32, y as u32, w as u32, h as u32],
+                                    pivot: [0.5, 0.5],
+                                    duration: duration as f32,
+                                    events: Vec::new(),
+                                });
+                            } else {
+                                let mut clip = Clip::new(clip_name.clone(), String::new());
+                                clip.add_frame(Frame {
+                                    rect: [x as u32, y as u32, w as u32, h as u32],
+                                    pivot: [0.5, 0.5],
+                                    duration: duration as f32,
+                                    events: Vec::new(),
+                                });
+                                anim.add_clip(clip);
+                            }
+                        } else {
+                            let mut anim = AnimationPlayer::new();
+                            let mut clip = Clip::new(clip_name.clone(), String::new());
+                            clip.add_frame(Frame {
+                                rect: [x as u32, y as u32, w as u32, h as u32],
+                                pivot: [0.5, 0.5],
+                                duration: duration as f32,
+                                events: Vec::new(),
+                            });
+                            anim.add_clip(clip);
+                            let _ = world.world_mut().insert_one(eid, anim);
+                        }
+                        break;
+                    }
+                }
+            }
+            SliceCommand::SetAnimationLoop {
+                source_id,
+                clip_name,
+                loops,
+            } => {
+                use crate::sprite::AnimationPlayer;
+                use kiln_runtime::SourceId;
+                for (sid, eid) in world.world_ref().query::<&SourceId>().iter() {
+                    if sid.0 == source_id {
+                        if let Ok(mut anim) = world.world_mut().get_mut::<&mut AnimationPlayer>(eid) {
+                            if let Some(clip) = anim.clips_mut().get_mut(&clip_name) {
+                                clip.loops = loops;
+                            }
+                        }
+                        break;
                     }
                 }
             }

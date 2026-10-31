@@ -119,6 +119,16 @@ impl AnimationPlayer {
         self.speed = speed.max(0.0);
     }
 
+    /// Get a mutable reference to a clip by name, if it exists.
+    pub fn get_clip_mut(&mut self, clip_name: &str) -> Option<&mut Clip> {
+        self.clips.get_mut(clip_name)
+    }
+
+    /// Get mutable access to all clips.
+    pub fn clips_mut(&mut self) -> &mut HashMap<String, Clip> {
+        &mut self.clips
+    }
+
     /// Get the current frame's normalized UV rect (0.0 to 1.0), if a clip is playing.
     /// Returns [u0, v0, u1, v1] in normalized texture coordinates.
     pub fn current_uv_rect(&self) -> Option<[f32; 4]> {
