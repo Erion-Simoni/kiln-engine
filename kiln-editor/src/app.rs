@@ -3381,57 +3381,32 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                     ui.add_space(8.0);
 
-                    // Prefab list
-                    egui::Frame::none()
-                        .fill(egui::Color32::from_rgb(35, 35, 40))
-                        .rounding(4.0)
-                        .inner_margin(12.0)
-                        .show(ui, |ui| {
-                            ui.strong("Prefabs");
-                            ui.add_space(8.0);
+                    ui.add_space(8.0);
 
-                            egui::ScrollArea::vertical()
-                                .max_height(ui.available_height())
-                                .show(ui, |ui| {
-                                    let prefab_ids: Vec<(String, String)> = self.prefab_editor
-                                        .prefab_list()
-                                        .iter()
-                                        .map(|p| (p.id.clone(), p.name.clone()))
-                                        .collect();
+                    // Render the prefab editor panel (list + override editor).
+                    // Returns true if overrides were applied, in which case we
+                    // update all ECS instances to match the edited prefab.
+                    if self.prefab_editor.render(ui) {
+                        let prefabs: Vec<_> = self
+                            .prefab_editor
+                            .state
+                            .prefab_list()
+                            .iter()
+                            .cloned()
+                            .collect();
+                        for prefab in prefabs {
+                            let updated =
+                                crate::editing::update_prefab_instances(&mut self.world, &prefab);
+                            if updated > 0 {
+                                self.log(&format!(
+                                    "[INFO] Updated {} instances of prefab '{}'",
+                                    updated, prefab.name
+                                ));
+                            }
+                        }
+                    }
+                };
 
-                                    let is_empty = prefab_ids.is_empty();
-
-                                    for (prefab_id, prefab_name) in prefab_ids {
-                                        let selected =
-                                            self.prefab_editor.selected_prefab_id() == Some(prefab_id.as_str());
-                                        ui.horizontal(|ui| {
-                                            if selected {
-                                                ui.strong(&prefab_name);
-                                            } else {
-                                                ui.label(&prefab_name);
-                                            }
-                                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                                if ui.button("Edit").clicked() {
-                                                    // Selecting the prefab shows
-                                                    // its data, so it can be
-                                                    // changed and instantiated.
-                                                    self.prefab_editor.select_prefab(&prefab_id);
-                                                }
-                                                if ui.button("Delete").clicked() {
-                                                    self.prefab_editor.remove_prefab(&prefab_id);
-                                                }
-                                            });
-                                        });
-                                        ui.add_space(4.0);
-                                    }
-
-                                    if is_empty {
-                                        ui.label("No prefabs created yet");
-                                        ui.label("Select an entity and click 'Create Prefab from Selection'");
-                                    }
-                                });
-                        });
-                });
             }
             Tab::SceneEditor => {
                 ui.vertical(|ui| {
