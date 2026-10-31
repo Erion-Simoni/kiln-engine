@@ -67,6 +67,12 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     // Time/frame (28-29)
     ("get_frame_count", 28, 0),      // -> frame number
     ("get_time_scale", 29, 0),       // -> time scale
+    // Extended entity API (30-34)
+    ("set_entity_vel", 30, 3),       // source_id, vx, vy
+    ("get_entities_at_position", 31, 3), // x, y, radius -> array of source_ids
+    ("get_entity_role", 32, 1),      // source_id -> role string
+    ("add_component", 33, 3),        // source_id, component_type, value_json
+    ("remove_component", 34, 2),     // source_id, component_type
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -116,6 +122,10 @@ pub struct SliceFacts {
     pub time_scale: f64,
     /// Map of entity source_id -> (x, y) position for entities with Role component.
     pub entity_positions: HashMap<String, (f64, f64)>,
+    /// Map of entity source_id -> sprite color [r, g, b, a].
+    pub entity_sprite_colors: HashMap<String, [f64; 4]>,
+    /// Map of entity source_id -> sprite size [w, h].
+    pub entity_sprite_sizes: HashMap<String, [f64; 2]>,
     /// Map of entity source_id -> role name.
     pub entity_roles: HashMap<String, String>,
 }
@@ -142,11 +152,24 @@ pub enum SliceCommand {
     DespawnEntity(String),
     /// Set entity position.
     SetEntityPos { source_id: String, x: f64, y: f64 },
+    /// Set entity velocity.
+    SetEntityVel { source_id: String, vx: f64, vy: f64 },
     /// Set entity component value.
     SetEntityComponent {
         source_id: String,
         component: String,
         value: Value,
+    },
+    /// Add a component to an entity.
+    AddComponent {
+        source_id: String,
+        component_type: String,
+        value: Value,
+    },
+    /// Remove a component from an entity.
+    RemoveComponent {
+        source_id: String,
+        component_type: String,
     },
 }
 
@@ -382,13 +405,30 @@ impl SliceHost {
             22 => {
                 // get_entity_component(source_id, component_name) -> value
                 let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
-                let _component = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
-                // For now, return position if asking for "transform"
-                // Full component access would need more infrastructure
-                if let Some((x, y)) = self.facts.entity_positions.get(source_id) {
-                    Ok(Value::Array(vec![Value::F64(*x), Value::F64(*y)]))
-                } else {
-                    Ok(Value::Bool(false))
+                let component = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
+                match component {
+                    "transform" | "Transform" | "position" | "Position" => {
+                        if let Some((x, y)) = self.facts.entity_positions.get(source_id) {
+                            Ok(Value::Array(vec![Value::F64(*x), Value::F64(*y)]))
+                        } else {
+                            Ok(Value::Bool(false))
+                        }
+                    }
+                    "sprite_color" | "SpriteColor" | "color" | "Color" => {
+                        if let Some(color) = self.facts.entity_sprite_colors.get(source_id) {
+                            Ok(Value::Array(color.iter().map(|&c| Value::F64(c)).collect()))
+                        } else {
+                            Ok(Value::Bool(false))
+                        }
+                    }
+                    "sprite_size" | "SpriteSize" | "size" | "Size" => {
+                        if let Some(size) = self.facts.entity_sprite_sizes.get(source_id) {
+                            Ok(Value::Array(size.iter().map(|&s| Value::F64(s)).collect()))
+                        } else {
+                            Ok(Value::Bool(false))
+                        }
+                    }
+                    _ => Ok(Value::Bool(false)),
                 }
             }
             23 => {
@@ -455,6 +495,64 @@ impl SliceHost {
             // Time/frame (28-29)
             28 => Ok(Value::I64(self.frame_count as i64)),
             29 => Ok(Value::F64(self.time_scale)),
+            // Extended entity API (30-34)
+            30 => {
+                // set_entity_vel(source_id, vx, vy)
+                #[cfg(feature = "physics")]
+                {
+                    let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let vx = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                    let vy = args.get(2).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                    self.commands.push(SliceCommand::SetEntityVel { source_id, vx, vy });
+                }
+                Ok(Value::I64(0))
+            }
+            31 => {
+                // get_entities_at_position(x, y, radius) -> array of source_ids
+                let x = args.first().and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let y = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let radius = args.get(2).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let mut found: Vec<Value> = Vec::new();
+                for (source_id, (ex, ey)) in &self.facts.entity_positions {
+                    let dx = ex - x;
+                    let dy = ey - y;
+                    if (dx * dx + dy * dy).sqrt() <= radius {
+                        found.push(Value::Str(source_id.clone()));
+                    }
+                }
+                Ok(Value::Array(found))
+            }
+            32 => {
+                // get_entity_role(source_id) -> role string
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+                if let Some(role) = self.facts.entity_roles.get(source_id) {
+                    Ok(Value::Str(role.clone()))
+                } else {
+                    Ok(Value::Str(String::new()))
+                }
+            }
+            33 => {
+                // add_component(source_id, component_type, value_json)
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let component_type = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let value = args.get(2).cloned().unwrap_or(Value::I64(0));
+                self.commands.push(SliceCommand::AddComponent {
+                    source_id,
+                    component_type,
+                    value,
+                });
+                Ok(Value::I64(0))
+            }
+            34 => {
+                // remove_component(source_id, component_type)
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let component_type = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                self.commands.push(SliceCommand::RemoveComponent {
+                    source_id,
+                    component_type,
+                });
+                Ok(Value::I64(0))
+            }
             _ => Err(VmError::HostCallError(format!(
                 "unknown slice builtin id {func_id}"
             ))),
@@ -572,9 +670,12 @@ impl SliceSession {
         let mut entity_positions = HashMap::new();
         let mut entity_velocities = HashMap::new();
         let mut entity_roles = HashMap::new();
+        let mut entity_sprite_colors = HashMap::new();
+        let mut entity_sprite_sizes = HashMap::new();
 
         use kiln_runtime::{Role, SourceId, Transform, Velocity};
         use kiln_core::project::Component;
+        use crate::sprite::Sprite;
 
         for (source_id, transform) in world.world_ref().query::<(&SourceId, &Transform)>().iter() {
             entity_positions.insert(source_id.0.clone(), (transform.position.x as f64, transform.position.y as f64));
@@ -582,6 +683,11 @@ impl SliceSession {
 
         for (source_id, role) in world.world_ref().query::<(&SourceId, &Role)>().iter() {
             entity_roles.insert(source_id.0.clone(), role.0.clone());
+        }
+
+        for (source_id, sprite) in world.world_ref().query::<(&SourceId, &Sprite)>().iter() {
+            entity_sprite_colors.insert(source_id.0.clone(), sprite.color.map(|c| c as f64));
+            entity_sprite_sizes.insert(source_id.0.clone(), sprite.size.map(|s| s as f64));
         }
 
         self.host_mut().frame_count += 1;
@@ -598,6 +704,8 @@ impl SliceSession {
             frame_count: self.host_mut().frame_count,
             time_scale: self.host_mut().time_scale,
             entity_positions,
+            entity_sprite_colors,
+            entity_sprite_sizes,
             entity_roles,
         }
     }
@@ -729,6 +837,86 @@ impl SliceSession {
                                         }
                                     }
                                 }
+                            }
+                            _ => {}
+                        }
+                        break;
+                    }
+                }
+            }
+            SliceCommand::AddComponent {
+                source_id,
+                component_type,
+                value,
+            } => {
+                use kiln_runtime::{SourceId, Transform, Sprite};
+                #[cfg(feature = "physics")]
+                use kiln_runtime::Velocity;
+                for (sid, eid) in world.world_ref().query::<&SourceId>().iter() {
+                    if sid.0 == source_id {
+                        match component_type.as_str() {
+                            "transform" | "Transform" => {
+                                if let Value::Array(arr) = value {
+                                    if arr.len() >= 2 {
+                                        if let (Some(Value::F64(x)), Some(Value::F64(y))) = (arr.get(0), arr.get(1)) {
+                                            if let Ok(mut transform) = world.world_mut().get_mut::<&mut Transform>(eid) {
+                                                transform.position.x = *x as f32;
+                                                transform.position.y = *y as f32;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            "velocity" | "Velocity" => {
+                                #[cfg(feature = "physics")]
+                                {
+                                    if let Value::Array(arr) = value {
+                                        if arr.len() >= 2 {
+                                            if let (Some(Value::F64(vx)), Some(Value::F64(vy))) = (arr.get(0), arr.get(1)) {
+                                                if let Ok(mut velocity) = world.world_mut().get_mut::<&mut Velocity>(eid) {
+                                                    velocity.0.x = *vx as f32;
+                                                    velocity.0.y = *vy as f32;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            "sprite" | "Sprite" => {
+                                if let Value::Array(arr) = value {
+                                    if arr.len() >= 4 {
+                                        if let (Some(Value::F64(r)), Some(Value::F64(g)), Some(Value::F64(b)), Some(Value::F64(a))) = (arr.get(0), arr.get(1), arr.get(2), arr.get(3)) {
+                                            if let Ok(mut sprite) = world.world_mut().get_mut::<&mut Sprite>(eid) {
+                                                sprite.color = [*r as f32, *g as f32, *b as f32, *a as f32];
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                        break;
+                    }
+                }
+            }
+            SliceCommand::RemoveComponent { source_id, component_type } => {
+                use kiln_runtime::{SourceId, Transform, Sprite, Velocity};
+                for (sid, eid) in world.world_ref().query::<&SourceId>().iter() {
+                    if sid.0 == source_id {
+                        match component_type.as_str() {
+                            "transform" | "Transform" => {
+                                let _ = world.world_mut().remove::<Transform>(eid);
+                            }
+                            "sprite" | "Sprite" => {
+                                let _ = world.world_mut().remove::<Sprite>(eid);
+                            }
+                            "velocity" | "Velocity" => {
+                                #[cfg(feature = "physics")]
+                                {
+                                    let _ = world.world_mut().remove::<Velocity>(eid);
+                                }
+                                #[cfg(not(feature = "physics"))]
+                                let _ = eid;
                             }
                             _ => {}
                         }

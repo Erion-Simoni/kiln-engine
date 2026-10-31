@@ -78,3 +78,18 @@ impl Default for GameWorld {
         Self::new()
     }
 }
+
+/// The id of the next entity, counted from one.
+///
+/// The ids are unique within a scene, so the editor can name an entity and
+/// find it again after a reload.
+pub fn next_entity_id(existing: &[String]) -> String {
+    let mut index = 1;
+    loop {
+        let candidate = format!("entity_{index}");
+        if !existing.iter().any(|id| id == &candidate) {
+            return candidate;
+        }
+        index += 1;
+    }
+}
