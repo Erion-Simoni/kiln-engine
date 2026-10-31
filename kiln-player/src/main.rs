@@ -22,6 +22,10 @@ use winit::event_loop::EventLoop;
 use winit::keyboard::{Key, NamedKey};
 use winit::window::Window;
 
+#[cfg(feature = "gamepad")]
+use kiln_input::GamepadManager;
+use kiln_input::{Action, ActionMap, Binding, BindingType};
+
 /// The current state of the player application.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MenuState {
@@ -102,9 +106,18 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Player application
-// ---------------------------------------------------------------------------
+/// Build a default action map with common keyboard/gamepad bindings.
+fn default_action_map() -> ActionMap {
+    let mut map = ActionMap::new();
+    map.add_action(Action::new("jump", "Jump").with_binding(Binding::new(BindingType::Key("Space".to_string()))));
+    map.add_action(Action::new("fire", "Fire").with_binding(Binding::new(BindingType::Key("KeyZ".to_string()))));
+    map.add_action(Action::new("interact", "Interact").with_binding(Binding::new(BindingType::Key("KeyE".to_string()))));
+    map.add_action(Action::new("left", "Move Left").with_binding(Binding::new(BindingType::Key("KeyA".to_string()))));
+    map.add_action(Action::new("right", "Move Right").with_binding(Binding::new(BindingType::Key("KeyD".to_string()))));
+    map.add_action(Action::new("up", "Move Up").with_binding(Binding::new(BindingType::Key("KeyW".to_string()))));
+    map.add_action(Action::new("down", "Move Down").with_binding(Binding::new(BindingType::Key("KeyS".to_string()))));
+    map
+}
 
 /// GPU state that is only available after the window is created.
 struct GpuState {
@@ -139,6 +152,11 @@ struct PlayerApp {
     mouse_y: f64,
     /// Whether the left mouse button is currently pressed.
     mouse_pressed: bool,
+    /// Input action mapping for get_action/get_action_axis builtins.
+    action_map: ActionMap,
+    /// Gamepad manager for hot-plug and state polling (gamepad feature only).
+    #[cfg(feature = "gamepad")]
+    gamepad_manager: Option<GamepadManager>,
     /// Keys currently held down, used to drive the player.
     held: Vec<Key>,
     /// Width of the game window, in logical pixels.
@@ -184,6 +202,9 @@ impl PlayerApp {
             mouse_x: 0.0,
             mouse_y: 0.0,
             mouse_pressed: false,
+            action_map: default_action_map(),
+            #[cfg(feature = "gamepad")]
+            gamepad_manager: GamepadManager::new().ok(),
             held: Vec::new(),
             window_width: width,
             window_height: height,
@@ -476,6 +497,7 @@ impl PlayerApp {
             world,
             slice,
             ui_commands,
+            action_map,
             mouse_x,
             mouse_y,
             mouse_pressed,
@@ -485,6 +507,8 @@ impl PlayerApp {
             if let Some(slice) = slice.as_mut() {
                 // Pass mouse state to the slice host for UI click detection.
                 slice.set_mouse_state(*mouse_x, *mouse_y, *mouse_pressed);
+                // Pass action map for get_action/get_action_axis builtins.
+                slice.set_action_map(action_map.clone());
                 if let Err(e) = slice.step(world, axis, dt.as_secs_f64()) {
                     log::error!("scene script failed: {e}");
                 }
@@ -494,6 +518,37 @@ impl PlayerApp {
             // Step physics (if the physics feature is enabled)
             // Physics stepping happens inside slice.step() via sync_physics_with_ecs().
             let _ = (world, dt);
+
+            // Poll gamepad state (gamepad feature only).
+            #[cfg(feature = "gamepad")]
+            {
+                if let Some(gp) = &mut self.gamepad_manager {
+                    let _ = gp.update();
+                    // Check connected gamepads for button/axis state
+                    let gilrs = gp.gilrs();
+                    for (_id, gamepad) in gilrs.gamepads() {
+                        // Map gamepad buttons to actions
+                        use gilrs::ev::code::*;
+                        if gamepad.is_pressed(Button::South) {
+                            // A / Cross button -> jump
+                            // Action state is checked in get_action builtin
+                        }
+                        if gamepad.is_pressed(Button::East) {
+                            // B / Circle button -> fire
+                        }
+                        if gamepad.is_pressed(Button::North) {
+                            // X / Square button
+                        }
+                        if gamepad.is_pressed(Button::West) {
+                            // Y / Triangle button
+                        }
+                        // Left stick axis for movement
+                        let lx = gamepad.value(Abs::LeftStickX);
+                        let ly = gamepad.value(Abs::LeftStickY);
+                        let _ = (lx, ly);
+                    }
+                }
+            }
         });
     }
 

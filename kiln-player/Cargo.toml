@@ -14,6 +14,7 @@ kiln-runtime = { workspace = true }
 kiln-assets = { workspace = true }
 kiln-render = { workspace = true }
 kiln-ui = { workspace = true }
+kiln-input = { workspace = true }
 log = { workspace = true }
 env_logger = { workspace = true }
 anyhow = { workspace = true }
@@ -23,4 +24,9 @@ winit = { workspace = true, features = ["android-activity"] }
 pollster = { workspace = true }
 ron = { workspace = true }
 thiserror = { workspace = true }
+gilrs = { workspace = true, optional = true }
+
+[features]
+default = []
+gamepad = ["gilrs", "kiln-input/gamepad"]
 

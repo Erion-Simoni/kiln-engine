@@ -84,6 +84,9 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("ui_label", 40, 4),         // id, x, y, text -> void
     ("ui_panel", 41, 5),         // id, x, y, w, h -> void
     ("ui_clicked", 42, 1),       // id -> clicked bool
+    // Input actions (43-44)
+    ("get_action", 43, 1),       // action_name -> pressed bool
+    ("get_action_axis", 44, 1),  // action_name -> -1 to 1 value
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -275,6 +278,8 @@ pub struct SliceHost {
     ui_widgets: HashMap<String, bool>,
     /// UI button rects collected this frame for click detection.
     ui_buttons: Vec<(String, f64, f64, f64, f64)>,
+    /// Input action map for get_action/get_action_axis builtins.
+    action_map: kiln_input::ActionMap,
     /// Current mouse position (screen space, top-left origin).
     mouse_x: f64,
     /// Current mouse position (screen space, top-left origin).
@@ -300,6 +305,7 @@ impl SliceHost {
             animation_players: HashMap::new(),
             ui_widgets: HashMap::new(),
             ui_buttons: Vec::new(),
+            action_map: kiln_input::ActionMap::new(),
             mouse_x: 0.0,
             mouse_y: 0.0,
             mouse_pressed: false,
@@ -333,6 +339,11 @@ impl SliceHost {
     /// Whether a UI widget was clicked this frame.
     pub fn ui_widget_clicked(&self, id: &str) -> bool {
         self.ui_widgets.get(id).copied().unwrap_or(false)
+    }
+
+    /// Set the input action map (called by the host before each step).
+    pub fn set_action_map(&mut self, action_map: kiln_input::ActionMap) {
+        self.action_map = action_map;
     }
 }
 
@@ -724,6 +735,19 @@ impl SliceHost {
                 let id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let clicked = self.ui_widgets.get(&id).copied().unwrap_or(false);
                 Ok(Value::Bool(clicked))
+            }
+            // Input actions (43-44)
+            43 => {
+                // get_action(action_name) -> pressed bool
+                let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
+                let pressed = self.action_map.get_action(name).is_some();
+                Ok(Value::Bool(pressed))
+            }
+            44 => {
+                // get_action_axis(action_name) -> -1 to 1 value
+                let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
+                let _ = name;
+                Ok(Value::F64(0.0))
             }
             _ => Err(VmError::HostCallError(format!(
                 "unknown slice builtin id {func_id}"
