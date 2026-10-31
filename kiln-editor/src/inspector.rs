@@ -130,7 +130,7 @@ fn render_component(
                 changed |= cols[1].add(egui::DragValue::new(scale).speed(0.01).clamp_range(0.001..=100.0)).changed();
             });
         }
-        Component::Sprite { color, texture } => {
+        Component::Sprite { color, texture, layer } => {
             ui.add_space(4.0);
             
             // Color editor
@@ -144,6 +144,11 @@ fn render_component(
                     color[3] = color_arr[3].clamp(0.0, 1.0);
                     changed = true;
                 }
+            });
+            // Sorting layer
+            ui.horizontal(|ui| {
+                ui.label("Layer:");
+                changed |= ui.add(egui::DragValue::new(layer).speed(0.1)).changed();
             });
             
             // Texture picker

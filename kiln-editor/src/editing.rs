@@ -280,9 +280,10 @@ pub fn update_prefab_instances(
                         .with_rotation(*rotation)
                         .with_scale(kiln_core::Vec2::splat(*scale));
                 }
-                kiln_core::project::Component::Sprite { color, texture } => {
+                kiln_core::project::Component::Sprite { color, texture, layer } => {
                     sprite = Sprite::new(color[0], color[1], color[2], color[3])
-                        .with_size(DEFAULT_SPRITE_SIZE[0], DEFAULT_SPRITE_SIZE[1]);
+                        .with_size(DEFAULT_SPRITE_SIZE[0], DEFAULT_SPRITE_SIZE[1])
+                        .with_layer(layer);
                     if let Some(path) = texture {
                         // Texture override would need asset loading; skip for now
                         let _ = path;

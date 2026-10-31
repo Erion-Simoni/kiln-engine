@@ -185,6 +185,10 @@ pub enum Component {
         /// tinted by `color`.
         #[serde(default)]
         texture: Option<String>,
+        /// Sorting layer — sprites on lower layers are drawn first.
+        /// Preserves painter order for transparent sprites across textures.
+        #[serde(default)]
+        layer: f32,
     },
     /// A tilemap instance placed in the scene.
     Tilemap {
