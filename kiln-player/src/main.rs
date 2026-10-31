@@ -12,7 +12,13 @@ use kiln_runtime::{
     GameLoop, GameWorld, InputState, SliceSession, Sprite, Tilemap,
     sync_physics_with_ecs,
 };
-use kiln_ui::TextRenderer;
+use kiln_ui::{
+    layout::Rect,
+    ui_renderer::UiRenderer,
+    widget::{Button, Label, Panel, WidgetId, Widget},
+    localization::LocalizationKey,
+    render::NineSlice,
+};
 use log::info;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -119,6 +125,27 @@ fn default_action_map() -> ActionMap {
     map
 }
 
+/// UI widget types that can be rendered by UiRenderer.
+#[derive(Debug, Clone)]
+enum UiWidget {
+    Button {
+        id: WidgetId,
+        bounds: Rect,
+        text_key: LocalizationKey,
+        hovered: bool,
+        pressed: bool,
+    },
+    Label {
+        id: WidgetId,
+        bounds: Rect,
+        text_key: LocalizationKey,
+    },
+    Panel {
+        id: WidgetId,
+        bounds: Rect,
+    },
+}
+
 /// Convert a winit logical key to a string name for action map lookup.
 fn key_name_string(key: &winit::keyboard::Key) -> String {
     match key {
@@ -168,6 +195,10 @@ struct PlayerApp {
     slice: Option<SliceSession>,
     /// UI commands collected from the last script frame (buttons, labels, panels).
     ui_commands: Vec<kiln_runtime::SliceCommand>,
+    /// UI widgets built from commands, ready for rendering.
+    ui_widgets: Vec<UiWidget>,
+    /// UI renderer for drawing widgets with nine-slice backgrounds and text.
+    ui_renderer: UiRenderer,
     /// Current mouse position (screen space, top-left origin).
     mouse_x: f64,
     /// Current mouse position (screen space, top-left origin).
@@ -223,6 +254,8 @@ impl PlayerApp {
             textures: TextureLibrary::default(),
             slice: None,
             ui_commands: Vec::new(),
+            ui_widgets: Vec::new(),
+            ui_renderer: UiRenderer::new(),
             mouse_x: 0.0,
             mouse_y: 0.0,
             mouse_pressed: false,
@@ -383,7 +416,13 @@ impl PlayerApp {
         (x, y)
     }
 
-    /// Save the game state to the save slot.
+    /// Check if mouse is over a rect (screen space, top-left origin).
+    fn is_mouse_over(&self, bounds: Rect) -> bool {
+        self.mouse_x >= bounds.x as f64
+            && self.mouse_x < (bounds.x + bounds.width) as f64
+            && self.mouse_y >= bounds.y as f64
+            && self.mouse_y < (bounds.y + bounds.height) as f64
+    }
     fn save_game(&mut self) {
         let Some(slice) = self.slice.as_ref() else {
             return;
@@ -545,8 +584,42 @@ impl PlayerApp {
                 if let Err(e) = slice.step(world, axis, dt.as_secs_f64()) {
                     log::error!("scene script failed: {e}");
                 }
-                // Collect UI commands from the last script frame.
-                *ui_commands = slice.take_ui_commands();
+                // Collect UI commands from the last script frame and build widgets.
+                let commands = slice.take_ui_commands();
+                *ui_commands = commands.clone();
+                *ui_widgets = commands
+                    .iter()
+                    .filter_map(|cmd| match cmd {
+                        kiln_runtime::SliceCommand::UiButton { id, x, y } => {
+                            let bounds = Rect::new(*x as f32, *y as f32, 64.0, 32.0);
+                            let hovered = self.is_mouse_over(bounds);
+                            let pressed = hovered && self.mouse_pressed;
+                            Some(UiWidget::Button {
+                                id: WidgetId::from_u64(id.hash()),
+                                bounds,
+                                text_key: LocalizationKey::new(format!("btn_{id}")),
+                                hovered,
+                                pressed,
+                            })
+                        }
+                        kiln_runtime::SliceCommand::UiLabel { id, x, y, text } => {
+                            let bounds = Rect::new(*x as f32, *y as f32, 200.0, 24.0);
+                            Some(UiWidget::Label {
+                                id: WidgetId::from_u64(id.hash()),
+                                bounds,
+                                text_key: LocalizationKey::new(text.clone()),
+                            })
+                        }
+                        kiln_runtime::SliceCommand::UiPanel { id, x, y, w, h } => {
+                            let bounds = Rect::new(*x as f32, *y as f32, *w as f32, *h as f32);
+                            Some(UiWidget::Panel {
+                                id: WidgetId::from_u64(id.hash()),
+                                bounds,
+                            })
+                        }
+                        _ => None,
+                    })
+                    .collect();
             }
             // Step physics (if the physics feature is enabled)
             // Physics stepping happens inside slice.step() via sync_physics_with_ecs().
@@ -684,10 +757,8 @@ impl PlayerApp {
                 .flush(&mut pass, &self.camera, gpu.renderer.queue());
         }
 
-        // Render UI commands from the script (buttons, labels, panels).
-        // These use screen-space coordinates, so we need a separate pass
-        // with a top-left origin camera.
-        if !self.ui_commands.is_empty() {
+        // Render UI widgets using UiRenderer (screen-space, top-left origin).
+        if !self.ui_widgets.is_empty() {
             let mut ui_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("ui_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -704,32 +775,62 @@ impl PlayerApp {
             });
             let ui_camera = Camera::new_top_left(size.width as f32, size.height as f32);
             gpu.hud_sprite_renderer.begin_frame();
-            for cmd in &self.ui_commands {
-                match cmd {
-                    kiln_runtime::SliceCommand::UiButton { id: _, x, y } => {
-                        gpu.hud_sprite_renderer.push(kiln_render::SpriteInstance::colored(
-                            [*x as f32 + 32.0, *y as f32 + 16.0],
-                            [64.0, 32.0],
-                            [0.2, 0.6, 1.0, 1.0],
+
+            for widget in &self.ui_widgets {
+                match widget {
+                    UiWidget::Button { id, bounds, text_key, hovered, pressed } => {
+                        let mut button = Button::new(*id, text_key.clone());
+                        button.set_bounds(Rect::new(
+                            bounds.x,
+                            bounds.y,
+                            bounds.width,
+                            bounds.height,
                         ));
-                    }
-                    kiln_runtime::SliceCommand::UiLabel { id: _, x, y, text } => {
-                        let text_renderer = kiln_ui::TextRenderer::new();
-                        let instances = text_renderer.render(text, *x as f32, *y as f32, 14.0, [1.0, 1.0, 1.0, 1.0]);
-                        for inst in instances {
-                            gpu.hud_sprite_renderer.push(inst);
+                        // Set button state colors based on hover/press
+                        let normal = NineSlice::new(1, 4.0);
+                        let hovered_ns = NineSlice::new(2, 4.0);
+                        let pressed_ns = NineSlice::new(3, 4.0);
+                        let button = if *pressed {
+                            button.with_normal(pressed_ns.clone())
+                        } else if *hovered {
+                            button.with_normal(hovered_ns.clone())
+                        } else {
+                            button.with_normal(normal.clone())
+                        };
+                        let quads = self.ui_renderer.render_button(&button, *hovered, *pressed);
+                        for quad in quads {
+                            gpu.hud_sprite_renderer.push_textured(quad.texture, quad.instance);
                         }
                     }
-                    kiln_runtime::SliceCommand::UiPanel { id: _, x, y, w, h } => {
-                        gpu.hud_sprite_renderer.push(kiln_render::SpriteInstance::colored(
-                            [*x as f32 + *w / 2.0, *y as f32 + *h / 2.0],
-                            [*w as f32, *h as f32],
-                            [0.15, 0.15, 0.2, 0.9],
+                    UiWidget::Label { id, bounds, text_key } => {
+                        let mut label = Label::new(*id, text_key.clone());
+                        label.set_bounds(Rect::new(
+                            bounds.x,
+                            bounds.y,
+                            bounds.width,
+                            bounds.height,
                         ));
+                        let quads = self.ui_renderer.render_label(&label);
+                        for instance in quads {
+                            gpu.hud_sprite_renderer.push(kiln_render::TextureId::WHITE, instance);
+                        }
                     }
-                    _ => {}
+                    UiWidget::Panel { id, bounds } => {
+                        let mut panel = Panel::new(*id);
+                        panel.set_bounds(Rect::new(
+                            bounds.x,
+                            bounds.y,
+                            bounds.width,
+                            bounds.height,
+                        ));
+                        let quads = self.ui_renderer.render_panel(&panel);
+                        for instance in quads {
+                            gpu.hud_sprite_renderer.push_textured(quad.texture, quad.instance);
+                        }
+                    }
                 }
             }
+
             gpu.hud_sprite_renderer
                 .flush(&mut ui_pass, &ui_camera, gpu.renderer.queue());
         }
