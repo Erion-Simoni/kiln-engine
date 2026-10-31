@@ -1084,6 +1084,23 @@ impl winit::application::ApplicationHandler for PlayerApp {
                 self.mouse_x = position.x as f64;
                 self.mouse_y = position.y as f64;
             }
+            winit::event::WindowEvent::Touch(touch) => {
+                match touch.phase {
+                    winit::event::TouchPhase::Started => {
+                        self.mouse_x = touch.location.x as f64;
+                        self.mouse_y = touch.location.y as f64;
+                        self.mouse_pressed = true;
+                    }
+                    winit::event::TouchPhase::Moved => {
+                        self.mouse_x = touch.location.x as f64;
+                        self.mouse_y = touch.location.y as f64;
+                    }
+                    winit::event::TouchPhase::Ended
+                    | winit::event::TouchPhase::Cancelled => {
+                        self.mouse_pressed = false;
+                    }
+                }
+            }
             winit::event::WindowEvent::MouseInput {
                 state,
                 button: winit::event::MouseButton::Left,

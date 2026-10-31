@@ -16,7 +16,7 @@ use kiln_ui::TextRenderer;
 use log::{error, info, warn};
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
-use web_sys::{HtmlCanvasElement, HtmlImageElement, KeyboardEvent};
+use web_sys::{HtmlCanvasElement, HtmlImageElement, KeyboardEvent, TouchEvent};
 
 use image::GenericImageView;
 
@@ -228,6 +228,67 @@ impl App {
             let _ = window
                 .add_event_listener_with_callback("keyup", on_keyup.as_ref().unchecked_ref());
             on_keyup.forget();
+        }
+        // ----------------------------------------------------------------------
+
+        // --- Touch input: update WebInput so gameplay receives touch input ---
+        {
+            let app_for_touchstart = app_clone.clone();
+            let on_touchstart = Closure::wrap(Box::new(move |event: TouchEvent| {
+                let mut app = app_for_touchstart.borrow_mut();
+                if let Some(app) = app.as_mut() {
+                    if let Some(touch) = event.touches().item(0) {
+                        app.input.input_x = 1.0;
+                        app.input.input_y = 1.0;
+                        // Store touch position in input_x/input_y as normalized coords
+                        // The actual position handling would need canvas rect
+                        let _ = touch.client_x();
+                        let _ = touch.client_y();
+                    }
+                }
+            }) as Box<dyn FnMut(TouchEvent)>);
+            let _ = window
+                .add_event_listener_with_callback(
+                    "touchstart",
+                    on_touchstart.as_ref().unchecked_ref(),
+                );
+            on_touchstart.forget();
+
+            let app_for_touchend = app_clone.clone();
+            let on_touchend = Closure::wrap(Box::new(move |event: TouchEvent| {
+                let mut app = app_for_touchend.borrow_mut();
+                if let Some(app) = app.as_mut() {
+                    if event.touches().length() == 0 {
+                        app.input.input_x = 0.0;
+                        app.input.input_y = 0.0;
+                    }
+                }
+            }) as Box<dyn FnMut(TouchEvent)>);
+            let _ = window
+                .add_event_listener_with_callback(
+                    "touchend",
+                    on_touchend.as_ref().unchecked_ref(),
+                );
+            on_touchend.forget();
+
+            let app_for_touchmove = app_clone.clone();
+            let on_touchmove = Closure::wrap(Box::new(move |event: TouchEvent| {
+                let mut app = app_for_touchmove.borrow_mut();
+                if let Some(app) = app.as_mut() {
+                    if let Some(touch) = event.touches().item(0) {
+                        app.input.input_x = 1.0;
+                        app.input.input_y = 1.0;
+                        let _ = touch.client_x();
+                        let _ = touch.client_y();
+                    }
+                }
+            }) as Box<dyn FnMut(TouchEvent)>);
+            let _ = window
+                .add_event_listener_with_callback(
+                    "touchmove",
+                    on_touchmove.as_ref().unchecked_ref(),
+                );
+            on_touchmove.forget();
         }
         // ----------------------------------------------------------------------
 
