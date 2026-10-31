@@ -4,7 +4,7 @@ use crate::layout::Rect;
 use crate::localization::Localization;
 use crate::render::{NineSlice, NineSliceRenderer};
 use crate::text::TextRenderer;
-use crate::widget::{Button, Label, List, Panel, Widget};
+use crate::widget::{Button, Canvas, Label, List, Panel, Widget};
 use kiln_render::{SpriteInstance, TextureId};
 
 /// Default UI text height in pixels.
@@ -69,6 +69,56 @@ impl UiRenderer {
             panel_color: [0.1, 0.1, 0.12, 0.6],
             font_size: FONT_SIZE,
         }
+    }
+
+    /// Check if a point is inside a widget's bounds and return the widget's on_click action if it's a button.
+    pub fn hit_test_button(&self, widget: &dyn Widget, x: f32, y: f32) -> Option<String> {
+        if !widget.visible() {
+            return None;
+        }
+        let bounds = widget.bounds();
+        if !bounds.contains_point(x, y) {
+            return None;
+        }
+        
+        // Check if it's a button with an on_click action
+        if let Some(button) = widget.as_any().downcast_ref::<Button>() {
+            if let Some(action) = button.on_click() {
+                return Some(action.to_string());
+            }
+        }
+        
+        // Check children if it's a Canvas
+        if let Some(canvas) = widget.as_any().downcast_ref::<Canvas>() {
+            for child in &canvas.children {
+                if let Some(action) = self.hit_test_button(child.as_ref(), x, y) {
+                    return Some(action);
+                }
+            }
+        }
+        
+        None
+    }
+
+    /// Check if a point is inside any widget and return the topmost widget's on_click action.
+    /// Widgets are checked in reverse order (last added = topmost).
+    pub fn hit_test_canvas(&self, canvas: &Canvas, x: f32, y: f32) -> Option<String> {
+        if !canvas.visible() {
+            return None;
+        }
+        let bounds = canvas.bounds();
+        if !bounds.contains_point(x, y) {
+            return None;
+        }
+        
+        // Check children in reverse order (topmost first)
+        for child in canvas.children.iter().rev() {
+            if let Some(action) = self.hit_test_button(child.as_ref(), x, y) {
+                return Some(action);
+            }
+        }
+        
+        None
     }
 
     /// Resolves a localization key through `localization`, falling back to the key text.
@@ -188,6 +238,45 @@ impl UiRenderer {
     /// Nine-slice sprite stretched over `bounds`.
     pub fn render_nine_slice(&self, nine_slice: &NineSlice, bounds: Rect) -> Vec<UiQuad> {
         nine_quads(&self.nine, nine_slice, bounds, [1.0; 4])
+    }
+
+    /// Canvas: renders background and all child widgets.
+    /// Canvas children are positioned in absolute screen coordinates.
+    pub fn render_canvas(&self, canvas: &Canvas) -> Vec<UiQuad> {
+        if !canvas.visible() {
+            return Vec::new();
+        }
+        let b = canvas.bounds();
+        if b.width <= 0.0 || b.height <= 0.0 {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        
+        // Render background if not transparent
+        if canvas.background_color[3] > 0.0 {
+            out.push(UiQuad::rect(b.x, b.y, b.width, b.height, canvas.background_color));
+        }
+        
+        // Render children
+        for child in &canvas.children {
+            // Downcast to specific widget types and render
+            // We use a trait object approach with type_id checks
+            if let Some(panel) = child.as_any().downcast_ref::<Panel>() {
+                out.extend(self.render_panel(panel));
+            } else if let Some(button) = child.as_any().downcast_ref::<Button>() {
+                // For buttons, we need to know hover/pressed state
+                // For now, render as not hovered/pressed
+                out.extend(self.render_button(button, false, false));
+            } else if let Some(label) = child.as_any().downcast_ref::<Label>() {
+                out.extend(self.render_label(label));
+            } else if let Some(list) = child.as_any().downcast_ref::<List>() {
+                out.extend(self.render_list(list));
+            } else if let Some(canvas) = child.as_any().downcast_ref::<Canvas>() {
+                out.extend(self.render_canvas(canvas));
+            }
+        }
+        
+        out
     }
 
     /// Bitmap text laid out with its top-left at `(x, y)`.

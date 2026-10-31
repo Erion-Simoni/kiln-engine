@@ -44,6 +44,11 @@ impl Rect {
     pub fn center_y(&self) -> f32 {
         self.y + self.height / 2.0
     }
+
+    /// Check if a point is inside this rectangle.
+    pub fn contains_point(&self, x: f32, y: f32) -> bool {
+        x >= self.x && x < self.x + self.width && y >= self.y && y < self.y + self.height
+    }
 }
 
 /// A 2D size.

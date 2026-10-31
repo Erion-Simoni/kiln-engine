@@ -16,7 +16,7 @@ use kiln_ui::TextRenderer;
 use log::{error, info, warn};
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
-use web_sys::{HtmlCanvasElement, HtmlImageElement, KeyboardEvent, TouchEvent, AudioContext, GainNode};
+use web_sys::{HtmlCanvasElement, HtmlImageElement, KeyboardEvent, TouchEvent, AudioContext, GainNode, MouseEvent, WheelEvent};
 
 use image::GenericImageView;
 
@@ -83,6 +83,11 @@ pub async fn run(canvas_id: &str, project_path: &str) {
 struct WebInput {
     input_x: f64,
     input_y: f64,
+    mouse_x: f64,
+    mouse_y: f64,
+    mouse_pressed: bool,
+    mouse_just_pressed: bool,
+    mouse_just_released: bool,
 }
 
 struct App {
@@ -100,6 +105,12 @@ struct App {
     master_gain: Option<web_sys::GainNode>,
     /// Registered audio buffers (name -> AudioBuffer)
     audio_buffers: std::collections::HashMap<String, web_sys::AudioBuffer>,
+    /// Audio file paths registered for playback (name -> URL)
+    audio_files: std::collections::HashMap<String, String>,
+    /// Canvas width
+    canvas_width: u32,
+    /// Canvas height
+    canvas_height: u32,
 }
 
 impl App {
@@ -156,31 +167,7 @@ impl App {
             SpriteRenderer::new(renderer.device(), renderer.queue(), renderer.scene_format());
         sprite_renderer.upload_quad(renderer.queue());
 
-        // Initialize Web Audio API
-        let audio_context = web_sys::AudioContext::new().ok();
-        let master_gain = audio_context.as_ref().map(|ctx| ctx.create_gain()).ok();
-        if let Some(gain) = &master_gain {
-            gain.connect_with_audio_node(&audio_context.as_ref().unwrap().destination()).ok();
-            gain.set_value(1.0);
-        }
-
-        // Register all project audio assets and decode them
-        let mut audio_buffers = std::collections::HashMap::new();
-        if let Some(project) = &project {
-            for asset in &project.audio_assets {
-                let audio_ctx = audio_context.as_ref();
-                if let Some(ctx) = audio_ctx {
-                    if let Ok(array_buffer) = fetch_audio_buffer(&asset.path).await {
-                        if let Ok(buffer) = ctx.decode_audio_data_sync(&array_buffer) {
-                            audio_buffers.insert(asset.name.clone(), buffer);
-                        }
-                    }
-                }
-            }
-        }
-
-        let camera = Camera::new(width as f32, height as f32);
-
+        // Load project first to get audio assets and scene script
         let project = load_project(project_path).await?;
 
         let textures =
@@ -195,12 +182,83 @@ impl App {
             .ok_or("Project has no scenes")?;
         let scene = project.scenes.get(&scene_id).ok_or("Scene not found")?;
 
+        // Initialize Web Audio API
+        let audio_context = web_sys::AudioContext::new().ok();
+        let master_gain = audio_context.as_ref().map(|ctx| ctx.create_gain()).ok();
+        if let Some(gain) = &master_gain {
+            gain.connect_with_audio_node(&audio_context.as_ref().unwrap().destination()).ok();
+            gain.set_value(1.0);
+        }
+
+        // Register all project audio assets and decode them
+        let mut audio_buffers = std::collections::HashMap::new();
+        let mut audio_files = std::collections::HashMap::new();
+        if let Some(ctx) = &audio_context {
+            for asset in &project.audio_assets {
+                audio_files.insert(asset.name.clone(), format!("{}/{}", project_path_dir(project_path), asset.path));
+                if let Ok(array_buffer) = fetch_audio_buffer(&asset.path).await {
+                    if let Ok(buffer) = ctx.decode_audio_data_sync(&array_buffer) {
+                        audio_buffers.insert(asset.name.clone(), buffer);
+                    }
+                }
+            }
+        }
+
+        let camera = Camera::new(width as f32, height as f32);
+
         let mut slice = None;
         if let Some(script_path) = &scene.script {
             let script_source = load_script(script_path, project_path).await?;
             let mut session =
                 SliceSession::new(&script_source)
                     .map_err(|e| format!("Script compile error: {:?}", e))?;
+            
+            // Set up audio player callback for Web Audio API
+            if let Some(audio_ctx) = &audio_context {
+                let audio_buffers_clone = audio_buffers.clone();
+                let master_gain_clone = master_gain.clone();
+                let audio_files_clone = audio_files.clone();
+                session.vm.host_mut().audio_player = Some(Box::new(move |name: &str| {
+                    // Try to play from pre-decoded buffers first
+                    if let Some(buffer) = audio_buffers_clone.get(name) {
+                        if let Some(ctx) = audio_ctx.clone().dyn_into::<web_sys::AudioContext>().ok() {
+                            if let Ok(source) = ctx.create_buffer_source() {
+                                source.set_buffer(buffer);
+                                if let Some(gain) = &master_gain_clone {
+                                    let _ = source.connect_with_audio_node(gain);
+                                } else {
+                                    let _ = source.connect_with_audio_node(&ctx.destination());
+                                }
+                                let _ = source.start();
+                            }
+                        }
+                    }
+                    // If not in buffers, try to fetch and play from URL
+                    else if let Some(url) = audio_files_clone.get(name) {
+                        if let Some(ctx) = audio_ctx.clone().dyn_into::<web_sys::AudioContext>().ok() {
+                            let url_clone = url.clone();
+                            let ctx_clone = ctx.clone();
+                            let master_gain_clone = master_gain_clone.clone();
+                            wasm_bindgen_futures::spawn_local(async move {
+                                if let Ok(array_buffer) = fetch_audio_buffer(&url_clone).await {
+                                    if let Ok(buffer) = ctx_clone.decode_audio_data_sync(&array_buffer) {
+                                        if let Ok(source) = ctx_clone.create_buffer_source() {
+                                            source.set_buffer(&buffer);
+                                            if let Some(gain) = &master_gain_clone {
+                                                let _ = source.connect_with_audio_node(gain);
+                                            } else {
+                                                let _ = source.connect_with_audio_node(&ctx_clone.destination());
+                                            }
+                                            let _ = source.start();
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }));
+            }
+            
             slice = Some(session);
         }
 
@@ -218,6 +276,9 @@ impl App {
             audio_context,
             master_gain,
             audio_buffers,
+            audio_files,
+            canvas_width: width,
+            canvas_height: height,
         })
     }
 
@@ -324,6 +385,123 @@ impl App {
         }
         // ----------------------------------------------------------------------
 
+        // --- Mouse input: update WebInput so gameplay receives mouse input ---
+        {
+            let app_for_mousedown = app_clone.clone();
+            let on_mousedown = Closure::wrap(Box::new(move |event: MouseEvent| {
+                let mut app = app_for_mousedown.borrow_mut();
+                if let Some(app) = app.as_mut() {
+                    app.input.mouse_pressed = true;
+                    app.input.mouse_just_pressed = true;
+                    app.input.mouse_x = event.client_x() as f64;
+                    app.input.mouse_y = event.client_y() as f64;
+                    // Also update input axes for UI interaction
+                    app.input.input_x = 1.0;
+                    app.input.input_y = 1.0;
+                }
+            }) as Box<dyn FnMut(MouseEvent)>);
+            let _ = window
+                .add_event_listener_with_callback(
+                    "mousedown",
+                    on_mousedown.as_ref().unchecked_ref(),
+                );
+            on_mousedown.forget();
+
+            let app_for_mouseup = app_clone.clone();
+            let on_mouseup = Closure::wrap(Box::new(move |event: MouseEvent| {
+                let mut app = app_for_mouseup.borrow_mut();
+                if let Some(app) = app.as_mut() {
+                    app.input.mouse_pressed = false;
+                    app.input.mouse_just_released = true;
+                    app.input.mouse_x = event.client_x() as f64;
+                    app.input.mouse_y = event.client_y() as f64;
+                    app.input.input_x = 0.0;
+                    app.input.input_y = 0.0;
+                }
+            }) as Box<dyn FnMut(MouseEvent)>);
+            let _ = window
+                .add_event_listener_with_callback(
+                    "mouseup",
+                    on_mouseup.as_ref().unchecked_ref(),
+                );
+            on_mouseup.forget();
+
+            let app_for_mousemove = app_clone.clone();
+            let on_mousemove = Closure::wrap(Box::new(move |event: MouseEvent| {
+                let mut app = app_for_mousemove.borrow_mut();
+                if let Some(app) = app.as_mut() {
+                    app.input.mouse_x = event.client_x() as f64;
+                    app.input.mouse_y = event.client_y() as f64;
+                }
+            }) as Box<dyn FnMut(MouseEvent)>);
+            let _ = window
+                .add_event_listener_with_callback(
+                    "mousemove",
+                    on_mousemove.as_ref().unchecked_ref(),
+                );
+            on_mousemove.forget();
+
+            let app_for_wheel = app_clone.clone();
+            let on_wheel = Closure::wrap(Box::new(move |event: WheelEvent| {
+                let mut app = app_for_wheel.borrow_mut();
+                if let Some(app) = app.as_mut() {
+                    // Handle zoom with mouse wheel (delta_y negative = zoom in)
+                    app.camera.zoom *= (1.0 - event.delta_y() as f32 * 0.001).clamp(0.1, 10.0);
+                    event.prevent_default();
+                }
+            }) as Box<dyn FnMut(WheelEvent)>);
+            let _ = window
+                .add_event_listener_with_callback(
+                    "wheel",
+                    on_wheel.as_ref().unchecked_ref(),
+                );
+            on_wheel.forget();
+        }
+        // ----------------------------------------------------------------------
+
+        // --- Window resize handler ---
+        {
+            let app_for_resize = app_clone.clone();
+            let on_resize = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+                let mut app = app_for_resize.borrow_mut();
+                if let Some(app) = app.as_mut() {
+                    let window = web_sys::window().expect("no window");
+                    let document = window.document().expect("no document");
+                    if let Some(canvas) = document.get_element_by_id("game-canvas") {
+                        if let Ok(canvas) = canvas.dyn_into::<HtmlCanvasElement>() {
+                            let width = canvas.client_width().max(1) as u32;
+                            let height = canvas.client_height().max(1) as u32;
+                            if width != app.canvas_width || height != app.canvas_height {
+                                app.canvas_width = width;
+                                app.canvas_height = height;
+                                app.surface.configure(
+                                    &app.renderer.device(),
+                                    &wgpu::SurfaceConfiguration {
+                                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                                        format: app.renderer.surface_config().format,
+                                        width,
+                                        height,
+                                        present_mode: app.renderer.surface_config().present_mode,
+                                        alpha_mode: app.renderer.surface_config().alpha_mode,
+                                        view_formats: vec![],
+                                        desired_maximum_frame_latency: 2,
+                                    },
+                                );
+                                app.camera = Camera::new(width as f32, height as f32);
+                            }
+                        }
+                    }
+                }
+            }) as Box<dyn FnMut(web_sys::Event)>);
+            let _ = window
+                .add_event_listener_with_callback(
+                    "resize",
+                    on_resize.as_ref().unchecked_ref(),
+                );
+            on_resize.forget();
+        }
+        // ----------------------------------------------------------------------
+
         let f = std::rc::Rc::new(std::cell::RefCell::new(None::<Closure<dyn FnMut()>>));
         let f_clone = std::rc::Rc::clone(&f);
 
@@ -352,11 +530,21 @@ impl App {
 
         self.game_loop.tick(|dt| {
             if let Some(slice) = &mut self.slice {
+                // Update mouse state on the slice host for UI click detection
+                let host = slice.host_mut();
+                host.mouse_x = input.mouse_x;
+                host.mouse_y = input.mouse_y;
+                host.mouse_pressed = input.mouse_just_pressed; // Only trigger on just pressed
+                
                 let _ = slice.step(&mut self.world, input_axis, dt.as_secs_f64());
             }
             // Update particle systems
             crate::sprite::update_particle_systems(&mut self.world, dt.as_secs_f64());
         });
+        
+        // Reset just_pressed/just_released flags
+        self.input.mouse_just_pressed = false;
+        self.input.mouse_just_released = false;
     }
 
     fn render(&mut self, _window: &web_sys::Window) {
@@ -440,7 +628,31 @@ impl App {
         }
 
         // Render HUD if slice has HUD lines
-        if let Some(slice) = &self.slice {
+        if let Some(slice) = &mut self.slice {
+            // Render UI commands from script
+            let ui_commands = slice.take_ui_commands();
+            if !ui_commands.is_empty() {
+                let mut ui_renderer = UiRenderer::new();
+                let size = self.renderer.surface_config();
+                let hud_camera = Camera::new_top_left(size.width as f32, size.height as f32);
+                
+                for command in ui_commands {
+                    match command {
+                        SliceCommand::UiButton { id, x, y, w, h } => {
+                            self.render_ui_button(&mut ui_renderer, &hud_camera, &view, id, x, y, w, h, &mut encoder);
+                        }
+                        SliceCommand::UiLabel { id, x, y, text } => {
+                            self.render_ui_label(&mut ui_renderer, &hud_camera, &view, id, x, y, text, &mut encoder);
+                        }
+                        SliceCommand::UiPanel { id, x, y, w, h } => {
+                            self.render_ui_panel(&mut ui_renderer, &hud_camera, &view, id, x, y, w, h, &mut encoder);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            
+            // Render HUD text
             let lines = slice.hud_lines();
             if !lines.is_empty() {
                 let text = TextRenderer::new();
@@ -717,4 +929,132 @@ fn create_wgpu_surface(
 ) -> Result<wgpu::Surface<'static>, Box<dyn std::error::Error>> {
     let surface = instance.create_surface(wgpu::SurfaceTarget::Canvas(canvas))?;
     Ok(surface)
+}
+
+impl App {
+    fn render_ui_button(
+        &mut self,
+        ui_renderer: &mut kiln_ui::UiRenderer,
+        hud_camera: &Camera,
+        view: &wgpu::TextureView,
+        id: String,
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let button = kiln_ui::widget::Button::new(
+            kiln_ui::widget::WidgetId::from_u64(id.hash::<std::collections::hash_map::DefaultHasher>() as u64),
+            id.clone(),
+        ).with_layout(kiln_ui::layout::Layout {
+            anchor: kiln_ui::layout::Anchor::TopLeft,
+            constraints: kiln_ui::layout::LayoutConstraints::tight(w as f32, h as f32),
+            ..Default::default()
+        });
+        let button = button.with_bounds(kiln_ui::layout::Rect::new(x as f32, y as f32, w as f32, h as f32));
+        let quads = ui_renderer.render_button(&button, false, false);
+        self.sprite_renderer.begin_frame();
+        for quad in quads {
+            self.sprite_renderer.push_textured(quad.texture, quad.instance);
+        }
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("web_ui_pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        self.sprite_renderer.flush(&mut pass, hud_camera, self.renderer.queue());
+    }
+
+    fn render_ui_label(
+        &mut self,
+        ui_renderer: &mut kiln_ui::UiRenderer,
+        hud_camera: &Camera,
+        view: &wgpu::TextureView,
+        id: String,
+        x: f64,
+        y: f64,
+        text: String,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let label = kiln_ui::widget::Label::new(
+            kiln_ui::widget::WidgetId::from_u64(id.hash::<std::collections::hash_map::DefaultHasher>() as u64),
+            text,
+        ).with_layout(kiln_ui::layout::Layout {
+            anchor: kiln_ui::layout::Anchor::TopLeft,
+            ..Default::default()
+        });
+        let label = label.with_bounds(kiln_ui::layout::Rect::new(x as f32, y as f32, 200.0, 24.0));
+        let quads = ui_renderer.render_label(&label);
+        self.sprite_renderer.begin_frame();
+        for quad in quads {
+            self.sprite_renderer.push_textured(quad.texture, quad.instance);
+        }
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("web_ui_pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        self.sprite_renderer.flush(&mut pass, hud_camera, self.renderer.queue());
+    }
+
+    fn render_ui_panel(
+        &mut self,
+        ui_renderer: &mut kiln_ui::UiRenderer,
+        hud_camera: &Camera,
+        view: &wgpu::TextureView,
+        id: String,
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let panel = kiln_ui::widget::Panel::new(
+            kiln_ui::widget::WidgetId::from_u64(id.hash::<std::collections::hash_map::DefaultHasher>() as u64),
+        ).with_layout(kiln_ui::layout::Layout {
+            anchor: kiln_ui::layout::Anchor::TopLeft,
+            constraints: kiln_ui::layout::LayoutConstraints::tight(w as f32, h as f32),
+            ..Default::default()
+        });
+        let panel = panel.with_bounds(kiln_ui::layout::Rect::new(x as f32, y as f32, w as f32, h as f32));
+        let quads = ui_renderer.render_panel(&panel);
+        self.sprite_renderer.begin_frame();
+        for quad in quads {
+            self.sprite_renderer.push_textured(quad.texture, quad.instance);
+        }
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("web_ui_pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        self.sprite_renderer.flush(&mut pass, hud_camera, self.renderer.queue());
+    }
 }

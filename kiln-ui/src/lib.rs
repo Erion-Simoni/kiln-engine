@@ -15,4 +15,4 @@ pub use navigation::{FocusDirection, FocusManager, Focusable};
 pub use render::{NineSlice, NineSliceRenderer};
 pub use text::TextRenderer;
 pub use ui_renderer::{UiQuad, UiRenderer};
-pub use widget::{Button, Label, List, Panel, Widget, WidgetId};
+pub use widget::{Button, Canvas, Label, List, Panel, Widget, WidgetId};

@@ -255,7 +255,7 @@ pub fn sync_physics_with_ecs(
     world: &mut hecs::World,
 ) -> Vec<CollisionEvent> {
     use crate::world::{
-        Collider2D, ColliderShape, PhysicsBody, RigidBody2D, RigidBodyType, SourceId, Transform,
+        Collider2D, ColliderShape, Joint2D, JointType, PhysicsBody, RigidBody2D, RigidBodyType, SourceId, Transform,
     };
 
     // Register new bodies: entities with RigidBody2D + Collider2D but no PhysicsBody
@@ -272,15 +272,16 @@ pub fn sync_physics_with_ecs(
         .collect();
 
     for (entity, rb, col, source_id) in to_register {
+        // Get the transform for this entity to set initial position
+        let transform = world.get::<Transform>(entity).ok().cloned();
+        let pos = transform.map(|t| t.position).unwrap_or([0.0, 0.0]);
+        
         let body_builder = match rb.body_type {
             RigidBodyType::Static => rapier2d::prelude::RigidBodyBuilder::static(),
             RigidBodyType::Dynamic => rapier2d::prelude::RigidBodyBuilder::dynamic(),
             RigidBodyType::Kinematic => rapier2d::prelude::RigidBodyBuilder::kinematic(),
         }
-        .translation(rapier2d::math::Vector::new(
-            rb.linear_velocity[0],
-            rb.linear_velocity[1],
-        ))
+        .translation(rapier2d::math::Vector::new(pos[0], pos[1]))
         .linear_velocity(rapier2d::math::Vector::new(rb.linear_velocity[0], rb.linear_velocity[1]))
         .angular_velocity(rb.angular_velocity)
         .gravity_scale(rb.gravity_scale)
@@ -293,7 +294,8 @@ pub fn sync_physics_with_ecs(
                 .friction(col.friction)
                 .restitution(col.restitution)
                 .density(col.density)
-                .sensor(col.is_sensor),
+                .sensor(col.is_sensor)
+                .collision_groups(rapier2d::pipeline::CollisionGroups::new(col.layer, col.mask)),
             ColliderShape::Rectangle {
                 half_width,
                 half_height,
@@ -301,7 +303,8 @@ pub fn sync_physics_with_ecs(
                 .friction(col.friction)
                 .restitution(col.restitution)
                 .density(col.density)
-                .sensor(col.is_sensor),
+                .sensor(col.is_sensor)
+                .collision_groups(rapier2d::pipeline::CollisionGroups::new(col.layer, col.mask)),
         };
 
         physics.create_collider(collider_builder, handle);
@@ -317,15 +320,7 @@ pub fn sync_physics_with_ecs(
         .map(|(_, (pb, sid))| (sid.0.clone(), pb.handle))
         .collect();
 
-    for (sid, eid) in world.world_ref().query::<(&SourceId, &Joint2D)>().iter() {
-        let handle_a = source_to_handle.get(&sid.0);
-        let handle_b = source_to_handle.get(&sid.0); // Same entity, need to find other entity
-        // For joint creation, we need to find both entities by their source_ids
-        // We'll handle this in a second pass below
-        let _ = (sid, eid);
-    }
-
-    // Second pass: create joints between entities
+    // Create joints between entities
     let joint_entities: Vec<hecs::Entity> = world
         .world_ref()
         .query::<&Joint2D>()
@@ -333,26 +328,66 @@ pub fn sync_physics_with_ecs(
         .map(|(e, _)| e)
         .collect();
 
-    for (entity, joint) in world.world_ref().query::<(&Joint2D,)>().iter() {
-        let handle_a = source_to_handle.get(&joint.entity_a);
-        let handle_b = source_to_handle.get(&joint.entity_b);
+    for entity in joint_entities {
+        if let Ok(joint) = world.get::<&Joint2D>(entity).map(|j| *j) {
+            let handle_a = source_to_handle.get(&joint.entity_a);
+            let handle_b = source_to_handle.get(&joint.entity_b);
 
-        if let (Some(&ha), Some(&hb)) = (handle_a, handle_b) {
-            let ha = rapier2d::prelude::RigidBodyHandle::from_index(ha as usize);
-            let hb = rapier2d::prelude::RigidBodyHandle::from_index(hb as usize);
+            if let (Some(&ha), Some(&hb)) = (handle_a, handle_b) {
+                let ha = rapier2d::prelude::RigidBodyHandle::from_index(ha as usize);
+                let hb = rapier2d::prelude::RigidBodyHandle::from_index(hb as usize);
 
-            match joint.joint_type {
-                JointType::Static => {
-                    // Static joint - no constraint (just connects bodies)
-                }
-                JointType::Dynamic => {
-                    // Dynamic joint - allows movement
-                }
-                JointType::Kinematic => {
-                    // Kinematic joint - follows animation
-                }
+                let joint_builder = match joint.joint_type {
+                    JointType::Distance => {
+                        rapier2d::prelude::ImpulseJoint::distance(
+                            joint.anchor_a.into(),
+                            joint.anchor_b.into(),
+                            joint.length,
+                        )
+                    }
+                    JointType::Revolute => {
+                        rapier2d::prelude::ImpulseJoint::revolute(
+                            joint.anchor_a.into(),
+                            joint.anchor_b.into(),
+                        )
+                    }
+                    JointType::Prismatic => {
+                        let mut j = rapier2d::prelude::ImpulseJoint::prismatic(
+                            joint.anchor_a.into(),
+                            joint.anchor_b.into(),
+                        );
+                        if joint.enable_limit {
+                            j = j.limits([joint.lower_translation, joint.upper_translation]);
+                        }
+                        if joint.enable_motor {
+                            j = j.motor(joint.motor_speed, joint.max_motor_torque);
+                        }
+                        j
+                    }
+                    JointType::Static => {
+                        rapier2d::prelude::ImpulseJoint::distance(
+                            joint.anchor_a.into(),
+                            joint.anchor_b.into(),
+                            0.0,
+                        )
+                    }
+                    JointType::Dynamic => {
+                        rapier2d::prelude::ImpulseJoint::revolute(
+                            joint.anchor_a.into(),
+                            joint.anchor_b.into(),
+                        )
+                    }
+                    JointType::Kinematic => {
+                        rapier2d::prelude::ImpulseJoint::distance(
+                            joint.anchor_a.into(),
+                            joint.anchor_b.into(),
+                            0.0,
+                        )
+                    }
+                };
+
+                physics.joint_set.insert(joint_builder, ha, hb, true);
             }
-            let _ = (ha, hb);
         }
     }
 
