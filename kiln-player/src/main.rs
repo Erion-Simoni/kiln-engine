@@ -119,6 +119,28 @@ fn default_action_map() -> ActionMap {
     map
 }
 
+/// Convert a winit logical key to a string name for action map lookup.
+fn key_name_string(key: &winit::keyboard::Key) -> String {
+    match key {
+        winit::keyboard::Key::Named(named) => match named {
+            NamedKey::ArrowUp => "ArrowUp".to_string(),
+            NamedKey::ArrowDown => "ArrowDown".to_string(),
+            NamedKey::ArrowLeft => "ArrowLeft".to_string(),
+            NamedKey::ArrowRight => "ArrowRight".to_string(),
+            NamedKey::Space => "Space".to_string(),
+            NamedKey::Enter => "Enter".to_string(),
+            NamedKey::Escape => "Escape".to_string(),
+            NamedKey::Shift => "Shift".to_string(),
+            NamedKey::Control => "Control".to_string(),
+            NamedKey::Alt => "Alt".to_string(),
+            _ => named.as_ref().to_string(),
+        },
+        winit::keyboard::Key::Character(c) => c.to_string(),
+        winit::keyboard::Key::Dead(_) => "Dead".to_string(),
+        winit::keyboard::Key::Unidentified(_) => "Unidentified".to_string(),
+    }
+}
+
 /// GPU state that is only available after the window is created.
 struct GpuState {
     window: Arc<Window>,
@@ -159,6 +181,8 @@ struct PlayerApp {
     gamepad_manager: Option<GamepadManager>,
     /// Keys currently held down, used to drive the player.
     held: Vec<Key>,
+    /// Currently pressed key names as strings (for action map lookup).
+    pressed_keys: Vec<String>,
     /// Width of the game window, in logical pixels.
     window_width: u32,
     /// Height of the game window, in logical pixels.
@@ -206,6 +230,7 @@ impl PlayerApp {
             #[cfg(feature = "gamepad")]
             gamepad_manager: GamepadManager::new().ok(),
             held: Vec::new(),
+            pressed_keys: Vec::new(),
             window_width: width,
             window_height: height,
             save_dir,
@@ -385,9 +410,13 @@ impl PlayerApp {
     }
 
     fn handle_key(&mut self, event: KeyEvent) {
+        let key_name = key_name_string(&event.logical_key);
         if event.state.is_pressed() {
             if !self.held.contains(&event.logical_key) {
                 self.held.push(event.logical_key.clone());
+            }
+            if !self.pressed_keys.contains(&key_name) {
+                self.pressed_keys.push(key_name);
             }
 
             // Handle menu navigation
@@ -399,6 +428,7 @@ impl PlayerApp {
             }
         } else {
             self.held.retain(|key| *key != event.logical_key);
+            self.pressed_keys.retain(|k| k != &key_name);
         }
     }
 
@@ -501,6 +531,7 @@ impl PlayerApp {
             mouse_x,
             mouse_y,
             mouse_pressed,
+            pressed_keys,
             ..
         } = self;
         game_loop.tick(|dt| {
@@ -509,6 +540,8 @@ impl PlayerApp {
                 slice.set_mouse_state(*mouse_x, *mouse_y, *mouse_pressed);
                 // Pass action map for get_action/get_action_axis builtins.
                 slice.set_action_map(action_map.clone());
+                // Pass pressed keys for get_action/get_action_axis builtins.
+                slice.set_pressed_keys(pressed_keys);
                 if let Err(e) = slice.step(world, axis, dt.as_secs_f64()) {
                     log::error!("scene script failed: {e}");
                 }

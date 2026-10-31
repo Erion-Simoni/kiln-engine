@@ -16,6 +16,7 @@ threads = []
 kiln-core = { path = "../kiln-core" }
 kiln-render = { path = "../kiln-render" }
 kiln-input = { path = "../kiln-input" }
+kiln-ui = { path = "../kiln-ui" }
 kiln-anim = { workspace = true }
 kiln-save = { path = "../kiln-save" }
 kiln-ir = { path = "../kiln-ir" }

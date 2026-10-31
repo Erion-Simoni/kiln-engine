@@ -87,6 +87,8 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     // Input actions (43-44)
     ("get_action", 43, 1),       // action_name -> pressed bool
     ("get_action_axis", 44, 1),  // action_name -> -1 to 1 value
+    // Localization (45)
+    ("localize", 45, 1),         // key -> localized string
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -280,12 +282,16 @@ pub struct SliceHost {
     ui_buttons: Vec<(String, f64, f64, f64, f64)>,
     /// Input action map for get_action/get_action_axis builtins.
     action_map: kiln_input::ActionMap,
+    /// Localization data for translating string keys.
+    localization: Option<kiln_ui::Localization>,
     /// Current mouse position (screen space, top-left origin).
     mouse_x: f64,
     /// Current mouse position (screen space, top-left origin).
     mouse_y: f64,
     /// Whether the left mouse button was pressed this frame.
     mouse_pressed: bool,
+    /// Currently pressed keys (winit key names as strings).
+    pressed_keys: std::collections::HashSet<String>,
     /// Frame counter for get_frame_count.
     frame_count: u64,
     /// Time scale for get_time_scale.
@@ -306,9 +312,11 @@ impl SliceHost {
             ui_widgets: HashMap::new(),
             ui_buttons: Vec::new(),
             action_map: kiln_input::ActionMap::new(),
+            localization: None,
             mouse_x: 0.0,
             mouse_y: 0.0,
             mouse_pressed: false,
+            pressed_keys: std::collections::HashSet::new(),
             frame_count: 0,
             time_scale: 1.0,
         }
@@ -344,6 +352,55 @@ impl SliceHost {
     /// Set the input action map (called by the host before each step).
     pub fn set_action_map(&mut self, action_map: kiln_input::ActionMap) {
         self.action_map = action_map;
+    }
+
+    /// Set the localization data (called by the host before each step).
+    pub fn set_localization(&mut self, localization: kiln_ui::Localization) {
+        self.localization = Some(localization);
+    }
+
+    /// Set the currently pressed keys (called by the host before each step).
+    pub fn set_pressed_keys(&mut self, keys: &[String]) {
+        self.pressed_keys = keys.iter().cloned().collect();
+    }
+
+    /// Check if an action is currently pressed by checking its key bindings.
+    fn is_action_pressed(&self, name: &str) -> bool {
+        let Some(action) = self.action_map.get_action(name) else {
+            return false;
+        };
+        action.bindings.iter().any(|binding| {
+            if let kiln_input::BindingType::Key(key) = &binding.binding_type {
+                self.pressed_keys.contains(key)
+            } else {
+                false
+            }
+        })
+    }
+
+    /// Get the axis value for an action (-1 to 1).
+    fn get_action_axis(&self, name: &str) -> f64 {
+        let Some(action) = self.action_map.get_action(name) else {
+            return 0.0;
+        };
+        // Simple axis: check if any binding maps to a negative/positive direction key.
+        // This is a basic implementation; full axis support would need gamepad input.
+        let mut value = 0.0;
+        for binding in &action.bindings {
+            if let kiln_input::BindingType::Key(key) = &binding.binding_type {
+                if self.pressed_keys.contains(key) {
+                    // Map common keys to axis directions
+                    match key.as_str() {
+                        "KeyA" | "ArrowLeft" | "a" | "A" => value -= 1.0,
+                        "KeyD" | "ArrowRight" | "d" | "D" => value += 1.0,
+                        "KeyS" | "ArrowDown" | "s" | "S" => value -= 1.0,
+                        "KeyW" | "ArrowUp" | "w" | "W" => value += 1.0,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        value.clamp(-1.0, 1.0)
     }
 }
 
@@ -740,14 +797,29 @@ impl SliceHost {
             43 => {
                 // get_action(action_name) -> pressed bool
                 let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
-                let pressed = self.action_map.get_action(name).is_some();
+                let pressed = self.is_action_pressed(name);
                 Ok(Value::Bool(pressed))
             }
             44 => {
                 // get_action_axis(action_name) -> -1 to 1 value
                 let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
-                let _ = name;
-                Ok(Value::F64(0.0))
+                let axis = self.get_action_axis(name);
+                Ok(Value::F64(axis))
+            }
+            // Localization (45)
+            45 => {
+                // localize(key) -> localized string
+                let key = args.first().and_then(|v| v.as_str()).unwrap_or("");
+                if let Some(loc) = &self.localization {
+                    let loc_key = kiln_ui::LocalizationKey::new(key);
+                    if let Some(value) = loc.get(&loc_key) {
+                        Ok(Value::Str(value.clone()))
+                    } else {
+                        Ok(Value::Str(key.to_string()))
+                    }
+                } else {
+                    Ok(Value::Str(key.to_string()))
+                }
             }
             _ => Err(VmError::HostCallError(format!(
                 "unknown slice builtin id {func_id}"
