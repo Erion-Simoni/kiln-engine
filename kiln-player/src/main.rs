@@ -378,7 +378,7 @@ impl PlayerApp {
                 return;
             }
         };
-        match SliceSession::new(&source) {
+        match SliceSession::with_action_map(&source, self.project.action_map.clone()) {
             Ok(session) => {
                 info!("Loaded scene script '{path}'");
                 self.slice = Some(session);

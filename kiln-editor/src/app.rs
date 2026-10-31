@@ -158,6 +158,7 @@ pub struct EditorApp {
     prefab_editor: PrefabEditorPanel,
     version_control: VersionControlPanel,
     plugin_manager: PluginManagerPanel,
+    input_rebind: InputRebindPanel,
     /// Mapping from project entity ID (source_id) to hecs Entity for selection sync.
     entity_id_to_hecs: HashMap<String, hecs::Entity>,
     graph_editor: GraphEditorState,
@@ -269,6 +270,7 @@ enum Tab {
     PluginManagerPanel,
     PrefabEditorPanel,
     VersionControl,
+    InputRebind,
 }
 }
 
@@ -500,7 +502,7 @@ fn start_play_session(
     let source = std::fs::read_to_string(root.join(path))
         .map_err(|e| format!("could not read the scene script: {e}"))?;
 
-    let slice = kiln_runtime::SliceSession::new(&source).map_err(|d| {
+    let slice = kiln_runtime::SliceSession::with_action_map(&source, project.action_map.clone()).map_err(|d| {
         d.iter()
             .map(|d| d.message.clone())
             .collect::<Vec<_>>()
@@ -747,6 +749,7 @@ impl EditorApp {
             prefab_editor: PrefabEditorPanel::new(),
             version_control: VersionControlPanel::new(),
             plugin_manager: PluginManagerPanel::new(),
+            input_rebind: InputRebindPanel::new(),
             entity_id_to_hecs: HashMap::new(),
             graph_editor: GraphEditorState::new(),
             inspector_panel: InspectorPanel::new(),
@@ -1739,6 +1742,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     if ui.button("Version Control").clicked() {
                         self.dock_state.add_window(vec![Tab::VersionControl]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Input Rebinding").clicked() {
+                        self.dock_state.add_window(vec![Tab::InputRebind]);
                         ui.close_menu();
                     }
                     if ui.button("Plugin Manager").clicked() {
@@ -3968,6 +3975,17 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     self.version_control.render(ui);
                 });
             }
+            Tab::InputRebind => {
+                ui.vertical(|ui| {
+                    if let Some(project) = self.current_project.as_mut() {
+                        self.input_rebind.render(ui, project);
+                    } else {
+                        ui.heading("Input Rebinding");
+                        ui.add_space(8.0);
+                        ui.label("Open a project to rebind inputs.");
+                    }
+                });
+            }
             Tab::Hierarchy => {
                 ui.vertical(|ui| {
                     if let Some(project) = self.current_project.as_mut() {
@@ -4084,6 +4102,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::Preferences => "Preferences".into(),
             Tab::PluginManagerPanel => "Plugin Manager".into(),
             Tab::VersionControl => "Version Control".into(),
+            Tab::InputRebind => "Input Rebinding".into(),
         }
     }
 }

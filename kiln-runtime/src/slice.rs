@@ -1132,14 +1132,21 @@ pub struct SliceSession {
 }
 
 impl SliceSession {
-    /// Compile a slice script.
+    /// Compile a slice script with the default action map.
     pub fn new(source: &str) -> Result<Self, Vec<Diagnostic>> {
+        Self::with_action_map(source, ActionMap::new())
+    }
+
+    /// Compile a slice script with a custom action map.
+    pub fn with_action_map(source: &str, action_map: ActionMap) -> Result<Self, Vec<Diagnostic>> {
         let mut frontend = KilnScriptFrontend::new();
         for (name, id, argc) in BUILTINS {
             frontend = frontend.with_builtin(*name, *id, *argc);
         }
         let program = frontend.compile(source)?;
-        let vm = Vm::new(SliceHost::default());
+        let mut host = SliceHost::default();
+        host.action_map = action_map;
+        let vm = Vm::new(host);
         Ok(Self {
             program,
             vm,

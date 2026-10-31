@@ -210,7 +210,7 @@ impl App {
         if let Some(script_path) = &scene.script {
             let script_source = load_script(script_path, project_path).await?;
             let mut session =
-                SliceSession::new(&script_source)
+                SliceSession::with_action_map(&script_source, project.action_map.clone())
                     .map_err(|e| format!("Script compile error: {:?}", e))?;
             
             // Set up audio player callback for Web Audio API
