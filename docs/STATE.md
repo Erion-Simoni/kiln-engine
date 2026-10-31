@@ -66,7 +66,7 @@ checkbox optimism in `docs/ROADMAP.md`.
 
 ## Done (this session)
 
-**Branch:** `cline/fix-gameplay-api-entities-components` (34 commits, pushed to origin)
+**Branch:** `cline/p0-gaps-web-ui-physics-anim` (pushed to origin)
 
 **All P0 gameplay gaps resolved — KilnScript now has a full gameplay API:**
 
