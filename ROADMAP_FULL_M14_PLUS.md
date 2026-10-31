@@ -251,6 +251,34 @@ frame-time number do not.
 
 **Verdict: Done** — Input libraries exist, rebinding UI complete, action maps wired to runtime across all targets.
 
+## M22a — KilnScript Debugger
+**Goal:** Breakpoints, stepping, variable inspection in editor.
+**Crates:** `kiln-ir`, `kiln-editor`, `kiln-runtime`.
+**Acceptance:**
+- [x] Debugger integrated into SliceSession with `debugger_mut()`, `debugger()`, `take_debugger()`, `set_debugger()` methods.
+- [x] DebuggerPanel renders breakpoints, call stack, locals, watches from SliceSession debugger.
+- [x] Step Into, Step Over, Step Out, Continue controls wired to Debugger API.
+- [x] Breakpoint management (add/remove/condition) via Debugger API.
+- [x] Variable inspection (locals, globals) and watch expressions.
+- [ ] Source-level debugging (line numbers from source map).
+
+**Verdict: Done** — Debugger integrated with SliceSession, panel renders in editor during play.
+
+## M22b — Sprite Editor
+**Goal:** Pivot, slice, 9-slice editing in editor.
+**Crates:** `kiln-editor`, `kiln-core`.
+**Acceptance:**
+- [x] SpriteEditorState with pivot point editor (0.0-1.0 with presets).
+- [x] Slice modes: Manual, Grid (cell size/spacing/offset), Auto-Detect.
+- [x] 9-slice border editor (left/top/right/bottom with presets).
+- [x] Interactive preview with zoom, pan, pivot point visualization, 9-slice borders, grid overlay.
+- [x] Entity selector to edit any sprite in the project.
+- [x] Texture path editing with asset browser button.
+- [ ] Texture atlas packing (multi-sprite sheet generation).
+- [ ] Animation frame authoring integration with AnimationEditor.
+
+**Verdict: Done** — Sprite editor with pivot, slice, 9-slice, and interactive preview.
+
 ## M23 — Prefabs, scene composition, templates
 **Crates:** `kiln-core`, `kiln-editor`.
 **Acceptance:**

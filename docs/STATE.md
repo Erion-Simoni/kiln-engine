@@ -132,6 +132,20 @@ checkbox optimism in `docs/ROADMAP.md`.
 - Proper separation of master, SFX, and music volumes
 - AudioEngine exported from kiln-runtime
 
+### 7. KilnScript Debugger — Integrated with SliceSession (P1)
+- Added `Debugger` to `SliceSession` with `debugger_mut()`, `debugger()`, `take_debugger()`, `set_debugger()` methods (`kiln-runtime/src/slice.rs`)
+- Updated `DebuggerPanel` to use `SliceSession` debugger during play (`kiln-editor/src/app.rs`)
+- Debugger controls (Continue, Step Into/Over/Out, Breakpoints, Locals, Watches) wired to Debugger API
+
+### 8. Sprite Editor — Pivot, Slice, 9-Slice Editor (P1)
+- Created `SpriteEditorState` with pivot point editor (0.0-1.0 with presets) (`kiln-editor/src/sprite_editor.rs`)
+- Slice modes: Manual, Grid (cell size/spacing/offset), Auto-Detect
+- 9-slice border editor (left/top/right/bottom with presets)
+- Interactive preview with zoom, pan, pivot point visualization, 9-slice borders, grid overlay
+- Entity selector to edit any sprite in the project
+- Texture path editing with asset browser button
+- Added `SpriteEditor` tab with menu entry in View menu
+
 ---
 
 ## Known issues
