@@ -2,6 +2,7 @@
 
 use kiln_anim::Clip;
 use kiln_render::{TextureId, FULL_UV};
+use kiln_vfx::{Emitter, EmitterConfig, EmissionShape, ParticleSystem};
 use std::collections::HashMap;
 
 /// CPU-side sprite drawn via [`kiln_render::SpriteRenderer`].
@@ -152,7 +153,44 @@ impl AnimationPlayer {
     }
 }
 
-impl Default for AnimationPlayer {
+/// Particle system component for 2D visual effects (smoke, fire, magic, etc.).
+///
+/// Drives a CPU particle system and can be rendered as sprite instances.
+#[derive(Debug, Clone)]
+pub struct ParticleSystemComponent {
+    system: ParticleSystem,
+}
+
+impl ParticleSystemComponent {
+    /// Create a new particle system component.
+    pub fn new() -> Self {
+        Self {
+            system: ParticleSystem::new(Default::default()),
+        }
+    }
+
+    /// Add an emitter to the particle system.
+    pub fn add_emitter(&mut self, config: EmitterConfig) {
+        self.system.add_emitter(crate::sprite::Emitter::new(config));
+    }
+
+    /// Get mutable access to the particle system.
+    pub fn system_mut(&mut self) -> &mut ParticleSystem {
+        &mut self.system
+    }
+
+    /// Get immutable access to the particle system.
+    pub fn system(&self) -> &ParticleSystem {
+        &self.system
+    }
+
+    /// Particle count.
+    pub fn particle_count(&self) -> usize {
+        self.system.particle_count()
+    }
+}
+
+impl Default for ParticleSystemComponent {
     fn default() -> Self {
         Self::new()
     }
@@ -166,5 +204,12 @@ pub fn update_animations(world: &mut hecs::World) {
         if let Some(uv_rect) = anim.current_uv_rect() {
             sprite.uv_rect = uv_rect;
         }
+    }
+}
+
+/// Emit particles from particle system components for one frame.
+pub fn update_particle_systems(world: &mut hecs::World, dt: f32) {
+    for (_, ps) in world.query_mut::<&mut ParticleSystemComponent>().iter() {
+        ps.system_mut().update(dt);
     }
 }

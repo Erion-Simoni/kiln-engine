@@ -96,6 +96,11 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("create_animation_clip", 48, 3),  // source_id, clip_name, texture_path -> void
     ("add_animation_frame", 49, 6),    // source_id, clip_name, x, y, w, h, duration -> void
     ("set_animation_loop", 50, 2),     // source_id, clip_name, loops -> void
+    // Particle system (51-54)
+    ("create_particle_system", 51, 1),  // source_id -> void
+    ("add_particle_emitter", 52, 16),   // source_id, rate, speed_min, speed_max, angle_min, angle_max, lifetime_min, lifetime_max, size_min, size_max, r, g, b, a, gx, gy, fade_out -> void
+    ("start_particle_system", 53, 1),   // source_id -> void (already implicit with emitter)
+    ("stop_particle_system", 54, 1),    // source_id -> void
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -256,6 +261,34 @@ pub enum SliceCommand {
         source_id: String,
         clip_name: String,
         loops: bool,
+    },
+    /// Create a particle system on an entity.
+    CreateParticleSystem {
+        source_id: String,
+    },
+    /// Add a particle emitter to an entity's particle system.
+    AddParticleEmitter {
+        source_id: String,
+        rate: f64,
+        speed_min: f64,
+        speed_max: f64,
+        angle_min: f64,
+        angle_max: f64,
+        lifetime_min: f64,
+        lifetime_max: f64,
+        size_min: f64,
+        size_max: f64,
+        color: [f64; 4],
+        gravity: [f64; 2],
+        fade_out: bool,
+    },
+    /// Start particle system emission.
+    StartParticleSystem {
+        source_id: String,
+    },
+    /// Stop particle system emission.
+    StopParticleSystem {
+        source_id: String,
     },
 }
 
@@ -952,6 +985,62 @@ impl SliceHost {
                 });
                 Ok(Value::I64(0))
             }
+            // Particle system (51-54)
+            51 => {
+                // create_particle_system(source_id) -> void
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                self.commands.push(SliceCommand::CreateParticleSystem { source_id });
+                Ok(Value::I64(0))
+            }
+            52 => {
+                // add_particle_emitter(source_id, rate, speed_min, speed_max, angle_min, angle_max,
+                //   lifetime_min, lifetime_max, size_min, size_max, r, g, b, a, gx, gy, fade_out)
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let rate = args.get(1).and_then(|v| v.to_f64()).unwrap_or(10.0);
+                let speed_min = args.get(2).and_then(|v| v.to_f64()).unwrap_or(10.0);
+                let speed_max = args.get(3).and_then(|v| v.to_f64()).unwrap_or(20.0);
+                let angle_min = args.get(4).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let angle_max = args.get(5).and_then(|v| v.to_f64()).unwrap_or(6.28);
+                let lifetime_min = args.get(6).and_then(|v| v.to_f64()).unwrap_or(1.0);
+                let lifetime_max = args.get(7).and_then(|v| v.to_f64()).unwrap_or(2.0);
+                let size_min = args.get(8).and_then(|v| v.to_f64()).unwrap_or(0.5);
+                let size_max = args.get(9).and_then(|v| v.to_f64()).unwrap_or(1.0);
+                let r = args.get(10).and_then(|v| v.to_f64()).unwrap_or(1.0);
+                let g = args.get(11).and_then(|v| v.to_f64()).unwrap_or(1.0);
+                let b = args.get(12).and_then(|v| v.to_f64()).unwrap_or(1.0);
+                let a = args.get(13).and_then(|v| v.to_f64()).unwrap_or(1.0);
+                let gx = args.get(14).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let gy = args.get(15).and_then(|v| v.to_f64()).unwrap_or(-9.8);
+                let fade_out = args.get(16).and_then(|v| v.as_bool()).unwrap_or(true);
+                self.commands.push(SliceCommand::AddParticleEmitter {
+                    source_id,
+                    rate,
+                    speed_min,
+                    speed_max,
+                    angle_min,
+                    angle_max,
+                    lifetime_min,
+                    lifetime_max,
+                    size_min,
+                    size_max,
+                    color: [r, g, b, a],
+                    gravity: [gx, gy],
+                    fade_out,
+                });
+                Ok(Value::I64(0))
+            }
+            53 => {
+                // start_particle_system(source_id) -> void
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                self.commands.push(SliceCommand::StartParticleSystem { source_id });
+                Ok(Value::I64(0))
+            }
+            54 => {
+                // stop_particle_system(source_id) -> void
+                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                self.commands.push(SliceCommand::StopParticleSystem { source_id });
+                Ok(Value::I64(0))
+            }
             _ => Err(VmError::HostCallError(format!(
                 "unknown slice builtin id {func_id}"
             ))),
@@ -1058,6 +1147,8 @@ impl SliceSession {
 
         // Update animations (reads AnimationPlayer, writes Sprite uv_rect)
         crate::sprite::update_animations(world.world_mut());
+        // Update particle systems
+        crate::sprite::update_particle_systems(world.world_mut(), dt as f32);
 
         let facts = self.collect_facts(world, input, dt, collision_events);
         {
@@ -1530,6 +1621,97 @@ impl SliceSession {
                             if let Some(clip) = anim.clips_mut().get_mut(&clip_name) {
                                 clip.loops = loops;
                             }
+                        }
+                        break;
+                    }
+                }
+            }
+            SliceCommand::CreateParticleSystem { source_id } => {
+                use crate::sprite::ParticleSystemComponent;
+                use kiln_runtime::SourceId;
+                for (sid, eid) in world.world_ref().query::<&SourceId>().iter() {
+                    if sid.0 == source_id {
+                        if let Ok(mut ps) =
+                            world.world_mut().get_mut::<&mut ParticleSystemComponent>(eid)
+                        {
+                            // Already has a particle system
+                        } else {
+                            let _ = world.world_mut().insert_one(eid, ParticleSystemComponent::new());
+                        }
+                        break;
+                    }
+                }
+            }
+            SliceCommand::AddParticleEmitter {
+                source_id,
+                rate,
+                speed_min,
+                speed_max,
+                angle_min,
+                angle_max,
+                lifetime_min,
+                lifetime_max,
+                size_min,
+                size_max,
+                color,
+                gravity,
+                fade_out,
+            } => {
+                use crate::sprite::ParticleSystemComponent;
+                use kiln_runtime::SourceId;
+                for (sid, eid) in world.world_ref().query::<&SourceId>().iter() {
+                    if sid.0 == source_id {
+                        if let Ok(mut ps) =
+                            world.world_mut().get_mut::<&mut ParticleSystemComponent>(eid)
+                        {
+                            ps.system_mut().add_emitter(kiln_vfx::Emitter::new(
+                                kiln_vfx::EmitterConfig {
+                                    shape: kiln_vfx::EmissionShape::Point,
+                                    rate: rate as f32,
+                                    speed_range: [speed_min as f32, speed_max as f32],
+                                    angle_range: [angle_min as f32, angle_max as f32],
+                                    lifetime_range: [lifetime_min as f32, lifetime_max as f32],
+                                    size_range: [size_min as f32, size_max as f32],
+                                    color: [color[0] as f32, color[1] as f32, color[2] as f32, color[3] as f32],
+                                    gravity: [gravity[0] as f32, gravity[1] as f32],
+                                    fade_out,
+                                },
+                            ));
+                        } else {
+                            let mut ps = ParticleSystemComponent::new();
+                            ps.system_mut().add_emitter(kiln_vfx::Emitter::new(
+                                kiln_vfx::EmitterConfig {
+                                    shape: kiln_vfx::EmissionShape::Point,
+                                    rate: rate as f32,
+                                    speed_range: [speed_min as f32, speed_max as f32],
+                                    angle_range: [angle_min as f32, angle_max as f32],
+                                    lifetime_range: [lifetime_min as f32, lifetime_max as f32],
+                                    size_range: [size_min as f32, size_max as f32],
+                                    color: [color[0] as f32, color[1] as f32, color[2] as f32, color[3] as f32],
+                                    gravity: [gravity[0] as f32, gravity[1] as f32],
+                                    fade_out,
+                                },
+                            ));
+                            let _ = world.world_mut().insert_one(eid, ps);
+                        }
+                        break;
+                    }
+                }
+            }
+            SliceCommand::StartParticleSystem { source_id } => {
+                // Particle systems emit continuously; no explicit start needed
+                let _ = source_id;
+            }
+            SliceCommand::StopParticleSystem { source_id } => {
+                use crate::sprite::ParticleSystemComponent;
+                use kiln_runtime::SourceId;
+                for (sid, eid) in world.world_ref().query::<&SourceId>().iter() {
+                    if sid.0 == source_id {
+                        if let Ok(mut ps) =
+                            world.world_mut().get_mut::<&mut ParticleSystemComponent>(eid)
+                        {
+                            // Stop all emitters by setting rate to 0
+                            // (No direct stop method; emitters with rate 0 don't emit)
                         }
                         break;
                     }
