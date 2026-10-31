@@ -21,6 +21,7 @@ kiln-anim = { workspace = true }
 kiln-save = { path = "../kiln-save" }
 kiln-ir = { path = "../kiln-ir" }
 kiln-script = { path = "../kiln-script" }
+kiln-vfx = { path = "../kiln-vfx" }
 hecs = { workspace = true }
 winit = { workspace = true, features = ["android-activity"] }
 serde = { workspace = true }
