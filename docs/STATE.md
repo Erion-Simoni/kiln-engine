@@ -196,9 +196,12 @@ Known gaps worth picking up on the way (none of them block M29):
   under ADR-0026
 - The script API is a fixed builtin list; a script cannot yet spawn
   entities or read arbitrary world state
-- Sprite layer ordering: same-layer different-texture transparent sprites
-  may still be drawn in the wrong order; use `push_textured_with_layer` to
-  separate transparent sprites onto different layers
+- Sprite layer ordering: same-layer different-texture transparent sprites may still be drawn in the wrong order; use `push_textured_with_layer` to separate transparent sprites onto different layers
+- **Sprite material/shader:** `Sprite.material` field allows custom shaders via `Shader` and `Material` types in `kiln_core::project`. Use `SpriteRenderer::push_textured_with_material()` to render sprites with custom materials.
+- **Web export:** `kiln-web` now has keyboard input, touch input, sprite rendering, tilemap rendering, GPU post-processing, and Web Audio API support. Full end-to-end web export testing (building and running in a real browser) has not been automated. See `docs/WEB_EXPORT_TESTING.md` for manual test procedure.
+- **Clean machine run:** The engine has not been tested on a machine without a Rust toolchain installed. See `docs/CLEAN_MACHINE_TEST.md` for manual test procedure.
+- **SDF/MSDF text:** SDF font support is implemented in `kiln-ui/src/text.rs` via `SdfTextRenderer` and `SdfFontData`. Font asset pipeline (TTF → SDF atlas) is not yet automated. See `docs/SDF_TEXT.md` for manual workflow.
+- **Custom shader editor:** `kiln-editor/src/shader_editor.rs` provides a WGSL shader editor panel. Shader compilation to wgpu RenderPipeline is implemented via `SpriteRenderer::compile_shader()`. Shader assets are stored in `kiln_core::Project.shaders` and referenced by `Sprite.material`.
 - The iOS and Android device capability paths return fixed values
 - The audio sample needs a system audio backend, so it is built on its
   own: `cargo check --manifest-path samples/audio/Cargo.toml`
