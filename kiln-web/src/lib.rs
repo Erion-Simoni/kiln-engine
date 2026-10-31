@@ -322,6 +322,8 @@ impl App {
             if let Some(slice) = &mut self.slice {
                 let _ = slice.step(&mut self.world, input_axis, dt.as_secs_f64());
             }
+            // Update particle systems
+            crate::sprite::update_particle_systems(&mut self.world, dt.as_secs_f64());
         });
     }
 
