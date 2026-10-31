@@ -3889,6 +3889,27 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::AudioEditor => {
                 ui.vertical(|ui| {
                     self.audio_editor.render(ui);
+                    // Connect audio editor to the slice's audio engine
+                    if let Some(play) = self.play.as_mut() {
+                        let slice = &mut play.slice;
+                        // Handle preview playback
+                        if let Some(name) = self.audio_editor.preview_asset.clone() {
+                            if self.audio_editor.preview_playing {
+                                slice.play_audio_preview(&name);
+                            } else {
+                                slice.stop_audio_preview();
+                            }
+                        }
+                        // Register all project audio assets with the slice host
+                        for (name, path) in self
+                            .project
+                            .as_ref()
+                            .map(|p| p.audio_assets.iter().map(|a| (a.name.clone(), a.path.clone())).collect::<Vec<_>>())
+                            .unwrap_or_default()
+                        {
+                            slice.register_audio(&name, &path);
+                        }
+                    }
                 });
             }
             Tab::PhysicsEditor => {

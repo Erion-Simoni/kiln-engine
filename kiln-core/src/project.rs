@@ -36,6 +36,26 @@ pub struct Project {
     /// Materials of the project, keyed by their id.
     #[serde(default)]
     pub materials: HashMap<String, Material>,
+    /// Audio assets of the project, keyed by their name.
+    #[serde(default)]
+    pub audio_assets: Vec<AudioAsset>,
+}
+
+/// An audio asset reference in the project.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioAsset {
+    /// Unique audio identifier.
+    pub id: String,
+    /// Human-readable name.
+    pub name: String,
+    /// Asset path of the audio file.
+    pub path: String,
+    /// Whether this is music (looped, single instance) or sound effect.
+    #[serde(default)]
+    pub is_music: bool,
+    /// Volume (0.0 to 1.0).
+    #[serde(default = "1.0")]
+    pub volume: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

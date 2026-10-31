@@ -101,6 +101,9 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("add_particle_emitter", 52, 16),   // source_id, rate, speed_min, speed_max, angle_min, angle_max, lifetime_min, lifetime_max, size_min, size_max, r, g, b, a, gx, gy, fade_out -> void
     ("start_particle_system", 53, 1),   // source_id -> void (already implicit with emitter)
     ("stop_particle_system", 54, 1),    // source_id -> void
+    // Audio editing (55-56)
+    ("register_audio", 55, 2),   // source_id, clip_name, texture_path -> void
+    ("play_audio_preview", 56, 1),   // source_id -> void
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -366,6 +369,9 @@ pub struct SliceHost {
     frame_count: u64,
     /// Time scale for get_time_scale.
     time_scale: f64,
+    /// Audio files registered for playback via script.
+    #[cfg(feature = "audio")]
+    registered_audio: HashMap<String, String>,
 }
 
 impl SliceHost {
@@ -391,6 +397,8 @@ impl SliceHost {
             pressed_keys: std::collections::HashSet::new(),
             frame_count: 0,
             time_scale: 1.0,
+            #[cfg(feature = "audio")]
+            registered_audio: HashMap::new(),
         }
     }
 
@@ -434,6 +442,31 @@ impl SliceHost {
     /// Set the save directory (called by the host before each step).
     pub fn set_save_dir(&mut self, dir: &std::path::Path) {
         self.save_dir = Some(dir.to_path_buf());
+    }
+
+    /// Register an audio file for playback by name (called by editor before each step).
+    #[cfg(feature = "audio")]
+    pub fn register_audio(&mut self, name: &str, path: &str) {
+        self.registered_audio.insert(name.to_string(), path.to_string());
+        if let Some(audio) = &mut self.audio {
+            audio.register_sound(name, path);
+        }
+    }
+
+    /// Play a registered audio file by name (used for editor preview).
+    #[cfg(feature = "audio")]
+    pub fn play_audio_preview(&mut self, name: &str) {
+        if let Some(audio) = &mut self.audio {
+            audio.play_sound(name);
+        }
+    }
+
+    /// Stop all audio playback (used when stopping preview).
+    #[cfg(feature = "audio")]
+    pub fn stop_audio_preview(&mut self) {
+        if let Some(audio) = &mut self.audio {
+            audio.stop_music();
+        }
     }
 
     /// Set the currently pressed keys (called by the host before each step).
@@ -1039,6 +1072,20 @@ impl SliceHost {
                 // stop_particle_system(source_id) -> void
                 let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 self.commands.push(SliceCommand::StopParticleSystem { source_id });
+                Ok(Value::I64(0))
+            }
+            // Audio editing (55-56)
+            55 => {
+                // register_audio(name, path) -> void
+                let name = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let path = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                self.host_mut().register_audio(&name, &path);
+                Ok(Value::I64(0))
+            }
+            56 => {
+                // play_audio_preview(name) -> void
+                let name = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                self.host_mut().play_audio_preview(&name);
                 Ok(Value::I64(0))
             }
             _ => Err(VmError::HostCallError(format!(
