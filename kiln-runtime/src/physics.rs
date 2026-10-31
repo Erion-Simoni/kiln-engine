@@ -1,6 +1,8 @@
 //! Physics module (feature-gated)
 //! Uses rapier2d for 2D rigid body physics
 
+use std::collections::HashMap;
+
 #[cfg(feature = "physics")]
 use rapier2d::prelude::*;
 
@@ -226,8 +228,119 @@ pub fn sync_physics_with_ecs(
         let _ = world.insert_one(entity, PhysicsBody { handle: handle.index() as u32 });
     }
 
+/// A collision event between two physics bodies.
+#[derive(Debug, Clone)]
+pub struct CollisionEvent {
+    /// Source id of the first entity.
+    pub entity_a: String,
+    /// Source id of the second entity.
+    pub entity_b: String,
+    /// Whether the collision just started (true) or ended (false).
+    pub started: bool,
+}
+
+/// Sync physics bodies with ECS transforms and collect collision events.
+///
+/// Call this once per frame. Returns collision events detected this frame.
+#[cfg(feature = "physics")]
+pub fn sync_physics_with_ecs(
+    physics: &mut PhysicsWorld,
+    world: &mut hecs::World,
+) -> Vec<CollisionEvent> {
+    use crate::world::{
+        Collider2D, ColliderShape, PhysicsBody, RigidBody2D, RigidBodyType, SourceId, Transform,
+    };
+
+    // Register new bodies: entities with RigidBody2D + Collider2D but no PhysicsBody
+    let to_register: Vec<(hecs::Entity, RigidBody2D, Collider2D, Option<SourceId>)> = world
+        .query::<(&RigidBody2D, &Collider2D, Option<&SourceId>)>()
+        .iter()
+        .filter_map(|(e, (rb, col, sid))| {
+            if world.get::<PhysicsBody>(e).is_err() {
+                Some((e, *rb, *col, sid.cloned()))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    for (entity, rb, col, source_id) in to_register {
+        let body_builder = match rb.body_type {
+            RigidBodyType::Static => rapier2d::prelude::RigidBodyBuilder::static(),
+            RigidBodyType::Dynamic => rapier2d::prelude::RigidBodyBuilder::dynamic(),
+            RigidBodyType::Kinematic => rapier2d::prelude::RigidBodyBuilder::kinematic(),
+        }
+        .translation(rapier2d::math::Vector::new(
+            rb.linear_velocity[0],
+            rb.linear_velocity[1],
+        ))
+        .linear_velocity(rapier2d::math::Vector::new(rb.linear_velocity[0], rb.linear_velocity[1]))
+        .angular_velocity(rb.angular_velocity)
+        .gravity_scale(rb.gravity_scale)
+        .can_sleep(rb.can_sleep);
+
+        let handle = physics.create_rigid_body(body_builder);
+
+        let collider_builder = match col.shape {
+            ColliderShape::Circle { radius } => rapier2d::prelude::ColliderBuilder::ball(radius)
+                .friction(col.friction)
+                .restitution(col.restitution)
+                .density(col.density)
+                .sensor(col.is_sensor),
+            ColliderShape::Rectangle {
+                half_width,
+                half_height,
+            } => rapier2d::prelude::ColliderBuilder::cuboid(half_width, half_height)
+                .friction(col.friction)
+                .restitution(col.restitution)
+                .density(col.density)
+                .sensor(col.is_sensor),
+        };
+
+        physics.create_collider(collider_builder, handle);
+
+        let _ = world.insert_one(entity, PhysicsBody { handle: handle.index() as u32 });
+    }
+
+    // Build a map from rapier2d rigid body handle index -> source id
+    let handle_to_source: std::collections::HashMap<u32, String> = world
+        .query::<(&PhysicsBody, &SourceId)>()
+        .iter()
+        .map(|(_, (pb, sid))| (pb.handle, sid.0.clone()))
+        .collect();
+
     // Step the simulation
     physics.step();
+
+    // Collect collision events from the narrow phase
+    let mut collision_events = Vec::new();
+    let _ = physics.narrow_phase.contact_events().for_each(|event| {
+        use rapier2d::prelude::ContactEvent;
+        match event {
+            ContactEvent::Started(h1, h2) => {
+                let a = handle_to_source.get(&(h1.index() as u32)).cloned();
+                let b = handle_to_source.get(&(h2.index() as u32)).cloned();
+                if let (Some(a), Some(b)) = (a, b) {
+                    collision_events.push(CollisionEvent {
+                        entity_a: a,
+                        entity_b: b,
+                        started: true,
+                    });
+                }
+            }
+            ContactEvent::Stopped(h1, h2) => {
+                let a = handle_to_source.get(&(h1.index() as u32)).cloned();
+                let b = handle_to_source.get(&(h2.index() as u32)).cloned();
+                if let (Some(a), Some(b)) = (a, b) {
+                    collision_events.push(CollisionEvent {
+                        entity_a: a,
+                        entity_b: b,
+                        started: false,
+                    });
+                }
+            }
+        }
+    });
 
     // Sync physics positions back to ECS transforms
     for (entity, physics_body, transform) in
@@ -242,6 +355,8 @@ pub fn sync_physics_with_ecs(
             transform.position.y = pos.y;
         }
     }
+
+    collision_events
 }
 
 #[cfg(test)]

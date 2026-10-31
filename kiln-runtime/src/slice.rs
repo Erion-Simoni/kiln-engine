@@ -77,6 +77,8 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("play_animation", 35, 2),       // source_id, clip_name
     ("stop_animation", 36, 1),       // source_id
     ("set_animation_speed", 37, 2),  // source_id, speed
+    // Collision events (38)
+    ("get_collision_events", 38, 0), // -> array of [entity_a, entity_b, started]
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -132,6 +134,8 @@ pub struct SliceFacts {
     pub entity_sprite_sizes: HashMap<String, [f64; 2]>,
     /// Map of entity source_id -> role name.
     pub entity_roles: HashMap<String, String>,
+    /// Collision events detected this frame (physics feature only).
+    pub collision_events: Vec<(String, String, bool)>,
 }
 
 /// A change the script asked for.
@@ -615,6 +619,22 @@ impl SliceHost {
                 self.commands.push(SliceCommand::SetAnimationSpeed { source_id, speed });
                 Ok(Value::I64(0))
             }
+            38 => {
+                // get_collision_events() -> array of [entity_a, entity_b, started]
+                let events: Vec<Value> = self
+                    .facts
+                    .collision_events
+                    .iter()
+                    .map(|(a, b, started)| {
+                        Value::Array(vec![
+                            Value::Str(a.clone()),
+                            Value::Str(b.clone()),
+                            Value::Bool(*started),
+                        ])
+                    })
+                    .collect();
+                Ok(Value::Array(events))
+            }
             _ => Err(VmError::HostCallError(format!(
                 "unknown slice builtin id {func_id}"
             ))),
@@ -688,10 +708,24 @@ impl SliceSession {
     ) -> Result<(), VmError> {
         self.state.elapsed += dt;
 
+        // Step physics and collect collision events (if physics feature enabled)
+        let collision_events = #[cfg(feature = "physics")]
+        {
+            use crate::physics::sync_physics_with_ecs;
+            let host = self.vm.host_mut();
+            if let Some(physics) = &mut host.physics {
+                sync_physics_with_ecs(physics, world.world_mut())
+            } else {
+                Vec::new()
+            }
+        };
+        #[cfg(not(feature = "physics"))]
+        let collision_events: Vec<(String, String, bool)> = Vec::new();
+
         // Update animations (reads AnimationPlayer, writes Sprite uv_rect)
         crate::sprite::update_animations(world.world_mut());
 
-        let facts = self.collect_facts(world, input, dt);
+        let facts = self.collect_facts(world, input, dt, collision_events);
         {
             let host = self.vm.host_mut();
             host.facts = facts;
@@ -708,7 +742,13 @@ impl SliceSession {
     }
 
     /// Gather the facts the script can read this frame.
-    fn collect_facts(&mut self, world: &mut GameWorld, input: (f64, f64), dt: f64) -> SliceFacts {
+    fn collect_facts(
+        &mut self,
+        world: &mut GameWorld,
+        input: (f64, f64),
+        dt: f64,
+        collision_events: Vec<(String, String, bool)>,
+    ) -> SliceFacts {
         let player = find_player(world);
         let (player_x, player_y) = player.as_ref().map(|p| (p.x, p.y)).unwrap_or((0.0, 0.0));
 
@@ -769,6 +809,7 @@ impl SliceSession {
             entity_sprite_colors,
             entity_sprite_sizes,
             entity_roles,
+            collision_events,
         }
     }
 
