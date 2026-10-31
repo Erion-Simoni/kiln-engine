@@ -58,6 +58,16 @@ impl SpriteInstance {
             5 => Uint32,      // material_id
         ]
     }
+
+    /// `wgpu` vertex buffer layout for instanced rendering.
+    pub fn vertex_layout() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: SpriteInstance::STRIDE,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &Self::vertex_attributes(),
+        }
+    }
+}
 }
 
 #[repr(C)]
@@ -393,6 +403,55 @@ impl SpriteRenderer {
         let id = self.materials.len() as u32 + 1;
         self.materials.push(material);
         id
+    }
+
+    /// Compile a shader source into a render pipeline and register it with the
+    /// given material ID. Returns the material ID on success.
+    pub fn compile_shader(
+        &mut self,
+        device: &Device,
+        material_id: u32,
+        shader_source: &str,
+        entry_point: &str,
+    ) -> Result<u32, String> {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(&format!("custom_shader_{material_id}")),
+            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+        });
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(&format!("sprite_pipeline_{material_id}")),
+            layout: None,
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point,
+                buffers: &[SpriteInstance::vertex_layout()],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point,
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+        });
+
+        self.material_pipelines.insert(material_id, pipeline);
+        Ok(material_id)
     }
 
     /// Get a material by ID.
