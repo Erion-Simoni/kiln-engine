@@ -17,6 +17,9 @@ pub struct Sprite {
     /// Sorting layer — sprites on lower layers are drawn first.
     /// Preserves painter order for transparent sprites across textures.
     pub layer: f32,
+    /// Optional material reference for custom shader rendering.
+    #[serde(default)]
+    pub material: Option<String>,
 }
 
 impl Sprite {

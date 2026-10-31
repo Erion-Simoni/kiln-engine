@@ -30,6 +30,12 @@ pub struct Project {
     /// Animation clips of the project, keyed by their id.
     #[serde(default)]
     pub animation_clips: HashMap<String, Clip>,
+    /// Shader programs of the project, keyed by their id.
+    #[serde(default)]
+    pub shaders: HashMap<String, Shader>,
+    /// Materials of the project, keyed by their id.
+    #[serde(default)]
+    pub materials: HashMap<String, Material>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -193,6 +199,9 @@ pub enum Component {
         /// Preserves painter order for transparent sprites across textures.
         #[serde(default)]
         layer: f32,
+        /// Optional material reference for custom shader rendering.
+        #[serde(default)]
+        material: Option<String>,
         /// Optional name of an animation clip from `animation_clips` to play
         /// on this sprite.
         #[serde(default)]
@@ -474,4 +483,45 @@ mod tests {
         assert_eq!(mobile.android.package_name, "com.example.game");
         assert_eq!(mobile.android.target_sdk, 33);
     }
+}
+
+/// A WGSL shader program for custom sprite rendering.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Shader {
+    /// Unique shader identifier.
+    pub id: String,
+    /// Human-readable name.
+    pub name: String,
+    /// WGSL source code for the fragment shader.
+    /// The shader receives position, size, color, uv_rect as inputs
+    /// and outputs a color.
+    pub source: String,
+    /// Entry point function name.
+    #[serde(default)]
+    pub entry_point: String,
+}
+
+/// A material that references a shader with parameter overrides.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Material {
+    /// Unique material identifier.
+    pub id: String,
+    /// Human-readable name.
+    pub name: String,
+    /// Shader this material uses.
+    pub shader_id: String,
+    /// Uniform parameter overrides (name -> value).
+    #[serde(default)]
+    pub parameters: HashMap<String, MaterialParam>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum MaterialParam {
+    Float(f32),
+    Vec2([f32; 2]),
+    Vec3([f32; 3]),
+    Vec4([f32; 4]),
+    Color([f32; 4]),
+    Texture(String),
 }
