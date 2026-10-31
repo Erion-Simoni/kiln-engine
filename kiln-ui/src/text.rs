@@ -129,3 +129,361 @@ mod tests {
             .is_empty());
     }
 }
+
+/// SDF (Signed Distance Field) text renderer for high-quality font rendering.
+///
+/// Uses pre-baked SDF font atlas textures to render crisp text at any size.
+/// This is an alternative to the built-in bitmap font renderer that scales
+/// smoothly without pixelation.
+#[derive(Debug, Default)]
+pub struct SdfTextRenderer {
+    /// SDF font data.
+    pub font: Option<SdfFont>,
+}
+
+/// SDF font data for rendering.
+#[derive(Debug, Clone)]
+pub struct SdfFontData {
+    /// Atlas texture ID.
+    pub texture_id: kiln_render::TextureId,
+    /// Glyph metrics.
+    pub glyphs: HashMap<char, GlyphMetrics>,
+    /// Line height in pixels.
+    pub line_height: f32,
+    /// Space advance width.
+    pub space_advance: f32,
+}
+
+/// Glyph metrics for SDF rendering.
+#[derive(Debug, Clone, Copy)]
+pub struct SdfGlyphMetrics {
+    /// Glyph position in atlas (x, y).
+    pub offset: [f32; 2],
+    /// Glyph size in pixels.
+    pub size: [f32; 2],
+    /// Bearing (offset to left edge).
+    pub bearing: [f32; 2],
+    /// Advance width.
+    pub advance: f32,
+}
+
+impl SdfTextRenderer {
+    /// Creates a new SDF text renderer with no font loaded.
+    pub fn new() -> Self {
+        Self {
+            font: None,
+        }
+    }
+
+    /// Load an SDF font into the renderer.
+    pub fn load_font(&mut self, font: SdfFontData) {
+        self.font = Some(font);
+    }
+
+    /// Render text using SDF fonts.
+    /// Returns sprite instances for each glyph.
+    pub fn render(
+        &self,
+        text: &str,
+        x: f32,
+        y: f32,
+        font_size: f32,
+        color: [f32; 4],
+    ) -> Vec<SpriteInstance> {
+        let font = match &self.font {
+            Some(f) => f,
+            None => return Vec::new(),
+        };
+
+        let mut out = Vec::new();
+        let scale = font_size / font.line_height.max(1.0);
+        let mut cursor_x = x;
+        let mut cursor_y = y;
+
+        for ch in text.chars() {
+            if ch == '\n' {
+                cursor_x = x;
+                cursor_y += font.line_height * scale;
+                continue;
+            }
+
+            if ch == ' ' {
+                cursor_x += font.space_advance * scale;
+                continue;
+            }
+
+            if let Some(glyph) = font.glyphs.get(&ch) {
+                let scale_x = font_size / glyph.size[0].max(1.0);
+                let scale_y = font_size / glyph.size[1].max(1.0);
+                let scale = scale_x.min(scale_y);
+
+                let display_w = glyph.size[0] * scale;
+                let display_h = glyph.size[1] * scale;
+
+                let draw_x = cursor_x + glyph.bearing[0] * scale;
+                let draw_y = cursor_y + glyph.bearing[1] * scale;
+
+                out.push(SpriteInstance::colored(
+                    [
+                        draw_x + display_w / 2.0,
+                        draw_y + display_h / 2.0,
+                    ],
+                    [display_w, display_h],
+                    color,
+                ));
+                // Note: material_id would be set to the font texture ID
+                // for SDF rendering. For now, use default (0).
+                let _ = glyph;
+            }
+
+            cursor_x += glyph.advance * scale;
+        }
+
+        out
+    }
+
+    /// Measure text width and height.
+    pub fn measure(&self, text: &str, font_size: f32) -> (f32, f32) {
+        if text.is_empty() {
+            return (0.0, 0.0);
+        }
+
+        let font = match &self.font {
+            Some(f) => f,
+            None => return (0.0, 0.0),
+        };
+
+        let scale = font_size / font.line_height.max(1.0);
+        let mut max_x = 0.0;
+        let mut cursor_x = 0.0;
+        let mut lines = 1;
+
+        for ch in text.chars() {
+            if ch == '\n' {
+                cursor_x = 0.0;
+                lines += 1;
+                continue;
+            }
+
+            if ch == ' ' {
+                cursor_x += font.space_advance * scale;
+                continue;
+            }
+
+            if let Some(glyph) = font.glyphs.get(&ch) {
+                cursor_x += glyph.advance * scale;
+                max_x = cursor_x.max(max_x);
+            }
+        }
+
+        let height = lines as f32 * font.line_height * scale;
+        (max_x, height)
+    }
+}
+
+//! SDF (Signed Distance Field) text renderer for high-quality font rendering.
+//!
+//! Uses pre-baked SDF font atlas textures to render crisp text at any size.
+//! This is an alternative to the built-in bitmap font renderer that scales
+//! smoothly without pixelation.
+
+use kiln_render::{SpriteInstance, TextureId};
+use std::collections::HashMap;
+
+/// SDF font data for rendering.
+#[derive(Debug, Clone)]
+pub struct SdfFontData {
+    /// Atlas texture ID.
+    pub texture_id: TextureId,
+    /// Glyph metrics.
+    pub glyphs: HashMap<char, SdfGlyphMetrics>,
+    /// Line height in pixels.
+    pub line_height: f32,
+    /// Space advance width.
+    pub space_advance: f32,
+}
+
+/// Glyph metrics for SDF rendering.
+#[derive(Debug, Clone, Copy)]
+pub struct SdfGlyphMetrics {
+    /// Glyph position in atlas (x, y).
+    pub offset: [f32; 2],
+    /// Glyph size in pixels.
+    pub size: [f32; 2],
+    /// Bearing (offset to left edge).
+    pub bearing: [f32; 2],
+    /// Advance width.
+    pub advance: f32,
+}
+
+/// SDF (Signed Distance Field) text renderer for high-quality font rendering.
+///
+/// Uses pre-baked SDF font atlas textures to render crisp text at any size.
+/// This is an alternative to the built-in bitmap font renderer that scales
+//! smoothly without pixelation.
+#[derive(Debug, Default)]
+pub struct SdfTextRenderer {
+    /// SDF font data.
+    pub font: Option<SdfFontData>,
+}
+
+impl SdfTextRenderer {
+    /// Creates a new SDF text renderer with no font loaded.
+    pub fn new() -> Self {
+        Self { font: None }
+    }
+
+    /// Load an SDF font into the renderer.
+    pub fn load_font(&mut self, font: SdfFontData) {
+        self.font = Some(font);
+    }
+
+    /// Render text using SDF fonts.
+    ///
+    /// Returns sprite instances for each glyph. Each instance uses
+    /// `TextureId::WHITE` as its texture; the SDF shader (if bound via a
+    /// material) will sample the actual font atlas texture.
+    pub fn render(
+        &self,
+        text: &str,
+        x: f32,
+        y: f32,
+        font_size: f32,
+        color: [f32; 4],
+    ) -> Vec<SpriteInstance> {
+        let font = match &self.font {
+            Some(f) => f,
+            None => return Vec::new(),
+        };
+
+        let mut out = Vec::new();
+        let scale = font_size / font.line_height.max(1.0);
+        let mut cursor_x = x;
+        let mut cursor_y = y;
+
+        for ch in text.chars() {
+            if ch == '\n' {
+                cursor_x = x;
+                cursor_y += font.line_height * scale;
+                continue;
+            }
+
+            if ch == ' ' {
+                cursor_x += font.space_advance * scale;
+                continue;
+            }
+
+            if let Some(glyph) = font.glyphs.get(&ch) {
+                let scale_x = font_size / glyph.size[0].max(1.0);
+                let scale_y = font_size / glyph.size[1].max(1.0);
+                let scale = scale_x.min(scale_y);
+
+                let display_w = glyph.size[0] * scale;
+                let display_h = glyph.size[1] * scale;
+
+                let draw_x = cursor_x + glyph.bearing[0] * scale;
+                let draw_y = cursor_y + glyph.bearing[1] * scale;
+
+                out.push(SpriteInstance::colored(
+                    [
+                        draw_x + display_w / 2.0,
+                        draw_y + display_h / 2.0,
+                    ],
+                    [display_w, display_h],
+                    color,
+                ));
+            }
+
+            cursor_x += glyph.advance * scale;
+        }
+
+        out
+    }
+
+    /// Measure text width and height.
+    pub fn measure(&self, text: &str, font_size: f32) -> (f32, f32) {
+        if text.is_empty() {
+            return (0.0, 0.0);
+        }
+
+        let font = match &self.font {
+            Some(f) => f,
+            None => return (0.0, 0.0),
+        };
+
+        let scale = font_size / font.line_height.max(1.0);
+        let mut max_x = 0.0;
+        let mut cursor_x = 0.0;
+        let mut lines = 1;
+
+        for ch in text.chars() {
+            if ch == '\n' {
+                cursor_x = 0.0;
+                lines += 1;
+                continue;
+            }
+
+            if ch == ' ' {
+                cursor_x += font.space_advance * scale;
+                continue;
+            }
+
+            if let Some(glyph) = font.glyphs.get(&ch) {
+                cursor_x += glyph.advance * scale;
+                max_x = cursor_x.max(max_x);
+            }
+        }
+
+        let height = lines as f32 * font.line_height * scale;
+        (max_x, height)
+    }
+}
+
+#[cfg(test)]
+mod sdf_text_renderer_tests {
+    use super::*;
+
+    #[test]
+    fn sdf_renderer_empty() {
+        let r = SdfTextRenderer::new();
+        assert_eq!(r.measure("hello", 16.0), (0.0, 0.0));
+        assert!(r.render("hello", 0.0, 0.0, 16.0, [1.0; 4]).is_empty());
+    }
+
+    #[test]
+    fn sdf_renderer_with_font() {
+        let mut r = SdfTextRenderer::new();
+        let mut font = SdfFontData {
+            texture_id: TextureId(1),
+            glyphs: HashMap::new(),
+            line_height: 16.0,
+            space_advance: 8.0,
+        };
+        font.glyphs.insert(
+            'A',
+            SdfGlyphMetrics {
+                offset: [0.0, 0.0],
+                size: [8.0, 8.0],
+                bearing: [0.0, 0.0],
+                advance: 8.0,
+            },
+        );
+        font.glyphs.insert(
+            'B',
+            SdfGlyphMetrics {
+                offset: [0.0, 0.0],
+                size: [8.0, 8.0],
+                bearing: [0.0, 0.0],
+                advance: 8.0,
+            },
+        );
+        r.load_font(font);
+
+        let (w, h) = r.measure("AB", 16.0);
+        assert!((w - 16.0).abs() < 0.001);
+        assert!((h - 16.0).abs() < 0.001);
+
+        let quads = r.render("AB", 0.0, 0.0, 16.0, [1.0; 4]);
+        assert_eq!(quads.len(), 2);
+    }
+}

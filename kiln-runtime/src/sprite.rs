@@ -2,6 +2,7 @@
 
 use kiln_anim::Clip;
 use kiln_render::{TextureId, FULL_UV};
+use kiln_vfx::{Emitter, EmitterConfig, EmissionShape, ParticleSystem};
 use std::collections::HashMap;
 
 /// CPU-side sprite drawn via [`kiln_render::SpriteRenderer`].
@@ -13,6 +14,12 @@ pub struct Sprite {
     pub uv_rect: [f32; 4],
     /// GPU texture handle (`TextureId::WHITE` = solid colour tint).
     pub texture: TextureId,
+    /// Sorting layer — sprites on lower layers are drawn first.
+    /// Preserves painter order for transparent sprites across textures.
+    pub layer: f32,
+    /// Optional material reference for custom shader rendering.
+    #[serde(default)]
+    pub material: Option<String>,
 }
 
 impl Sprite {
@@ -22,6 +29,7 @@ impl Sprite {
             size: [32.0, 32.0],
             uv_rect: FULL_UV,
             texture: TextureId::WHITE,
+            layer: 0.0,
         }
     }
 
@@ -37,6 +45,12 @@ impl Sprite {
 
     pub fn with_uv(mut self, uv_rect: [f32; 4]) -> Self {
         self.uv_rect = uv_rect;
+        self
+    }
+
+    /// Set the sorting layer (default 0.0).
+    pub fn with_layer(mut self, layer: f32) -> Self {
+        self.layer = layer;
         self
     }
 }
@@ -60,6 +74,8 @@ pub struct AnimationPlayer {
     clip_textures: HashMap<String, (u32, u32)>,
     current_clip: Option<String>,
     elapsed: f32,
+    /// Playback speed multiplier (1.0 = normal speed).
+    speed: f32,
 }
 
 impl AnimationPlayer {
@@ -69,6 +85,7 @@ impl AnimationPlayer {
             clip_textures: HashMap::new(),
             current_clip: None,
             elapsed: 0.0,
+            speed: 1.0,
         }
     }
 
@@ -98,7 +115,22 @@ impl AnimationPlayer {
 
     /// Advance the animation by `dt` seconds.
     pub fn update(&mut self, dt: f32) {
-        self.elapsed += dt;
+        self.elapsed += dt * self.speed;
+    }
+
+    /// Set the playback speed multiplier (1.0 = normal speed).
+    pub fn set_speed(&mut self, speed: f32) {
+        self.speed = speed.max(0.0);
+    }
+
+    /// Get a mutable reference to a clip by name, if it exists.
+    pub fn get_clip_mut(&mut self, clip_name: &str) -> Option<&mut Clip> {
+        self.clips.get_mut(clip_name)
+    }
+
+    /// Get mutable access to all clips.
+    pub fn clips_mut(&mut self) -> &mut HashMap<String, Clip> {
+        &mut self.clips
     }
 
     /// Get the current frame's normalized UV rect (0.0 to 1.0), if a clip is playing.
@@ -124,7 +156,44 @@ impl AnimationPlayer {
     }
 }
 
-impl Default for AnimationPlayer {
+/// Particle system component for 2D visual effects (smoke, fire, magic, etc.).
+///
+/// Drives a CPU particle system and can be rendered as sprite instances.
+#[derive(Debug, Clone)]
+pub struct ParticleSystemComponent {
+    system: ParticleSystem,
+}
+
+impl ParticleSystemComponent {
+    /// Create a new particle system component.
+    pub fn new() -> Self {
+        Self {
+            system: ParticleSystem::new(Default::default()),
+        }
+    }
+
+    /// Add an emitter to the particle system.
+    pub fn add_emitter(&mut self, config: EmitterConfig) {
+        self.system.add_emitter(crate::sprite::Emitter::new(config));
+    }
+
+    /// Get mutable access to the particle system.
+    pub fn system_mut(&mut self) -> &mut ParticleSystem {
+        &mut self.system
+    }
+
+    /// Get immutable access to the particle system.
+    pub fn system(&self) -> &ParticleSystem {
+        &self.system
+    }
+
+    /// Particle count.
+    pub fn particle_count(&self) -> usize {
+        self.system.particle_count()
+    }
+}
+
+impl Default for ParticleSystemComponent {
     fn default() -> Self {
         Self::new()
     }
@@ -138,5 +207,12 @@ pub fn update_animations(world: &mut hecs::World) {
         if let Some(uv_rect) = anim.current_uv_rect() {
             sprite.uv_rect = uv_rect;
         }
+    }
+}
+
+/// Emit particles from particle system components for one frame.
+pub fn update_particle_systems(world: &mut hecs::World, dt: f32) {
+    for (_, ps) in world.query_mut::<&mut ParticleSystemComponent>().iter() {
+        ps.system_mut().update(dt);
     }
 }

@@ -489,3 +489,84 @@ mod tests {
         assert_eq!(list.selected_index(), Some(1));
     }
 }
+
+/// A Canvas widget for screen-space UI rendering.
+///
+/// A Canvas is a container widget that positions its children in screen space,
+/// making it ideal for HUDs, menus, and other screen-space UI elements.
+/// Unlike regular widgets which are positioned relative to their parent,
+/// canvas children are positioned in absolute screen coordinates.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Canvas {
+    id: WidgetId,
+    layout: Layout,
+    bounds: Rect,
+    visible: bool,
+    /// Background color for the canvas.
+    pub background_color: [f32; 4],
+    /// Whether the canvas captures input events.
+    pub captures_input: bool,
+}
+
+impl Canvas {
+    pub fn new() -> Self {
+        Self {
+            id: WidgetId::new(),
+            layout: Layout::default(),
+            bounds: Rect::default(),
+            visible: true,
+            background_color: [0.0, 0.0, 0.0, 0.0],
+            captures_input: false,
+        }
+    }
+
+    pub fn with_layout(mut self, layout: Layout) -> Self {
+        self.layout = layout;
+        self
+    }
+
+    pub fn with_bounds(mut self, bounds: Rect) -> Self {
+        self.bounds = bounds;
+        self
+    }
+
+    pub fn with_background_color(mut self, color: [f32; 4]) -> Self {
+        self.background_color = color;
+        self
+    }
+
+    pub fn with_captures_input(mut self, captures: bool) -> Self {
+        self.captures_input = captures;
+        self
+    }
+}
+
+impl Widget for Canvas {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn layout(&self) -> &Layout {
+        &self.layout
+    }
+
+    fn layout_mut(&mut self) -> &mut Layout {
+        &mut self.layout
+    }
+
+    fn bounds(&self) -> Rect {
+        self.bounds
+    }
+
+    fn set_bounds(&mut self, bounds: Rect) {
+        self.bounds = bounds;
+    }
+
+    fn visible(&self) -> bool {
+        self.visible
+    }
+
+    fn set_visible(&mut self, visible: bool) {
+        self.visible = visible;
+    }
+}

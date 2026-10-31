@@ -16,7 +16,7 @@ use kiln_ui::TextRenderer;
 use log::{error, info, warn};
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
-use web_sys::{HtmlCanvasElement, HtmlImageElement, KeyboardEvent};
+use web_sys::{HtmlCanvasElement, HtmlImageElement, KeyboardEvent, TouchEvent, AudioContext, GainNode};
 
 use image::GenericImageView;
 
@@ -94,6 +94,12 @@ struct App {
     slice: Option<SliceSession>,
     game_loop: GameLoop,
     input: WebInput,
+    /// Web Audio API context for audio playback
+    audio_context: Option<web_sys::AudioContext>,
+    /// Master gain node
+    master_gain: Option<web_sys::GainNode>,
+    /// Registered audio buffers (name -> AudioBuffer)
+    audio_buffers: std::collections::HashMap<String, web_sys::AudioBuffer>,
 }
 
 impl App {
@@ -150,6 +156,29 @@ impl App {
             SpriteRenderer::new(renderer.device(), renderer.queue(), renderer.scene_format());
         sprite_renderer.upload_quad(renderer.queue());
 
+        // Initialize Web Audio API
+        let audio_context = web_sys::AudioContext::new().ok();
+        let master_gain = audio_context.as_ref().map(|ctx| ctx.create_gain()).ok();
+        if let Some(gain) = &master_gain {
+            gain.connect_with_audio_node(&audio_context.as_ref().unwrap().destination()).ok();
+            gain.set_value(1.0);
+        }
+
+        // Register all project audio assets and decode them
+        let mut audio_buffers = std::collections::HashMap::new();
+        if let Some(project) = &project {
+            for asset in &project.audio_assets {
+                let audio_ctx = audio_context.as_ref();
+                if let Some(ctx) = audio_ctx {
+                    if let Ok(array_buffer) = fetch_audio_buffer(&asset.path).await {
+                        if let Ok(buffer) = ctx.decode_audio_data_sync(&array_buffer) {
+                            audio_buffers.insert(asset.name.clone(), buffer);
+                        }
+                    }
+                }
+            }
+        }
+
         let camera = Camera::new(width as f32, height as f32);
 
         let project = load_project(project_path).await?;
@@ -186,6 +215,9 @@ impl App {
             slice,
             game_loop: GameLoop::new(),
             input: WebInput::default(),
+            audio_context,
+            master_gain,
+            audio_buffers,
         })
     }
 
@@ -231,6 +263,67 @@ impl App {
         }
         // ----------------------------------------------------------------------
 
+        // --- Touch input: update WebInput so gameplay receives touch input ---
+        {
+            let app_for_touchstart = app_clone.clone();
+            let on_touchstart = Closure::wrap(Box::new(move |event: TouchEvent| {
+                let mut app = app_for_touchstart.borrow_mut();
+                if let Some(app) = app.as_mut() {
+                    if let Some(touch) = event.touches().item(0) {
+                        app.input.input_x = 1.0;
+                        app.input.input_y = 1.0;
+                        // Store touch position in input_x/input_y as normalized coords
+                        // The actual position handling would need canvas rect
+                        let _ = touch.client_x();
+                        let _ = touch.client_y();
+                    }
+                }
+            }) as Box<dyn FnMut(TouchEvent)>);
+            let _ = window
+                .add_event_listener_with_callback(
+                    "touchstart",
+                    on_touchstart.as_ref().unchecked_ref(),
+                );
+            on_touchstart.forget();
+
+            let app_for_touchend = app_clone.clone();
+            let on_touchend = Closure::wrap(Box::new(move |event: TouchEvent| {
+                let mut app = app_for_touchend.borrow_mut();
+                if let Some(app) = app.as_mut() {
+                    if event.touches().length() == 0 {
+                        app.input.input_x = 0.0;
+                        app.input.input_y = 0.0;
+                    }
+                }
+            }) as Box<dyn FnMut(TouchEvent)>);
+            let _ = window
+                .add_event_listener_with_callback(
+                    "touchend",
+                    on_touchend.as_ref().unchecked_ref(),
+                );
+            on_touchend.forget();
+
+            let app_for_touchmove = app_clone.clone();
+            let on_touchmove = Closure::wrap(Box::new(move |event: TouchEvent| {
+                let mut app = app_for_touchmove.borrow_mut();
+                if let Some(app) = app.as_mut() {
+                    if let Some(touch) = event.touches().item(0) {
+                        app.input.input_x = 1.0;
+                        app.input.input_y = 1.0;
+                        let _ = touch.client_x();
+                        let _ = touch.client_y();
+                    }
+                }
+            }) as Box<dyn FnMut(TouchEvent)>);
+            let _ = window
+                .add_event_listener_with_callback(
+                    "touchmove",
+                    on_touchmove.as_ref().unchecked_ref(),
+                );
+            on_touchmove.forget();
+        }
+        // ----------------------------------------------------------------------
+
         let f = std::rc::Rc::new(std::cell::RefCell::new(None::<Closure<dyn FnMut()>>));
         let f_clone = std::rc::Rc::clone(&f);
 
@@ -261,6 +354,8 @@ impl App {
             if let Some(slice) = &mut self.slice {
                 let _ = slice.step(&mut self.world, input_axis, dt.as_secs_f64());
             }
+            // Update particle systems
+            crate::sprite::update_particle_systems(&mut self.world, dt.as_secs_f64());
         });
     }
 
@@ -501,6 +596,21 @@ async fn load_project(project_path: &str) -> Result<kiln_core::Project, Box<dyn 
     let project = kiln_core::Project::from_toml(&text)
         .map_err(|e| format!("TOML parse failed: {}", e))?;
     Ok(project)
+}
+
+/// Fetch an audio file and return the raw bytes.
+async fn fetch_audio_buffer(path: &str) -> Result<js_sys::Uint8Array, Box<dyn std::error::Error>> {
+    let window = web_sys::window().ok_or("No window available")?;
+    let resp = window.fetch_with_str(path).await.map_err(|e| format!("{:?}", e))?;
+    if !resp.ok() {
+        return Err(format!("HTTP error: {}", resp.status()).into());
+    }
+    let buffer = resp.array_buffer().map_err(|e| format!("{:?}", e))?;
+    let buffer = wasm_bindgen_futures::JsFuture::from(buffer)
+        .await
+        .map_err(|e| format!("{:?}", e))?;
+    let bytes = js_sys::Uint8Array::new(&buffer);
+    Ok(bytes)
 }
 
 /// Load a single PNG texture from a URL and upload it to the GPU.

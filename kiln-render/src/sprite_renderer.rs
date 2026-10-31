@@ -12,6 +12,7 @@ use wgpu::{Device, Queue};
 
 use crate::camera::Camera;
 use crate::texture::{create_rgba8_texture, TextureId, FULL_UV};
+use kiln_core::project::Material;
 
 /// Maximum sprites per frame (prevents unbounded allocations).
 pub const MAX_SPRITES: usize = 16_384;
@@ -28,6 +29,8 @@ pub struct SpriteInstance {
     pub color: [f32; 4],
     /// Normalised UV rect: `u0, v0, u1, v1`.
     pub uv_rect: [f32; 4],
+    /// Optional material ID for custom shader rendering (0 = default shader).
+    pub material_id: u32,
 }
 
 impl SpriteInstance {
@@ -41,18 +44,30 @@ impl SpriteInstance {
             size,
             color,
             uv_rect: FULL_UV,
+            material_id: 0,
         }
     }
 
     /// `wgpu` vertex attributes for the instance step.
-    pub fn vertex_attributes() -> [wgpu::VertexAttribute; 4] {
+    pub fn vertex_attributes() -> [wgpu::VertexAttribute; 5] {
         wgpu::vertex_attr_array![
             1 => Float32x2,   // position
             2 => Float32x2,   // size
             3 => Float32x4,   // color
             4 => Float32x4,   // uv_rect
+            5 => Uint32,      // material_id
         ]
     }
+
+    /// `wgpu` vertex buffer layout for instanced rendering.
+    pub fn vertex_layout() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: SpriteInstance::STRIDE,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &Self::vertex_attributes(),
+        }
+    }
+}
 }
 
 #[repr(C)]
@@ -68,7 +83,7 @@ struct TextureSlot {
     pub height: u32,
 }
 
-/// Batching 2D sprite renderer with per-texture draw calls.
+/// Batching 2D sprite renderer with per-texture draw calls and custom material support.
 pub struct SpriteRenderer {
     pipeline: wgpu::RenderPipeline,
     uniform_buffer: wgpu::Buffer,
@@ -76,15 +91,19 @@ pub struct SpriteRenderer {
     texture_bgl: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     textures: Vec<TextureSlot>,
+    /// Custom materials keyed by material ID (0 = default shader).
+    materials: Vec<Material>,
+    /// Compiled render pipelines for custom materials, keyed by material ID.
+    material_pipelines: std::collections::HashMap<u32, wgpu::RenderPipeline>,
     quad_vertices: wgpu::Buffer,
     quad_indices: wgpu::Buffer,
     instance_buffer: wgpu::Buffer,
-    /// Pending sprites queued for this frame: `(texture, layer, instance)`.
-    /// Sprites are sorted by `(layer, texture)` before drawing so that
+    /// Pending sprites queued for this frame: `(texture, material_id, layer, instance)`.
+    /// Sprites are sorted by `(layer, material_id, texture)` before drawing so that
     /// sprites on lower layers (background) are drawn before higher layers
     /// (foreground), preserving painter order for transparent sprites.
-    /// Within the same layer and texture, submission order is preserved.
-    pending: Vec<(TextureId, f32, SpriteInstance)>,
+    /// Within the same layer, material, and texture, submission order is preserved.
+    pending: Vec<(TextureId, u32, f32, SpriteInstance)>,
     last_draw_calls: u32,
 }
 
@@ -252,6 +271,8 @@ impl SpriteRenderer {
             texture_bgl,
             sampler,
             textures: Vec::new(),
+            materials: Vec::new(),
+            material_pipelines: std::collections::HashMap::new(),
             quad_vertices,
             quad_indices,
             instance_buffer,
@@ -334,13 +355,17 @@ impl SpriteRenderer {
         } else {
             TextureId::WHITE
         };
-        self.pending.push((id, 0.0, instance));
+        self.pending.push((id, instance.material_id, 0.0, instance));
     }
 
     /// Queue a sprite sampled from `texture` on a specific `layer`.
-    /// Sprites on lower layers are drawn first, preserving painter order
-    /// for transparent sprites across different textures.
-    pub fn push_textured_with_layer(&mut self, texture: TextureId, layer: f32, instance: SpriteInstance) {
+    /// Uses the sprite's `material_id` field for material selection.
+    pub fn push_textured_with_layer(
+        &mut self,
+        texture: TextureId,
+        layer: f32,
+        instance: SpriteInstance,
+    ) {
         if self.pending.len() >= MAX_SPRITES {
             return;
         }
@@ -349,10 +374,92 @@ impl SpriteRenderer {
         } else {
             TextureId::WHITE
         };
-        self.pending.push((id, layer, instance));
+        self.pending.push((id, instance.material_id, layer, instance));
     }
 
-    /// Upload instances and draw one instanced call per distinct texture.
+    /// Queue a sprite sampled from `texture` on a specific `layer` with an explicit material ID.
+    pub fn push_textured_with_material(
+        &mut self,
+        texture: TextureId,
+        layer: f32,
+        material_id: u32,
+        instance: SpriteInstance,
+    ) {
+        if self.pending.len() >= MAX_SPRITES {
+            return;
+        }
+        let id = if (texture.0 as usize) < self.textures.len() {
+            texture
+        } else {
+            TextureId::WHITE
+        };
+        self.pending.push((id, material_id, layer, instance));
+    }
+
+    /// Register a material with the renderer for custom shader rendering.
+    /// Returns the material ID (starting from 1). Use `MaterialId::default()`
+    /// (0) for the default sprite shader.
+    pub fn add_material(&mut self, material: Material) -> u32 {
+        let id = self.materials.len() as u32 + 1;
+        self.materials.push(material);
+        id
+    }
+
+    /// Compile a shader source into a render pipeline and register it with the
+    /// given material ID. Returns the material ID on success.
+    pub fn compile_shader(
+        &mut self,
+        device: &Device,
+        material_id: u32,
+        shader_source: &str,
+        entry_point: &str,
+    ) -> Result<u32, String> {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(&format!("custom_shader_{material_id}")),
+            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+        });
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(&format!("sprite_pipeline_{material_id}")),
+            layout: None,
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point,
+                buffers: &[SpriteInstance::vertex_layout()],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point,
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+        });
+
+        self.material_pipelines.insert(material_id, pipeline);
+        Ok(material_id)
+    }
+
+    /// Get a material by ID.
+    pub fn material(&self, id: u32) -> Option<&Material> {
+        self.materials.get(id as usize).as_ref()
+    }
+
+    /// Upload instances and draw one instanced call per distinct (material, texture) pair.
     pub fn flush<'a>(
         &'a mut self,
         render_pass: &mut wgpu::RenderPass<'a>,
@@ -367,14 +474,15 @@ impl SpriteRenderer {
         let proj: [f32; 16] = camera.projection_matrix().to_cols_array();
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&proj));
 
-        // Sort by (layer, texture) so sprites on lower layers are drawn first
-        // (painter order for transparency), while same-layer same-texture
+        // Sort by (layer, material_id, texture) so sprites on lower layers are drawn first
+        // (painter order for transparency), while same-layer same-material same-texture
         // sprites are batched into one draw call. The sort is stable, so
-        // submission order is preserved within each (layer, texture) group.
+        // submission order is preserved within each (layer, material, texture) group.
         self.pending.sort_by(|a, b| {
-            a.1
-                .partial_cmp(&b.1)
+            a.2
+                .partial_cmp(&b.2)
                 .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.1.cmp(&b.1))
                 .then_with(|| a.0.0.cmp(&b.0.0))
         });
 
@@ -382,7 +490,7 @@ impl SpriteRenderer {
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&proj));
 
         // Collect all instances into a single buffer upload.
-        let all: Vec<SpriteInstance> = self.pending.iter().map(|(_, _, inst)| *inst).collect();
+        let all: Vec<SpriteInstance> = self.pending.iter().map(|(_, _, _, inst)| *inst).collect();
         queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&all));
 
         render_pass.set_pipeline(&self.pipeline);
@@ -393,11 +501,26 @@ impl SpriteRenderer {
         let mut i = 0;
         while i < self.pending.len() {
             let tex_id = self.pending[i].0;
+            let mat_id = self.pending[i].1;
             let start = i;
-            while i < self.pending.len() && self.pending[i].0 == tex_id {
+            while i < self.pending.len()
+                && self.pending[i].0 == tex_id
+                && self.pending[i].1 == mat_id
+            {
                 i += 1;
             }
             let count = i - start;
+
+            // Use material pipeline if material_id != 0, otherwise default pipeline
+            if mat_id != 0 && mat_id as usize <= self.materials.len() {
+                if let Some(pipeline) = self.material_pipelines.get(&mat_id) {
+                    render_pass.set_pipeline(pipeline);
+                } else {
+                    render_pass.set_pipeline(&self.pipeline);
+                }
+            } else {
+                render_pass.set_pipeline(&self.pipeline);
+            }
 
             let slot = &self.textures[tex_id.0 as usize];
             render_pass.set_bind_group(1, &slot.bind_group, &[]);
@@ -468,40 +591,50 @@ mod tests {
     fn sort_preserves_layer_order_across_textures() {
         let mut sr = SpriteRendererCpu::default();
         // Submit in painter order: background A, foreground B, background C
-        sr.pending.push((TextureId(0), 0.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // A: layer 0, tex 0
-        sr.pending.push((TextureId(1), 1.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // B: layer 1, tex 1
-        sr.pending.push((TextureId(0), 0.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // C: layer 0, tex 0
+        sr.pending.push((TextureId(0), 0, 0.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // A: layer 0, tex 0
+        sr.pending.push((TextureId(1), 0, 1.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // B: layer 1, tex 1
+        sr.pending.push((TextureId(0), 0, 0.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // C: layer 0, tex 0
 
         // Extract the sort order that flush would use
-        let mut ordered: Vec<(f32, u32)> = sr
+        let mut ordered: Vec<(f32, u32, u32)> = sr
             .pending
             .iter()
-            .map(|(tex, layer, _)| (*layer, tex.0))
+            .map(|(tex, mat, layer, _)| (*layer, *mat, tex.0))
             .collect();
-        ordered.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then_with(|| a.1.cmp(&b.1)));
+        ordered.sort_by(|a, b| {
+            a.0.partial_cmp(&b.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.1.cmp(&b.1))
+                .then_with(|| a.2.cmp(&b.2))
+        });
 
         // Layer 0 sprites (A, C) must come before layer 1 (B)
-        assert_eq!(ordered[0], (0.0, 0)); // A
-        assert_eq!(ordered[1], (0.0, 0)); // C
-        assert_eq!(ordered[2], (1.0, 1)); // B
+        assert_eq!(ordered[0], (0.0, 0, 0)); // A
+        assert_eq!(ordered[1], (0.0, 0, 0)); // C
+        assert_eq!(ordered[2], (1.0, 0, 1)); // B
     }
 
     /// Within the same layer and texture, submission order is preserved.
     #[test]
     fn sort_preserves_submission_order_within_same_layer_and_texture() {
         let mut sr = SpriteRendererCpu::default();
-        sr.pending.push((TextureId(0), 0.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // first
-        sr.pending.push((TextureId(0), 0.0, SpriteInstance::colored([1.0; 2], [1.0; 2], [1.0; 4]))); // second
+        sr.pending.push((TextureId(0), 0, 0.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // first
+        sr.pending.push((TextureId(0), 0, 0.0, SpriteInstance::colored([1.0; 2], [1.0; 2], [1.0; 2]), [1.0; 4])); // second
 
-        let mut ordered: Vec<(f32, u32)> = sr
+        let mut ordered: Vec<(f32, u32, u32)> = sr
             .pending
             .iter()
-            .map(|(tex, layer, _)| (*layer, tex.0))
+            .map(|(tex, mat, layer, _)| (*layer, *mat, tex.0))
             .collect();
-        ordered.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then_with(|| a.1.cmp(&b.1)));
+        ordered.sort_by(|a, b| {
+            a.0.partial_cmp(&b.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.1.cmp(&b.1))
+                .then_with(|| a.2.cmp(&b.2))
+        });
 
-        assert_eq!(ordered[0], (0.0, 0));
-        assert_eq!(ordered[1], (0.0, 0));
+        assert_eq!(ordered[0], (0.0, 0, 0));
+        assert_eq!(ordered[1], (0.0, 0, 0));
     }
 
     #[test]
@@ -512,7 +645,7 @@ mod tests {
 
     #[derive(Default)]
     struct SpriteRendererCpu {
-        pending: Vec<(TextureId, f32, SpriteInstance)>,
+        pending: Vec<(TextureId, u32, f32, SpriteInstance)>,
     }
     impl SpriteRendererCpu {
         fn push(&mut self, inst: SpriteInstance) {
@@ -520,14 +653,18 @@ mod tests {
         }
         fn push_textured(&mut self, texture: TextureId, inst: SpriteInstance) {
             if self.pending.len() < MAX_SPRITES {
-                self.pending.push((texture, 0.0, inst));
+                self.pending.push((texture, inst.material_id, 0.0, inst));
             }
         }
         fn len(&self) -> usize {
             self.pending.len()
         }
         fn draw_calls_if_flushed(&self) -> u32 {
-            let mut ids: Vec<_> = self.pending.iter().map(|(t, _, _)| t.0).collect();
+            let mut ids: Vec<_> = self
+                .pending
+                .iter()
+                .map(|(t, _, _, _)| t.0)
+                .collect();
             ids.sort_unstable();
             ids.dedup();
             ids.len() as u32

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use kiln_core::project::Project;
-use kiln_core::Transform;
+use kiln_core::{PrefabInstance, Transform};
 use kiln_runtime::{GameWorld, Role, SourceId, Sprite, Tilemap};
 
 /// The components a new scene entity gets.
@@ -190,6 +190,8 @@ pub fn prefab_from_entity(entity: &kiln_core::project::Entity, name: &str) -> ki
 ///
 /// The instance keeps the components of the prefab and gets its own source
 /// id, so it is saved with the scene like every other entity.
+/// A `PrefabInstance` component is added so that edits to the prefab can be
+/// propagated to all instances.
 pub fn instantiate_prefab(
     world: &mut GameWorld,
     prefab: &kiln_core::Prefab,
@@ -217,8 +219,114 @@ pub fn instantiate_prefab(
         }
     }
 
-    world.spawn((transform, sprite, SourceId::new(id.clone())));
+    let prefab_instance = PrefabInstance {
+        prefab_id: prefab.id.clone(),
+        entity_id: id.clone(),
+        overrides: kiln_core::PrefabOverride::new(id.clone()),
+    };
+
+    world.spawn((
+        transform,
+        sprite,
+        SourceId::new(id.clone()),
+        prefab_instance,
+    ));
     Some(id)
+}
+
+/// Re-apply a prefab to all ECS instances that reference it.
+///
+/// This finds all entities with a `PrefabInstance` component whose
+/// `prefab_id` matches the given prefab, and rebuilds their transform and
+/// sprite from the prefab data while preserving instance-level overrides.
+pub fn update_prefab_instances(
+    world: &mut GameWorld,
+    prefab: &kiln_core::Prefab,
+) -> usize {
+    let mut updated = 0;
+
+    // Collect entities that are instances of this prefab
+    let instance_entities: Vec<hecs::Entity> = world
+        .world_ref()
+        .query::<(&PrefabInstance, &SourceId)>()
+        .iter()
+        .filter_map(|(entity, (prefab_instance, source_id))| {
+            if prefab_instance.prefab_id == prefab.id {
+                Some(entity)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    for entity in instance_entities {
+        // Get the source id to find the overrides
+        let source_id = world
+            .world_ref()
+            .get::<&SourceId>(entity)
+            .map(|sid| sid.0.clone())
+            .unwrap_or_default();
+
+        // Rebuild transform and sprite from prefab
+        let mut transform = Transform::new(0.0, 0.0);
+        let mut sprite = Sprite::new(1.0, 1.0, 1.0, 1.0).with_size(32.0, 32.0);
+
+        for component in &prefab.root_entity.components {
+            match component {
+                kiln_core::project::Component::Transform {
+                    x, y, rotation, scale, ..
+                } => {
+                    transform = Transform::new(*x, *y)
+                        .with_rotation(*rotation)
+                        .with_scale(kiln_core::Vec2::splat(*scale));
+                }
+                kiln_core::project::Component::Sprite { color, texture, layer } => {
+                    sprite = Sprite::new(color[0], color[1], color[2], color[3])
+                        .with_size(DEFAULT_SPRITE_SIZE[0], DEFAULT_SPRITE_SIZE[1])
+                        .with_layer(layer);
+                    if let Some(path) = texture {
+                        // Texture override would need asset loading; skip for now
+                        let _ = path;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Apply instance overrides
+        if let Ok(mut prefab_inst) = world.world_mut().get_one::<&mut PrefabInstance>(entity) {
+            for (comp_name, comp_override) in &prefab_inst.overrides.overrides {
+                match comp_name.as_str() {
+                    "transform" | "Transform" => {
+                        if let kiln_core::prefab::ComponentOverride::Transform { x, y, rotation, scale } = comp_override {
+                            if let Some(v) = x { transform.position.x = *v; }
+                            if let Some(v) = y { transform.position.y = *v; }
+                            if let Some(v) = rotation { transform.rotation = *v; }
+                            if let Some(v) = scale { transform.scale = kiln_core::Vec2::splat(*v); }
+                        }
+                    }
+                    "sprite" | "Sprite" => {
+                        if let kiln_core::prefab::ComponentOverride::Sprite { color, texture } = comp_override {
+                            if let Some(c) = color { sprite.color = *c; }
+                            if let Some(t) = texture {
+                                let _ = t; // Texture override handled by asset system
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // Write back to the entity
+        let _ = world
+            .world_mut()
+            .insert_one(entity, transform);
+        let _ = world.world_mut().insert_one(entity, sprite);
+        updated += 1;
+    }
+
+    updated
 }
 
 /// The default size of a sprite without a texture, in world units.

@@ -1,6 +1,7 @@
 //! Project file format
 
 use crate::tilemap::{TileMap, TileSet};
+use kiln_anim::Clip;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -26,6 +27,38 @@ pub struct Project {
     /// Tilesets of the project, keyed by their id.
     #[serde(default)]
     pub tilesets: HashMap<String, TileSet>,
+    /// Animation clips of the project, keyed by their id.
+    #[serde(default)]
+    pub animation_clips: HashMap<String, Clip>,
+    /// Shader programs of the project, keyed by their id.
+    #[serde(default)]
+    pub shaders: HashMap<String, Shader>,
+    /// Materials of the project, keyed by their id.
+    #[serde(default)]
+    pub materials: HashMap<String, Material>,
+    /// Audio assets of the project, keyed by their name.
+    #[serde(default)]
+    pub audio_assets: Vec<AudioAsset>,
+    /// SDF font assets of the project, keyed by their id.
+    #[serde(default)]
+    pub sdf_fonts: HashMap<String, SdfFont>,
+}
+
+/// An audio asset reference in the project.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioAsset {
+    /// Unique audio identifier.
+    pub id: String,
+    /// Human-readable name.
+    pub name: String,
+    /// Asset path of the audio file.
+    pub path: String,
+    /// Whether this is music (looped, single instance) or sound effect.
+    #[serde(default)]
+    pub is_music: bool,
+    /// Volume (0.0 to 1.0).
+    #[serde(default = "1.0")]
+    pub volume: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,6 +218,17 @@ pub enum Component {
         /// tinted by `color`.
         #[serde(default)]
         texture: Option<String>,
+        /// Sorting layer — sprites on lower layers are drawn first.
+        /// Preserves painter order for transparent sprites across textures.
+        #[serde(default)]
+        layer: f32,
+        /// Optional material reference for custom shader rendering.
+        #[serde(default)]
+        material: Option<String>,
+        /// Optional name of an animation clip from `animation_clips` to play
+        /// on this sprite.
+        #[serde(default)]
+        animation_clip: Option<String>,
     },
     /// A tilemap instance placed in the scene.
     Tilemap {
@@ -461,5 +505,72 @@ mod tests {
         assert_eq!(mobile.ios.bundle_identifier, "com.example.game");
         assert_eq!(mobile.android.package_name, "com.example.game");
         assert_eq!(mobile.android.target_sdk, 33);
+    }
+}
+
+/// A WGSL shader program for custom sprite rendering.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Shader {
+    /// Unique shader identifier.
+    pub id: String,
+    /// Human-readable name.
+    pub name: String,
+    /// WGSL source code for the fragment shader.
+    /// The shader receives position, size, color, uv_rect as inputs
+    /// and outputs a color.
+    pub source: String,
+    /// Entry point function name.
+    #[serde(default)]
+    pub entry_point: String,
+}
+
+/// Signed Distance Field font asset for high-quality text rendering.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SdfFont {
+    /// Unique font identifier.
+    pub id: String,
+    /// Human-readable font name.
+    pub name: String,
+    /// Asset path to the SDF font texture atlas.
+    pub texture_path: String,
+    /// Atlas texture width in pixels.
+    pub atlas_width: u32,
+    /// Atlas texture height in pixels.
+    pub atlas_height: u32,
+    /// Glyph metrics: character code -> glyph metrics.
+    #[serde(default)]
+    pub glyphs: HashMap<char, GlyphMetrics>,
+    /// Base line height in pixels.
+    pub line_height: f32,
+    /// Space character advance width in pixels.
+    pub space_advance: f32,
+    /// Tab width in spaces.
+    #[serde(default)]
+    pub tab_width: u32,
+}
+
+/// Glyph metrics for an SDF font glyph.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GlyphMetrics {
+    /// Character code.
+    pub codepoint: char,
+    /// Glyph position in the atlas texture (x, y).
+    pub offset: [f32; 2],
+    /// Glyph size in pixels (width, height).
+    pub size: [f32; 2],
+    /// Glyph bearing (offset from origin to left edge).
+    pub bearing: [f32; 2],
+    /// Advance width for the next character.
+    pub advance: f32,
+}
+impl Default for GlyphMetrics {
+    fn default() -> Self {
+        GlyphMetrics {
+            codepoint: ' ',
+            offset: [0.0, 0.0],
+            size: [0.0, 0.0],
+            bearing: [0.0, 0.0],
+            advance: 0.0,
+        }
     }
 }

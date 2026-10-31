@@ -17,6 +17,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use thiserror::Error;
 use winit::{
+    event::{ElementState, Key, KeyEvent, NamedKey, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop},
     window::Window,
 };
@@ -37,6 +38,7 @@ use crate::audio_editor::AudioEditorState;
 use crate::vfx_editor::VfxEditorState;
 use crate::debugger_panel::DebuggerPanel;
 use crate::profiler_panel::ProfilerPanel;
+use crate::shader_editor::{render_shader_editor, ShaderEditorState};
 use crate::project_hub::ProjectHubState;
 use crate::scene_view::{self, SceneTextures, ViewportRect};
 use crate::tilemap_editor::TilemapEditorState;
@@ -146,6 +148,7 @@ pub struct EditorApp {
     build_panel: BuildPanel,
     project_hub: ProjectHubState,
     profiler_panel: ProfilerPanel,
+    shader_editor: ShaderEditorState,
     debugger_panel: DebuggerPanel,
     vfx_editor: VfxEditorState,
     audio_editor: AudioEditorState,
@@ -162,6 +165,8 @@ pub struct EditorApp {
     project_path: Option<PathBuf>,
     current_project: Option<Project>,
     asset_browser: AssetBrowser,
+    /// Transform gizmo state for visual entity manipulation.
+    gizmo: GizmoState,
     /// Set by the welcome screen, handled after the UI pass.
     open_project_requested: bool,
     /// Set by the scene toolbar, handled after the UI pass.
@@ -174,6 +179,54 @@ pub struct EditorApp {
     scene_tabs: Vec<SceneTab>,
     /// Currently active scene tab index.
     active_scene_tab: Option<usize>,
+}
+
+/// Transform gizmo mode for visual entity manipulation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GizmoMode {
+    None,
+    Translate,
+    Rotate,
+    Scale,
+}
+
+/// Transform gizmo state for dragging entities in the scene view.
+#[derive(Debug, Clone, Default)]
+struct GizmoState {
+    mode: GizmoMode,
+    active_axis: Option<GizmoAxis>,
+    /// Screen-space position where the drag started (pixels, top-left origin).
+    drag_start_screen_pos: Option<(f64, f64)>,
+    /// World-space position where the drag started.
+    drag_start_world_pos: Option<(f32, f32)>,
+}
+
+/// Gizmo axis for translate/rotate/scale operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GizmoAxis {
+    X,
+    Y,
+    Both,
+}
+
+impl Default for GizmoMode {
+    fn default() -> Self {
+        GizmoMode::Translate
+    }
+}
+
+/// Convert screen-space mouse position to world-space using the camera.
+fn screen_to_world(
+    camera: &Camera,
+    screen_x: f64,
+    screen_y: f64,
+    viewport_width: f64,
+    viewport_height: f64,
+) -> (f32, f32) {
+    let world_x = camera.position[0] + screen_x as f32 / camera.zoom;
+    // Y grows up in world space, down in screen space
+    let world_y = camera.position[1] + (viewport_height as f32 - screen_y as f32) / camera.zoom;
+    (world_x, world_y)
 }
 
 /// A scene tab entry for the scene tabs bar.
@@ -210,6 +263,7 @@ enum Tab {
     VfxEditor,
     AudioEditor,
     PhysicsEditor,
+    ShaderEditor,
     UiLayoutEditor,
     Preferences,
     PluginManagerPanel,
@@ -252,6 +306,7 @@ enum Tab {
     VfxEditor,
     AudioEditor,
     PhysicsEditor,
+    ShaderEditor,
     UiLayoutEditor,
     Preferences,
 }
@@ -679,6 +734,7 @@ impl EditorApp {
             build_panel: BuildPanel::new(),
             project_hub: ProjectHubState::new(),
             profiler_panel: ProfilerPanel::new(),
+            shader_editor: ShaderEditorState::new(),
             debugger_panel: DebuggerPanel::new(),
             vfx_editor: VfxEditorState::new(),
             audio_editor: AudioEditorState::new(),
@@ -700,6 +756,7 @@ impl EditorApp {
             scene_load_requested: false,
             scene_tabs: Vec::new(),
             active_scene_tab: None,
+            gizmo: GizmoState::default(),
         })
     }
 
@@ -1346,7 +1403,105 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                 }
             }
+            WindowEvent::MouseInput {
+                state,
+                button: winit::event::MouseButton::Left,
+                ..
+            } => {
+                // Gizmo drag start/stop on the scene view canvas
+                if self.gizmo.mode == GizmoMode::Translate {
+                    if let Some(rect) = self.scene_view_rect {
+                        let mouse_over = self.mouse_x >= rect.min.x
+                            && self.mouse_x < rect.max.x
+                            && self.mouse_y >= rect.min.y
+                            && self.mouse_y < rect.max.y;
+                        if mouse_over {
+                            if state.is_pressed() {
+                                // Start drag
+                                if let Some(entity) = self.selected_entity {
+                                    let (wx, wy) = screen_to_world(
+                                        &self.camera,
+                                        self.mouse_x,
+                                        self.mouse_y,
+                                        size.width as f64,
+                                        size.height as f64,
+                                    );
+                                    self.gizmo.drag_start_screen_pos =
+                                        Some((self.mouse_x, self.mouse_y));
+                                    self.gizmo.drag_start_world_pos = Some((wx, wy));
+                                    // Record current transform for undo
+                                    if let Some((_, transform)) = self
+                                        .world
+                                        .world()
+                                        .query::<(hecs::Entity, &Transform)>()
+                                        .iter()
+                                        .find(|(e, _)| *e == entity)
+                                    {
+                                        self.gizmo.drag_start_transform = Some((
+                                            transform.position.x,
+                                            transform.position.y,
+                                            transform.rotation,
+                                        ));
+                                    }
+                                }
+                            } else {
+                                // End drag - record history
+                                if let Some(entity) = self.selected_entity {
+                                    let before = scene_from_world(
+                                        &*self.world,
+                                        self.entity_textures,
+                                        self.entity_roles,
+                                        self.current_project.as_ref(),
+                                    );
+                                    if let Ok(mut transform) = self
+                                        .world
+                                        .world_mut()
+                                        .get_mut::<&mut Transform>(entity)
+                                    {
+                                        // Record the change for undo
+                                        let after = scene_from_world(
+                                            &*self.world,
+                                            self.entity_textures,
+                                            self.entity_roles,
+                                            self.current_project.as_ref(),
+                                        );
+                                        // Only record if something changed
+                                        if before != after {
+                                            self.history.record(before);
+                                        }
+                                    }
+                                    self.gizmo.drag_start_screen_pos = None;
+                                    self.gizmo.drag_start_world_pos = None;
+                                    self.gizmo.drag_start_transform = None;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             _ => {}
+        }
+
+        // Gizmo mode keyboard shortcuts (W/E/R like Unity)
+        if let WindowEvent::KeyboardInput {
+            event:
+                KeyEvent {
+                    logical_key: key,
+                    state: ElementState::Pressed,
+                    ..
+                },
+            ..
+        } = event
+        {
+            if !response.consumed {
+                match key {
+                    Key::Named(NamedKey::W) => self.gizmo.mode = GizmoMode::Translate,
+                    Key::Named(NamedKey::E) => self.gizmo.mode = GizmoMode::Rotate,
+                    Key::Named(NamedKey::R) => self.gizmo.mode = GizmoMode::Scale,
+                    Key::Named(NamedKey::Escape) => self.gizmo.mode = GizmoMode::None,
+                    _ => {}
+                }
+            }
         }
 
         // Early return if egui handled the event
@@ -1387,6 +1542,31 @@ impl winit::application::ApplicationHandler for EditorApp {
         let size = gpu.window.inner_size();
         if size.width == 0 || size.height == 0 {
             return;
+        }
+
+        // Apply gizmo drag to selected entity (translate mode)
+        if self.gizmo.mode == GizmoMode::Translate {
+            if let Some((start_world_x, start_world_y)) = self.gizmo.drag_start_world_pos {
+                if let Some(entity) = self.selected_entity {
+                    let (current_world_x, current_world_y) = screen_to_world(
+                        &self.camera,
+                        self.mouse_x,
+                        self.mouse_y,
+                        size.width as f64,
+                        size.height as f64,
+                    );
+                    let dx = current_world_x - start_world_x;
+                    let dy = current_world_y - start_world_y;
+                    if dx != 0.0 || dy != 0.0 {
+                        if let Ok(mut transform) =
+                            self.world.world_mut().get_mut::<&mut Transform>(entity)
+                        {
+                            transform.position.x += dx;
+                            transform.position.y += dy;
+                        }
+                    }
+                }
+            }
         }
 
         // Apply tier change if needed
@@ -1536,6 +1716,14 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     if ui.button("Physics Editor").clicked() {
                         self.dock_state.add_window(vec![Tab::PhysicsEditor]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Shader Editor").clicked() {
+                        self.dock_state.add_window(vec![Tab::ShaderEditor]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Shader Editor").clicked() {
+                        self.dock_state.add_window(vec![Tab::ShaderEditor]);
                         ui.close_menu();
                     }
                     if ui.button("UI Layout Editor").clicked() {
@@ -2459,6 +2647,22 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                         ui.separator();
 
+                        // Gizmo mode toggle
+                        let gizmo_mode_label = match self.gizmo.mode {
+                            GizmoMode::Translate => "Gizmo: Move",
+                            GizmoMode::Rotate => "Gizmo: Rotate",
+                            GizmoMode::Scale => "Gizmo: Scale",
+                            GizmoMode::None => "Gizmo: None",
+                        };
+                        if ui.button(gizmo_mode_label).clicked() {
+                            self.gizmo.mode = match self.gizmo.mode {
+                                GizmoMode::None => GizmoMode::Translate,
+                                GizmoMode::Translate => GizmoMode::Rotate,
+                                GizmoMode::Rotate => GizmoMode::Scale,
+                                GizmoMode::Scale => GizmoMode::None,
+                            };
+                        }
+
                         if ui.button("Save Scene").clicked() {
                             *self.scene_save_requested = true;
                         }
@@ -2518,6 +2722,33 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     // loop, which converts it to pixels and draws the scene
                     // with the engine's sprite renderer.
                     *self.scene_view_rect = Some(rect);
+
+                    // Draw gizmo mode indicator in the top-left of the scene view
+                    if self.gizmo.mode != GizmoMode::None {
+                        if let Some(entity) = self.selected_entity {
+                            let gizmo_color = match self.gizmo.mode {
+                                GizmoMode::Translate => egui::Color32::from_rgb(255, 0, 0),
+                                GizmoMode::Rotate => egui::Color32::from_rgb(0, 255, 0),
+                                GizmoMode::Scale => egui::Color32::from_rgb(0, 0, 255),
+                                GizmoMode::None => egui::Color32::from_rgb(128, 128, 128),
+                            };
+                            ui.painter().rect_filled(
+                                egui::Rect::from_min_size(
+                                    rect.min + egui::vec2(8.0, 8.0),
+                                    egui::vec2(16.0, 16.0),
+                                ),
+                                4.0,
+                                gizmo_color,
+                            );
+                            ui.painter().text(
+                                rect.min + egui::vec2(28.0, 12.0),
+                                egui::Align2::LEFT_TOP,
+                                format!("Gizmo: {:?}", self.gizmo.mode),
+                                egui::TextStyle::Small,
+                                gizmo_color,
+                            );
+                        }
+                    }
 
                     // The grid is drawn by the engine as world-space quads, so
                     // it lines up with the world instead of the panel.
@@ -3381,57 +3612,32 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                     ui.add_space(8.0);
 
-                    // Prefab list
-                    egui::Frame::none()
-                        .fill(egui::Color32::from_rgb(35, 35, 40))
-                        .rounding(4.0)
-                        .inner_margin(12.0)
-                        .show(ui, |ui| {
-                            ui.strong("Prefabs");
-                            ui.add_space(8.0);
+                    ui.add_space(8.0);
 
-                            egui::ScrollArea::vertical()
-                                .max_height(ui.available_height())
-                                .show(ui, |ui| {
-                                    let prefab_ids: Vec<(String, String)> = self.prefab_editor
-                                        .prefab_list()
-                                        .iter()
-                                        .map(|p| (p.id.clone(), p.name.clone()))
-                                        .collect();
+                    // Render the prefab editor panel (list + override editor).
+                    // Returns true if overrides were applied, in which case we
+                    // update all ECS instances to match the edited prefab.
+                    if self.prefab_editor.render(ui) {
+                        let prefabs: Vec<_> = self
+                            .prefab_editor
+                            .state
+                            .prefab_list()
+                            .iter()
+                            .cloned()
+                            .collect();
+                        for prefab in prefabs {
+                            let updated =
+                                crate::editing::update_prefab_instances(&mut self.world, &prefab);
+                            if updated > 0 {
+                                self.log(&format!(
+                                    "[INFO] Updated {} instances of prefab '{}'",
+                                    updated, prefab.name
+                                ));
+                            }
+                        }
+                    }
+                };
 
-                                    let is_empty = prefab_ids.is_empty();
-
-                                    for (prefab_id, prefab_name) in prefab_ids {
-                                        let selected =
-                                            self.prefab_editor.selected_prefab_id() == Some(prefab_id.as_str());
-                                        ui.horizontal(|ui| {
-                                            if selected {
-                                                ui.strong(&prefab_name);
-                                            } else {
-                                                ui.label(&prefab_name);
-                                            }
-                                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                                if ui.button("Edit").clicked() {
-                                                    // Selecting the prefab shows
-                                                    // its data, so it can be
-                                                    // changed and instantiated.
-                                                    self.prefab_editor.select_prefab(&prefab_id);
-                                                }
-                                                if ui.button("Delete").clicked() {
-                                                    self.prefab_editor.remove_prefab(&prefab_id);
-                                                }
-                                            });
-                                        });
-                                        ui.add_space(4.0);
-                                    }
-
-                                    if is_empty {
-                                        ui.label("No prefabs created yet");
-                                        ui.label("Select an entity and click 'Create Prefab from Selection'");
-                                    }
-                                });
-                        });
-                });
             }
             Tab::SceneEditor => {
                 ui.vertical(|ui| {
@@ -3612,6 +3818,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             ui,
                             &mut self.anim_editor,
                             project,
+                            &mut project.animation_clips,
                             1.0 / 60.0, // dt
                         );
                     } else {
@@ -3695,11 +3902,47 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::AudioEditor => {
                 ui.vertical(|ui| {
                     self.audio_editor.render(ui);
+                    // Connect audio editor to the slice's audio engine
+                    if let Some(play) = self.play.as_mut() {
+                        let slice = &mut play.slice;
+                        // Handle preview playback
+                        if let Some(name) = self.audio_editor.preview_asset.clone() {
+                            if self.audio_editor.preview_playing {
+                                slice.play_audio_preview(&name);
+                            } else {
+                                slice.stop_audio_preview();
+                            }
+                        }
+                        // Register all project audio assets with the slice host
+                        for (name, path) in self
+                            .project
+                            .as_ref()
+                            .map(|p| p.audio_assets.iter().map(|a| (a.name.clone(), a.path.clone())).collect::<Vec<_>>())
+                            .unwrap_or_default()
+                        {
+                            slice.register_audio(&name, &path);
+                        }
+                    }
                 });
             }
             Tab::PhysicsEditor => {
                 ui.vertical(|ui| {
                     self.physics_editor.render(ui);
+                });
+            }
+            Tab::ShaderEditor => {
+                ui.vertical(|ui| {
+                    if let Some(project) = self.current_project.as_mut() {
+                        crate::shader_editor::render_shader_editor(
+                            ui,
+                            &mut self.shader_editor,
+                            project,
+                        );
+                    } else {
+                        ui.heading("Shader Editor");
+                        ui.add_space(8.0);
+                        ui.label("Open a project to edit shaders.");
+                    }
                 });
             }
             Tab::UiLayoutEditor => {
@@ -3833,6 +4076,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::VfxEditor => "VFX Editor".into(),
             Tab::AudioEditor => "Audio Editor".into(),
             Tab::PhysicsEditor => "Physics Editor".into(),
+            Tab::ShaderEditor => "Shader Editor".into(),
             Tab::UiLayoutEditor => "UI Layout Editor".into(),
             Tab::Preferences => "Preferences".into(),
             Tab::PluginManagerPanel => "Plugin Manager".into(),

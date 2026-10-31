@@ -40,6 +40,137 @@ impl SourceId {
     }
 }
 
+/// 2D rigid body physics component.
+///
+/// When the `physics` feature is enabled, this component is synced with a
+/// rapier2d rigid body each frame. When disabled, it is a plain data holder.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RigidBody2D {
+    /// Body type: static, dynamic, or kinematic.
+    pub body_type: RigidBodyType,
+    /// Linear velocity (world units per second).
+    pub linear_velocity: [f32; 2],
+    /// Angular velocity (radians per second).
+    pub angular_velocity: f32,
+    /// Gravity scale multiplier (1.0 = normal gravity).
+    pub gravity_scale: f32,
+    /// Whether the body can sleep.
+    pub can_sleep: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RigidBodyType {
+    Static,
+    Dynamic,
+    Kinematic,
+}
+
+impl Default for RigidBody2D {
+    fn default() -> Self {
+        Self {
+            body_type: RigidBodyType::Dynamic,
+            linear_velocity: [0.0, 0.0],
+            angular_velocity: 0.0,
+            gravity_scale: 1.0,
+            can_sleep: true,
+        }
+    }
+}
+
+/// 2D collider component.
+///
+/// Defines the collision shape attached to a rigid body.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Collider2D {
+    /// Collider shape.
+    pub shape: ColliderShape,
+    /// Whether the collider is a sensor (triggers events but no physical response).
+    pub is_sensor: bool,
+    /// Friction coefficient (0.0 = frictionless, 1.0 = high friction).
+    pub friction: f32,
+    /// Restitution / bounciness (0.0 = no bounce, 1.0 = super bouncy).
+    pub restitution: f32,
+    /// Density (used for mass calculation of dynamic bodies).
+    pub density: f32,
+    /// Collision layer (0-15). Sprites on different layers won't collide
+    /// unless their masks overlap.
+    pub layer: u16,
+    /// Collision mask - which layers this collider will collide with.
+    /// Bit i is set if this collider collides with layer i.
+    pub mask: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColliderShape {
+    /// A circle with the given radius.
+    Circle { radius: f32 },
+    /// A rectangle with the given half-extents.
+    Rectangle { half_width: f32, half_height: f32 },
+}
+
+/// Handle linking an ECS entity to a rapier2d rigid body.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PhysicsBody {
+    /// rapier2d rigid body handle index.
+    pub handle: u32,
+}
+
+impl Default for Collider2D {
+    fn default() -> Self {
+        Self {
+            shape: ColliderShape::Rectangle {
+                half_width: 16.0,
+                half_height: 16.0,
+            },
+            is_sensor: false,
+            friction: 0.5,
+            restitution: 0.0,
+            density: 1.0,
+        }
+
+/// A 2D joint that connects two entities via their physics bodies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JointType {
+    /// Keeps two bodies at a fixed distance from each other.
+    Distance,
+    /// Revolute joint (hinge) - allows rotation around a point.
+    Revolute,
+    /// Prismatic joint (slider) - allows linear motion along an axis.
+    Prismatic,
+}
+
+/// A 2D joint component connecting two entities via their physics bodies.
+#[derive(Debug, Clone, Copy)]
+pub struct Joint2D {
+    /// First entity in the joint.
+    pub entity_a: String,
+    /// Second entity in the joint.
+    pub entity_b: String,
+    /// Type of joint.
+    pub joint_type: JointType,
+    /// Anchor point on entity A (local coordinates).
+    pub anchor_a: [f32; 2],
+    /// Anchor point on entity B (local coordinates).
+    pub anchor_b: [f32; 2],
+    /// Reference angle (radians) - relative angle between bodies.
+    pub reference_angle: f32,
+    /// For distance joints: target distance.
+    pub length: f32,
+    /// For prismatic joints: translation limits.
+    pub lower_translation: f32,
+    pub upper_translation: f32,
+    /// Enable translation limits.
+    pub enable_limit: bool,
+    /// Motor speed (for revolute/prismatic joints).
+    pub motor_speed: f32,
+    /// Maximum motor force/torque.
+    pub max_motor_torque: f32,
+    /// Enable motor.
+    pub enable_motor: bool,
+}
+    }
+}
+
 pub struct GameWorld {
     world: World,
 }
@@ -76,5 +207,20 @@ impl GameWorld {
 impl Default for GameWorld {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// The id of the next entity, counted from one.
+///
+/// The ids are unique within a scene, so the editor can name an entity and
+/// find it again after a reload.
+pub fn next_entity_id(existing: &[String]) -> String {
+    let mut index = 1;
+    loop {
+        let candidate = format!("entity_{index}");
+        if !existing.iter().any(|id| id == &candidate) {
+            return candidate;
+        }
+        index += 1;
     }
 }

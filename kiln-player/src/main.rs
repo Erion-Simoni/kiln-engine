@@ -8,8 +8,17 @@ use kiln_player::loader;
 use kiln_player::spawn;
 use kiln_player::textures::TextureLibrary;
 use kiln_render::{camera::Camera, sprite_renderer::SpriteInstance, Renderer, SpriteRenderer};
-use kiln_runtime::{GameLoop, GameWorld, InputState, SliceSession, Sprite, Tilemap};
-use kiln_ui::TextRenderer;
+use kiln_runtime::{
+    GameLoop, GameWorld, InputState, SliceSession, Sprite, Tilemap,
+    sync_physics_with_ecs,
+};
+use kiln_ui::{
+    layout::Rect,
+    ui_renderer::UiRenderer,
+    widget::{Button, Label, Panel, WidgetId, Widget},
+    localization::LocalizationKey,
+    render::NineSlice,
+};
 use log::info;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -18,6 +27,10 @@ use winit::event::KeyEvent;
 use winit::event_loop::EventLoop;
 use winit::keyboard::{Key, NamedKey};
 use winit::window::Window;
+
+#[cfg(feature = "gamepad")]
+use kiln_input::GamepadManager;
+use kiln_input::{Action, ActionMap, Binding, BindingType};
 
 /// The current state of the player application.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -99,9 +112,61 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Player application
-// ---------------------------------------------------------------------------
+/// Build a default action map with common keyboard/gamepad bindings.
+fn default_action_map() -> ActionMap {
+    let mut map = ActionMap::new();
+    map.add_action(Action::new("jump", "Jump").with_binding(Binding::new(BindingType::Key("Space".to_string()))));
+    map.add_action(Action::new("fire", "Fire").with_binding(Binding::new(BindingType::Key("KeyZ".to_string()))));
+    map.add_action(Action::new("interact", "Interact").with_binding(Binding::new(BindingType::Key("KeyE".to_string()))));
+    map.add_action(Action::new("left", "Move Left").with_binding(Binding::new(BindingType::Key("KeyA".to_string()))));
+    map.add_action(Action::new("right", "Move Right").with_binding(Binding::new(BindingType::Key("KeyD".to_string()))));
+    map.add_action(Action::new("up", "Move Up").with_binding(Binding::new(BindingType::Key("KeyW".to_string()))));
+    map.add_action(Action::new("down", "Move Down").with_binding(Binding::new(BindingType::Key("KeyS".to_string()))));
+    map
+}
+
+/// UI widget types that can be rendered by UiRenderer.
+#[derive(Debug, Clone)]
+enum UiWidget {
+    Button {
+        id: WidgetId,
+        bounds: Rect,
+        text_key: LocalizationKey,
+        hovered: bool,
+        pressed: bool,
+    },
+    Label {
+        id: WidgetId,
+        bounds: Rect,
+        text_key: LocalizationKey,
+    },
+    Panel {
+        id: WidgetId,
+        bounds: Rect,
+    },
+}
+
+/// Convert a winit logical key to a string name for action map lookup.
+fn key_name_string(key: &winit::keyboard::Key) -> String {
+    match key {
+        winit::keyboard::Key::Named(named) => match named {
+            NamedKey::ArrowUp => "ArrowUp".to_string(),
+            NamedKey::ArrowDown => "ArrowDown".to_string(),
+            NamedKey::ArrowLeft => "ArrowLeft".to_string(),
+            NamedKey::ArrowRight => "ArrowRight".to_string(),
+            NamedKey::Space => "Space".to_string(),
+            NamedKey::Enter => "Enter".to_string(),
+            NamedKey::Escape => "Escape".to_string(),
+            NamedKey::Shift => "Shift".to_string(),
+            NamedKey::Control => "Control".to_string(),
+            NamedKey::Alt => "Alt".to_string(),
+            _ => named.as_ref().to_string(),
+        },
+        winit::keyboard::Key::Character(c) => c.to_string(),
+        winit::keyboard::Key::Dead(_) => "Dead".to_string(),
+        winit::keyboard::Key::Unidentified(_) => "Unidentified".to_string(),
+    }
+}
 
 /// GPU state that is only available after the window is created.
 struct GpuState {
@@ -128,8 +193,27 @@ struct PlayerApp {
     textures: TextureLibrary,
     /// The gameplay script of the loaded scene, if it has one.
     slice: Option<SliceSession>,
+    /// UI commands collected from the last script frame (buttons, labels, panels).
+    ui_commands: Vec<kiln_runtime::SliceCommand>,
+    /// UI widgets built from commands, ready for rendering.
+    ui_widgets: Vec<UiWidget>,
+    /// UI renderer for drawing widgets with nine-slice backgrounds and text.
+    ui_renderer: UiRenderer,
+    /// Current mouse position (screen space, top-left origin).
+    mouse_x: f64,
+    /// Current mouse position (screen space, top-left origin).
+    mouse_y: f64,
+    /// Whether the left mouse button is currently pressed.
+    mouse_pressed: bool,
+    /// Input action mapping for get_action/get_action_axis builtins.
+    action_map: ActionMap,
+    /// Gamepad manager for hot-plug and state polling (gamepad feature only).
+    #[cfg(feature = "gamepad")]
+    gamepad_manager: Option<GamepadManager>,
     /// Keys currently held down, used to drive the player.
     held: Vec<Key>,
+    /// Currently pressed key names as strings (for action map lookup).
+    pressed_keys: Vec<String>,
     /// Width of the game window, in logical pixels.
     window_width: u32,
     /// Height of the game window, in logical pixels.
@@ -169,7 +253,17 @@ impl PlayerApp {
             assets,
             textures: TextureLibrary::default(),
             slice: None,
+            ui_commands: Vec::new(),
+            ui_widgets: Vec::new(),
+            ui_renderer: UiRenderer::new(),
+            mouse_x: 0.0,
+            mouse_y: 0.0,
+            mouse_pressed: false,
+            action_map: default_action_map(),
+            #[cfg(feature = "gamepad")]
+            gamepad_manager: GamepadManager::new().ok(),
             held: Vec::new(),
+            pressed_keys: Vec::new(),
             window_width: width,
             window_height: height,
             save_dir,
@@ -322,7 +416,13 @@ impl PlayerApp {
         (x, y)
     }
 
-    /// Save the game state to the save slot.
+    /// Check if mouse is over a rect (screen space, top-left origin).
+    fn is_mouse_over(&self, bounds: Rect) -> bool {
+        self.mouse_x >= bounds.x as f64
+            && self.mouse_x < (bounds.x + bounds.width) as f64
+            && self.mouse_y >= bounds.y as f64
+            && self.mouse_y < (bounds.y + bounds.height) as f64
+    }
     fn save_game(&mut self) {
         let Some(slice) = self.slice.as_ref() else {
             return;
@@ -349,9 +449,13 @@ impl PlayerApp {
     }
 
     fn handle_key(&mut self, event: KeyEvent) {
+        let key_name = key_name_string(&event.logical_key);
         if event.state.is_pressed() {
             if !self.held.contains(&event.logical_key) {
                 self.held.push(event.logical_key.clone());
+            }
+            if !self.pressed_keys.contains(&key_name) {
+                self.pressed_keys.push(key_name);
             }
 
             // Handle menu navigation
@@ -363,6 +467,7 @@ impl PlayerApp {
             }
         } else {
             self.held.retain(|key| *key != event.logical_key);
+            self.pressed_keys.retain(|k| k != &key_name);
         }
     }
 
@@ -460,12 +565,128 @@ impl PlayerApp {
             game_loop,
             world,
             slice,
+            ui_commands,
+            action_map,
+            mouse_x,
+            mouse_y,
+            mouse_pressed,
+            pressed_keys,
             ..
         } = self;
         game_loop.tick(|dt| {
             if let Some(slice) = slice.as_mut() {
+                // Pass mouse state to the slice host for UI click detection.
+                slice.set_mouse_state(*mouse_x, *mouse_y, *mouse_pressed);
+                // Pass action map for get_action/get_action_axis builtins.
+                slice.set_action_map(action_map.clone());
+                // Pass pressed keys for get_action/get_action_axis builtins.
+                slice.set_pressed_keys(pressed_keys);
+                // Pass save directory for save_game/load_game builtins.
+                slice.set_save_dir(&self.save_dir);
                 if let Err(e) = slice.step(world, axis, dt.as_secs_f64()) {
                     log::error!("scene script failed: {e}");
+                }
+                // Collect UI commands from the last script frame and build widgets.
+                let commands = slice.take_ui_commands();
+                *ui_commands = commands.clone();
+                *ui_widgets = commands
+                    .iter()
+                    .filter_map(|cmd| match cmd {
+                        kiln_runtime::SliceCommand::UiButton { id, x, y } => {
+                            let bounds = Rect::new(*x as f32, *y as f32, 64.0, 32.0);
+                            let hovered = self.is_mouse_over(bounds);
+                            let pressed = hovered && self.mouse_pressed;
+                            Some(UiWidget::Button {
+                                id: WidgetId::from_u64(id.hash()),
+                                bounds,
+                                text_key: LocalizationKey::new(format!("btn_{id}")),
+                                hovered,
+                                pressed,
+                            })
+                        }
+                        kiln_runtime::SliceCommand::UiLabel { id, x, y, text } => {
+                            let bounds = Rect::new(*x as f32, *y as f32, 200.0, 24.0);
+                            Some(UiWidget::Label {
+                                id: WidgetId::from_u64(id.hash()),
+                                bounds,
+                                text_key: LocalizationKey::new(text.clone()),
+                            })
+                        }
+                        kiln_runtime::SliceCommand::UiPanel { id, x, y, w, h } => {
+                            let bounds = Rect::new(*x as f32, *y as f32, *w as f32, *h as f32);
+                            Some(UiWidget::Panel {
+                                id: WidgetId::from_u64(id.hash()),
+                                bounds,
+                            })
+                        }
+                        _ => None,
+                    })
+                    .collect();
+            }
+            // Step physics (if the physics feature is enabled)
+            // Physics stepping happens inside slice.step() via sync_physics_with_ecs().
+            let _ = (world, dt);
+
+            // Poll gamepad state (gamepad feature only).
+            #[cfg(feature = "gamepad")]
+            {
+                if let Some(gp) = &mut self.gamepad_manager {
+                    let _ = gp.update();
+                    // Check connected gamepads for button/axis state
+                    let gilrs = gp.gilrs();
+                    for (_id, gamepad) in gilrs.gamepads() {
+                        // Map gamepad buttons to pressed_keys
+                        use gilrs::ev::code::*;
+                        // Button::South = A/Cross (index 0)
+                        // Button::East = B/Circle (index 1)
+                        // Button::North = X/Square (index 2)
+                        // Button::West = Y/Triangle (index 3)
+                        // Button::LeftTrigger = LT (index 4)
+                        // Button::RightTrigger = RT (index 5)
+                        // Button::LeftBumper = LB (index 6)
+                        // Button::RightBumper = RB (index 7)
+                        // Button::LeftStick = L3 (index 8)
+                        // Button::RightStick = R3 (index 9)
+                        // Button::DpadUp = D-pad up (index 10)
+                        // Button::DpadDown = D-pad down (index 11)
+                        // Button::DpadLeft = D-pad left (index 12)
+                        // Button::DpadRight = D-pad right (index 13)
+                        // Button::Start = Start (index 14)
+                        // Button::Select = Select/Back (index 15)
+                        // Button::Home = Home (index 16)
+                        for btn_idx in 0..17u8 {
+                            if gamepad.is_pressed(Button::from_index(btn_idx)) {
+                                pressed_keys.push(format!("GamepadBtn{}", btn_idx));
+                            }
+                        }
+                        // Left stick axis
+                        let lx = gamepad.value(Axis::LeftStickX);
+                        let ly = gamepad.value(Axis::LeftStickY);
+                        if lx.abs() > 0.1 {
+                            pressed_keys.push(format!("GamepadAxis0:{:.2}", lx));
+                        }
+                        if ly.abs() > 0.1 {
+                            pressed_keys.push(format!("GamepadAxis1:{:.2}", ly));
+                        }
+                        // Right stick axis
+                        let rx = gamepad.value(Axis::RightStickX);
+                        let ry = gamepad.value(Axis::RightStickY);
+                        if rx.abs() > 0.1 {
+                            pressed_keys.push(format!("GamepadAxis2:{:.2}", rx));
+                        }
+                        if ry.abs() > 0.1 {
+                            pressed_keys.push(format!("GamepadAxis3:{:.2}", ry));
+                        }
+                        // Left/right triggers
+                        let lt = gamepad.value(Axis::LeftTrigger);
+                        let rt = gamepad.value(Axis::RightTrigger);
+                        if lt.abs() > 0.1 {
+                            pressed_keys.push(format!("GamepadAxis4:{:.2}", lt));
+                        }
+                        if rt.abs() > 0.1 {
+                            pressed_keys.push(format!("GamepadAxis5:{:.2}", rt));
+                        }
+                    }
                 }
             }
         });
@@ -568,6 +789,84 @@ impl PlayerApp {
 
             gpu.sprite_renderer
                 .flush(&mut pass, &self.camera, gpu.renderer.queue());
+        }
+
+        // Render UI widgets using UiRenderer (screen-space, top-left origin).
+        if !self.ui_widgets.is_empty() {
+            let mut ui_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("ui_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: gpu.renderer.scene_target().unwrap_or(&view),
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            let ui_camera = Camera::new_top_left(size.width as f32, size.height as f32);
+            gpu.hud_sprite_renderer.begin_frame();
+
+            for widget in &self.ui_widgets {
+                match widget {
+                    UiWidget::Button { id, bounds, text_key, hovered, pressed } => {
+                        let mut button = Button::new(*id, text_key.clone());
+                        button.set_bounds(Rect::new(
+                            bounds.x,
+                            bounds.y,
+                            bounds.width,
+                            bounds.height,
+                        ));
+                        // Set button state colors based on hover/press
+                        let normal = NineSlice::new(1, 4.0);
+                        let hovered_ns = NineSlice::new(2, 4.0);
+                        let pressed_ns = NineSlice::new(3, 4.0);
+                        let button = if *pressed {
+                            button.with_normal(pressed_ns.clone())
+                        } else if *hovered {
+                            button.with_normal(hovered_ns.clone())
+                        } else {
+                            button.with_normal(normal.clone())
+                        };
+                        let quads = self.ui_renderer.render_button(&button, *hovered, *pressed);
+                        for quad in quads {
+                            gpu.hud_sprite_renderer.push_textured(quad.texture, quad.instance);
+                        }
+                    }
+                    UiWidget::Label { id, bounds, text_key } => {
+                        let mut label = Label::new(*id, text_key.clone());
+                        label.set_bounds(Rect::new(
+                            bounds.x,
+                            bounds.y,
+                            bounds.width,
+                            bounds.height,
+                        ));
+                        let quads = self.ui_renderer.render_label(&label);
+                        for instance in quads {
+                            gpu.hud_sprite_renderer.push(kiln_render::TextureId::WHITE, instance);
+                        }
+                    }
+                    UiWidget::Panel { id, bounds } => {
+                        let mut panel = Panel::new(*id);
+                        panel.set_bounds(Rect::new(
+                            bounds.x,
+                            bounds.y,
+                            bounds.width,
+                            bounds.height,
+                        ));
+                        let quads = self.ui_renderer.render_panel(&panel);
+                        for instance in quads {
+                            gpu.hud_sprite_renderer.push_textured(quad.texture, quad.instance);
+                        }
+                    }
+                }
+            }
+
+            gpu.hud_sprite_renderer
+                .flush(&mut ui_pass, &ui_camera, gpu.renderer.queue());
         }
 
         if has_post {
@@ -780,6 +1079,34 @@ impl winit::application::ApplicationHandler for PlayerApp {
             winit::event::WindowEvent::KeyboardInput { event, .. } => self.handle_key(event),
             winit::event::WindowEvent::Resized(size) => {
                 self.camera = Camera::new(size.width as f32, size.height as f32);
+            }
+            winit::event::WindowEvent::CursorMoved { position, .. } => {
+                self.mouse_x = position.x as f64;
+                self.mouse_y = position.y as f64;
+            }
+            winit::event::WindowEvent::Touch(touch) => {
+                match touch.phase {
+                    winit::event::TouchPhase::Started => {
+                        self.mouse_x = touch.location.x as f64;
+                        self.mouse_y = touch.location.y as f64;
+                        self.mouse_pressed = true;
+                    }
+                    winit::event::TouchPhase::Moved => {
+                        self.mouse_x = touch.location.x as f64;
+                        self.mouse_y = touch.location.y as f64;
+                    }
+                    winit::event::TouchPhase::Ended
+                    | winit::event::TouchPhase::Cancelled => {
+                        self.mouse_pressed = false;
+                    }
+                }
+            }
+            winit::event::WindowEvent::MouseInput {
+                state,
+                button: winit::event::MouseButton::Left,
+                ..
+            } => {
+                self.mouse_pressed = state.is_pressed();
             }
             _ => {}
         }

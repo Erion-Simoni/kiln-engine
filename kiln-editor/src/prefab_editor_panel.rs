@@ -39,7 +39,12 @@ impl PrefabEditorPanel {
 
 
     /// Render the prefab editor panel.
-    pub fn render(&mut self, ui: &mut Ui) {
+    ///
+    /// Returns `true` if prefab overrides were applied this frame, so the
+    /// host can call `update_prefab_instances` on all ECS instances.
+    pub fn render(&mut self, ui: &mut Ui) -> bool {
+        let mut applied = false;
+
         ui.heading("Prefab Editor");
         ui.add_space(8.0);
 
@@ -193,6 +198,15 @@ impl PrefabEditorPanel {
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 if ui.button("Done").clicked() {
+                    // Apply the override to the prefab in state
+                    if let Some(override_data) = self.current_override.take() {
+                        if let Some(entity_id) = &self.override_entity_id {
+                            if let Some(prefab) = self.state.get_prefab_mut(&override_data.entity_id) {
+                                prefab.apply_overrides(&mut prefab.root_entity, &override_data);
+                                applied = true;
+                            }
+                        }
+                    }
                     self.show_override_editor = false;
                 }
             });
@@ -230,6 +244,7 @@ impl PrefabEditorPanel {
                     });
             });
         }
+        applied
     }
 }
 
