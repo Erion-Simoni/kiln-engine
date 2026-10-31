@@ -581,6 +581,8 @@ impl PlayerApp {
                 slice.set_action_map(action_map.clone());
                 // Pass pressed keys for get_action/get_action_axis builtins.
                 slice.set_pressed_keys(pressed_keys);
+                // Pass save directory for save_game/load_game builtins.
+                slice.set_save_dir(&self.save_dir);
                 if let Err(e) = slice.step(world, axis, dt.as_secs_f64()) {
                     log::error!("scene script failed: {e}");
                 }

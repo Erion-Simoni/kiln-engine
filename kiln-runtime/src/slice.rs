@@ -89,6 +89,9 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("get_action_axis", 44, 1),  // action_name -> -1 to 1 value
     // Localization (45)
     ("localize", 45, 1),         // key -> localized string
+    // Save/load (46-47)
+    ("save_game", 46, 1),        // slot_id -> bool
+    ("load_game", 47, 1),        // slot_id -> bool
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -224,6 +227,10 @@ pub enum SliceCommand {
         w: f64,
         h: f64,
     },
+    /// Load a save slot.
+    LoadGame {
+        slot: u32,
+    },
 }
 
 /// The persistent state of a slice.
@@ -284,6 +291,10 @@ pub struct SliceHost {
     action_map: kiln_input::ActionMap,
     /// Localization data for translating string keys.
     localization: Option<kiln_ui::Localization>,
+    /// Directory where save slots are written.
+    save_dir: Option<std::path::PathBuf>,
+    /// Current persistent state (synced from SliceSession each frame).
+    state: SliceState,
     /// Current mouse position (screen space, top-left origin).
     mouse_x: f64,
     /// Current mouse position (screen space, top-left origin).
@@ -313,6 +324,8 @@ impl SliceHost {
             ui_buttons: Vec::new(),
             action_map: kiln_input::ActionMap::new(),
             localization: None,
+            save_dir: None,
+            state: SliceState::default(),
             mouse_x: 0.0,
             mouse_y: 0.0,
             mouse_pressed: false,
@@ -357,6 +370,11 @@ impl SliceHost {
     /// Set the localization data (called by the host before each step).
     pub fn set_localization(&mut self, localization: kiln_ui::Localization) {
         self.localization = Some(localization);
+    }
+
+    /// Set the save directory (called by the host before each step).
+    pub fn set_save_dir(&mut self, dir: &std::path::Path) {
+        self.save_dir = Some(dir.to_path_buf());
     }
 
     /// Set the currently pressed keys (called by the host before each step).
@@ -821,6 +839,24 @@ impl SliceHost {
                     Ok(Value::Str(key.to_string()))
                 }
             }
+            // Save/load (46-47)
+            46 => {
+                // save_game(slot_id) -> bool
+                let slot = args.first().and_then(|v| v.as_i64()).unwrap_or(0) as u32;
+                let Some(dir) = &self.save_dir else {
+                    return Ok(Value::Bool(false));
+                };
+                match save_state(dir, slot, &self.state) {
+                    Ok(()) => Ok(Value::Bool(true)),
+                    Err(_) => Ok(Value::Bool(false)),
+                }
+            }
+            47 => {
+                // load_game(slot_id) -> bool
+                let slot = args.first().and_then(|v| v.as_i64()).unwrap_or(0) as u32;
+                self.commands.push(SliceCommand::LoadGame { slot });
+                Ok(Value::Bool(true))
+            }
             _ => Err(VmError::HostCallError(format!(
                 "unknown slice builtin id {func_id}"
             ))),
@@ -905,6 +941,9 @@ impl SliceSession {
     ) -> Result<(), VmError> {
         self.state.elapsed += dt;
 
+        // Sync persistent state to host so save_game can access it.
+        self.vm.host_mut().state = self.state.clone();
+
         // Reset per-frame UI click state (clicks only last one frame).
         self.ui_widgets.clear();
 
@@ -948,6 +987,9 @@ impl SliceSession {
                 }
             }
         }
+
+        // Sync host state back to session (e.g., after LoadGame).
+        self.state = self.vm.host_mut().state.clone();
 
         // Detect UI button clicks: check if any button rect contains the mouse
         // and the left button was pressed this frame.
@@ -1303,6 +1345,14 @@ impl SliceSession {
             }
             // UI commands are no-ops in apply() — they are handled via take_ui_commands().
             SliceCommand::UiButton { .. } | SliceCommand::UiLabel { .. } | SliceCommand::UiPanel { .. } => {}
+            SliceCommand::LoadGame { slot } => {
+                // Load state from disk and apply it to the session + world.
+                if let Some(dir) = &self.save_dir {
+                    if let Ok(loaded) = load_state(dir, *slot) {
+                        self.state = loaded;
+                    }
+                }
+            }
         }
     }
     /// Make the world match the slice state: collected pickups are removed and
