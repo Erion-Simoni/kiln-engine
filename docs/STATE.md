@@ -66,7 +66,7 @@ checkbox optimism in `docs/ROADMAP.md`.
 
 ## Done (this session)
 
-**Branch:** `cline/fix-build-issues-and-sprite-order` (pushed to origin)
+**Branch:** `cline/fix-gameplay-api-entities-components` (21 commits, pushed to origin)
 
 **Compile blockers fixed:**
 
