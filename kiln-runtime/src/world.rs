@@ -92,6 +92,12 @@ pub struct Collider2D {
     pub restitution: f32,
     /// Density (used for mass calculation of dynamic bodies).
     pub density: f32,
+    /// Collision layer (0-15). Sprites on different layers won't collide
+    /// unless their masks overlap.
+    pub layer: u16,
+    /// Collision mask - which layers this collider will collide with.
+    /// Bit i is set if this collider collides with layer i.
+    pub mask: u16,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

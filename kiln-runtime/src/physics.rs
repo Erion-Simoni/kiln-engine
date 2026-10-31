@@ -212,7 +212,8 @@ pub fn sync_physics_with_ecs(
                 .friction(col.friction)
                 .restitution(col.restitution)
                 .density(col.density)
-                .sensor(col.is_sensor),
+                .sensor(col.is_sensor)
+                .collision_groups(rapier2d::pipeline::CollisionGroups::new(col.layer, col.mask)),
             ColliderShape::Rectangle {
                 half_width,
                 half_height,
@@ -220,7 +221,8 @@ pub fn sync_physics_with_ecs(
                 .friction(col.friction)
                 .restitution(col.restitution)
                 .density(col.density)
-                .sensor(col.is_sensor),
+                .sensor(col.is_sensor)
+                .collision_groups(rapier2d::pipeline::CollisionGroups::new(col.layer, col.mask)),
         };
 
         physics.create_collider(collider_builder, handle);
