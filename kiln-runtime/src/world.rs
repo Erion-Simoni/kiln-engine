@@ -127,6 +127,47 @@ impl Default for Collider2D {
             restitution: 0.0,
             density: 1.0,
         }
+
+/// A 2D joint that connects two entities via their physics bodies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JointType {
+    /// Keeps two bodies at a fixed distance from each other.
+    Distance,
+    /// Revolute joint (hinge) - allows rotation around a point.
+    Revolute,
+    /// Prismatic joint (slider) - allows linear motion along an axis.
+    Prismatic,
+}
+
+/// A 2D joint component connecting two entities via their physics bodies.
+#[derive(Debug, Clone, Copy)]
+pub struct Joint2D {
+    /// First entity in the joint.
+    pub entity_a: String,
+    /// Second entity in the joint.
+    pub entity_b: String,
+    /// Type of joint.
+    pub joint_type: JointType,
+    /// Anchor point on entity A (local coordinates).
+    pub anchor_a: [f32; 2],
+    /// Anchor point on entity B (local coordinates).
+    pub anchor_b: [f32; 2],
+    /// Reference angle (radians) - relative angle between bodies.
+    pub reference_angle: f32,
+    /// For distance joints: target distance.
+    pub length: f32,
+    /// For prismatic joints: translation limits.
+    pub lower_translation: f32,
+    pub upper_translation: f32,
+    /// Enable translation limits.
+    pub enable_limit: bool,
+    /// Motor speed (for revolute/prismatic joints).
+    pub motor_speed: f32,
+    /// Maximum motor force/torque.
+    pub max_motor_torque: f32,
+    /// Enable motor.
+    pub enable_motor: bool,
+}
     }
 }
 

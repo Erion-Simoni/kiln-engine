@@ -1778,6 +1778,70 @@ impl SliceSession {
                     }
                 }
             }
+            SliceCommand::CreateJoint { source_id_a, source_id_b, joint_type, anchor_a, anchor_b, .. } => {
+                use crate::sprite::PhysicsBodyComponent;
+                use kiln_runtime::SourceId;
+                use rapier2d::prelude::{JointBuilder, RevoluteJointBuilder, DistanceJointBuilder, PrismaticJointBuilder};
+
+                // Find the physics bodies for both entities
+                let handle_a = world.world_ref().query::<(&SourceId, &PhysicsBodyComponent)>().iter()
+                    .find(|(_, (sid, _))| sid.0 == source_id_a)
+                    .map(|(_, (_, pb))| pb.handle);
+                let handle_b = world.world_ref().query::<(&SourceId, &PhysicsBodyComponent)>().iter()
+                    .find(|(_, (sid, _))| sid.0 == source_id_b)
+                    .map(|(_, (_, pb))| pb.handle);
+
+                if let (Some(&ha), Some(&hb)) = (handle_a, handle_b) {
+                    let ha = rapier2d::prelude::RigidBodyHandle::from_index(ha as usize);
+                    let hb = rapier2d::prelude::RigidBodyHandle::from_index(hb as usize);
+
+                    let joint = match joint.joint_type {
+                        JointType::Distance => {
+                            let mut builder = rapier2d::prelude::JointBuilder::new()
+                                .local_anchor1(rapier2d::math::Vector::new(joint.anchor_a[0], joint.anchor_a[1]))
+                                .local_anchor2(rapier2d::math::Vector::new(joint.anchor_b[0], joint.anchor_b[1]))
+                                .restitution(0.0)
+                                .damping(0.1)
+                                .stiffness(10.0);
+                            if joint.length > 0.0 {
+                                builder = builder.limits([joint.length, joint.length]);
+                            }
+                            builder.build()
+                        }
+                        JointType::Revolute => {
+                            let mut builder = rapier2d::prelude::RevoluteJointBuilder::new()
+                                .local_anchor1(rapier2d::math::Vector::new(joint.anchor_a[0], joint.anchor_a[1]))
+                                .local_anchor2(rapier2d::math::Vector::new(joint.anchor_b[0], joint.anchor_b[1]))
+                                .angle(joint.reference_angle);
+                            if joint.enable_limit {
+                                builder = builder.limits([joint.lower_translation, joint.upper_translation]);
+                            }
+                            if joint.enable_motor {
+                                builder = builder.motor(joint.motor_speed, joint.max_motor_torque);
+                            }
+                            builder.build()
+                        }
+                        JointType::Kinematic => {
+                            // Prismatic joint - allows linear motion along an axis
+                            let mut builder = rapier2d::prelude::PrismaticJointBuilder::new()
+                                .local_anchor1(rapier2d::math::Vector::new(joint.anchor_a[0], joint.anchor_a[1]))
+                                .local_anchor2(rapier2d::math::Vector::new(joint.anchor_b[0], joint.anchor_b[1]))
+                                .axis(rapier2d::math::Vector::new(1.0, 0.0));
+                            if joint.enable_limit {
+                                builder = builder.limits([joint.lower_translation, joint.upper_translation]);
+                            }
+                            if joint.enable_motor {
+                                builder = builder.motor(joint.motor_speed, joint.max_motor_torque);
+                            }
+                            builder.build()
+                        }
+                    };
+
+                    if let Some(world_mut) = world.world_mut() {
+                        let _ = world_mut.insert_joint(ha, hb, joint);
+                    }
+                }
+            }
         }
     }
     /// Make the world match the slice state: collected pickups are removed and
