@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use kiln_ir::{HostContext, Program, Value, Vm, VmError};
+use kiln_ir::{Debugger, HostContext, Program, Value, Vm, VmError};
 use kiln_save::slot::SaveSlotError;
 use kiln_save::SaveSlotManager;
 use kiln_script::{Diagnostic, KilnScriptFrontend, LanguageFrontend};
@@ -1219,6 +1219,7 @@ fn describe(value: &Value) -> String {
 pub struct SliceSession {
     program: Program,
     vm: Vm<SliceHost>,
+    debugger: Option<Debugger<SliceHost>>,
     state: SliceState,
     /// UI commands recorded during the last script run (buttons, labels, panels).
     ui_commands: Vec<SliceCommand>,
@@ -1239,10 +1240,14 @@ impl SliceSession {
         let program = frontend.compile(source)?;
         let mut host = SliceHost::default();
         host.action_map = action_map;
-        let vm = Vm::new(host);
+        let vm = Vm::new(host.clone());
+        let mut host = SliceHost::default();
+        host.action_map = action_map;
+        let debugger = Debugger::new(program.clone(), host);
         Ok(Self {
             program,
             vm,
+            debugger: Some(debugger),
             state: SliceState::default(),
             ui_commands: Vec::new(),
         })
@@ -1267,6 +1272,26 @@ impl SliceSession {
     /// that the script requested to be drawn this frame.
     pub fn take_ui_commands(&mut self) -> Vec<SliceCommand> {
         std::mem::take(&mut self.ui_commands)
+    }
+
+    /// Get a mutable reference to the debugger, if available.
+    pub fn debugger_mut(&mut self) -> Option<&mut Debugger<SliceHost>> {
+        self.debugger.as_mut()
+    }
+
+    /// Get an immutable reference to the debugger, if available.
+    pub fn debugger(&self) -> Option<&Debugger<SliceHost>> {
+        self.debugger.as_ref()
+    }
+
+    /// Take the debugger out of the session (for transferring to another context).
+    pub fn take_debugger(&mut self) -> Option<Debugger<SliceHost>> {
+        self.debugger.take()
+    }
+
+    /// Replace the debugger (e.g., after hot-reload).
+    pub fn set_debugger(&mut self, debugger: Debugger<SliceHost>) {
+        self.debugger = Some(debugger);
     }
 
     /// Replace the state of the slice.

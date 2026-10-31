@@ -150,6 +150,7 @@ pub struct EditorApp {
     profiler_panel: ProfilerPanel,
     shader_editor: ShaderEditorState,
     debugger_panel: DebuggerPanel,
+    sprite_editor: SpriteEditorState,
     vfx_editor: VfxEditorState,
     audio_editor: AudioEditorState,
     physics_editor: PhysicsEditorState,
@@ -271,6 +272,7 @@ enum Tab {
     PrefabEditorPanel,
     VersionControl,
     InputRebind,
+    SpriteEditor,
 }
 }
 
@@ -741,6 +743,7 @@ impl EditorApp {
             profiler_panel: ProfilerPanel::new(),
             shader_editor: ShaderEditorState::new(),
             debugger_panel: DebuggerPanel::new(),
+            sprite_editor: SpriteEditorState::new(),
             vfx_editor: VfxEditorState::new(),
             audio_editor: AudioEditorState::new(),
             physics_editor: PhysicsEditorState::new(),
@@ -1746,6 +1749,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     if ui.button("Input Rebinding").clicked() {
                         self.dock_state.add_window(vec![Tab::InputRebind]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Sprite Editor").clicked() {
+                        self.dock_state.add_window(vec![Tab::SpriteEditor]);
                         ui.close_menu();
                     }
                     if ui.button("Plugin Manager").clicked() {
@@ -3890,17 +3897,19 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             }
             Tab::DebuggerPanel => {
                 ui.vertical(|ui| {
-                    if let Some(gpu) = self.gpu.as_ref() {
-                        // Debugger would need access to the SliceSession/VM
-                        // For now, show placeholder
+                    if let Some(play) = &mut self.play {
+                        // Use the SliceSession's debugger
+                        if let Some(debugger) = play.slice.debugger_mut() {
+                            self.debugger_panel.render(ui, debugger);
+                        } else {
+                            ui.heading("KilnScript Debugger");
+                            ui.add_space(8.0);
+                            ui.label("Debugger not available");
+                        }
+                    } else {
                         ui.heading("KilnScript Debugger");
                         ui.add_space(8.0);
-                        ui.label("Debugger panel - requires SliceSession integration");
-                        ui.label("Breakpoints, stepping, and variable inspection coming soon");
-                    } else {
-                        ui.heading("Debugger");
-                        ui.add_space(8.0);
-                        ui.label("GPU not initialized. Open a project to use debugger.");
+                        ui.label("Start a play session to use the debugger.");
                     }
                 });
             }
@@ -3983,6 +3992,17 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.heading("Input Rebinding");
                         ui.add_space(8.0);
                         ui.label("Open a project to rebind inputs.");
+                    }
+                });
+            }
+            Tab::SpriteEditor => {
+                ui.vertical(|ui| {
+                    if let Some(project) = self.current_project.as_mut() {
+                        self.sprite_editor.render(ui, project);
+                    } else {
+                        ui.heading("Sprite Editor");
+                        ui.add_space(8.0);
+                        ui.label("Open a project to edit sprites.");
                     }
                 });
             }
@@ -4103,6 +4123,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::PluginManagerPanel => "Plugin Manager".into(),
             Tab::VersionControl => "Version Control".into(),
             Tab::InputRebind => "Input Rebinding".into(),
+            Tab::SpriteEditor => "Sprite Editor".into(),
         }
     }
 }
