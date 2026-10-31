@@ -17,6 +17,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use thiserror::Error;
 use winit::{
+    event::{ElementState, Key, KeyEvent, NamedKey, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop},
     window::Window,
 };
@@ -1474,6 +1475,28 @@ impl winit::application::ApplicationHandler for EditorApp {
                 }
             }
             _ => {}
+        }
+
+        // Gizmo mode keyboard shortcuts (W/E/R like Unity)
+        if let WindowEvent::KeyboardInput {
+            event:
+                KeyEvent {
+                    logical_key: key,
+                    state: ElementState::Pressed,
+                    ..
+                },
+            ..
+        } = event
+        {
+            if !response.consumed {
+                match key {
+                    Key::Named(NamedKey::W) => self.gizmo.mode = GizmoMode::Translate,
+                    Key::Named(NamedKey::E) => self.gizmo.mode = GizmoMode::Rotate,
+                    Key::Named(NamedKey::R) => self.gizmo.mode = GizmoMode::Scale,
+                    Key::Named(NamedKey::Escape) => self.gizmo.mode = GizmoMode::None,
+                    _ => {}
+                }
+            }
         }
 
         // Early return if egui handled the event
