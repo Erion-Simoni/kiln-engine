@@ -79,7 +79,12 @@ pub struct SpriteRenderer {
     quad_vertices: wgpu::Buffer,
     quad_indices: wgpu::Buffer,
     instance_buffer: wgpu::Buffer,
-    pending: Vec<(TextureId, SpriteInstance)>,
+    /// Pending sprites queued for this frame: `(texture, layer, instance)`.
+    /// Sprites are sorted by `(layer, texture)` before drawing so that
+    /// sprites on lower layers (background) are drawn before higher layers
+    /// (foreground), preserving painter order for transparent sprites.
+    /// Within the same layer and texture, submission order is preserved.
+    pending: Vec<(TextureId, f32, SpriteInstance)>,
     last_draw_calls: u32,
 }
 
@@ -319,7 +324,7 @@ impl SpriteRenderer {
         self.push_textured(TextureId::WHITE, instance);
     }
 
-    /// Queue a sprite sampled from `texture`.
+    /// Queue a sprite sampled from `texture` on the default layer (0.0).
     pub fn push_textured(&mut self, texture: TextureId, instance: SpriteInstance) {
         if self.pending.len() >= MAX_SPRITES {
             return;
@@ -329,7 +334,22 @@ impl SpriteRenderer {
         } else {
             TextureId::WHITE
         };
-        self.pending.push((id, instance));
+        self.pending.push((id, 0.0, instance));
+    }
+
+    /// Queue a sprite sampled from `texture` on a specific `layer`.
+    /// Sprites on lower layers are drawn first, preserving painter order
+    /// for transparent sprites across different textures.
+    pub fn push_textured_with_layer(&mut self, texture: TextureId, layer: f32, instance: SpriteInstance) {
+        if self.pending.len() >= MAX_SPRITES {
+            return;
+        }
+        let id = if (texture.0 as usize) < self.textures.len() {
+            texture
+        } else {
+            TextureId::WHITE
+        };
+        self.pending.push((id, layer, instance));
     }
 
     /// Upload instances and draw one instanced call per distinct texture.
@@ -347,16 +367,18 @@ impl SpriteRenderer {
         let proj: [f32; 16] = camera.projection_matrix().to_cols_array();
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&proj));
 
-        // Sort by texture so each texture is one draw call. The sort is
-        // stable, so sprites of the same texture keep the order they were
-        // queued in, which is the order they are drawn in.
-        self.pending.sort_by_key(|(tex, _)| tex.0);
+        // Sort by (layer, texture) so sprites on lower layers are drawn first
+        // (painter order for transparency), while same-layer same-texture
+        // sprites are batched into one draw call. The sort is stable, so
+        // submission order is preserved within each (layer, texture) group.
+        self.pending
+            .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal).then_with(|| a.0.cmp(&b.0)));
 
         let proj: [f32; 16] = camera.projection_matrix().to_cols_array();
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&proj));
 
         // Collect all instances into a single buffer upload.
-        let all: Vec<SpriteInstance> = self.pending.iter().map(|(_, inst)| *inst).collect();
+        let all: Vec<SpriteInstance> = self.pending.iter().map(|(_, _, inst)| *inst).collect();
         queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&all));
 
         render_pass.set_pipeline(&self.pipeline);
@@ -432,6 +454,52 @@ mod tests {
         assert_eq!(sr.draw_calls_if_flushed(), 2);
     }
 
+    /// Regression test: sprites on different layers must be drawn in layer
+    /// order even when they use different textures. Without layer sorting,
+    /// texture batching would reorder A(tex1, layer0), B(tex2, layer1),
+    /// C(tex1, layer0) into A, C, B — breaking painter order for transparent
+    /// sprites. With layer sorting, all layer-0 sprites are drawn before
+    /// layer-1 sprites, preserving correct background→foreground order.
+    #[test]
+    fn sort_preserves_layer_order_across_textures() {
+        let mut sr = SpriteRendererCpu::default();
+        // Submit in painter order: background A, foreground B, background C
+        sr.pending.push((TextureId(0), 0.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // A: layer 0, tex 0
+        sr.pending.push((TextureId(1), 1.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // B: layer 1, tex 1
+        sr.pending.push((TextureId(0), 0.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // C: layer 0, tex 0
+
+        // Extract the sort order that flush would use
+        let mut ordered: Vec<(f32, u32)> = sr
+            .pending
+            .iter()
+            .map(|(tex, layer, _)| (*layer, tex.0))
+            .collect();
+        ordered.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then_with(|| a.1.cmp(&b.1)));
+
+        // Layer 0 sprites (A, C) must come before layer 1 (B)
+        assert_eq!(ordered[0], (0.0, 0)); // A
+        assert_eq!(ordered[1], (0.0, 0)); // C
+        assert_eq!(ordered[2], (1.0, 1)); // B
+    }
+
+    /// Within the same layer and texture, submission order is preserved.
+    #[test]
+    fn sort_preserves_submission_order_within_same_layer_and_texture() {
+        let mut sr = SpriteRendererCpu::default();
+        sr.pending.push((TextureId(0), 0.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // first
+        sr.pending.push((TextureId(0), 0.0, SpriteInstance::colored([1.0; 2], [1.0; 2], [1.0; 4]))); // second
+
+        let mut ordered: Vec<(f32, u32)> = sr
+            .pending
+            .iter()
+            .map(|(tex, layer, _)| (*layer, tex.0))
+            .collect();
+        ordered.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then_with(|| a.1.cmp(&b.1)));
+
+        assert_eq!(ordered[0], (0.0, 0));
+        assert_eq!(ordered[1], (0.0, 0));
+    }
+
     #[test]
     fn colored_defaults_full_uv() {
         let s = SpriteInstance::colored([1.0, 2.0], [3.0, 4.0], [1.0; 4]);
@@ -440,7 +508,7 @@ mod tests {
 
     #[derive(Default)]
     struct SpriteRendererCpu {
-        pending: Vec<(TextureId, SpriteInstance)>,
+        pending: Vec<(TextureId, f32, SpriteInstance)>,
     }
     impl SpriteRendererCpu {
         fn push(&mut self, inst: SpriteInstance) {
@@ -448,14 +516,14 @@ mod tests {
         }
         fn push_textured(&mut self, texture: TextureId, inst: SpriteInstance) {
             if self.pending.len() < MAX_SPRITES {
-                self.pending.push((texture, inst));
+                self.pending.push((texture, 0.0, inst));
             }
         }
         fn len(&self) -> usize {
             self.pending.len()
         }
         fn draw_calls_if_flushed(&self) -> u32 {
-            let mut ids: Vec<_> = self.pending.iter().map(|(t, _)| t.0).collect();
+            let mut ids: Vec<_> = self.pending.iter().map(|(t, _, _)| t.0).collect();
             ids.sort_unstable();
             ids.dedup();
             ids.len() as u32

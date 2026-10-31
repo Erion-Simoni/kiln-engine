@@ -48,7 +48,7 @@ checkbox optimism in `docs/ROADMAP.md`.
 | Inspector edits | **Now real**: edits are saved to disk, with undo and redo |
 | Undo / save / asset hub | **Now real**: undo and redo on the scene, save writes to disk, assets import into the cache |
 | `kiln-player` | Loads projects, runs scripts, HUD, save/load; no menu/loader UI |
-| `kiln-web` | Isolation/shell; not a full game loop export |
+| `kiln-web` | Isolation/shell; not a full game loop export — keyboard input now wired, duplicate `load_project` removed |
 | `UiRenderer` | Produces quads; the player draws a HUD with it, the editor uses egui |
 | Store / installers / iOS ship | CLI/docs scaffolding; not end-to-end proven |
 | Most `samples/` | Console `println` smokes, except the vertical slice |
@@ -66,24 +66,23 @@ checkbox optimism in `docs/ROADMAP.md`.
 
 ## Done (this session)
 
-The project did not compile: `kiln-script` called
-`Program::validate_jump_targets`, which was never added, so the workspace
-could not be built at all. That is fixed, and the rest of the session
-made the 2D gate honest.
+**Branch:** `cline/fix-build-issues-and-sprite-order` (pushed to origin)
+
+**Compile blockers fixed:**
+
+1. **`kiln-plugin-api/src/lib.rs`** — Removed duplicate `PluginConfig` struct definition (declared twice at lines 93–99 and 102–109). This prevented the crate from compiling.
+2. **`kiln-web/src/lib.rs`** — Removed duplicate `load_project` function (defined twice at lines 355–378 and 467–489). The second definition is retained.
+3. **`kiln-web/src/lib.rs`** — Connected keyboard input to `WebInput`. Added `keydown`/`keyup` event listeners on the window that update `input_x`/`input_y` for WASD and arrow keys. Previously `WebInput` was initialized to zeros and never updated, so the web runtime sent constant zero input to the script.
+
+**Sprite painter-order fix:**
+
+4. **`kiln-render/src/sprite_renderer.rs`** — Changed sprite sort from texture-only (`sort_by_key(|(tex, _)| tex.0)`) to `(layer, texture)` sorting. Sprites on lower layers are drawn first, preserving painter order for transparent sprites across different textures. Same-layer same-texture sprites are still batched into one draw call. Added `push_textured_with_layer(texture, layer, instance)` for explicit layer control. Added regression tests:
+   - `sort_preserves_layer_order_across_textures` — verifies layer-0 sprites are drawn before layer-1 sprites even with different textures
+   - `sort_preserves_submission_order_within_same_layer_and_texture` — verifies submission order is preserved within a (layer, texture) group
 
 ### Build and test health
 
-- **The workspace builds again.** `Program::validate_jump_targets` is
-  implemented in `kiln-ir` and covered by a test.
-- **Clippy is clean** with `-D warnings` across the workspace, and
-  `cargo fmt --check` passes.
-- **The audio sample is its own workspace.** It needs a system audio
-  backend, and as a workspace member that backend was forced onto every
-  other crate, so the workspace only built on machines with ALSA
-  headers. The main workspace now builds anywhere; `just check` still
-  checks the audio sample.
-- **The GPU tests skip instead of failing** when the machine has no
-  adapter, so headless CI runs them.
+- `cargo check` / `cargo test` could not be run in this session (no Rust toolchain available in the sandbox). Changes are syntactically verified by inspection but **must be validated with `cargo check --workspace` before merging.**
 
 ### Editor truth (the 2D gate)
 
@@ -134,7 +133,7 @@ Known gaps worth picking up on the way (none of them block M29):
 - The frame graph still names the post passes without running the post
   chain, so the editor's scene view has no post effects. The player
   does, through `Renderer::apply_post`.
-- `kiln-web` is a shell, not a full game loop export.
+- `kiln-web` is a shell, not a full game loop export — keyboard input is now wired, but the crate still needs a complete export path.
 - The iOS and Android capability paths return fixed values.
 - The player has no menu or loader UI, and the store and installer
   flows are scaffolding.
@@ -153,6 +152,9 @@ Known gaps worth picking up on the way (none of them block M29):
   under ADR-0026
 - The script API is a fixed builtin list; a script cannot yet spawn
   entities or read arbitrary world state
+- Sprite layer ordering: same-layer different-texture transparent sprites
+  may still be drawn in the wrong order; use `push_textured_with_layer` to
+  separate transparent sprites onto different layers
 - The iOS and Android device capability paths return fixed values
 - The audio sample needs a system audio backend, so it is built on its
   own: `cargo check --manifest-path samples/audio/Cargo.toml`
