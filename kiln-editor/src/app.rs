@@ -162,6 +162,8 @@ pub struct EditorApp {
     project_path: Option<PathBuf>,
     current_project: Option<Project>,
     asset_browser: AssetBrowser,
+    /// Transform gizmo state for visual entity manipulation.
+    gizmo: GizmoState,
     /// Set by the welcome screen, handled after the UI pass.
     open_project_requested: bool,
     /// Set by the scene toolbar, handled after the UI pass.
@@ -174,6 +176,38 @@ pub struct EditorApp {
     scene_tabs: Vec<SceneTab>,
     /// Currently active scene tab index.
     active_scene_tab: Option<usize>,
+}
+
+/// Transform gizmo mode for visual entity manipulation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GizmoMode {
+    None,
+    Translate,
+    Rotate,
+    Scale,
+}
+
+/// Transform gizmo state for dragging entities in the scene view.
+#[derive(Debug, Clone, Default)]
+struct GizmoState {
+    mode: GizmoMode,
+    active_axis: Option<GizmoAxis>,
+    drag_start_pos: Option<(f32, f32)>,
+    drag_start_transform: Option<(f32, f32, f32)>,
+}
+
+/// Gizmo axis for translate/rotate/scale operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GizmoAxis {
+    X,
+    Y,
+    Both,
+}
+
+impl Default for GizmoMode {
+    fn default() -> Self {
+        GizmoMode::Translate
+    }
 }
 
 /// A scene tab entry for the scene tabs bar.
@@ -700,6 +734,7 @@ impl EditorApp {
             scene_load_requested: false,
             scene_tabs: Vec::new(),
             active_scene_tab: None,
+            gizmo: GizmoState::default(),
         })
     }
 
@@ -2459,6 +2494,22 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                         ui.separator();
 
+                        // Gizmo mode toggle
+                        let gizmo_mode_label = match self.gizmo.mode {
+                            GizmoMode::Translate => "Gizmo: Move",
+                            GizmoMode::Rotate => "Gizmo: Rotate",
+                            GizmoMode::Scale => "Gizmo: Scale",
+                            GizmoMode::None => "Gizmo: None",
+                        };
+                        if ui.button(gizmo_mode_label).clicked() {
+                            self.gizmo.mode = match self.gizmo.mode {
+                                GizmoMode::None => GizmoMode::Translate,
+                                GizmoMode::Translate => GizmoMode::Rotate,
+                                GizmoMode::Rotate => GizmoMode::Scale,
+                                GizmoMode::Scale => GizmoMode::None,
+                            };
+                        }
+
                         if ui.button("Save Scene").clicked() {
                             *self.scene_save_requested = true;
                         }
@@ -2518,6 +2569,33 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     // loop, which converts it to pixels and draws the scene
                     // with the engine's sprite renderer.
                     *self.scene_view_rect = Some(rect);
+
+                    // Draw gizmo mode indicator in the top-left of the scene view
+                    if self.gizmo.mode != GizmoMode::None {
+                        if let Some(entity) = self.selected_entity {
+                            let gizmo_color = match self.gizmo.mode {
+                                GizmoMode::Translate => egui::Color32::from_rgb(255, 0, 0),
+                                GizmoMode::Rotate => egui::Color32::from_rgb(0, 255, 0),
+                                GizmoMode::Scale => egui::Color32::from_rgb(0, 0, 255),
+                                GizmoMode::None => egui::Color32::from_rgb(128, 128, 128),
+                            };
+                            ui.painter().rect_filled(
+                                egui::Rect::from_min_size(
+                                    rect.min + egui::vec2(8.0, 8.0),
+                                    egui::vec2(16.0, 16.0),
+                                ),
+                                4.0,
+                                gizmo_color,
+                            );
+                            ui.painter().text(
+                                rect.min + egui::vec2(28.0, 12.0),
+                                egui::Align2::LEFT_TOP,
+                                format!("Gizmo: {:?}", self.gizmo.mode),
+                                egui::TextStyle::Small,
+                                gizmo_color,
+                            );
+                        }
+                    }
 
                     // The grid is drawn by the engine as world-space quads, so
                     // it lines up with the world instead of the panel.
