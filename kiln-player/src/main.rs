@@ -133,6 +133,12 @@ struct PlayerApp {
     slice: Option<SliceSession>,
     /// UI commands collected from the last script frame (buttons, labels, panels).
     ui_commands: Vec<kiln_runtime::SliceCommand>,
+    /// Current mouse position (screen space, top-left origin).
+    mouse_x: f64,
+    /// Current mouse position (screen space, top-left origin).
+    mouse_y: f64,
+    /// Whether the left mouse button is currently pressed.
+    mouse_pressed: bool,
     /// Keys currently held down, used to drive the player.
     held: Vec<Key>,
     /// Width of the game window, in logical pixels.
@@ -175,6 +181,9 @@ impl PlayerApp {
             textures: TextureLibrary::default(),
             slice: None,
             ui_commands: Vec::new(),
+            mouse_x: 0.0,
+            mouse_y: 0.0,
+            mouse_pressed: false,
             held: Vec::new(),
             window_width: width,
             window_height: height,
@@ -467,10 +476,15 @@ impl PlayerApp {
             world,
             slice,
             ui_commands,
+            mouse_x,
+            mouse_y,
+            mouse_pressed,
             ..
         } = self;
         game_loop.tick(|dt| {
             if let Some(slice) = slice.as_mut() {
+                // Pass mouse state to the slice host for UI click detection.
+                slice.set_mouse_state(*mouse_x, *mouse_y, *mouse_pressed);
                 if let Err(e) = slice.step(world, axis, dt.as_secs_f64()) {
                     log::error!("scene script failed: {e}");
                 }
@@ -842,6 +856,17 @@ impl winit::application::ApplicationHandler for PlayerApp {
             winit::event::WindowEvent::KeyboardInput { event, .. } => self.handle_key(event),
             winit::event::WindowEvent::Resized(size) => {
                 self.camera = Camera::new(size.width as f32, size.height as f32);
+            }
+            winit::event::WindowEvent::CursorMoved { position, .. } => {
+                self.mouse_x = position.x as f64;
+                self.mouse_y = position.y as f64;
+            }
+            winit::event::WindowEvent::MouseInput {
+                state,
+                button: winit::event::MouseButton::Left,
+                ..
+            } => {
+                self.mouse_pressed = state.is_pressed();
             }
             _ => {}
         }

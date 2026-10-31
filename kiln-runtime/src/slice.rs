@@ -273,6 +273,14 @@ pub struct SliceHost {
     animation_players: HashMap<String, AnimationPlayer>,
     /// UI widget state: widget id -> whether it was clicked this frame.
     ui_widgets: HashMap<String, bool>,
+    /// UI button rects collected this frame for click detection.
+    ui_buttons: Vec<(String, f64, f64, f64, f64)>,
+    /// Current mouse position (screen space, top-left origin).
+    mouse_x: f64,
+    /// Current mouse position (screen space, top-left origin).
+    mouse_y: f64,
+    /// Whether the left mouse button was pressed this frame.
+    mouse_pressed: bool,
     /// Frame counter for get_frame_count.
     frame_count: u64,
     /// Time scale for get_time_scale.
@@ -291,6 +299,10 @@ impl SliceHost {
             physics: PhysicsWorld::new().ok(),
             animation_players: HashMap::new(),
             ui_widgets: HashMap::new(),
+            ui_buttons: Vec::new(),
+            mouse_x: 0.0,
+            mouse_y: 0.0,
+            mouse_pressed: false,
             frame_count: 0,
             time_scale: 1.0,
         }
@@ -309,6 +321,18 @@ impl SliceHost {
     /// Take the recorded commands, leaving the host empty.
     pub fn take_commands(&mut self) -> Vec<SliceCommand> {
         std::mem::take(&mut self.commands)
+    }
+
+    /// Set the current mouse position and button state (called by the host before each step).
+    pub fn set_mouse_state(&mut self, x: f64, y: f64, pressed: bool) {
+        self.mouse_x = x;
+        self.mouse_y = y;
+        self.mouse_pressed = pressed;
+    }
+
+    /// Whether a UI widget was clicked this frame.
+    pub fn ui_widget_clicked(&self, id: &str) -> bool {
+        self.ui_widgets.get(id).copied().unwrap_or(false)
     }
 }
 
@@ -670,6 +694,8 @@ impl SliceHost {
                 let id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let x = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
                 let y = args.get(2).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                // Button is 64x32 screen pixels (matching the player renderer).
+                self.ui_buttons.push((id.clone(), x, y, 64.0, 32.0));
                 self.commands.push(SliceCommand::UiButton { id, x, y });
                 let clicked = self.ui_widgets.get(&id).copied().unwrap_or(false);
                 Ok(Value::Bool(clicked))
@@ -783,6 +809,9 @@ impl SliceSession {
     ) -> Result<(), VmError> {
         self.state.elapsed += dt;
 
+        // Reset per-frame UI click state (clicks only last one frame).
+        self.ui_widgets.clear();
+
         // Step physics and collect collision events (if physics feature enabled)
         let collision_events = #[cfg(feature = "physics")]
         {
@@ -823,6 +852,24 @@ impl SliceSession {
                 }
             }
         }
+
+        // Detect UI button clicks: check if any button rect contains the mouse
+        // and the left button was pressed this frame.
+        if self.mouse_pressed {
+            for (id, bx, by, bw, bh) in &self.ui_buttons {
+                if self.mouse_x >= *bx
+                    && self.mouse_x < bx + bw
+                    && self.mouse_y >= *by
+                    && self.mouse_y < by + bh
+                {
+                    self.ui_widgets.insert(id.clone(), true);
+                }
+            }
+        }
+
+        // Clear per-frame UI tracking for next frame.
+        self.ui_buttons.clear();
+
         Ok(())
     }
 
