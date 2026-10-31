@@ -39,6 +39,9 @@ pub struct Project {
     /// Audio assets of the project, keyed by their name.
     #[serde(default)]
     pub audio_assets: Vec<AudioAsset>,
+    /// SDF font assets of the project, keyed by their id.
+    #[serde(default)]
+    pub sdf_fonts: HashMap<String, SdfFont>,
 }
 
 /// An audio asset reference in the project.
