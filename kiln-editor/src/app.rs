@@ -38,6 +38,7 @@ use crate::audio_editor::AudioEditorState;
 use crate::vfx_editor::VfxEditorState;
 use crate::debugger_panel::DebuggerPanel;
 use crate::profiler_panel::ProfilerPanel;
+use crate::shader_editor::{render_shader_editor, ShaderEditorState};
 use crate::project_hub::ProjectHubState;
 use crate::scene_view::{self, SceneTextures, ViewportRect};
 use crate::tilemap_editor::TilemapEditorState;
@@ -147,6 +148,7 @@ pub struct EditorApp {
     build_panel: BuildPanel,
     project_hub: ProjectHubState,
     profiler_panel: ProfilerPanel,
+    shader_editor: ShaderEditorState,
     debugger_panel: DebuggerPanel,
     vfx_editor: VfxEditorState,
     audio_editor: AudioEditorState,
@@ -261,6 +263,7 @@ enum Tab {
     VfxEditor,
     AudioEditor,
     PhysicsEditor,
+    ShaderEditor,
     UiLayoutEditor,
     Preferences,
     PluginManagerPanel,
@@ -303,6 +306,7 @@ enum Tab {
     VfxEditor,
     AudioEditor,
     PhysicsEditor,
+    ShaderEditor,
     UiLayoutEditor,
     Preferences,
 }
@@ -730,6 +734,7 @@ impl EditorApp {
             build_panel: BuildPanel::new(),
             project_hub: ProjectHubState::new(),
             profiler_panel: ProfilerPanel::new(),
+            shader_editor: ShaderEditorState::new(),
             debugger_panel: DebuggerPanel::new(),
             vfx_editor: VfxEditorState::new(),
             audio_editor: AudioEditorState::new(),
@@ -1711,6 +1716,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     if ui.button("Physics Editor").clicked() {
                         self.dock_state.add_window(vec![Tab::PhysicsEditor]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Shader Editor").clicked() {
+                        self.dock_state.add_window(vec![Tab::ShaderEditor]);
                         ui.close_menu();
                     }
                     if ui.button("UI Layout Editor").clicked() {
@@ -3917,6 +3926,21 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     self.physics_editor.render(ui);
                 });
             }
+            Tab::ShaderEditor => {
+                ui.vertical(|ui| {
+                    if let Some(project) = self.current_project.as_mut() {
+                        crate::shader_editor::render_shader_editor(
+                            ui,
+                            &mut self.shader_editor,
+                            project,
+                        );
+                    } else {
+                        ui.heading("Shader Editor");
+                        ui.add_space(8.0);
+                        ui.label("Open a project to edit shaders.");
+                    }
+                });
+            }
             Tab::UiLayoutEditor => {
                 ui.vertical(|ui| {
                     self.ui_layout_editor.render(ui);
@@ -4048,6 +4072,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::VfxEditor => "VFX Editor".into(),
             Tab::AudioEditor => "Audio Editor".into(),
             Tab::PhysicsEditor => "Physics Editor".into(),
+            Tab::ShaderEditor => "Shader Editor".into(),
             Tab::UiLayoutEditor => "UI Layout Editor".into(),
             Tab::Preferences => "Preferences".into(),
             Tab::PluginManagerPanel => "Plugin Manager".into(),

@@ -521,27 +521,53 @@ pub struct Shader {
     pub entry_point: String,
 }
 
-/// A material that references a shader with parameter overrides.
+/// Signed Distance Field font asset for high-quality text rendering.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Material {
-    /// Unique material identifier.
+pub struct SdfFont {
+    /// Unique font identifier.
     pub id: String,
-    /// Human-readable name.
+    /// Human-readable font name.
     pub name: String,
-    /// Shader this material uses.
-    pub shader_id: String,
-    /// Uniform parameter overrides (name -> value).
+    /// Asset path to the SDF font texture atlas.
+    pub texture_path: String,
+    /// Atlas texture width in pixels.
+    pub atlas_width: u32,
+    /// Atlas texture height in pixels.
+    pub atlas_height: u32,
+    /// Glyph metrics: character code -> glyph metrics.
     #[serde(default)]
-    pub parameters: HashMap<String, MaterialParam>,
+    pub glyphs: HashMap<char, GlyphMetrics>,
+    /// Base line height in pixels.
+    pub line_height: f32,
+    /// Space character advance width in pixels.
+    pub space_advance: f32,
+    /// Tab width in spaces.
+    #[serde(default)]
+    pub tab_width: u32,
 }
 
+/// Glyph metrics for an SDF font glyph.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum MaterialParam {
-    Float(f32),
-    Vec2([f32; 2]),
-    Vec3([f32; 3]),
-    Vec4([f32; 4]),
-    Color([f32; 4]),
-    Texture(String),
+pub struct GlyphMetrics {
+    /// Character code.
+    pub codepoint: char,
+    /// Glyph position in the atlas texture (x, y).
+    pub offset: [f32; 2],
+    /// Glyph size in pixels (width, height).
+    pub size: [f32; 2],
+    /// Glyph bearing (offset from origin to left edge).
+    pub bearing: [f32; 2],
+    /// Advance width for the next character.
+    pub advance: f32,
+}
+impl Default for GlyphMetrics {
+    fn default() -> Self {
+        GlyphMetrics {
+            codepoint: ' ',
+            offset: [0.0, 0.0],
+            size: [0.0, 0.0],
+            bearing: [0.0, 0.0],
+            advance: 0.0,
+        }
+    }
 }
