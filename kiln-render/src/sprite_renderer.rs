@@ -619,7 +619,7 @@ mod tests {
     fn sort_preserves_submission_order_within_same_layer_and_texture() {
         let mut sr = SpriteRendererCpu::default();
         sr.pending.push((TextureId(0), 0, 0.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // first
-        sr.pending.push((TextureId(0), 0, 0.0, SpriteInstance::colored([1.0; 2], [1.0; 2], [1.0; 2]), [1.0; 4])); // second
+        sr.pending.push((TextureId(0), 0, 0.0, SpriteInstance::colored([1.0; 2], [1.0; 2], [1.0; 4]))); // second
 
         let mut ordered: Vec<(f32, u32, u32)> = sr
             .pending

@@ -88,6 +88,11 @@ struct WebInput {
     mouse_pressed: bool,
     mouse_just_pressed: bool,
     mouse_just_released: bool,
+    /// Track which movement keys are currently pressed
+    key_right: bool,
+    key_left: bool,
+    key_down: bool,
+    key_up: bool,
 }
 
 struct App {
@@ -107,11 +112,19 @@ struct App {
     audio_buffers: std::collections::HashMap<String, web_sys::AudioBuffer>,
     /// Audio file paths registered for playback (name -> URL)
     audio_files: std::collections::HashMap<String, String>,
+    /// Canvas element for touch position calculations
+    canvas_element: Option<web_sys::HtmlCanvasElement>,
     /// Canvas width
     canvas_width: u32,
     /// Canvas height
     canvas_height: u32,
 }
+
+impl App {
+    /// Get the canvas element for touch position calculations
+    fn get_canvas_element(&self) -> Option<web_sys::HtmlCanvasElement> {
+        self.canvas_element.clone()
+    }
 
 impl App {
     async fn new(
@@ -277,6 +290,7 @@ impl App {
             master_gain,
             audio_buffers,
             audio_files,
+            canvas_element: Some(canvas.clone()),
             canvas_width: width,
             canvas_height: height,
         })
@@ -292,12 +306,38 @@ impl App {
             let on_keydown = Closure::wrap(Box::new(move |event: KeyboardEvent| {
                 let mut app = app_for_keydown.borrow_mut();
                 if let Some(app) = app.as_mut() {
+                    let mut changed = false;
                     match event.key().as_str() {
-                        "ArrowRight" | "d" | "D" => app.input.input_x = 1.0,
-                        "ArrowLeft" | "a" | "A" => app.input.input_x = -1.0,
-                        "ArrowDown" | "s" | "S" => app.input.input_y = 1.0,
-                        "ArrowUp" | "w" | "W" => app.input.input_y = -1.0,
+                        "ArrowRight" | "d" | "D" => {
+                            if !app.input.key_right {
+                                app.input.key_right = true;
+                                changed = true;
+                            }
+                        }
+                        "ArrowLeft" | "a" | "A" => {
+                            if !app.input.key_left {
+                                app.input.key_left = true;
+                                changed = true;
+                            }
+                        }
+                        "ArrowDown" | "s" | "S" => {
+                            if !app.input.key_down {
+                                app.input.key_down = true;
+                                changed = true;
+                            }
+                        }
+                        "ArrowUp" | "w" | "W" => {
+                            if !app.input.key_up {
+                                app.input.key_up = true;
+                                changed = true;
+                            }
+                        }
                         _ => {}
+                    }
+                    // Recompute input_x and input_y based on all pressed keys
+                    if changed {
+                        app.input.input_x = (app.input.key_right as i8 - app.input.key_left as i8) as f64;
+                        app.input.input_y = (app.input.key_down as i8 - app.input.key_up as i8) as f64;
                     }
                 }
             }) as Box<dyn FnMut(KeyboardEvent)>);
@@ -309,12 +349,38 @@ impl App {
             let on_keyup = Closure::wrap(Box::new(move |event: KeyboardEvent| {
                 let mut app = app_for_keyup.borrow_mut();
                 if let Some(app) = app.as_mut() {
+                    let mut changed = false;
                     match event.key().as_str() {
-                        "ArrowRight" | "d" | "D" => app.input.input_x = 0.0,
-                        "ArrowLeft" | "a" | "A" => app.input.input_x = 0.0,
-                        "ArrowDown" | "s" | "S" => app.input.input_y = 0.0,
-                        "ArrowUp" | "w" | "W" => app.input.input_y = 0.0,
+                        "ArrowRight" | "d" | "D" => {
+                            if app.input.key_right {
+                                app.input.key_right = false;
+                                changed = true;
+                            }
+                        }
+                        "ArrowLeft" | "a" | "A" => {
+                            if app.input.key_left {
+                                app.input.key_left = false;
+                                changed = true;
+                            }
+                        }
+                        "ArrowDown" | "s" | "S" => {
+                            if app.input.key_down {
+                                app.input.key_down = false;
+                                changed = true;
+                            }
+                        }
+                        "ArrowUp" | "w" | "W" => {
+                            if app.input.key_up {
+                                app.input.key_up = false;
+                                changed = true;
+                            }
+                        }
                         _ => {}
+                    }
+                    // Recompute input_x and input_y based on all pressed keys
+                    if changed {
+                        app.input.input_x = (app.input.key_right as i8 - app.input.key_left as i8) as f64;
+                        app.input.input_y = (app.input.key_down as i8 - app.input.key_up as i8) as f64;
                     }
                 }
             }) as Box<dyn FnMut(KeyboardEvent)>);
@@ -331,12 +397,26 @@ impl App {
                 let mut app = app_for_touchstart.borrow_mut();
                 if let Some(app) = app.as_mut() {
                     if let Some(touch) = event.touches().item(0) {
-                        app.input.input_x = 1.0;
-                        app.input.input_y = 1.0;
-                        // Store touch position in input_x/input_y as normalized coords
-                        // The actual position handling would need canvas rect
-                        let _ = touch.client_x();
-                        let _ = touch.client_y();
+                        // Calculate input axes from touch position relative to canvas center
+                        if let Some(canvas) = app.get_canvas_element() {
+                            let rect = canvas.get_bounding_client_rect();
+                            let canvas_width = rect.width() as f64;
+                            let canvas_height = rect.height() as f64;
+                            let touch_x = touch.client_x() as f64 - rect.left();
+                            let touch_y = touch.client_y() as f64 - rect.top();
+                            
+                            // Normalize to -1 to 1 range from canvas center
+                            app.input.input_x = (touch_x - canvas_width / 2.0) / (canvas_width / 2.0);
+                            app.input.input_y = (touch_y - canvas_height / 2.0) / (canvas_height / 2.0);
+                            
+                            // Clamp to [-1, 1]
+                            app.input.input_x = app.input.input_x.clamp(-1.0, 1.0);
+                            app.input.input_y = app.input.input_y.clamp(-1.0, 1.0);
+                        } else {
+                            // Fallback if canvas not available
+                            app.input.input_x = 1.0;
+                            app.input.input_y = 1.0;
+                        }
                     }
                 }
             }) as Box<dyn FnMut(TouchEvent)>);
@@ -369,10 +449,25 @@ impl App {
                 let mut app = app_for_touchmove.borrow_mut();
                 if let Some(app) = app.as_mut() {
                     if let Some(touch) = event.touches().item(0) {
-                        app.input.input_x = 1.0;
-                        app.input.input_y = 1.0;
-                        let _ = touch.client_x();
-                        let _ = touch.client_y();
+                        // Calculate input axes from touch position relative to canvas center
+                        if let Some(canvas) = app.get_canvas_element() {
+                            let rect = canvas.get_bounding_client_rect();
+                            let canvas_width = rect.width() as f64;
+                            let canvas_height = rect.height() as f64;
+                            let touch_x = touch.client_x() as f64 - rect.left();
+                            let touch_y = touch.client_y() as f64 - rect.top();
+                            
+                            // Normalize to -1 to 1 range from canvas center
+                            app.input.input_x = (touch_x - canvas_width / 2.0) / (canvas_width / 2.0);
+                            app.input.input_y = (touch_y - canvas_height / 2.0) / (canvas_height / 2.0);
+                            
+                            // Clamp to [-1, 1]
+                            app.input.input_x = app.input.input_x.clamp(-1.0, 1.0);
+                            app.input.input_y = app.input.input_y.clamp(-1.0, 1.0);
+                        } else {
+                            app.input.input_x = 1.0;
+                            app.input.input_y = 1.0;
+                        }
                     }
                 }
             }) as Box<dyn FnMut(TouchEvent)>);
