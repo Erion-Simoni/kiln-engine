@@ -1722,6 +1722,10 @@ impl winit::application::ApplicationHandler for EditorApp {
                         self.dock_state.add_window(vec![Tab::ShaderEditor]);
                         ui.close_menu();
                     }
+                    if ui.button("Shader Editor").clicked() {
+                        self.dock_state.add_window(vec![Tab::ShaderEditor]);
+                        ui.close_menu();
+                    }
                     if ui.button("UI Layout Editor").clicked() {
                         self.dock_state.add_window(vec![Tab::UiLayoutEditor]);
                         ui.close_menu();
