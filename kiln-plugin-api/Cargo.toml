@@ -1,0 +1,27 @@
+[package]
+name = "kiln-plugin-api"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Erion-Simoni/kiln-engine"
+description = "Plugin API for Kiln Engine - defines interfaces for WASM plugins"
+
+[dependencies]
+kiln-core = { path = "../kiln-core" }
+kiln-render = { path = "../kiln-render" }
+kiln-runtime = { path = "../kiln-runtime" }
+kiln-assets = { path = "../kiln-assets" }
+kiln-ui = { path = "../kiln-ui" }
+kiln-ir = { path = "../kiln-ir" }
+kiln-graph = { path = "../kiln-graph" }
+wasm-bindgen = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+anyhow = "1.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []

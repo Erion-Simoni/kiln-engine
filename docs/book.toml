@@ -1,0 +1,45 @@
+[book]
+authors = ["Kiln Engine Contributors"]
+language = "en"
+multilingual = false
+src = "."
+title = "Kiln Engine Documentation"
+description = "Documentation for the Kiln game engine"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+default-theme = "light"
+curly-quotes = true
+mathjax = false
+additional-css = []
+additional-js = []
+no-section-label = false
+git-repository-url = "https://github.com/Erion-Simoni/kiln-engine"
+git-repository-icon = "fa-github"
+edit-url-template = "https://github.com/Erion-Simoni/kiln-engine/edit/master/docs/{path}"
+favicon = "favicon.ico"
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.search]
+enable = true
+limit-results = 30
+teaser-word-count = 30
+use-boolean-and = true
+boost-header = 2
+boost-header-sub = 1
+boost-content = 1
+
+[preprocess.index]
+enable = true
+
+[preprocess.links]
+enable = true
+
+[preprocess.env]
+enable = false

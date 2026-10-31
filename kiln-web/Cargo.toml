@@ -52,5 +52,8 @@ wasm-bindgen-futures = "0.4"
 uuid = { workspace = true, features = ["rng-getrandom"] }
 image = { version = "0.25", features = ["png"] }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { workspace = true, features = ["wasm_js"] }
+
 [lib]
 crate-type = ["cdylib", "rlib"]

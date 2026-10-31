@@ -19,7 +19,7 @@ env_logger = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 wgpu = { workspace = true }
-winit = { workspace = true }
+winit = { workspace = true, features = ["android-activity"] }
 pollster = { workspace = true }
 ron = { workspace = true }
 thiserror = { workspace = true }

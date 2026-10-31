@@ -3,9 +3,11 @@
 use egui::{Color32, RichText, ScrollArea, Ui, Vec2};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+use dirs;
+use serde::{Serialize, Deserialize};
 
 /// A recent project entry.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RecentProject {
     pub path: PathBuf,
     pub name: String,
@@ -29,24 +31,54 @@ pub struct ProjectHubState {
     pub show_project_settings: bool,
     /// Current project being edited (for settings).
     pub current_project_path: Option<PathBuf>,
+    /// Whether to auto-reopen last project on startup.
+    pub auto_reopen_last: bool,
+}
+
+/// Config file path for project hub settings.
+fn config_path() -> PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("kiln")
+        .join("project_hub.json")
 }
 
 impl ProjectHubState {
     pub fn new() -> Self {
-        Self {
+        let mut state = Self {
             recent_projects: Self::load_recent(),
             ..Default::default()
-        }
+        };
+        // Auto-reopen last project if enabled
+        state.auto_reopen_last = true;
+        state
     }
 
     fn load_recent() -> Vec<RecentProject> {
-        // TODO: Load from config file
+        let path = config_path();
+        if path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                if let Ok(projects) = serde_json::from_str::<Vec<RecentProject>>(&content) {
+                    // Filter out non-existent paths
+                    return projects.into_iter()
+                        .filter(|p| p.path.exists())
+                        .collect();
+                }
+            }
+        }
         Vec::new()
     }
 
     fn save_recent(&self) {
-        // TODO: Save to config file
+        let path = config_path();
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(json) = serde_json::to_string_pretty(&self.recent_projects) {
+            let _ = std::fs::write(&path, json);
+        }
     }
+
 
     /// Add a project to recent list.
     pub fn add_recent(&mut self, path: PathBuf, name: String) {
@@ -87,8 +119,12 @@ impl ProjectHubState {
             ("topdown", "Top-Down Template"),
         ]
     }
-}
 
+    /// Get the last opened project for auto-reopen.
+    pub fn last_project(&self) -> Option<&RecentProject> {
+        self.recent_projects.first()
+    }
+}
 
 /// Render the project hub panel (welcome screen / project manager).
 pub fn render_project_hub(
@@ -160,6 +196,8 @@ pub fn render_project_hub(
 
         ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
             for project in &state.recent_projects {
+                let path = project.path.clone();
+                let name = project.name.clone();
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.label(RichText::new(&project.name).size(16.0).strong());
@@ -168,7 +206,7 @@ pub fn render_project_hub(
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.small_button("Open").clicked() {
-                            state.add_recent(path.clone(), project.name.clone());
+                            state.add_recent(path.clone(), name.clone());
                             open_project_callback(project.path.clone());
                         }
                         if ui.small_button("Remove").clicked() {
