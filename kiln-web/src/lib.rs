@@ -16,7 +16,7 @@ use kiln_ui::TextRenderer;
 use log::{error, info, warn};
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
-use web_sys::{HtmlCanvasElement, HtmlImageElement};
+use web_sys::{HtmlCanvasElement, HtmlImageElement, KeyboardEvent};
 
 use image::GenericImageView;
 
@@ -193,6 +193,44 @@ impl App {
         let app = std::rc::Rc::new(std::cell::RefCell::new(Some(self)));
         let app_clone = std::rc::Rc::clone(&app);
 
+        // --- Keyboard input: update WebInput so gameplay receives real input ---
+        {
+            let app_for_keydown = app_clone.clone();
+            let on_keydown = Closure::wrap(Box::new(move |event: KeyboardEvent| {
+                let mut app = app_for_keydown.borrow_mut();
+                if let Some(app) = app.as_mut() {
+                    match event.key().as_str() {
+                        "ArrowRight" | "d" | "D" => app.input.input_x = 1.0,
+                        "ArrowLeft" | "a" | "A" => app.input.input_x = -1.0,
+                        "ArrowDown" | "s" | "S" => app.input.input_y = 1.0,
+                        "ArrowUp" | "w" | "W" => app.input.input_y = -1.0,
+                        _ => {}
+                    }
+                }
+            }) as Box<dyn FnMut(KeyboardEvent)>);
+            let _ = window
+                .add_event_listener_with_callback("keydown", on_keydown.as_ref().unchecked_ref());
+            on_keydown.forget();
+
+            let app_for_keyup = app_clone.clone();
+            let on_keyup = Closure::wrap(Box::new(move |event: KeyboardEvent| {
+                let mut app = app_for_keyup.borrow_mut();
+                if let Some(app) = app.as_mut() {
+                    match event.key().as_str() {
+                        "ArrowRight" | "d" | "D" => app.input.input_x = 0.0,
+                        "ArrowLeft" | "a" | "A" => app.input.input_x = 0.0,
+                        "ArrowDown" | "s" | "S" => app.input.input_y = 0.0,
+                        "ArrowUp" | "w" | "W" => app.input.input_y = 0.0,
+                        _ => {}
+                    }
+                }
+            }) as Box<dyn FnMut(KeyboardEvent)>);
+            let _ = window
+                .add_event_listener_with_callback("keyup", on_keyup.as_ref().unchecked_ref());
+            on_keyup.forget();
+        }
+        // ----------------------------------------------------------------------
+
         let f = std::rc::Rc::new(std::cell::RefCell::new(None::<Closure<dyn FnMut()>>));
         let f_clone = std::rc::Rc::clone(&f);
 
@@ -352,30 +390,7 @@ impl App {
     }
 }
 
-async fn load_project(path: &str) -> Result<kiln_core::Project, Box<dyn std::error::Error>> {
-    let opts = web_sys::RequestInit::new();
-    opts.set_method("GET");
-    let request = web_sys::Request::new_with_str_and_init(path, &opts)
-        .map_err(|e| format!("Request creation failed: {:?}", e))?;
-    let window = web_sys::window().ok_or("No window")?;
-    let promise = window.fetch_with_request(&request);
-    let resp_value = wasm_bindgen_futures::JsFuture::from(promise)
-        .await
-        .map_err(|e| format!("Fetch await failed: {}", e.as_string().unwrap_or_else(|| "unknown".to_string())))?;
-    let resp: web_sys::Response = resp_value
-        .dyn_into()
-        .map_err(|e| format!("Response cast failed: {:?}", e))?;
-    if !resp.ok() {
-        return Err(format!("HTTP {} for {}", resp.status(), path).into());
-    }
-    let text_promise = resp.text().map_err(|e| format!("{:?}", e))?;
-    let text = wasm_bindgen_futures::JsFuture::from(text_promise)
-        .await
-        .map_err(|e| format!("Text await failed: {}", e.as_string().unwrap_or_else(|| "unknown".to_string())))?;
-    let text_str = text.as_string().ok_or("Response text is not valid UTF-8")?;
-    let project = kiln_core::Project::from_toml(&text_str)?;
-    Ok(project)
-}
+
 
 async fn load_script(path: &str, project_path: &str) -> Result<String, Box<dyn std::error::Error>> {
     let window = web_sys::window().ok_or("No window")?;

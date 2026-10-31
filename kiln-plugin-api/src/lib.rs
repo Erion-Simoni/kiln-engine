@@ -98,16 +98,6 @@ pub struct PluginConfig {
     pub settings: serde_json::Value,
 }
 
-
-/// Plugin configuration provided by the user.
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-pub struct PluginConfig {
-    /// Whether the plugin is enabled
-    pub enabled: bool,
-    /// Plugin-specific configuration (JSON)
-    pub settings: serde_json::Value,
-}
-
 /// Context provided to plugins during initialization and runtime.
 pub struct PluginContext {
     /// Project being edited
