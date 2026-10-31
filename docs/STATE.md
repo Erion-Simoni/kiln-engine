@@ -80,6 +80,10 @@ checkbox optimism in `docs/ROADMAP.md`.
    - `sort_preserves_layer_order_across_textures` — verifies layer-0 sprites are drawn before layer-1 sprites even with different textures
    - `sort_preserves_submission_order_within_same_layer_and_texture` — verifies submission order is preserved within a (layer, texture) group
 
+**Fixes during CI investigation:**
+
+5. **`kiln-render/src/sprite_renderer.rs`** — Fixed `TextureId` comparison in sort closure: `TextureId` derives `PartialEq, Eq, Hash` but not `Ord`, so changed `a.0.cmp(&b.0)` to `a.0.0.cmp(&b.0.0)` (comparing inner `u32`). Reformatted the `sort_by` closure for rustfmt compliance.
+
 ### Build and test health
 
 - `cargo check` / `cargo test` could not be run in this session (no Rust toolchain available in the sandbox). Changes are syntactically verified by inspection but **must be validated with `cargo check --workspace` before merging.**
