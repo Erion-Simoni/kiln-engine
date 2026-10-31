@@ -13,6 +13,9 @@ pub struct Sprite {
     pub uv_rect: [f32; 4],
     /// GPU texture handle (`TextureId::WHITE` = solid colour tint).
     pub texture: TextureId,
+    /// Sorting layer — sprites on lower layers are drawn first.
+    /// Preserves painter order for transparent sprites across textures.
+    pub layer: f32,
 }
 
 impl Sprite {
@@ -22,6 +25,7 @@ impl Sprite {
             size: [32.0, 32.0],
             uv_rect: FULL_UV,
             texture: TextureId::WHITE,
+            layer: 0.0,
         }
     }
 
@@ -37,6 +41,12 @@ impl Sprite {
 
     pub fn with_uv(mut self, uv_rect: [f32; 4]) -> Self {
         self.uv_rect = uv_rect;
+        self
+    }
+
+    /// Set the sorting layer (default 0.0).
+    pub fn with_layer(mut self, layer: f32) -> Self {
+        self.layer = layer;
         self
     }
 }

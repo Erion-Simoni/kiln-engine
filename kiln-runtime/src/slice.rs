@@ -79,6 +79,11 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("set_animation_speed", 37, 2),  // source_id, speed
     // Collision events (38)
     ("get_collision_events", 38, 0), // -> array of [entity_a, entity_b, started]
+    // UI widgets (39-42)
+    ("ui_button", 39, 3),        // id, x, y -> clicked bool
+    ("ui_label", 40, 4),         // id, x, y, text -> void
+    ("ui_panel", 41, 5),         // id, x, y, w, h -> void
+    ("ui_clicked", 42, 1),       // id -> clicked bool
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -193,6 +198,27 @@ pub enum SliceCommand {
         source_id: String,
         speed: f64,
     },
+    /// Render a UI button at screen position.
+    UiButton {
+        id: String,
+        x: f64,
+        y: f64,
+    },
+    /// Render a UI label at screen position.
+    UiLabel {
+        id: String,
+        x: f64,
+        y: f64,
+        text: String,
+    },
+    /// Render a UI panel at screen position.
+    UiPanel {
+        id: String,
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+    },
 }
 
 /// The persistent state of a slice.
@@ -245,6 +271,8 @@ pub struct SliceHost {
     #[cfg(feature = "physics")]
     physics: Option<PhysicsWorld>,
     animation_players: HashMap<String, AnimationPlayer>,
+    /// UI widget state: widget id -> whether it was clicked this frame.
+    ui_widgets: HashMap<String, bool>,
     /// Frame counter for get_frame_count.
     frame_count: u64,
     /// Time scale for get_time_scale.
@@ -262,6 +290,7 @@ impl SliceHost {
             #[cfg(feature = "physics")]
             physics: PhysicsWorld::new().ok(),
             animation_players: HashMap::new(),
+            ui_widgets: HashMap::new(),
             frame_count: 0,
             time_scale: 1.0,
         }
@@ -635,6 +664,41 @@ impl SliceHost {
                     .collect();
                 Ok(Value::Array(events))
             }
+            // UI widgets (39-42)
+            39 => {
+                // ui_button(id, x, y) -> clicked bool
+                let id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let x = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let y = args.get(2).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                self.commands.push(SliceCommand::UiButton { id, x, y });
+                let clicked = self.ui_widgets.get(&id).copied().unwrap_or(false);
+                Ok(Value::Bool(clicked))
+            }
+            40 => {
+                // ui_label(id, x, y, text) -> void
+                let id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let x = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let y = args.get(2).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let text = args.get(3).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                self.commands.push(SliceCommand::UiLabel { id, x, y, text });
+                Ok(Value::I64(0))
+            }
+            41 => {
+                // ui_panel(id, x, y, w, h) -> void
+                let id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let x = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let y = args.get(2).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let w = args.get(3).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                let h = args.get(4).and_then(|v| v.to_f64()).unwrap_or(0.0);
+                self.commands.push(SliceCommand::UiPanel { id, x, y, w, h });
+                Ok(Value::I64(0))
+            }
+            42 => {
+                // ui_clicked(id) -> clicked bool
+                let id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let clicked = self.ui_widgets.get(&id).copied().unwrap_or(false);
+                Ok(Value::Bool(clicked))
+            }
             _ => Err(VmError::HostCallError(format!(
                 "unknown slice builtin id {func_id}"
             ))),
@@ -660,6 +724,8 @@ pub struct SliceSession {
     program: Program,
     vm: Vm<SliceHost>,
     state: SliceState,
+    /// UI commands recorded during the last script run (buttons, labels, panels).
+    ui_commands: Vec<SliceCommand>,
 }
 
 impl SliceSession {
@@ -675,6 +741,7 @@ impl SliceSession {
             program,
             vm,
             state: SliceState::default(),
+            ui_commands: Vec::new(),
         })
     }
 
@@ -689,6 +756,14 @@ impl SliceSession {
     /// editor show the same information.
     pub fn hud_lines(&self) -> Vec<String> {
         hud_lines(&self.state)
+    }
+
+    /// UI commands recorded during the last script run.
+    ///
+    /// Call after `step()` to retrieve buttons, labels, and panels
+    /// that the script requested to be drawn this frame.
+    pub fn take_ui_commands(&mut self) -> Vec<SliceCommand> {
+        std::mem::take(&mut self.ui_commands)
     }
 
     /// Replace the state of the slice.
@@ -736,7 +811,17 @@ impl SliceSession {
 
         let commands = self.vm.host_mut().take_commands();
         for command in commands {
-            self.apply(command, world);
+            match &command {
+                SliceCommand::UiButton { .. }
+                | SliceCommand::UiLabel { .. }
+                | SliceCommand::UiPanel { .. } => {
+                    // UI commands are rendering instructions, not world mutations.
+                    self.ui_commands.push(command);
+                }
+                _ => {
+                    self.apply(command, world);
+                }
+            }
         }
         Ok(())
     }
@@ -852,10 +937,12 @@ impl SliceSession {
             }
             SliceCommand::SpawnEntity { name, x, y, texture_path: _ } => {
                 use kiln_runtime::{SourceId, Transform, Sprite, Role};
-                let source_id = crate::editing::next_entity_id(&[]);
+                let source_id = crate::world::next_entity_id(&[]);
                 world.world_mut().spawn((
                     Transform::new(x as f32, y as f32),
-                    Sprite::new(1.0, 1.0, 1.0, 1.0).with_size(32.0, 32.0),
+                    Sprite::new(1.0, 1.0, 1.0, 1.0)
+                        .with_size(32.0, 32.0)
+                        .with_layer(0.0),
                     SourceId::new(source_id.clone()),
                     Role::new(name),
                 ));
@@ -1071,6 +1158,8 @@ impl SliceSession {
                     }
                 }
             }
+            // UI commands are no-ops in apply() — they are handled via take_ui_commands().
+            SliceCommand::UiButton { .. } | SliceCommand::UiLabel { .. } | SliceCommand::UiPanel { .. } => {}
         }
     }
     /// Make the world match the slice state: collected pickups are removed and

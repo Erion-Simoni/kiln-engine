@@ -8,7 +8,10 @@ use kiln_player::loader;
 use kiln_player::spawn;
 use kiln_player::textures::TextureLibrary;
 use kiln_render::{camera::Camera, sprite_renderer::SpriteInstance, Renderer, SpriteRenderer};
-use kiln_runtime::{GameLoop, GameWorld, InputState, SliceSession, Sprite, Tilemap};
+use kiln_runtime::{
+    GameLoop, GameWorld, InputState, SliceSession, Sprite, Tilemap,
+    sync_physics_with_ecs,
+};
 use kiln_ui::TextRenderer;
 use log::info;
 use std::collections::HashMap;
@@ -128,6 +131,8 @@ struct PlayerApp {
     textures: TextureLibrary,
     /// The gameplay script of the loaded scene, if it has one.
     slice: Option<SliceSession>,
+    /// UI commands collected from the last script frame (buttons, labels, panels).
+    ui_commands: Vec<kiln_runtime::SliceCommand>,
     /// Keys currently held down, used to drive the player.
     held: Vec<Key>,
     /// Width of the game window, in logical pixels.
@@ -169,6 +174,7 @@ impl PlayerApp {
             assets,
             textures: TextureLibrary::default(),
             slice: None,
+            ui_commands: Vec::new(),
             held: Vec::new(),
             window_width: width,
             window_height: height,
@@ -460,6 +466,7 @@ impl PlayerApp {
             game_loop,
             world,
             slice,
+            ui_commands,
             ..
         } = self;
         game_loop.tick(|dt| {
@@ -467,7 +474,12 @@ impl PlayerApp {
                 if let Err(e) = slice.step(world, axis, dt.as_secs_f64()) {
                     log::error!("scene script failed: {e}");
                 }
+                // Collect UI commands from the last script frame.
+                *ui_commands = slice.take_ui_commands();
             }
+            // Step physics (if the physics feature is enabled)
+            // Physics stepping happens inside slice.step() via sync_physics_with_ecs().
+            let _ = (world, dt);
         });
     }
 
@@ -568,6 +580,56 @@ impl PlayerApp {
 
             gpu.sprite_renderer
                 .flush(&mut pass, &self.camera, gpu.renderer.queue());
+        }
+
+        // Render UI commands from the script (buttons, labels, panels).
+        // These use screen-space coordinates, so we need a separate pass
+        // with a top-left origin camera.
+        if !self.ui_commands.is_empty() {
+            let mut ui_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("ui_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: gpu.renderer.scene_target().unwrap_or(&view),
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            let ui_camera = Camera::new_top_left(size.width as f32, size.height as f32);
+            gpu.hud_sprite_renderer.begin_frame();
+            for cmd in &self.ui_commands {
+                match cmd {
+                    kiln_runtime::SliceCommand::UiButton { id: _, x, y } => {
+                        gpu.hud_sprite_renderer.push(kiln_render::SpriteInstance::colored(
+                            [*x as f32 + 32.0, *y as f32 + 16.0],
+                            [64.0, 32.0],
+                            [0.2, 0.6, 1.0, 1.0],
+                        ));
+                    }
+                    kiln_runtime::SliceCommand::UiLabel { id: _, x, y, text } => {
+                        let text_renderer = kiln_ui::TextRenderer::new();
+                        let instances = text_renderer.render(text, *x as f32, *y as f32, 14.0, [1.0, 1.0, 1.0, 1.0]);
+                        for inst in instances {
+                            gpu.hud_sprite_renderer.push(inst);
+                        }
+                    }
+                    kiln_runtime::SliceCommand::UiPanel { id: _, x, y, w, h } => {
+                        gpu.hud_sprite_renderer.push(kiln_render::SpriteInstance::colored(
+                            [*x as f32 + *w / 2.0, *y as f32 + *h / 2.0],
+                            [*w as f32, *h as f32],
+                            [0.15, 0.15, 0.2, 0.9],
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+            gpu.hud_sprite_renderer
+                .flush(&mut ui_pass, &ui_camera, gpu.renderer.queue());
         }
 
         if has_post {
