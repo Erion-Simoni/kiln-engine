@@ -150,6 +150,7 @@ pub struct EditorApp {
     profiler_panel: ProfilerPanel,
     shader_editor: ShaderEditorState,
     debugger_panel: DebuggerPanel,
+    sprite_editor: SpriteEditorState,
     vfx_editor: VfxEditorState,
     audio_editor: AudioEditorState,
     physics_editor: PhysicsEditorState,
@@ -158,6 +159,7 @@ pub struct EditorApp {
     prefab_editor: PrefabEditorPanel,
     version_control: VersionControlPanel,
     plugin_manager: PluginManagerPanel,
+    input_rebind: InputRebindPanel,
     /// Mapping from project entity ID (source_id) to hecs Entity for selection sync.
     entity_id_to_hecs: HashMap<String, hecs::Entity>,
     graph_editor: GraphEditorState,
@@ -269,6 +271,8 @@ enum Tab {
     PluginManagerPanel,
     PrefabEditorPanel,
     VersionControl,
+    InputRebind,
+    SpriteEditor,
 }
 }
 
@@ -500,7 +504,7 @@ fn start_play_session(
     let source = std::fs::read_to_string(root.join(path))
         .map_err(|e| format!("could not read the scene script: {e}"))?;
 
-    let slice = kiln_runtime::SliceSession::new(&source).map_err(|d| {
+    let slice = kiln_runtime::SliceSession::with_action_map(&source, project.action_map.clone()).map_err(|d| {
         d.iter()
             .map(|d| d.message.clone())
             .collect::<Vec<_>>()
@@ -549,6 +553,9 @@ pub fn scene_from_world(
             kiln_core::project::Component::Sprite {
                 color: sprite.color,
                 texture,
+                layer: sprite.layer,
+                material: sprite.material.clone(),
+                animation_clip: sprite.animation_clip.clone(),
             },
         ];
         if let Some(role) = role {
@@ -736,6 +743,7 @@ impl EditorApp {
             profiler_panel: ProfilerPanel::new(),
             shader_editor: ShaderEditorState::new(),
             debugger_panel: DebuggerPanel::new(),
+            sprite_editor: SpriteEditorState::new(),
             vfx_editor: VfxEditorState::new(),
             audio_editor: AudioEditorState::new(),
             physics_editor: PhysicsEditorState::new(),
@@ -744,6 +752,7 @@ impl EditorApp {
             prefab_editor: PrefabEditorPanel::new(),
             version_control: VersionControlPanel::new(),
             plugin_manager: PluginManagerPanel::new(),
+            input_rebind: InputRebindPanel::new(),
             entity_id_to_hecs: HashMap::new(),
             graph_editor: GraphEditorState::new(),
             inspector_panel: InspectorPanel::new(),
@@ -1736,6 +1745,14 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                     if ui.button("Version Control").clicked() {
                         self.dock_state.add_window(vec![Tab::VersionControl]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Input Rebinding").clicked() {
+                        self.dock_state.add_window(vec![Tab::InputRebind]);
+                        ui.close_menu();
+                    }
+                    if ui.button("Sprite Editor").clicked() {
+                        self.dock_state.add_window(vec![Tab::SpriteEditor]);
                         ui.close_menu();
                     }
                     if ui.button("Plugin Manager").clicked() {
@@ -3880,17 +3897,19 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             }
             Tab::DebuggerPanel => {
                 ui.vertical(|ui| {
-                    if let Some(gpu) = self.gpu.as_ref() {
-                        // Debugger would need access to the SliceSession/VM
-                        // For now, show placeholder
+                    if let Some(play) = &mut self.play {
+                        // Use the SliceSession's debugger
+                        if let Some(debugger) = play.slice.debugger_mut() {
+                            self.debugger_panel.render(ui, debugger);
+                        } else {
+                            ui.heading("KilnScript Debugger");
+                            ui.add_space(8.0);
+                            ui.label("Debugger not available");
+                        }
+                    } else {
                         ui.heading("KilnScript Debugger");
                         ui.add_space(8.0);
-                        ui.label("Debugger panel - requires SliceSession integration");
-                        ui.label("Breakpoints, stepping, and variable inspection coming soon");
-                    } else {
-                        ui.heading("Debugger");
-                        ui.add_space(8.0);
-                        ui.label("GPU not initialized. Open a project to use debugger.");
+                        ui.label("Start a play session to use the debugger.");
                     }
                 });
             }
@@ -3963,6 +3982,28 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::VersionControl => {
                 ui.vertical(|ui| {
                     self.version_control.render(ui);
+                });
+            }
+            Tab::InputRebind => {
+                ui.vertical(|ui| {
+                    if let Some(project) = self.current_project.as_mut() {
+                        self.input_rebind.render(ui, project);
+                    } else {
+                        ui.heading("Input Rebinding");
+                        ui.add_space(8.0);
+                        ui.label("Open a project to rebind inputs.");
+                    }
+                });
+            }
+            Tab::SpriteEditor => {
+                ui.vertical(|ui| {
+                    if let Some(project) = self.current_project.as_mut() {
+                        self.sprite_editor.render(ui, project);
+                    } else {
+                        ui.heading("Sprite Editor");
+                        ui.add_space(8.0);
+                        ui.label("Open a project to edit sprites.");
+                    }
                 });
             }
             Tab::Hierarchy => {
@@ -4081,6 +4122,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::Preferences => "Preferences".into(),
             Tab::PluginManagerPanel => "Plugin Manager".into(),
             Tab::VersionControl => "Version Control".into(),
+            Tab::InputRebind => "Input Rebinding".into(),
+            Tab::SpriteEditor => "Sprite Editor".into(),
         }
     }
 }

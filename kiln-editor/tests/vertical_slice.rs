@@ -32,7 +32,7 @@ fn the_editor_can_play_the_sample_project() {
         .and_then(|s| s.script.clone())
         .expect("the sample scene has a script");
     let source = std::fs::read_to_string(dir.join(&script_path)).expect("the script is readable");
-    let mut session = kiln_runtime::SliceSession::new(&source).expect("the script compiles");
+    let mut session = kiln_runtime::SliceSession::with_action_map(&source, project.action_map.clone()).expect("the script compiles");
 
     // The editor spawns the scene the same way the player does.
     let mut world = kiln_runtime::GameWorld::new();

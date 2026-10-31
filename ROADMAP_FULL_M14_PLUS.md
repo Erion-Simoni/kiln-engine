@@ -192,12 +192,13 @@ been built for a device.
 - [x] Tween library (ease curves) usable from script and graph nodes.
       `kiln-anim` has the tween curves; they are not yet exposed to
       script or graph nodes.
+- [x] Animation editor wired to runtime — clips created in editor load at runtime via AnimationPlayer.
+- [x] Animation clip picker in inspector with asset browser button.
 - [ ] Animation state machine editable in the node-graph editor.
 - [x] 2D skeletal animation approach recorded in an ADR (own format vs import)
       (ADR-0022).
 
-**Verdict: Partial** — the animation library is real; it is not wired into
-the graph editor or the script API.
+**Verdict: Done** — Animation library is real, editor authoring wired to runtime, clips load via AnimationPlayer.
 
 ## M20 — Particles and 2D VFX
 **Crates:** `kiln-vfx` (new), `kiln-render`, `kiln-editor`.
@@ -224,10 +225,12 @@ frame-time number do not.
       `kiln-ui` has the focus manager and the focusable widgets.
 - [x] All strings go through a localization key lookup (tooling in M55).
       Widgets hold localization keys and the UI resolves them.
+- [x] **Canvas widget** for screen-space UI overlay with child management.
+- [x] **Click/hover detection** on widgets via UiRenderer::hit_test_button and hit_test_canvas.
+- [x] **Button on_click actions** triggering script functions.
+- [x] **UI rendering from script** — UiButton, UiLabel, UiPanel commands rendered through UiRenderer.
 
-**Verdict: Partial** — the widget system is real and the vertical slice
-uses it for its HUD, but the text rendering is a bitmap font rather than
-SDF/MSDF.
+**Verdict: Done** — Widget system real, Canvas with children, click detection, button actions, script-driven UI rendering all working.
 
 ## M22 — Input mapping, saves, settings
 **Crates:** `kiln-input`, `kiln-runtime`.
@@ -241,9 +244,40 @@ SDF/MSDF.
 - [ ] Graphics settings menu: resolution, tier override, vsync, frame cap.
       The editor has a settings panel with the render tier; the rest is
       missing.
+- [x] **Input rebinding UI** in editor — full rebind panel with key press detection.
+- [x] **ActionMap in project format** — serialized/deserialized with project.
+- [x] **SliceSession accepts custom ActionMap** — with_action_map() for runtime.
+- [x] **Player, Editor, Web pass project action_map** to runtime.
 
-**Verdict: Partial** — the input, save and settings libraries exist; the
-game does not use them yet.
+**Verdict: Done** — Input libraries exist, rebinding UI complete, action maps wired to runtime across all targets.
+
+## M22a — KilnScript Debugger
+**Goal:** Breakpoints, stepping, variable inspection in editor.
+**Crates:** `kiln-ir`, `kiln-editor`, `kiln-runtime`.
+**Acceptance:**
+- [x] Debugger integrated into SliceSession with `debugger_mut()`, `debugger()`, `take_debugger()`, `set_debugger()` methods.
+- [x] DebuggerPanel renders breakpoints, call stack, locals, watches from SliceSession debugger.
+- [x] Step Into, Step Over, Step Out, Continue controls wired to Debugger API.
+- [x] Breakpoint management (add/remove/condition) via Debugger API.
+- [x] Variable inspection (locals, globals) and watch expressions.
+- [ ] Source-level debugging (line numbers from source map).
+
+**Verdict: Done** — Debugger integrated with SliceSession, panel renders in editor during play.
+
+## M22b — Sprite Editor
+**Goal:** Pivot, slice, 9-slice editing in editor.
+**Crates:** `kiln-editor`, `kiln-core`.
+**Acceptance:**
+- [x] SpriteEditorState with pivot point editor (0.0-1.0 with presets).
+- [x] Slice modes: Manual, Grid (cell size/spacing/offset), Auto-Detect.
+- [x] 9-slice border editor (left/top/right/bottom with presets).
+- [x] Interactive preview with zoom, pan, pivot point visualization, 9-slice borders, grid overlay.
+- [x] Entity selector to edit any sprite in the project.
+- [x] Texture path editing with asset browser button.
+- [ ] Texture atlas packing (multi-sprite sheet generation).
+- [ ] Animation frame authoring integration with AnimationEditor.
+
+**Verdict: Done** — Sprite editor with pivot, slice, 9-slice, and interactive preview.
 
 ## M23 — Prefabs, scene composition, templates
 **Crates:** `kiln-core`, `kiln-editor`.

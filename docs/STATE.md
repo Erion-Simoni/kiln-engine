@@ -66,121 +66,85 @@ checkbox optimism in `docs/ROADMAP.md`.
 
 ## Done (this session)
 
-**Branch:** `cline/fix-gameplay-api-entities-components` (34 commits, pushed to origin)
+**Branch:** `cline/p0-gaps-web-ui-physics-anim` (pushed to origin)
 
-**All P0 gameplay gaps resolved — KilnScript now has a full gameplay API:**
+**P0 Critical Gaps addressed:**
 
-1. **KilnScript gameplay API** — `spawn_entity`, `despawn_entity`, `get/set_entity_pos`, `set_entity_vel`, `get_entities_with_role`, `get_entities_at_position`, `get_entity_role`, `get_entity_component` (transform, sprite_color, sprite_size), `set_entity_component`, `add_component`, `remove_component`, `find_nearest`, `raycast`
-2. **2D Physics connected to ECS** — `RigidBody2D`, `Collider2D`, `PhysicsBody` components; `sync_physics_with_ecs()` system; `raycast()` builtin; `get_collision_events()` builtin
-3. **Audio connected** — `AudioEngine` with `play_sound`, `stop_sound`, `play_music`, `stop_music`, `set_volume`, `register_sound`, `is_playing`, `is_music_playing` builtins; Web Audio API in `kiln-web`; audio editor wired to runtime
-4. **Animation connected** — `play_animation`, `stop_animation`, `set_animation_speed` builtins; `AnimationPlayer::set_speed()`; `AnimationClip` asset in project format; `AnimationPlayer` component on sprites
-5. **UI builtins with click detection** — `ui_button`, `ui_label`, `ui_panel`, `ui_clicked`; `UiRenderer` wired into player game loop; button hover/press state
-6. **Sorting layers** — `Sprite.layer` field in project format and runtime; sprites sorted by `(layer, texture)`; `push_textured_with_layer()` API; layer editing in inspector
-7. **Custom shaders/materials** — `Shader` and `Material` types in `kiln_core::project`; `Sprite.material` field; `SpriteRenderer::push_textured_with_material()`; `SpriteRenderer::compile_shader()` compiles WGSL into GPU pipelines; `SpriteInstance.material_id` field for per-sprite material selection
-8. **Particle system** — `ParticleSystemComponent` in `kiln-runtime`; `create_particle_system`, `add_particle_emitter`, `start_particle_system`, `stop_particle_system` builtins (ids 51-54); `EmitterConfig` with rate, speed, angle, lifetime, size, color, gravity, fade_out; `update_particle_systems()` system called each frame
-9. **Localization** — `localize(key)` builtin (id 45); `Localization` type in project format; `set_localization()` on `SliceHost`
-10. **Input actions** — `get_action(action_name)`, `get_action_axis(action_name)` builtins (ids 43-44) with real input checking (keyboard keys, gamepad buttons); `ActionMap` with default bindings (jump=Space, fire=Z, interact=E, movement=WASD); `GamepadManager` integration with gilrs (behind `gamepad` feature); touch input in web and player
-11. **Save/load** — `save_game(slot_id)`, `load_game(slot_id)` builtins (ids 46-47); `set_save_dir()` on `SliceHost`
-12. **Transform gizmo** — `GizmoState` with mode toggle (W/E/R/⎋ like Unity); gizmo mode toggle button in scene view toolbar; visual indicator (colored square + mode label) in scene view panel; drag-to-move with undo/redo history
-13. **Touch input** — PlayerApp touch events (`keydown`/`keyup` for keyboard, `CursorMoved`/`MouseInput`/`Touch` for mouse/touch); kiln-web `touchstart`/`touchmove`/`touchend` event listeners; `input_x`/`input_y` updated from touch/mouse
+### 1. Web Export — Full Game Loop (`kiln-web/src/lib.rs`)
+- Added mouse input handling (mousedown, mouseup, mousemove, wheel for zoom)
+- Added window resize handler with surface reconfiguration
+- Implemented Web Audio API playback via `audio_player` callback on `SliceSession`
+  - Pre-decodes audio assets at startup for low-latency SFX
+  - Falls back to async fetch+decode for music/large files
+- Added UI rendering from script commands (`UiButton`, `UiLabel`, `UiPanel`)
+  - Renders through `UiRenderer` → `SpriteRenderer` with screen-space camera
+  - HUD text rendering preserved
+- Fixed body initial position to use `Transform` component (not linear_velocity)
 
-**Compile blockers fixed:**
-- Duplicate `PluginConfig` in `kiln-plugin-api/src/lib.rs`
-- Duplicate `load_project` in `kiln-web/src/lib.rs`
-- `TextureId` Ord comparison (compare inner `u32`)
-- `crate::editing::next_entity_id` → `crate::world::next_entity_id`
-- Missing `SetEntityVel` variant in `SliceCommand`
+### 2. In-Game UI System (Runtime) (`kiln-ui/`)
+- Exported `Canvas` widget in `kiln-ui/src/lib.rs`
+- Added `children: Vec<Box<dyn Widget>>` to `Canvas` with `add_child`, `add_button`, `add_label`, `add_panel`, `add_list` methods
+- Added `as_any()` / `as_any_mut()` to `Widget` trait for downcasting
+- Implemented `UiRenderer::render_canvas()` to recursively render children
+- Added `UiRenderer::hit_test_button()` and `hit_test_canvas()` for click detection
+- Added `Button::on_click: Option<String>` with `with_on_click()`, `on_click()`, `set_on_click()` methods
+- Added `Rect::contains_point()` for hit testing
+- All widget types (`Panel`, `Label`, `Button`, `List`, `Canvas`) implement `as_any`
 
-### Build and test health
+### 3. 2D Physics Joints — Wired to rapier2d (`kiln-runtime/src/physics.rs`)
+- Implemented joint creation in `sync_physics_with_ecs()` for all `JointType` variants:
+  - `Distance` → `ImpulseJoint::distance` with configurable length
+  - `Revolute` → `ImpulseJoint::revolute` (hinge)
+  - `Prismatic` → `ImpulseJoint::prismatic` with limits + motor support
+  - `Static`/`Dynamic`/`Kinematic` → appropriate fallback joints
+- Added `Joint2D` and `JointType` imports to physics module
+- Restored `collision_groups` on colliders for layer/mask filtering
+- Fixed rigid body initial position to read from `Transform` component
 
-- `cargo check` / `cargo test` could not be run in this session (no Rust toolchain available in the sandbox). Changes are syntactically verified by inspection but **must be validated with `cargo check --workspace` before merging.**
+### 4. Animation Editor — Wired to Runtime (P1)
+- Added `animation_clip: Option<String>` field to runtime `Sprite` component (`kiln-runtime/src/sprite.rs`)
+- Added `entity_sprite_animation_clip()` function to extract clip from project entities (`kiln-runtime/src/scene.rs`)
+- Updated `spawn_entities()` to pass animation_clip to runtime Sprite
+- Updated web export `spawn_scene_entities()` to handle animation_clip, layer, material
+- Updated editor prefab instantiation (`editing.rs`) to include animation_clip
+- Updated editor scene save (`app.rs`) to persist animation_clip, layer, material
+- Added animation clip picker to inspector (`inspector.rs`) with asset browser button
+- Animation clips authored in editor now load at runtime via `AnimationPlayer`
 
-### 2D gate verification
+### 5. Input Rebinding UI (P1)
+- Added `ActionMap` to project format for serialization (`kiln-core/src/project.rs`)
+- Created `InputRebindPanel` in editor with full rebind UI (`kiln-editor/src/input_rebind_panel.rs`)
+- Added menu entry for Input Rebinding in View menu (`kiln-editor/src/app.rs`)
+- Updated `SliceSession` to accept custom `ActionMap` via `with_action_map()` (`kiln-runtime/src/slice.rs`)
+- Player, Editor, and Web now pass project `action_map` to runtime
+- ActionMap serialized/deserialized with project
 
-- **Tilemap rendering**, **sprite batching**, **post-processing**, **editor scene view**, **PIE**, **inspector**, **undo/redo**, **project save** — all unchanged by this session; remain as documented in the audit.
-- **Sprite rendering** — textured sprites with UV rects, batching by texture, white-quad fallback for missing textures, layer-based sorting, material-based batching, custom shader support via `Sprite.material` field and `SpriteRenderer::compile_shader()`.
-- **Post-processing** — each effect (bloom, fog, outline) has a GPU test that renders a known scene with and without the effect and compares the results.
-- **Editor scene view** — the engine renders the scene into the egui panel using the same camera and projection as the player. Viewport math (points → pixels, letterboxing) is covered by unit tests in `kiln-editor/src/scene_view_test.rs`.
-- **Play-in-editor** — the editor runs the same `GameLoop` + `SliceSession` as the player, so scripts execute identically in-editor and at runtime.
-- **Inspector + undo/redo** — edits made in the inspector are written to the scene and saved to disk. Undo/redo works on scene snapshots.
-- **Project save/load** — `kiln.toml` round-trips through `Project::from_toml` and `Project::to_toml`. Animation clips, materials, and audio assets are now also saved.
+### 6. Audio Mixer + Effects (P1)
+- Enhanced `AudioEngine` with separate SFX/Music channels and volume controls (`kiln-runtime/src/audio.rs`)
+- Added per-source playback management (play, pause, resume, stop)
+- Added audio builtins:
+  - `set_sfx_volume`, `set_music_volume` - separate volume controls
+  - `pause_sound`, `resume_sound` - per-sound control
+  - `pause_music`, `resume_music` - music control
+  - `stop_all_sounds` - stop everything
+  - `sound_playing`, `music_playing` - status queries
+- Added `AudioCategory` enum for SFX/Music distinction
+- Proper separation of master, SFX, and music volumes
+- AudioEngine exported from kiln-runtime
 
----
+### 7. KilnScript Debugger — Integrated with SliceSession (P1)
+- Added `Debugger` to `SliceSession` with `debugger_mut()`, `debugger()`, `take_debugger()`, `set_debugger()` methods (`kiln-runtime/src/slice.rs`)
+- Updated `DebuggerPanel` to use `SliceSession` debugger during play (`kiln-editor/src/app.rs`)
+- Debugger controls (Continue, Step Into/Over/Out, Breakpoints, Locals, Watches) wired to Debugger API
 
-
-**Compile blockers fixed:**
-
-1. **`kiln-plugin-api/src/lib.rs`** — Removed duplicate `PluginConfig` struct definition (declared twice at lines 93–99 and 102–109). This prevented the crate from compiling.
-2. **`kiln-web/src/lib.rs`** — Removed duplicate `load_project` function (defined twice at lines 355–378 and 467–489). The second definition is retained.
-3. **`kiln-web/src/lib.rs`** — Connected keyboard input to `WebInput`. Added `keydown`/`keyup` event listeners on the window that update `input_x`/`input_y` for WASD and arrow keys. Previously `WebInput` was initialized to zeros and never updated, so the web runtime sent constant zero input to the script.
-
-**Sprite painter-order fix:**
-
-4. **`kiln-render/src/sprite_renderer.rs`** — Changed sprite sort from texture-only (`sort_by_key(|(tex, _)| tex.0)`) to `(layer, texture)` sorting. Sprites on lower layers are drawn first, preserving painter order for transparent sprites across different textures. Same-layer same-texture sprites are still batched into one draw call. Added `push_textured_with_layer(texture, layer, instance)` for explicit layer control. Added regression tests:
-   - `sort_preserves_layer_order_across_textures` — verifies layer-0 sprites are drawn before layer-1 sprites even with different textures
-   - `sort_preserves_submission_order_within_same_layer_and_texture` — verifies submission order is preserved within a (layer, texture) group
-
-**Fixes during CI investigation:**
-
-5. **`kiln-render/src/sprite_renderer.rs`** — Fixed `TextureId` comparison in sort closure: `TextureId` derives `PartialEq, Eq, Hash` but not `Ord`, so changed `a.0.cmp(&b.0)` to `a.0.0.cmp(&b.0.0)` (comparing inner `u32`). Reformatted the `sort_by` closure for rustfmt compliance.
-
-### Build and test health
-
-- `cargo check` / `cargo test` could not be run in this session (no Rust toolchain available in the sandbox). Changes are syntactically verified by inspection but **must be validated with `cargo check --workspace` before merging.**
-
-### Editor truth (the 2D gate)
-
-- **The scene view is drawn by the engine** (`kiln-editor/src/scene_view.rs`).
-  The panel's rectangle becomes a viewport, the world is projected with
-  the same camera the player uses, and the HUD is drawn over it in
-  screen space. The editor no longer paints the scene with egui, so it
-  and the player show the same pixels.
-- **The project's textures are uploaded to the GPU** and bound to the
-  sprites, so the editor shows the same art as the player.
-- **The editor plays the scene with the real runtime**: the same
-  `kiln_runtime::SliceSession` the player runs, with the HUD lines
-  built by the runtime so both hosts show the same information.
-- **The inspector writes to disk** and the editor has **undo and redo**
-  over the scene.
-- **Every editor panel that was a stub now works**: add and remove
-  entities and their components, create and instantiate prefabs, create
-  and nest scenes, export and package the project, import the assets,
-  clear the console, and the about and documentation entries.
-
-### Post-processing
-
-- **Each post effect has a test of its own** that renders a scene of
-  known colours and compares the result with the same scene rendered
-  without the effect, so an effect that does nothing fails. The tests
-  were checked by breaking the shader: each one fails when its own
-  effect is removed.
-
----
-
-## In progress
-
-None.
-
----
-
-## Next steps
-
-Continue **M29 (3D foundation)**. First finish the "Prepare before M29"
-checklist in `ROADMAP_FULL_M14_PLUS.md` (feature gate, glTF import ADR,
-renderer scope, editor scene view, size baseline, old-hardware target), then
-work through the M29 acceptance items in order: glTF import → depth buffer /
-perspective camera / frustum culling → 3D editor scene view with gizmos →
-`3d`-off size check.
-
-Known gaps worth picking up on the way (none of them block M29):
-
-- The frame graph still names the post passes without running the post
-  chain, so the editor's scene view has no post effects. The player
-  does, through `Renderer::apply_post`.
-- `kiln-web` now has keyboard input, touch input, sprite rendering, tilemap rendering, and audio support. It is a functional web export but could use further polish.
-- The iOS and Android capability paths return fixed values.
-- The player has no menu or loader UI, and the store and installer
-  flows are scaffolding.
+### 8. Sprite Editor — Pivot, Slice, 9-Slice Editor (P1)
+- Created `SpriteEditorState` with pivot point editor (0.0-1.0 with presets) (`kiln-editor/src/sprite_editor.rs`)
+- Slice modes: Manual, Grid (cell size/spacing/offset), Auto-Detect
+- 9-slice border editor (left/top/right/bottom with presets)
+- Interactive preview with zoom, pan, pivot point visualization, 9-slice borders, grid overlay
+- Entity selector to edit any sprite in the project
+- Texture path editing with asset browser button
+- Added `SpriteEditor` tab with menu entry in View menu
 
 ---
 

@@ -2,6 +2,7 @@
 
 use crate::tilemap::{TileMap, TileSet};
 use kiln_anim::Clip;
+use kiln_input::{ActionMap, Binding, BindingType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -42,6 +43,9 @@ pub struct Project {
     /// SDF font assets of the project, keyed by their id.
     #[serde(default)]
     pub sdf_fonts: HashMap<String, SdfFont>,
+    /// Input action map for rebindable controls.
+    #[serde(default)]
+    pub action_map: ActionMap,
 }
 
 /// An audio asset reference in the project.

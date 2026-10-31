@@ -34,7 +34,7 @@ pub use tilemap_scene::{spawn_tilemaps, TilesetTextureResolver};
 pub use world::*;
 
 #[cfg(feature = "audio")]
-pub use audio::*;
+pub use audio::{AudioEngine, AudioCategory};
 
 #[cfg(feature = "physics")]
 pub use physics::*;

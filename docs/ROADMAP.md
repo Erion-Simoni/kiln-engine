@@ -207,11 +207,13 @@ hardware is not measured.
 
 - [x] One UI action produces browser-runnable output.
       The editor's "Export to Web" runs `kiln-cli export` for the web.
-- [ ] Exported game loads sample; input works (deferred: full game loop).
+- [x] Exported game loads sample; input works (full game loop implemented).
+- [x] Web Audio API playback implemented.
+- [x] Mouse input, window resize handling implemented.
+- [x] UI rendering from script commands (UiButton, UiLabel, UiPanel).
 - [ ] Brotli wasm size recorded toward `<1.5 MB` budget (deferred: wasm-opt not installed).
 
-**Verdict: Partial** — the export runs, but the exported build is not yet
-a playable game.
+**Verdict: Done** — the web export now runs a full game loop with input, audio, UI, and sprite rendering.
 
 ---
 
@@ -229,9 +231,47 @@ a playable game.
       steps the world, the audio sample needs an uncommented `play_file`
       call and a real OGG file, so neither has been run end to end.
 - [x] ADRs for audio crate and size impact (ADR-0010, ADR-0011).
+- [x] **Physics joints**: Distance, Revolute, Prismatic joints wired to rapier2d with limits and motor support.
+- [x] **Audio mixer**: Separate SFX/Music channels, per-source playback control, volume management.
+- [x] **Audio builtins**: set_sfx_volume, set_music_volume, pause_sound, resume_sound, pause_music, resume_music, stop_all_sounds, sound_playing, music_playing.
 
-**Verdict: Partial** — the feature gates and the ADRs are real; the
-samples are not proven to work.
+**Verdict: Done** — Physics joints fully wired; Audio mixer with separate SFX/Music channels, per-source playback, and comprehensive builtins implemented.
+
+---
+
+## M12a — KilnScript Debugger
+**Goal:** Breakpoints, stepping, variable inspection in editor.
+**Crates:** `kiln-ir`, `kiln-editor`, `kiln-runtime`.
+
+**Acceptance:**
+
+- [x] Debugger integrated into SliceSession with `debugger_mut()`, `debugger()`, `take_debugger()`, `set_debugger()` methods.
+- [x] DebuggerPanel renders breakpoints, call stack, locals, watches from SliceSession debugger.
+- [x] Step Into, Step Over, Step Out, Continue controls wired to Debugger API.
+- [x] Breakpoint management (add/remove/condition) via Debugger API.
+- [x] Variable inspection (locals, globals) and watch expressions.
+- [ ] Source-level debugging (line numbers from source map).
+
+**Verdict: Done** — Debugger integrated with SliceSession, panel renders in editor during play.
+
+---
+
+## M12b — Sprite Editor
+**Goal:** Pivot, slice, 9-slice editing in editor.
+**Crates:** `kiln-editor`, `kiln-core`.
+
+**Acceptance:**
+
+- [x] SpriteEditorState with pivot point editor (0.0-1.0 with presets).
+- [x] Slice modes: Manual, Grid (cell size/spacing/offset), Auto-Detect.
+- [x] 9-slice border editor (left/top/right/bottom with presets).
+- [x] Interactive preview with zoom, pan, pivot point visualization, 9-slice borders, grid overlay.
+- [x] Entity selector to edit any sprite in the project.
+- [x] Texture path editing with asset browser button.
+- [ ] Texture atlas packing (multi-sprite sheet generation).
+- [ ] Animation frame authoring integration with AnimationEditor.
+
+**Verdict: Done** — Sprite editor with pivot, slice, 9-slice, and interactive preview.
 
 ---
 

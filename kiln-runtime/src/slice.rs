@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use kiln_ir::{HostContext, Program, Value, Vm, VmError};
+use kiln_ir::{Debugger, HostContext, Program, Value, Vm, VmError};
 use kiln_save::slot::SaveSlotError;
 use kiln_save::SaveSlotManager;
 use kiln_script::{Diagnostic, KilnScriptFrontend, LanguageFrontend};
@@ -49,61 +49,59 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("play_music", 14, 1),
     ("stop_music", 15, 0),
     ("set_volume", 16, 1),
-    // Entity management (17-22)
-    ("spawn_entity", 17, 4),       // name, x, y, texture_path?
-    ("despawn_entity", 18, 1),     // source_id
-    ("get_entity_pos", 19, 1),     // source_id -> (x, y)
-    ("set_entity_pos", 20, 3),     // source_id, x, y
-    // Query builtins (21-25)
-    ("get_entities_with_role", 21, 1),  // role -> array of source_ids
-    ("get_entity_component", 22, 2),    // source_id, component_name -> value
-    ("set_entity_component", 23, 3),    // source_id, component_name, value
-    // World queries (24-25)
-    ("find_nearest", 24, 3),         // x, y, role -> source_id
-    ("raycast", 25, 4),              // x, y, dx, dy -> hit info
-    // Audio extended (26-27)
-    ("sound_playing", 26, 1),        // sound_name -> bool
-    ("music_playing", 27, 0),        // -> bool
-    // Time/frame (28-29)
-    ("get_frame_count", 28, 0),      // -> frame number
-    ("get_time_scale", 29, 0),       // -> time scale
-    // Extended entity API (30-34)
-    ("set_entity_vel", 30, 3),       // source_id, vx, vy
-    ("get_entities_at_position", 31, 3), // x, y, radius -> array of source_ids
-    ("get_entity_role", 32, 1),      // source_id -> role string
-    ("add_component", 33, 3),        // source_id, component_type, value_json
-    ("remove_component", 34, 2),     // source_id, component_type
-    // Animation API (35-37)
-    ("play_animation", 35, 2),       // source_id, clip_name
-    ("stop_animation", 36, 1),       // source_id
-    ("set_animation_speed", 37, 2),  // source_id, speed
-    // Collision events (38)
-    ("get_collision_events", 38, 0), // -> array of [entity_a, entity_b, started]
-    // UI widgets (39-42)
-    ("ui_button", 39, 3),        // id, x, y -> clicked bool
-    ("ui_label", 40, 4),         // id, x, y, text -> void
-    ("ui_panel", 41, 5),         // id, x, y, w, h -> void
-    ("ui_clicked", 42, 1),       // id -> clicked bool
-    // Input actions (43-44)
-    ("get_action", 43, 1),       // action_name -> pressed bool
-    ("get_action_axis", 44, 1),  // action_name -> -1 to 1 value
-    // Localization (45)
-    ("localize", 45, 1),         // key -> localized string
-    // Save/load (46-47)
-    ("save_game", 46, 1),        // slot_id -> bool
-    ("load_game", 47, 1),        // slot_id -> bool
-    // Animation clip creation (48-50)
-    ("create_animation_clip", 48, 3),  // source_id, clip_name, texture_path -> void
-    ("add_animation_frame", 49, 6),    // source_id, clip_name, x, y, w, h, duration -> void
-    ("set_animation_loop", 50, 2),     // source_id, clip_name, loops -> void
-    // Particle system (51-54)
-    ("create_particle_system", 51, 1),  // source_id -> void
-    ("add_particle_emitter", 52, 16),   // source_id, rate, speed_min, speed_max, angle_min, angle_max, lifetime_min, lifetime_max, size_min, size_max, r, g, b, a, gx, gy, fade_out -> void
-    ("start_particle_system", 53, 1),   // source_id -> void (already implicit with emitter)
-    ("stop_particle_system", 54, 1),    // source_id -> void
-    // Audio editing (55-56)
-    ("register_audio", 55, 2),   // source_id, clip_name, texture_path -> void
-    ("play_audio_preview", 56, 1),   // source_id -> void
+    // Audio extended (17-24)
+    ("set_sfx_volume", 17, 1),        // volume 0-1
+    ("set_music_volume", 18, 1),      // volume 0-1
+    ("pause_sound", 19, 1),           // sound_name -> void
+    ("resume_sound", 20, 1),          // sound_name -> void
+    ("pause_music", 21, 0),           // -> void
+    ("resume_music", 22, 0),          // -> void
+    ("stop_all_sounds", 23, 0),       // -> void
+    ("sound_playing", 24, 1),         // sound_name -> bool
+    ("music_playing", 25, 0),         // -> bool
+    // Entity management (26-31)
+    ("spawn_entity", 26, 4),       // name, x, y, texture_path?
+    ("despawn_entity", 27, 1),     // source_id
+    ("get_entity_pos", 28, 1),     // source_id -> (x, y)
+    ("set_entity_pos", 29, 3),     // source_id, x, y
+    // Query builtins (30-34)
+    ("get_entities_with_role", 30, 1),  // role -> array of source_ids
+    ("get_entity_component", 31, 2),    // source_id, component_name -> value
+    ("set_entity_component", 32, 3),    // source_id, component_name, value
+    // World queries (33-34)
+    ("find_nearest", 33, 3),         // x, y, role -> source_id
+    ("raycast", 34, 4),              // x, y, dx, dy -> hit info
+    // Time/frame (35-36)
+    ("get_frame_count", 35, 0),      // -> frame number
+    ("get_time_scale", 36, 0),       // -> time scale
+    // Extended entity API (37-41)
+    ("set_entity_vel", 37, 3),       // source_id, vx, vy
+    ("get_entities_at_position", 38, 3), // x, y, radius -> array of source_ids
+    ("get_entity_role", 39, 1),      // source_id -> role string
+    ("add_component", 40, 3),        // source_id, component_type, value_json
+    ("remove_component", 41, 2),     // source_id, component_type
+    // Animation API (42-44)
+    ("play_animation", 42, 2),       // source_id, clip_name
+    ("stop_animation", 43, 1),       // source_id
+    ("set_animation_speed", 44, 2),  // source_id, speed
+    // Collision events (45)
+    ("get_collision_events", 45, 0), // -> array of [entity_a, entity_b, started]
+    // UI widgets (46-49)
+    ("ui_button", 46, 3),        // id, x, y -> clicked bool
+    ("ui_label", 47, 4),         // id, x, y, text -> void
+    ("ui_panel", 48, 5),         // id, x, y, w, h -> void
+    ("ui_clicked", 49, 1),       // id -> clicked bool
+    // Input actions (50-51)
+    ("get_action", 50, 1),        // action_name -> pressed bool
+    ("get_action_axis", 51, 1),  // action_name -> -1 to 1 value
+    // Localization (52)
+    ("localize", 52, 1),         // key -> localized string
+    // Save/load (53-54)
+    ("save_game", 53, 1),        // slot_id -> bool
+    ("load_game", 54, 1),        // slot_id -> bool
+    // Animation clip creation (55-57)
+    ("create_animation_clip", 55, 3),  // source_id, clip_name, texture_path -> void
+
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -642,8 +640,103 @@ impl SliceHost {
                 }
                 Ok(Value::I64(0))
             }
-            // Entity management (17-20)
             17 => {
+                // set_sfx_volume(volume) -> void
+                #[cfg(feature = "audio")]
+                {
+                    let volume = args.first().and_then(|v| v.to_f64()).unwrap_or(1.0) as f32;
+                    if let Some(audio) = &mut self.audio {
+                        audio.set_sfx_volume(volume);
+                    }
+                }
+                Ok(Value::I64(0))
+            }
+            18 => {
+                // set_music_volume(volume) -> void
+                #[cfg(feature = "audio")]
+                {
+                    let volume = args.first().and_then(|v| v.to_f64()).unwrap_or(1.0) as f32;
+                    if let Some(audio) = &mut self.audio {
+                        audio.set_music_volume(volume);
+                    }
+                }
+                Ok(Value::I64(0))
+            }
+            19 => {
+                // pause_sound(name) -> void
+                #[cfg(feature = "audio")]
+                {
+                    let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
+                    if let Some(audio) = &mut self.audio {
+                        audio.pause_sound(name);
+                    }
+                }
+                Ok(Value::I64(0))
+            }
+            20 => {
+                // resume_sound(name) -> void
+                #[cfg(feature = "audio")]
+                {
+                    let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
+                    if let Some(audio) = &mut self.audio {
+                        audio.resume_sound(name);
+                    }
+                }
+                Ok(Value::I64(0))
+            }
+            21 => {
+                // pause_music() -> void
+                #[cfg(feature = "audio")]
+                {
+                    if let Some(audio) = &mut self.audio {
+                        audio.pause_music();
+                    }
+                }
+                Ok(Value::I64(0))
+            }
+            22 => {
+                // resume_music() -> void
+                #[cfg(feature = "audio")]
+                {
+                    if let Some(audio) = &mut self.audio {
+                        audio.resume_music();
+                    }
+                }
+                Ok(Value::I64(0))
+            }
+            23 => {
+                // stop_all_sounds() -> void
+                #[cfg(feature = "audio")]
+                {
+                    if let Some(audio) = &mut self.audio {
+                        audio.stop_all();
+                    }
+                }
+                Ok(Value::I64(0))
+            }
+            24 => {
+                // sound_playing(name) -> bool
+                #[cfg(feature = "audio")]
+                {
+                    let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
+                    let playing = self.audio.as_ref().map(|a| a.is_playing(name)).unwrap_or(false);
+                    Ok(Value::Bool(playing))
+                }
+                #[cfg(not(feature = "audio"))]
+                Ok(Value::Bool(false))
+            }
+            25 => {
+                // music_playing() -> bool
+                #[cfg(feature = "audio")]
+                {
+                    let playing = self.audio.as_ref().map(|a| a.is_music_playing()).unwrap_or(false);
+                    Ok(Value::Bool(playing))
+                }
+                #[cfg(not(feature = "audio"))]
+                Ok(Value::Bool(false))
+            }
+            // Entity management (26-31)
+            26 => {
                 // spawn_entity(name, x, y, texture_path?)
                 let name = args.first().and_then(|v| v.as_str()).unwrap_or("entity").to_string();
                 let x = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
@@ -1126,23 +1219,35 @@ fn describe(value: &Value) -> String {
 pub struct SliceSession {
     program: Program,
     vm: Vm<SliceHost>,
+    debugger: Option<Debugger<SliceHost>>,
     state: SliceState,
     /// UI commands recorded during the last script run (buttons, labels, panels).
     ui_commands: Vec<SliceCommand>,
 }
 
 impl SliceSession {
-    /// Compile a slice script.
+    /// Compile a slice script with the default action map.
     pub fn new(source: &str) -> Result<Self, Vec<Diagnostic>> {
+        Self::with_action_map(source, ActionMap::new())
+    }
+
+    /// Compile a slice script with a custom action map.
+    pub fn with_action_map(source: &str, action_map: ActionMap) -> Result<Self, Vec<Diagnostic>> {
         let mut frontend = KilnScriptFrontend::new();
         for (name, id, argc) in BUILTINS {
             frontend = frontend.with_builtin(*name, *id, *argc);
         }
         let program = frontend.compile(source)?;
-        let vm = Vm::new(SliceHost::default());
+        let mut host = SliceHost::default();
+        host.action_map = action_map;
+        let vm = Vm::new(host.clone());
+        let mut host = SliceHost::default();
+        host.action_map = action_map;
+        let debugger = Debugger::new(program.clone(), host);
         Ok(Self {
             program,
             vm,
+            debugger: Some(debugger),
             state: SliceState::default(),
             ui_commands: Vec::new(),
         })
@@ -1167,6 +1272,26 @@ impl SliceSession {
     /// that the script requested to be drawn this frame.
     pub fn take_ui_commands(&mut self) -> Vec<SliceCommand> {
         std::mem::take(&mut self.ui_commands)
+    }
+
+    /// Get a mutable reference to the debugger, if available.
+    pub fn debugger_mut(&mut self) -> Option<&mut Debugger<SliceHost>> {
+        self.debugger.as_mut()
+    }
+
+    /// Get an immutable reference to the debugger, if available.
+    pub fn debugger(&self) -> Option<&Debugger<SliceHost>> {
+        self.debugger.as_ref()
+    }
+
+    /// Take the debugger out of the session (for transferring to another context).
+    pub fn take_debugger(&mut self) -> Option<Debugger<SliceHost>> {
+        self.debugger.take()
+    }
+
+    /// Replace the debugger (e.g., after hot-reload).
+    pub fn set_debugger(&mut self, debugger: Debugger<SliceHost>) {
+        self.debugger = Some(debugger);
     }
 
     /// Replace the state of the slice.

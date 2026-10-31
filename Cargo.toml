@@ -75,6 +75,9 @@ rand         = "0.8"
 chrono       = "0.4"
 gilrs        = "0.10"
 mdbook       = "0.4"
+rodio        = { version = "0.19", optional = true }
+symphonia    = { version = "0.7", features = ["vorbis", "ogg"], optional = true }
+cpal         = { version = "0.15", optional = true }
 kiln-core    = { path = "kiln-core" }
 kiln-render  = { path = "kiln-render" }
 kiln-runtime = { path = "kiln-runtime" }

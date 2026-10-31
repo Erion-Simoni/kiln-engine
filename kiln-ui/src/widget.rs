@@ -52,6 +52,12 @@ pub trait Widget {
 
     /// Sets the widget's visibility.
     fn set_visible(&mut self, visible: bool);
+
+    /// Returns self as Any for downcasting.
+    fn as_any(&self) -> &dyn std::any::Any;
+
+    /// Returns self as mutable Any for downcasting.
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
 }
 
 /// A panel widget for grouping other widgets.
@@ -118,6 +124,14 @@ impl Widget for Panel {
     fn set_visible(&mut self, visible: bool) {
         self.visible = visible;
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }
 
 /// A label widget for displaying text.
@@ -183,6 +197,14 @@ impl Widget for Label {
     fn set_visible(&mut self, visible: bool) {
         self.visible = visible;
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }
 
 /// A button widget.
@@ -196,6 +218,8 @@ pub struct Button {
     normal: Option<NineSlice>,
     hovered: Option<NineSlice>,
     pressed: Option<NineSlice>,
+    /// Optional action name to trigger when clicked (e.g., "pause", "restart", "menu").
+    pub on_click: Option<String>,
 }
 
 impl Button {
@@ -209,6 +233,7 @@ impl Button {
             normal: None,
             hovered: None,
             pressed: None,
+            on_click: None,
         }
     }
 
@@ -230,6 +255,24 @@ impl Button {
     pub fn with_pressed(mut self, pressed: NineSlice) -> Self {
         self.pressed = Some(pressed);
         self
+    }
+
+    pub fn with_on_click(mut self, action: impl Into<String>) -> Self {
+        self.on_click = Some(action.into());
+        self
+    }
+
+    pub fn on_click(&self) -> Option<&str> {
+        self.on_click.as_deref()
+    }
+
+    pub fn set_on_click(&mut self, action: impl Into<String>) {
+        self.on_click = Some(action.into());
+    }
+
+    /// Check if the given point is inside the button bounds.
+    pub fn contains_point(&self, x: f32, y: f32) -> bool {
+        self.visible() && self.bounds().contains_point(x, y)
     }
 
     pub fn text_key(&self) -> &LocalizationKey {
@@ -280,6 +323,14 @@ impl Widget for Button {
 
     fn set_visible(&mut self, visible: bool) {
         self.visible = visible;
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 
@@ -376,6 +427,14 @@ impl Widget for List {
 
     fn set_visible(&mut self, visible: bool) {
         self.visible = visible;
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 
@@ -506,6 +565,9 @@ pub struct Canvas {
     pub background_color: [f32; 4],
     /// Whether the canvas captures input events.
     pub captures_input: bool,
+    /// Child widgets contained in this canvas.
+    #[serde(skip)]
+    pub children: Vec<Box<dyn Widget>>,
 }
 
 impl Canvas {
@@ -517,6 +579,7 @@ impl Canvas {
             visible: true,
             background_color: [0.0, 0.0, 0.0, 0.0],
             captures_input: false,
+            children: Vec::new(),
         }
     }
 
@@ -538,6 +601,26 @@ impl Canvas {
     pub fn with_captures_input(mut self, captures: bool) -> Self {
         self.captures_input = captures;
         self
+    }
+
+    pub fn add_child(&mut self, child: Box<dyn Widget>) {
+        self.children.push(child);
+    }
+
+    pub fn add_button(&mut self, button: Button) {
+        self.children.push(Box::new(button));
+    }
+
+    pub fn add_label(&mut self, label: Label) {
+        self.children.push(Box::new(label));
+    }
+
+    pub fn add_panel(&mut self, panel: Panel) {
+        self.children.push(Box::new(panel));
+    }
+
+    pub fn add_list(&mut self, list: List) {
+        self.children.push(Box::new(list));
     }
 }
 
@@ -568,5 +651,13 @@ impl Widget for Canvas {
 
     fn set_visible(&mut self, visible: bool) {
         self.visible = visible;
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }

@@ -84,6 +84,7 @@ pub fn spawn_entities(
         );
         let color = entity_sprite_color(entity);
         let texture_path = entity_sprite_texture(entity);
+        let animation_clip = entity_sprite_animation_clip(entity);
         let role_name = entity_role(entity);
 
         let position = [
@@ -95,25 +96,11 @@ pub fn spawn_entities(
             .with_scale(transform.scale);
         let source_id = SourceId::new(entity.id.clone());
 
-        let sprite = match color {
-            Some(rgba) => Some(make_sprite(entity, rgba, texture_path.as_deref())),
-            None => None,
-        };
-
-        eprintln!(
-            "DEBUG spawn_entities: entity id={} sprite={:?}",
-            entity.id,
-            sprite.is_some()
-        );
-
-        if let Some(ref s) = sprite {
-            eprintln!(
-                "DEBUG spawn_entities: entity id={} sprite.texture={:?}",
-                entity.id, s.texture
-            );
-        }
-
-        let sprite = color.map(|rgba| make_sprite(entity, rgba, texture_path.as_deref()));
+        let sprite = color.map(|rgba| {
+            let mut s = make_sprite(entity, rgba, texture_path.as_deref());
+            s.animation_clip = animation_clip.clone();
+            s
+        });
 
         eprintln!(
             "DEBUG spawn_entities: entity id={} sprite={:?}",
@@ -260,6 +247,16 @@ fn entity_sprite_texture(entity: &Entity) -> Option<String> {
     for component in &entity.components {
         if let Component::Sprite { texture, .. } = component {
             return texture.clone();
+        }
+    }
+    None
+}
+
+/// Read the animation clip name of a scene entity's sprite, if it has one.
+fn entity_sprite_animation_clip(entity: &Entity) -> Option<String> {
+    for component in &entity.components {
+        if let Component::Sprite { animation_clip, .. } = component {
+            return animation_clip.clone();
         }
     }
     None

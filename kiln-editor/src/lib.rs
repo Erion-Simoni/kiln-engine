@@ -24,6 +24,8 @@ pub mod preferences;
 pub mod prefab_editor_panel;
 pub mod version_control_panel;
 pub mod plugin_manager_panel;
+pub mod input_rebind_panel;
+pub mod sprite_editor;
 
 pub use app::{scene_from_world, EditorApp};
 pub use assets::{AssetBrowser, AssetEntry, AssetKind};
@@ -43,4 +45,6 @@ pub use physics_editor::PhysicsEditorState;
 pub use preferences::PreferencesPanel;
 pub use prefab_editor_panel::PrefabEditorPanel;
 pub use version_control_panel::VersionControlPanel;
-pub use plugin_manager_panel::PluginManagerPanel;
+pub mod plugin_manager_panel;
+pub use input_rebind_panel::InputRebindPanel;
+pub use sprite_editor::SpriteEditorState;
