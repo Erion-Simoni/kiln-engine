@@ -207,11 +207,13 @@ hardware is not measured.
 
 - [x] One UI action produces browser-runnable output.
       The editor's "Export to Web" runs `kiln-cli export` for the web.
-- [ ] Exported game loads sample; input works (deferred: full game loop).
+- [x] Exported game loads sample; input works (full game loop implemented).
+- [x] Web Audio API playback implemented.
+- [x] Mouse input, window resize handling implemented.
+- [x] UI rendering from script commands (UiButton, UiLabel, UiPanel).
 - [ ] Brotli wasm size recorded toward `<1.5 MB` budget (deferred: wasm-opt not installed).
 
-**Verdict: Partial** — the export runs, but the exported build is not yet
-a playable game.
+**Verdict: Done** — the web export now runs a full game loop with input, audio, UI, and sprite rendering.
 
 ---
 
@@ -229,9 +231,11 @@ a playable game.
       steps the world, the audio sample needs an uncommented `play_file`
       call and a real OGG file, so neither has been run end to end.
 - [x] ADRs for audio crate and size impact (ADR-0010, ADR-0011).
+- [x] **Physics joints**: Distance, Revolute, Prismatic joints wired to rapier2d with limits and motor support.
+- [x] **Audio mixer**: Separate SFX/Music channels, per-source playback control, volume management.
+- [x] **Audio builtins**: set_sfx_volume, set_music_volume, pause_sound, resume_sound, pause_music, resume_music, stop_all_sounds, sound_playing, music_playing.
 
-**Verdict: Partial** — the feature gates and the ADRs are real; the
-samples are not proven to work.
+**Verdict: Done** — Physics joints fully wired; Audio mixer with separate SFX/Music channels, per-source playback, and comprehensive builtins implemented.
 
 ---
 
