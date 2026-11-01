@@ -1157,3 +1157,4 @@ impl App {
         self.sprite_renderer.flush(&mut pass, hud_camera, self.renderer.queue());
     }
 }
+}

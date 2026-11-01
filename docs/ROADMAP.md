@@ -6,6 +6,16 @@ Acceptance criteria must be **testable** (command, screenshot, or automated chec
 
 ---
 
+## Hard gate: 2D before 3D
+
+Kiln 2D v1.0 must be complete and verified before any 3D work begins
+(M29+). See `docs/KILN_2D_V1_ROADMAP.md` for the 17-stage roadmap and
+release gate checklist. Stages 0–5 (stabilise build/CI, general runtime,
+asset management, scene editor, sprites/rendering) are foundational and
+must be done before expanding the feature set.
+
+---
+
 ## M0 — Workspace, CI, window + triangle (native + browser)
 
 **Goal:** Empty Rust workspace builds; CI green; colored triangle on native window and in browser.

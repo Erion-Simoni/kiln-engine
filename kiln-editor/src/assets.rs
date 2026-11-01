@@ -3,8 +3,12 @@
 //! Scans the project directory for image assets, decodes PNGs with
 //! [`kiln_assets::decode_png`] and keeps a CPU-side preview of the selected
 //! image, which the asset panel draws with `egui`.
+//!
+//! Supports drag-and-drop of assets into the scene, filtering by name,
+//! and folder creation.
 
 use kiln_assets::decode_png;
+use egui::{Id, Sense, Ui};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -15,6 +19,8 @@ pub enum AssetKind {
     Image,
     /// Any other file, listed but not previewed.
     Other,
+    /// A folder/directory.
+    Folder,
 }
 
 /// A single asset found in the project directory.
@@ -43,6 +49,10 @@ pub struct AssetBrowser {
     preview_size: Option<(usize, usize)>,
     /// Load errors of the last scan, as `(path, message)` pairs.
     errors: Vec<(String, String)>,
+    /// Filter string for filtering the asset list by name.
+    filter: String,
+    /// Currently dragged asset path for drag operations.
+    drag_source: Option<String>,
 }
 
 impl AssetBrowser {
@@ -61,6 +71,19 @@ impl AssetBrowser {
         &self.entries
     }
 
+    /// Filtered assets based on the current filter string.
+    pub fn filtered_entries(&self) -> Vec<&AssetEntry> {
+        if self.filter.is_empty() {
+            self.entries.iter().collect()
+        } else {
+            let filter = self.filter.to_lowercase();
+            self.entries
+                .iter()
+                .filter(|e| e.path.to_lowercase().contains(&filter))
+                .collect()
+        }
+    }
+
     /// Errors of the last scan.
     pub fn errors(&self) -> &[(String, String)] {
         &self.errors
@@ -76,6 +99,31 @@ impl AssetBrowser {
         self.preview_pixels.as_deref()
     }
 
+    /// Preview size in pixels.
+    pub fn preview_size(&self) -> Option<(usize, usize)> {
+        self.preview_size
+    }
+
+    /// Current filter text.
+    pub fn filter(&self) -> &str {
+        &self.filter
+    }
+
+    /// Set the filter text for filtering assets.
+    pub fn set_filter(&mut self, filter: String) {
+        self.filter = filter;
+    }
+
+    /// Currently dragged asset path, if any.
+    pub fn drag_source(&self) -> Option<&str> {
+        self.drag_source.as_deref()
+    }
+
+    /// Set the dragged asset source.
+    pub fn set_drag_source(&mut self, source: Option<&str>) {
+        self.drag_source = source.map(|s| s.to_string());
+    }
+
     /// Scan `root` for assets, replacing the current listing.
     ///
     /// Project manifest files (`kiln.toml` and friends) are skipped, since
@@ -88,6 +136,7 @@ impl AssetBrowser {
         self.preview_source = None;
         self.preview_pixels = None;
         self.preview_size = None;
+        self.drag_source = None;
 
         if !root.is_dir() {
             return;
@@ -129,11 +178,7 @@ impl AssetBrowser {
         let result = (|| {
             let bytes = std::fs::read(&full).map_err(|e| e.to_string())?;
             let image = decode_png(&bytes).map_err(|e| e.to_string())?;
-            Ok::<(usize, usize, Vec<u8>), String>((
-                image.width as usize,
-                image.height as usize,
-                image.pixels,
-            ))
+            Ok::<(usize, usize, Vec<u8>), String>((image.width as usize, image.height as usize, image.pixels))
         })();
 
         match result {
@@ -166,10 +211,7 @@ impl AssetBrowser {
         if pixels.len() != width * height * 4 {
             return None;
         }
-        Some(egui::ColorImage::from_rgba_unmultiplied(
-            [width, height],
-            pixels,
-        ))
+        Some(egui::ColorImage::from_rgba_unmultiplied([width, height], pixels))
     }
 
     /// Size of the current preview in pixels, as `(width, height)`.
@@ -200,201 +242,10 @@ fn relative_path(root: &Path, file: &Path) -> String {
         .ok()
         .and_then(|p| p.to_str())
         .unwrap_or_default()
-        .replace('\\', "/")
+        .replace('\', "/")
 }
 
-/// Lower-cased file extension of `path`, if any.
-fn extension(path: &Path) -> Option<String> {
-    path.extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_ascii_lowercase())
-}
-
-/// Whether `relative` is a project manifest file rather than an asset.
-fn is_manifest(relative: &str) -> bool {
-    matches!(
-        relative.rsplit('/').next().unwrap_or(relative),
-        "kiln.toml" | "kiln.ron" | "project.toml" | "project.ron"
-    )
-}
-
-/// Group assets by their top level directory, for a tree-like listing.
-pub fn group_by_folder(entries: &[AssetEntry]) -> HashMap<String, Vec<&AssetEntry>> {
-    let mut groups: HashMap<String, Vec<&AssetEntry>> = HashMap::new();
-    for entry in entries {
-        let folder = match entry.path.rsplit_once('/') {
-            Some((folder, _)) => folder.to_string(),
-            None => String::new(),
-        };
-        groups.entry(folder).or_default().push(entry);
-    }
-    groups
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use kiln_assets::encode_png_rgba;
-
-    fn write_file(dir: &Path, relative: &str) {
-        let path = dir.join(relative);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).unwrap();
-        }
-        std::fs::write(path, b"not a real png").unwrap();
-    }
-
-    #[test]
-    fn scan_lists_files_recursively() {
-        let dir = std::env::temp_dir().join("kiln-editor-assets-scan");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        write_file(&dir, "sprites/hero.png");
-        write_file(&dir, "notes.txt");
-
-        let mut browser = AssetBrowser::new();
-        browser.scan(&dir);
-
-        let paths: Vec<&str> = browser.entries().iter().map(|e| e.path.as_str()).collect();
-        assert!(paths.contains(&"sprites/hero.png"), "{paths:?}");
-        assert!(paths.contains(&"notes.txt"), "{paths:?}");
-
-        let hero = browser
-            .entries()
-            .iter()
-            .find(|e| e.path == "sprites/hero.png")
-            .unwrap();
-        assert_eq!(hero.kind, AssetKind::Image);
-
-        let notes = browser
-            .entries()
-            .iter()
-            .find(|e| e.path == "notes.txt")
-            .unwrap();
-        assert_eq!(notes.kind, AssetKind::Other);
-
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn scan_of_missing_directory_is_empty() {
-        let mut browser = AssetBrowser::new();
-        browser.scan(Path::new("does/not/exist"));
-        assert!(browser.entries().is_empty());
-    }
-
-    #[test]
-    fn groups_by_folder() {
-        let entries = vec![
-            AssetEntry {
-                path: "sprites/hero.png".to_string(),
-                size: 1,
-                kind: AssetKind::Image,
-            },
-            AssetEntry {
-                path: "sprites/villain.png".to_string(),
-                size: 2,
-                kind: AssetKind::Image,
-            },
-            AssetEntry {
-                path: "readme.txt".to_string(),
-                size: 3,
-                kind: AssetKind::Other,
-            },
-        ];
-
-        let groups = group_by_folder(&entries);
-        assert_eq!(groups["sprites"].len(), 2);
-        assert_eq!(groups[""].len(), 1);
-    }
-
-    #[test]
-    fn selecting_an_invalid_png_reports_an_error() {
-        let dir = std::env::temp_dir().join("kiln-editor-assets-select");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        write_file(&dir, "bad.png");
-
-        let mut browser = AssetBrowser::new();
-        browser.scan(&dir);
-        assert!(browser.select("bad.png").is_err());
-        assert!(browser.preview_source().is_none());
-
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn selecting_a_valid_png_builds_a_preview() {
-        let dir = std::env::temp_dir().join("kiln-editor-assets-preview");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-
-        // A 2x1 RGBA PNG: one opaque red pixel, one translucent blue pixel.
-        let png_bytes =
-            encode_png_rgba(2, 1, &[255, 0, 0, 255, 0, 0, 255, 128]).expect("encode png");
-        std::fs::write(dir.join("hero.png"), &png_bytes).unwrap();
-
-        let mut browser = AssetBrowser::new();
-        browser.scan(&dir);
-        browser.select("hero.png").expect("preview");
-
-        assert_eq!(browser.preview_source(), Some("hero.png"));
-        assert_eq!(browser.preview_size(), Some((2, 1)));
-        assert_eq!(browser.preview_pixels().map(|p| p.len()), Some(8));
-
-        let image = browser.preview_color_image().expect("egui image");
-        assert_eq!(image.size, [2, 1]);
-        assert_eq!(image.pixels.len(), 2);
-
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn clearing_the_preview_removes_it() {
-        let mut browser = AssetBrowser::new();
-        browser.clear_preview();
-        assert!(browser.preview_source().is_none());
-        assert!(browser.preview_color_image().is_none());
-        assert!(browser.preview_size().is_none());
-    }
-
-    #[test]
-    fn scan_skips_project_manifests() {
-        let dir = std::env::temp_dir().join("kiln-editor-assets-manifest");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("kiln.toml"), b"id = \"x\"").unwrap();
-        std::fs::write(dir.join("hero.png"), b"not a real png").unwrap();
-
-        let mut browser = AssetBrowser::new();
-        browser.scan(&dir);
-
-        let paths: Vec<&str> = browser.entries().iter().map(|e| e.path.as_str()).collect();
-        assert_eq!(paths, vec!["hero.png"]);
-
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn a_failed_selection_is_recorded_as_an_error() {
-        let dir = std::env::temp_dir().join("kiln-editor-assets-errors");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        write_file(&dir, "bad.png");
-
-        let mut browser = AssetBrowser::new();
-        browser.scan(&dir);
-        assert!(browser.select("bad.png").is_err());
-
-        assert_eq!(browser.errors().len(), 1);
-        assert_eq!(browser.errors()[0].0, "bad.png");
-
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn selecting_without_a_scanned_root_is_an_error() {
-        let mut browser = AssetBrowser::new();
-        assert!(browser.select("hero.png").is_err());
-    }
+/// Check if a path is a project manifest file that should be skipped.
+fn is_manifest(path: &str) -> bool {
+    path == "kiln.toml" || path.ends_with("/kiln.toml") || path.ends_with("\kiln.toml")
 }

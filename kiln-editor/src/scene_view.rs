@@ -228,9 +228,23 @@ pub fn background(world_w: f32, world_h: f32, color: [f32; 4]) -> SpriteInstance
     SpriteInstance::colored([world_w / 2.0, world_h / 2.0], [world_w, world_h], color)
 }
 
-/// The grid lines of the scene view, as world-space quads.
+/// Snap a world position to the grid, rounding each component to the nearest
+/// multiple of `spacing`.
 ///
-/// The lines sit on the world grid, so they line up with the world however the
+/// Returns the snapped position.
+pub fn snap_to_grid(position: [f32; 2], spacing: f32) -> [f32; 2] {
+    if spacing <= 0.0 {
+        return position;
+    }
+    [
+        (position[0] / spacing).round() * spacing,
+        (position[1] / spacing).round() * spacing,
+    ]
+}
+
+/// The grid lines of the scene view, as world-space quads.
+//
+//! The lines sit on the world grid, so they line up with the world however the
 /// viewport is scaled.
 pub fn grid_lines(
     world_w: f32,

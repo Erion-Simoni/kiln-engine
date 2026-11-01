@@ -1,4 +1,5 @@
 use crate::hash::{content_hash, HashError};
+use crate::settings::ImportSettings;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -15,6 +16,8 @@ pub enum CacheError {
     Deserialize(#[from] serde_json::Error),
     #[error("Walk error: {0}")]
     Walk(#[from] walkdir::Error),
+    #[error("Asset not found: {0}")]
+    AssetNotFound(String),
 }
 
 /// Cache entry tracking a file's content hash.
@@ -37,6 +40,10 @@ pub enum ImportResult {
 pub struct AssetCache {
     cache_dir: PathBuf,
     entries: HashMap<PathBuf, CacheEntry>,
+    /// Asset dependency graph: dependency path -> set of dependent paths.
+    dependencies: HashMap<String, Vec<String>>,
+    /// Import settings per asset path.
+    import_settings: HashMap<PathBuf, ImportSettings>,
 }
 
 impl AssetCache {
@@ -45,6 +52,8 @@ impl AssetCache {
         Self {
             cache_dir,
             entries: HashMap::new(),
+            dependencies: HashMap::new(),
+            import_settings: HashMap::new(),
         }
     }
 
@@ -122,6 +131,62 @@ impl AssetCache {
     pub fn get_hash(&self, path: &Path) -> Option<&str> {
         let canonical = path.canonicalize().ok()?;
         self.entries.get(&canonical).map(|e| e.hash.as_str())
+    }
+
+    /// Register import settings for a specific asset path.
+    pub fn set_import_settings(
+        &mut self,
+        path: &Path,
+        settings: ImportSettings,
+    ) {
+        self.import_settings.insert(path.to_path_buf(), settings);
+    }
+
+    /// Get the import settings for a given path, returning defaults if none set.
+    pub fn get_import_settings(&self, path: &Path) -> ImportSettings {
+        self.import_settings
+            .get(path)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    /// Record that `dependent` depends on `dependency`.
+    pub fn add_dependency(&mut self, dependent: &str, dependency: &str) {
+        self.dependencies
+            .entry(dependency.to_string())
+            .or_default()
+            .push(dependent.to_string());
+    }
+
+    /// Get all assets that depend on the given path.
+    pub fn dependents(&self, dependency: &str) -> Vec<&str> {
+        self.dependencies
+            .get(dependency)
+            .map(|deps| deps.iter().map(|s| s.as_str()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Find all asset paths that no longer exist on disk.
+    pub fn missing_assets(&self) -> Vec<String> {
+        let mut missing = Vec::new();
+        for path in self.entries.keys() {
+            if !path.exists() {
+                missing.push(path.to_string_lossy().to_string());
+            }
+        }
+        missing
+    }
+
+    /// Find groups of duplicate assets (same content hash, different paths).
+    pub fn duplicate_assets(&self) -> Vec<Vec<PathBuf>> {
+        let mut by_hash: HashMap<String, Vec<PathBuf>> = HashMap::new();
+        for (path, entry) in &self.entries {
+            by_hash.entry(entry.hash.clone()).or_default().push(path.clone());
+        }
+        by_hash
+            .into_values()
+            .filter(|paths| paths.len() > 1)
+            .collect()
     }
 }
 

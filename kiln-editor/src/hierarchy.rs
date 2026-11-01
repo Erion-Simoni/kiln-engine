@@ -15,6 +15,10 @@ pub enum HierarchyAction {
     AddEntity(String),
     /// User wants to remove the entity with the given project ID.
     RemoveEntity(String),
+    /// User wants to duplicate (copy) the entity with the given source id.
+    DuplicateEntity(String),
+    /// User wants to reparent `child_id` under `parent_id`.
+    Reparent { child_id: String, parent_id: Option<String> },
     /// User selected an entity (for syncing with inspector).
     SelectEntity(String),
 }
@@ -47,6 +51,8 @@ pub struct HierarchyPanel {
     pub show_add_dialog: bool,
     /// Name typed for the new entity.
     pub new_entity_name: String,
+    /// Currently dragged entity id (for drag-and-drop reparenting).
+    pub drag_source: Option<String>,
 }
 
 impl HierarchyPanel {
@@ -110,7 +116,7 @@ impl HierarchyPanel {
         self.selected_id = None;
     }
 
-    /// Filter nodes by name (case-insensitive substring match).
+    /// Filter nodes by name (case-insensitive).
     pub fn set_filter(&mut self, filter: &str) {
         self.filter = filter.to_string();
     }
@@ -152,7 +158,7 @@ pub fn render_hierarchy_panel(
 
     // Entity tree
     egui::ScrollArea::vertical().show(ui, |ui| {
-        let nodes: Vec<HierarchyNode> = state.filtered_nodes().iter().cloned().cloned().collect();
+        let nodes: Vec<HierarchyNode> = state.filtered_nodes().iter().cloned().collect();
         for node in nodes {
             let selected = state.selected_id.as_deref() == Some(&node.entity_id);
             let node_text = if node.has_children {
@@ -175,10 +181,27 @@ pub fn render_hierarchy_panel(
                 }
 
                 // Entity select button
-                if ui
+                let mut response = ui
                     .selectable_label(selected, &node.name)
-                    .clicked()
-                {
+                    .on_hover_text(&node.entity_id);
+
+                // Drag-and-drop: start drag on mouse press
+                if response.drag_started() {
+                    state.drag_source = Some(node.entity_id.clone());
+                }
+
+                // Handle drop: reparent the dragged entity onto this entity
+                if let Some(drag_source) = &state.drag_source {
+                    if response.hovered() && drag_source != &node.entity_id {
+                        action = Some(HierarchyAction::Reparent {
+                            child_id: drag_source.clone(),
+                            parent_id: Some(node.entity_id.clone()),
+                        });
+                        state.drag_source = None;
+                    }
+                }
+
+                if response.clicked() {
                     state.select(&node.entity_id);
                     action = Some(HierarchyAction::SelectEntity(node.entity_id.clone()));
                 }
@@ -201,6 +224,11 @@ pub fn render_hierarchy_panel(
         if ui.button("- Remove Selected").clicked() {
             if let Some(id) = &state.selected_id {
                 action = Some(HierarchyAction::RemoveEntity(id.clone()));
+            }
+        }
+        if ui.button("Duplicate").clicked() {
+            if let Some(id) = &state.selected_id {
+                action = Some(HierarchyAction::DuplicateEntity(id.clone()));
             }
         }
     });

@@ -2,7 +2,9 @@
 
 pub mod camera;
 pub mod frame;
+pub mod pixel_perfect;
 pub mod graph;
+pub mod lighting;
 pub mod particle_renderer;
 pub mod pass_config;
 pub mod post;
@@ -21,6 +23,7 @@ pub use graph::{
     CompiledGraph, GraphError, PassDecl, PassId, RenderGraph, ResourceDesc, ResourceId,
     ResourceKind, ResourceRef, ResourceUsage, TextureFormatKey,
 };
+pub use lighting::{Light, Lighting};
 pub use particle_renderer::ParticleRenderer;
 pub use pass_config::{PassEnableConfig, PassTierEnable};
 pub use post::{PostConfig, PostFramebuffer, PostPipeline};
