@@ -167,6 +167,8 @@ pub struct EditorApp {
     project_path: Option<PathBuf>,
     current_project: Option<Project>,
     asset_browser: AssetBrowser,
+    /// Filter text for the asset browser.
+    asset_filter: String,
     /// Transform gizmo state for visual entity manipulation.
     gizmo: GizmoState,
     /// Set by the welcome screen, handled after the UI pass.
@@ -759,6 +761,7 @@ impl EditorApp {
             project_path: None,
             current_project: None,
             asset_browser: AssetBrowser::new(),
+            asset_filter: String::new(),
             open_project_requested: false,
             play_toggle_requested: false,
             scene_save_requested: false,
@@ -3234,7 +3237,29 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     self.asset_browser.scan(&dir);
                                 }
                             }
+                            if ui.button("New Folder").clicked() {
+                                if let Some(dir) =
+                                    self.asset_browser.root().map(|p| p.to_path_buf())
+                                {
+                                    if let Err(e) =
+                                        std::fs::create_dir(dir.join("New Folder"))
+                                    {
+                                        self.log(&format!(
+                                            "Failed to create folder: {e}"
+                                        ));
+                                    } else {
+                                        self.asset_browser.scan(&dir);
+                                    }
+                                }
+                            }
                         });
+                        ui.add_space(8.0);
+                        ui.label("Filter:");
+                        ui.text_edit_singleline(&mut self.asset_filter);
+                        if self.asset_browser.filter() != self.asset_filter {
+                            self.asset_browser
+                                .set_filter(self.asset_filter.clone());
+                        }
                     });
 
                     ui.add_space(8.0);
@@ -3244,7 +3269,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         .rounding(4.0)
                         .inner_margin(12.0)
                         .show(ui, |ui| {
-                            let entries = self.asset_browser.entries().to_vec();
+                            let entries = self.asset_browser.filtered_entries();
                             if entries.is_empty() {
                                 ui.centered_and_justified(|ui| {
                                     ui.label("No assets found");
@@ -3263,13 +3288,33 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         let selected = self.asset_browser.preview_source()
                                             == Some(&entry.path);
 
-                                        let response = ui
-                                            .selectable_label(selected, &name)
-                                            .on_hover_text(&entry.path);
+                                        let mut selectable =
+                                            ui.selectable_label(selected, &name)
+                                                .on_hover_text(&entry.path);
 
+                                        // Drag-and-drop support: start drag on the asset entry.
                                         if response.clicked() && entry.kind == AssetKind::Image {
                                             if let Err(e) = self.asset_browser.select(&entry.path) {
                                                 log::warn!("asset '{}': {e}", entry.path);
+                                            }
+                                        }
+
+                                        // Drag-and-drop: start drag on mouse press.
+                                        if response.drag_started() {
+                                            self.asset_browser.set_drag_source(Some(&entry.path));
+                                        }
+
+                                        // Handle drop onto this entity (if it's a sprite/texture target).
+                                        if let Some(drag_source) = self.asset_browser.drag_source() {
+                                            if response.hovered() && response.hovered() {
+                                                if entry.kind == AssetKind::Image {
+                                                    // We could support dropping an asset onto an entity here
+                                                    // to change its texture. For now, just log.
+                                                    log::info!(
+                                                        "Drag {:?} onto {}",
+                                                        drag_source, entry.path
+                                                    );
+                                                }
                                             }
                                         }
                                     }
