@@ -22,6 +22,13 @@ pub struct Sprite {
     /// Optional name of an animation clip from `animation_clips` to play
     /// on this sprite.
     pub animation_clip: Option<String>,
+    /// Horizontal flip: when true, the sprite is flipped horizontally.
+    pub flip_x: bool,
+    /// Vertical flip: when true, the sprite is flipped vertically.
+    pub flip_y: bool,
+    /// Pivot point in local space (0.0 = left/top, 0.5 = center, 1.0 = right/bottom).
+    /// Defaults to (0.5, 0.5) center pivot.
+    pub pivot: [f32; 2],
 }
 
 impl Sprite {
@@ -34,6 +41,9 @@ impl Sprite {
             layer: 0.0,
             material: None,
             animation_clip: None,
+            flip_x: false,
+            flip_y: false,
+            pivot: [0.5, 0.5],
         }
     }
 
@@ -63,6 +73,24 @@ impl Sprite {
         self.animation_clip = Some(clip_name.into());
         self
     }
+
+    /// Set horizontal flipping (flip horizontally).
+    pub fn with_flip_x(mut self, flip: bool) -> Self {
+        self.flip_x = flip;
+        self
+    }
+
+    /// Set vertical flipping (flip vertically).
+    pub fn with_flip_y(mut self, flip: bool) -> Self {
+        self.flip_y = flip;
+        self
+    }
+
+    /// Set the pivot point for the sprite (0.0 = left/top, 0.5 = center, 1.0 = right/bottom).
+    pub fn with_pivot(mut self, x: f32, y: f32) -> Self {
+        self.pivot = [x, y];
+        self
+    }
 }
 
 impl Default for Sprite {
@@ -76,7 +104,7 @@ impl Default for Sprite {
 /// Tracks a set of named animation clips and advances the current frame
 /// based on elapsed time. The current frame's UV rect can be read and
 /// applied to a sprite's `uv_rect` each frame.
-#[derive(Debug, hecs::Component)]
+#[derive(Debug)]
 pub struct AnimationPlayer {
     clips: HashMap<String, Clip>,
     /// Texture dimensions for each clip (width, height) - used to convert
@@ -175,7 +203,6 @@ impl AnimationPlayer {
 /// Particle system component for 2D visual effects (smoke, fire, magic, etc.).
 ///
 /// Drives a CPU particle system and can be rendered as sprite instances.
-#[derive(hecs::Component)]
 pub struct ParticleSystemComponent {
     system: ParticleSystem,
 }
@@ -235,7 +262,7 @@ impl Default for ParticleSystemComponent {
 /// System to update animations and apply UV rects to sprites.
 /// Reads AnimationPlayer and Sprite, writes Sprite (uv_rect).
 pub fn update_animations(world: &mut hecs::World) {
-    for (_, (anim, sprite)) in world.query_mut::<(&mut AnimationPlayer, &mut Sprite)>() {
+    for (anim, sprite) in world.query_mut::<(&mut AnimationPlayer, &mut Sprite)>() {
         anim.update(1.0 / 60.0); // Fixed timestep
         if let Some(uv_rect) = anim.current_uv_rect() {
             sprite.uv_rect = uv_rect;
@@ -245,7 +272,7 @@ pub fn update_animations(world: &mut hecs::World) {
 
 /// Emit particles from particle system components for one frame.
 pub fn update_particle_systems(world: &mut hecs::World, dt: f32) {
-    for (_, ps) in world.query_mut::<&mut ParticleSystemComponent>() {
+    for ps in world.query_mut::<&mut ParticleSystemComponent>() {
         ps.system_mut().update(dt);
     }
 }

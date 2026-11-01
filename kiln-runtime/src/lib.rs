@@ -8,6 +8,7 @@ pub mod scene;
 pub mod schedule;
 pub mod settings;
 pub mod slice;
+pub mod slice_sample;
 pub mod sprite;
 pub mod tilemap;
 pub mod tilemap_collision;

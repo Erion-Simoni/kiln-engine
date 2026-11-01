@@ -44,6 +44,7 @@ chat: split into `Mxx-a` / `Mxx-b` and keep each half testable.
 |---|---|---|
 | v0.4 "Downloadable" | M18 | Games ship as native downloads on desktop and Android |
 | v0.5 "2D complete" | M26 | A full 2D game can be made and shipped to web, desktop, Android, iOS |
+| Kiln 2D v1.0 | Before M29 | 2D production readiness gate — all 17 stages complete and verified (see `docs/KILN_2D_V1_ROADMAP.md`). **Must pass before any 3D work (M29+).** |
 | v0.8 "3D playable" | M39 | A 3D sample runs on Mid hardware with lighting, shadows, animation, physics, terrain |
 | v0.9 "Looks great" | M47 | High tier delivers modern visuals; Low tier still meets budget |
 | v1.0 "Production" | M61 | Tooling, plugins, mods, docs and three flagship samples shipped |
@@ -385,6 +386,17 @@ pass switches are real and tested.
 ---
 
 # Phase 4: 3D foundation (M29 to M39)
+
+## Hard gate: Kiln 2D v1.0 must be complete before 3D
+
+No 3D work (M29+) may begin until **Kiln 2D v1.0 is complete and verified**.
+
+See `docs/KILN_2D_V1_ROADMAP.md` for the full 17-stage roadmap and acceptance
+criteria. Stages 0–5 (stabilise, general runtime, asset management, scene
+editor, sprites/rendering) must be finished before expanding the feature set.
+
+The 2D v1.0 release gate checklist (0/17 verified) in that document is the
+authority for this gate — not a checkbox in `TODO_LIST.md`.
 
 ## Prepare before M29 (3D core)
 

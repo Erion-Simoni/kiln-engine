@@ -1,10 +1,9 @@
 # Kiln Session Handoff
 
 **Current milestone:** M0–M28 and the 2D-first gate (G-1 … G-6) are
-**complete**. M29 (3D foundation) **is in progress**: commit `4556431` added a
-feature-gated `3d` feature with mesh/material types (`Mesh`, `Material`,
-`Vertex`, `SubMesh`, `MeshBounds`, `PrimitiveTopology`, `VertexFormat`,
-`AlphaMode`, `Model`, `MeshHandle`) to `kiln-core`.
+**complete**. M29 (3D foundation) **is blocked** until Kiln 2D v1.0 is
+complete and verified — see `docs/KILN_2D_V1_ROADMAP.md` for the 17-stage
+roadmap and the 0/17 release gate checklist.
 
 **Do not start M30 (PBR lighting) until M29's 3D core acceptance is met** —
 M29 is not done yet. What remains for M29: glTF import, depth buffer,
@@ -170,8 +169,10 @@ checkbox optimism in `docs/ROADMAP.md`.
 - The audio sample needs a system audio backend, so it is built on its
   own: `cargo check --manifest-path samples/audio/Cargo.toml`
 
-**Blocked:** None — M29 (3D foundation) is in progress. The 2D gate is
-complete, so M29 may proceed; M30 is blocked on M29's acceptance.
+**Blocked:** M29 (3D foundation) is blocked until Kiln 2D v1.0 is complete
+and verified. See `docs/KILN_2D_V1_ROADMAP.md` for the 17-stage roadmap and
+the 0/17 release gate checklist — all 17 items must pass before any 3D work
+(M29+) may begin. M30 remains blocked on M29's acceptance.
 
 ---
 
@@ -194,6 +195,7 @@ without reading every source file:
 | `docs/DECISIONS.md` | Architecture decision records (ADR-0001 … ADR-0034) |
 | `ROADMAP_FULL_M14_PLUS.md` | M14+ milestones, M29 plan, "Prepare before M29" checklist |
 | `docs/ROADMAP.md` | Milestones M0–M61+ |
+| `docs/KILN_2D_V1_ROADMAP.md` | Kiln 2D v1.0 roadmap — 17 stages, release gate, hard prerequisite before 3D (M29+) |
 | `docs/PACKAGING.md` | Packaging, signing, storefront distribution |
 | `docs/ANDROID.md` / `docs/IOS.md` | Mobile export guides |
 | `docs/PROGRESS_F6_NEXT.md` | F6 session record, pre-M29 checklist |

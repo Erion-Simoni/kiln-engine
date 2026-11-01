@@ -21,7 +21,6 @@ impl HostContext for SliceHost {
     }
 }
 
-use hecs::Component;
 use kiln_save::slot::SaveSlotError;
 use kiln_save::SaveSlotManager;
 use kiln_script::{Diagnostic, KilnScriptFrontend, LanguageFrontend};
@@ -393,7 +392,7 @@ impl SliceHost {
             #[cfg(feature = "audio")]
             audio: AudioEngine::new().ok(),
             #[cfg(feature = "physics")]
-            physics: PhysicsWorld::new().ok(),
+            physics: Some(PhysicsWorld::new()),
             animation_players: HashMap::new(),
             ui_widgets: HashMap::new(),
             ui_buttons: Vec::new(),
@@ -1016,7 +1015,7 @@ impl SliceHost {
                 let y = args.get(2).and_then(|v| v.to_f64()).unwrap_or(0.0);
                 // Button is 64x32 screen pixels (matching the player renderer).
                 self.ui_buttons.push((id.clone(), x, y, 64.0, 32.0));
-                self.commands.push(SliceCommand::UiButton { id, x, y });
+                self.commands.push(SliceCommand::UiButton { id: id.clone(), x, y });
                 let clicked = self.ui_widgets.get(&id).copied().unwrap_or(false);
                 Ok(Value::Bool(clicked))
             }
@@ -1193,17 +1192,19 @@ impl SliceHost {
                 Ok(Value::I64(0))
             }
             // Audio editing (55-56)
+            #[cfg(feature = "audio")]
             55 => {
                 // register_audio(name, path) -> void
                 let name = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let path = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
-                self.host_mut().register_audio(&name, &path);
+                self.register_audio(&name, &path);
                 Ok(Value::I64(0))
             }
+            #[cfg(feature = "audio")]
             56 => {
                 // play_audio_preview(name) -> void
                 let name = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
-                self.host_mut().play_audio_preview(&name);
+                self.play_audio_preview(&name);
                 Ok(Value::I64(0))
             }
             _ => Err(VmError::HostCallError(format!(
@@ -1248,12 +1249,13 @@ impl SliceSession {
             frontend = frontend.with_builtin(*name, *id, *argc);
         }
         let program = frontend.compile(source)?;
-        let mut host = SliceHost::default();
-        host.action_map = action_map;
-        let vm = Vm::new(host.clone());
-        let mut host = SliceHost::default();
-        host.action_map = action_map;
-        let debugger = Debugger::new(program.clone(), host);
+        let mut vm_host = SliceHost::default();
+        vm_host.action_map = action_map.clone();
+        let vm = Vm::new(vm_host);
+
+        let mut debug_host = SliceHost::default();
+        debug_host.action_map = action_map;
+        let debugger = Debugger::new(program.clone(), debug_host);
         Ok(Self {
             program,
             vm,
@@ -1325,21 +1327,28 @@ impl SliceSession {
         self.vm.host_mut().state = self.state.clone();
 
         // Reset per-frame UI click state (clicks only last one frame).
-        self.ui_widgets.clear();
+        self.host_mut().ui_widgets.clear();
 
-        // Step physics and collect collision events (if physics feature enabled)
-        #[cfg(feature = "physics")]
-        let collision_events = {
-            use crate::physics::sync_physics_with_ecs;
-            let host = self.vm.host_mut();
-            if let Some(physics) = &mut host.physics {
-                sync_physics_with_ecs(physics, world.world_mut())
-            } else {
+        // Step physics and collect collision events (if physics feature enabled).
+        let collision_events: Vec<(String, String, bool)> = {
+            #[cfg(feature = "physics")]
+            {
+                use crate::physics::sync_physics_with_ecs;
+                let host = self.vm.host_mut();
+                if let Some(physics) = &mut host.physics {
+                    sync_physics_with_ecs(physics, world.world_mut())
+                        .into_iter()
+                        .map(|e| (e.entity_a, e.entity_b, e.started))
+                        .collect()
+                } else {
+                    Vec::new()
+                }
+            }
+            #[cfg(not(feature = "physics"))]
+            {
                 Vec::new()
             }
         };
-        #[cfg(not(feature = "physics"))]
-        let collision_events: Vec<(String, String, bool)> = Vec::new();
 
         // Update animations (reads AnimationPlayer, writes Sprite uv_rect)
         crate::sprite::update_animations(world.world_mut());
@@ -1375,20 +1384,25 @@ impl SliceSession {
 
         // Detect UI button clicks: check if any button rect contains the mouse
         // and the left button was pressed this frame.
-        if self.mouse_pressed {
-            for (id, bx, by, bw, bh) in &self.ui_buttons {
-                if self.mouse_x >= *bx
-                    && self.mouse_x < bx + bw
-                    && self.mouse_y >= *by
-                    && self.mouse_y < by + bh
-                {
-                    self.ui_widgets.insert(id.clone(), true);
+        {
+            let host = self.host_mut();
+            let mouse_pressed = host.mouse_pressed;
+            let mouse_x = host.mouse_x;
+            let mouse_y = host.mouse_y;
+
+            let mut clicked_ids = Vec::new();
+            if mouse_pressed {
+                for (id, bx, by, bw, bh) in &host.ui_buttons {
+                    if mouse_x >= *bx && mouse_x < bx + bw && mouse_y >= *by && mouse_y < by + bh {
+                        clicked_ids.push(id.clone());
+                    }
                 }
             }
+            for id in clicked_ids {
+                host.ui_widgets.insert(id, true);
+            }
+            host.ui_buttons.clear();
         }
-
-        // Clear per-frame UI tracking for next frame.
-        self.ui_buttons.clear();
 
         Ok(())
     }
@@ -1422,7 +1436,6 @@ impl SliceSession {
 
         // Collect entity positions, velocities, and roles for script queries.
         let mut entity_positions = HashMap::new();
-        let mut entity_velocities = HashMap::new();
         let mut entity_roles = HashMap::new();
         let mut entity_sprite_colors = HashMap::new();
         let mut entity_sprite_sizes = HashMap::new();
@@ -1432,15 +1445,15 @@ impl SliceSession {
         use kiln_core::project::Component;
         use crate::sprite::Sprite;
 
-        for (_, (source_id, transform)) in world.world_ref().query::<(&SourceId, &Transform)>().iter() {
-            entity_positions.insert(source_id.0.clone(), (transform.position.x as f64, transform.position.y as f64));
+        for (source_id, transform) in world.world_ref().query::<(&SourceId, &Transform)>().iter() {
+            entity_positions.insert(source_id.0.clone(), (transform.position[0] as f64, transform.position[1] as f64));
         }
 
-        for (_, (source_id, role)) in world.world_ref().query::<(&SourceId, &Role)>().iter() {
+        for (source_id, role) in world.world_ref().query::<(&SourceId, &Role)>().iter() {
             entity_roles.insert(source_id.0.clone(), role.0.clone());
         }
 
-        for (_, (source_id, sprite)) in world.world_ref().query::<(&SourceId, &Sprite)>().iter() {
+        for (source_id, sprite) in world.world_ref().query::<(&SourceId, &Sprite)>().iter() {
             entity_sprite_colors.insert(source_id.0.clone(), sprite.color.map(|c| c as f64));
             entity_sprite_sizes.insert(source_id.0.clone(), sprite.size.map(|s| s as f64));
         }
@@ -1518,23 +1531,25 @@ impl SliceSession {
             }
             SliceCommand::DespawnEntity(source_id) => {
                 use crate::SourceId;
-                for (eid, sid) in world.world_ref().query::<&SourceId>().iter() {
-                    if sid.0 == source_id {
-                        let _ = world.world_mut().despawn(eid);
-                        break;
-                    }
+                let target_eid: Option<hecs::Entity> = world.world_ref()
+                    .query::<(hecs::Entity, &SourceId)>()
+                    .iter()
+                    .find_map(|(eid, sid)| if sid.0 == source_id { Some(eid) } else { None});
+                if let Some(eid) = target_eid {
+                    let _ = world.world_mut().despawn(eid);
                 }
             }
             SliceCommand::SetEntityPos { source_id, x, y } => {
                 use crate::SourceId;
                 use kiln_core::Transform;
-                for (eid, sid) in world.world_ref().query::<&SourceId>().iter() {
-                    if sid.0 == source_id {
-                        if let Ok(mut transform) = world.world_mut().query_one_mut::<Transform>(eid) {
-                            transform.position.x = x as f32;
-                            transform.position.y = y as f32;
-                        }
-                        break;
+                let target_eid: Option<hecs::Entity> = world.world_ref()
+                    .query::<(hecs::Entity, &SourceId)>()
+                    .iter()
+                    .find_map(|(eid, sid)| if sid.0 == source_id { Some(eid) } else { None});
+                if let Some(eid) = target_eid {
+                    if let Ok(mut transform) = world.world_mut().query_one_mut::<&mut Transform>(eid) {
+                        transform.position[0] = x as f32;
+                        transform.position[1] = y as f32;
                     }
                 }
             }
@@ -1542,13 +1557,14 @@ impl SliceSession {
                 #[cfg(feature = "physics")]
                 {
                     use crate::{SourceId, Velocity};
-                    for (eid, sid) in world.world_ref().query::<&SourceId>().iter() {
-                        if sid.0 == source_id {
-                            if let Ok(mut velocity) = world.world_mut().query_one_mut::<Velocity>(eid) {
-                                velocity.0.x = vx as f32;
-                                velocity.0.y = vy as f32;
-                            }
-                            break;
+                    let target_eid: Option<hecs::Entity> = world.world_ref()
+                        .query::<(hecs::Entity, &SourceId)>()
+                        .iter()
+                        .find_map(|(eid, sid)| if sid.0 == source_id { Some(eid) } else { None});
+                    if let Some(eid) = target_eid {
+                        if let Ok(mut velocity) = world.world_mut().query_one_mut::<&mut Velocity>(eid) {
+                            velocity.0[0] = vx as f32;
+                            velocity.0[1] = vy as f32;
                         }
                     }
                 }
@@ -1558,50 +1574,51 @@ impl SliceSession {
                 use kiln_core::Transform;
                 #[cfg(feature = "physics")]
                 use crate::Velocity;
-                for (eid, sid) in world.world_ref().query::<&SourceId>().iter() {
-                    if sid.0 == source_id {
-                        match component.as_str() {
-                            "transform" | "Transform" => {
+                let target_eid: Option<hecs::Entity> = world.world_ref()
+                    .query::<(hecs::Entity, &SourceId)>()
+                    .iter()
+                    .find_map(|(eid, sid)| if sid.0 == source_id { Some(eid) } else { None});
+                if let Some(eid) = target_eid {
+                    match component.as_str() {
+                        "transform" | "Transform" => {
+                            if let Value::Array(arr) = value {
+                                if arr.len() >= 2 {
+                                    if let (Some(Value::F64(x)), Some(Value::F64(y))) = (arr.get(0), arr.get(1)) {
+                                        if let Ok(mut transform) = world.world_mut().query_one_mut::<&mut Transform>(eid) {
+                                            transform.position[0] = *x as f32;
+                                            transform.position[1] = *y as f32;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        "velocity" | "Velocity" => {
+                            #[cfg(feature = "physics")]
+                            {
                                 if let Value::Array(arr) = value {
                                     if arr.len() >= 2 {
-                                        if let (Some(Value::F64(x)), Some(Value::F64(y))) = (arr.get(0), arr.get(1)) {
-                                            if let Ok(mut transform) = world.world_mut().query_one_mut::<Transform>(eid) {
-                                                transform.position.x = *x as f32;
-                                                transform.position.y = *y as f32;
+                                        if let (Some(Value::F64(vx)), Some(Value::F64(vy))) = (arr.get(0), arr.get(1)) {
+                                            if let Ok(mut velocity) = world.world_mut().query_one_mut::<&mut Velocity>(eid) {
+                                                velocity.0[0] = *vx as f32;
+                                                velocity.0[1] = *vy as f32;
                                             }
                                         }
                                     }
                                 }
                             }
-                            "velocity" | "Velocity" => {
-                                #[cfg(feature = "physics")]
-                                {
-                                    if let Value::Array(arr) = value {
-                                        if arr.len() >= 2 {
-                                            if let (Some(Value::F64(vx)), Some(Value::F64(vy))) = (arr.get(0), arr.get(1)) {
-                                                if let Ok(mut velocity) = world.world_mut().query_one_mut::<Velocity>(eid) {
-                                                    velocity.0.x = *vx as f32;
-                                                    velocity.0.y = *vy as f32;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            "sprite_color" | "SpriteColor" => {
-                                if let Value::Array(arr) = value {
-                                    if arr.len() >= 4 {
-                                        if let (Some(Value::F64(r)), Some(Value::F64(g)), Some(Value::F64(b)), Some(Value::F64(a))) = (arr.get(0), arr.get(1), arr.get(2), arr.get(3)) {
-                                            if let Ok(mut sprite) = world.world_mut().query_one_mut::<Sprite>(eid) {
-                                                sprite.color = [*r as f32, *g as f32, *b as f32, *a as f32];
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            _ => {}
                         }
-                        break;
+                        "sprite_color" | "SpriteColor" => {
+                            if let Value::Array(arr) = value {
+                                if arr.len() >= 4 {
+                                    if let (Some(Value::F64(r)), Some(Value::F64(g)), Some(Value::F64(b)), Some(Value::F64(a))) = (arr.get(0), arr.get(1), arr.get(2), arr.get(3)) {
+                                        if let Ok(mut sprite) = world.world_mut().query_one_mut::<&mut Sprite>(eid) {
+                                            sprite.color = [*r as f32, *g as f32, *b as f32, *a as f32];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -1614,120 +1631,125 @@ impl SliceSession {
                 use kiln_core::Transform;
                 #[cfg(feature = "physics")]
                 use crate::Velocity;
-                for (eid, sid) in world.world_ref().query::<&SourceId>().iter() {
-                    if sid.0 == source_id {
-                        match component_type.as_str() {
-                            "transform" | "Transform" => {
+                let target_eid: Option<hecs::Entity> = world.world_ref()
+                    .query::<(hecs::Entity, &SourceId)>()
+                    .iter()
+                    .find_map(|(eid, sid)| if sid.0 == source_id { Some(eid) } else { None});
+                if let Some(eid) = target_eid {
+                    match component_type.as_str() {
+                        "transform" | "Transform" => {
+                            if let Value::Array(arr) = value {
+                                if arr.len() >= 2 {
+                                    if let (Some(Value::F64(x)), Some(Value::F64(y))) = (arr.get(0), arr.get(1)) {
+                                        if let Ok(mut transform) = world.world_mut().query_one_mut::<&mut Transform>(eid) {
+                                            transform.position[0] = *x as f32;
+                                            transform.position[1] = *y as f32;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        "velocity" | "Velocity" => {
+                            #[cfg(feature = "physics")]
+                            {
                                 if let Value::Array(arr) = value {
                                     if arr.len() >= 2 {
-                                        if let (Some(Value::F64(x)), Some(Value::F64(y))) = (arr.get(0), arr.get(1)) {
-                                            if let Ok(mut transform) = world.world_mut().query_one_mut::<Transform>(eid) {
-                                                transform.position.x = *x as f32;
-                                                transform.position.y = *y as f32;
+                                        if let (Some(Value::F64(vx)), Some(Value::F64(vy))) = (arr.get(0), arr.get(1)) {
+                                            if let Ok(mut velocity) = world.world_mut().query_one_mut::<&mut Velocity>(eid) {
+                                                velocity.0[0] = *vx as f32;
+                                                velocity.0[1] = *vy as f32;
                                             }
                                         }
                                     }
                                 }
                             }
-                            "velocity" | "Velocity" => {
-                                #[cfg(feature = "physics")]
-                                {
-                                    if let Value::Array(arr) = value {
-                                        if arr.len() >= 2 {
-                                            if let (Some(Value::F64(vx)), Some(Value::F64(vy))) = (arr.get(0), arr.get(1)) {
-                                                if let Ok(mut velocity) = world.world_mut().query_one_mut::<Velocity>(eid) {
-                                                    velocity.0.x = *vx as f32;
-                                                    velocity.0.y = *vy as f32;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            "sprite" | "Sprite" => {
-                                if let Value::Array(arr) = value {
-                                    if arr.len() >= 4 {
-                                        if let (Some(Value::F64(r)), Some(Value::F64(g)), Some(Value::F64(b)), Some(Value::F64(a))) = (arr.get(0), arr.get(1), arr.get(2), arr.get(3)) {
-                                            if let Ok(mut sprite) = world.world_mut().query_one_mut::<Sprite>(eid) {
-                                                sprite.color = [*r as f32, *g as f32, *b as f32, *a as f32];
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            _ => {}
                         }
-                        break;
+                        "sprite" | "Sprite" => {
+                            if let Value::Array(arr) = value {
+                                if arr.len() >= 4 {
+                                    if let (Some(Value::F64(r)), Some(Value::F64(g)), Some(Value::F64(b)), Some(Value::F64(a))) = (arr.get(0), arr.get(1), arr.get(2), arr.get(3)) {
+                                        if let Ok(mut sprite) = world.world_mut().query_one_mut::<&mut Sprite>(eid) {
+                                            sprite.color = [*r as f32, *g as f32, *b as f32, *a as f32];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
             SliceCommand::RemoveComponent { source_id, component_type } => {
                 use crate::{SourceId, Sprite, Velocity};
                 use kiln_core::Transform;
-                for (eid, sid) in world.world_ref().query::<&SourceId>().iter() {
-                    if sid.0 == source_id {
-                        match component_type.as_str() {
-                            "transform" | "Transform" => {
-                                let _ = world.world_mut().remove::<Transform>(eid);
-                            }
-                            "sprite" | "Sprite" => {
-                                let _ = world.world_mut().remove::<Sprite>(eid);
-                            }
-                            "velocity" | "Velocity" => {
-                                #[cfg(feature = "physics")]
-                                {
-                                    let _ = world.world_mut().remove::<Velocity>(eid);
-                                }
-                                #[cfg(not(feature = "physics"))]
-                                let _ = eid;
-                            }
-                            _ => {}
+                let target_eid: Option<hecs::Entity> = world.world_ref()
+                    .query::<(hecs::Entity, &SourceId)>()
+                    .iter()
+                    .find_map(|(eid, sid)| if sid.0 == source_id { Some(eid) } else { None});
+                if let Some(eid) = target_eid {
+                    match component_type.as_str() {
+                        "transform" | "Transform" => {
+                            let _ = world.world_mut().remove::<(Transform,)>(eid);
                         }
-                        break;
+                        "sprite" | "Sprite" => {
+                            let _ = world.world_mut().remove::<(Sprite,)>(eid);
+                        }
+                        "velocity" | "Velocity" => {
+                            #[cfg(feature = "physics")]
+                            {
+                                let _ = world.world_mut().remove::<(Velocity,)>(eid);
+                            }
+                            #[cfg(not(feature = "physics"))]
+                            let _ = eid;
+                        }
+                        _ => {}
                     }
                 }
             }
             SliceCommand::PlayAnimation { source_id, clip_name } => {
                 use crate::sprite::AnimationPlayer;
                 use crate::SourceId;
-                for (eid, sid) in world.world_ref().query::<&SourceId>().iter() {
-                    if sid.0 == source_id {
-                        if let Ok(mut anim) = world.world_mut().query_one_mut::<AnimationPlayer>(eid) {
-                            anim.play(&clip_name);
-                        } else {
-                            let mut anim = AnimationPlayer::new();
-                            anim.play(&clip_name);
-                            let _ = world.world_mut().insert_one(eid, anim);
-                        }
-                        break;
+                let target_eid: Option<hecs::Entity> = world.world_ref()
+                    .query::<(hecs::Entity, &SourceId)>()
+                    .iter()
+                    .find_map(|(eid, sid)| if sid.0 == source_id { Some(eid) } else { None});
+                if let Some(eid) = target_eid {
+                    if let Ok(mut anim) = world.world_mut().query_one_mut::<&mut AnimationPlayer>(eid) {
+                        anim.play(&clip_name);
+                    } else {
+                        let mut anim = AnimationPlayer::new();
+                        anim.play(&clip_name);
+                        let _ = world.world_mut().insert_one(eid, anim);
                     }
                 }
             }
             SliceCommand::StopAnimation { source_id } => {
                 use crate::sprite::AnimationPlayer;
                 use crate::SourceId;
-                for (eid, sid) in world.world_ref().query::<&SourceId>().iter() {
-                    if sid.0 == source_id {
-                        if let Ok(mut anim) = world.world_mut().query_one_mut::<AnimationPlayer>(eid) {
-                            anim.stop();
-                        }
-                        break;
+                let target_eid: Option<hecs::Entity> = world.world_ref()
+                    .query::<(hecs::Entity, &SourceId)>()
+                    .iter()
+                    .find_map(|(eid, sid)| if sid.0 == source_id { Some(eid) } else { None});
+                if let Some(eid) = target_eid {
+                    if let Ok(mut anim) = world.world_mut().query_one_mut::<&mut AnimationPlayer>(eid) {
+                        anim.stop();
                     }
                 }
             }
             SliceCommand::SetAnimationSpeed { source_id, speed } => {
                 use crate::sprite::AnimationPlayer;
                 use crate::SourceId;
-                for (eid, sid) in world.world_ref().query::<&SourceId>().iter() {
-                    if sid.0 == source_id {
-                        if let Ok(mut anim) = world.world_mut().query_one_mut::<AnimationPlayer>(eid) {
-                            anim.set_speed(speed as f32);
-                        } else {
-                            let mut anim = AnimationPlayer::new();
-                            anim.set_speed(speed as f32);
-                            let _ = world.world_mut().insert_one(eid, anim);
-                        }
-                        break;
+                let target_eid: Option<hecs::Entity> = world.world_ref()
+                    .query::<(hecs::Entity, &SourceId)>()
+                    .iter()
+                    .find_map(|(eid, sid)| if sid.0 == source_id { Some(eid) } else { None});
+                if let Some(eid) = target_eid {
+                    if let Ok(mut anim) = world.world_mut().query_one_mut::<&mut AnimationPlayer>(eid) {
+                        anim.set_speed(speed as f32);
+                    } else {
+                        let mut anim = AnimationPlayer::new();
+                        anim.set_speed(speed as f32);
+                        let _ = world.world_mut().insert_one(eid, anim);
                     }
                 }
             }
@@ -1746,16 +1768,17 @@ impl SliceSession {
                 use crate::sprite::AnimationPlayer;
                 use kiln_anim::Clip;
                 use crate::SourceId;
-                for (eid, sid) in world.world_ref().query::<&SourceId>().iter() {
-                    if sid.0 == source_id {
-                        if let Ok(mut anim) = world.world_mut().query_one_mut::<AnimationPlayer>(eid) {
-                            anim.add_clip(Clip::new(clip_name, texture_path));
-                        } else {
-                            let mut anim = AnimationPlayer::new();
-                            anim.add_clip(Clip::new(clip_name, texture_path));
-                            let _ = world.world_mut().insert_one(eid, anim);
-                        }
-                        break;
+                let target_eid: Option<hecs::Entity> = world.world_ref()
+                    .query::<(hecs::Entity, &SourceId)>()
+                    .iter()
+                    .find_map(|(eid, sid)| if sid.0 == source_id { Some(eid) } else { None});
+                if let Some(eid) = target_eid {
+                    if let Ok(mut anim) = world.world_mut().query_one_mut::<&mut AnimationPlayer>(eid) {
+                        anim.add_clip(Clip::new(clip_name, texture_path));
+                    } else {
+                        let mut anim = AnimationPlayer::new();
+                        anim.add_clip(Clip::new(clip_name, texture_path));
+                        let _ = world.world_mut().insert_one(eid, anim);
                     }
                 }
             }
@@ -1771,28 +1794,20 @@ impl SliceSession {
                 use crate::sprite::AnimationPlayer;
                 use kiln_anim::{Clip, Frame};
                 use crate::SourceId;
-                for (eid, sid) in world.world_ref().query::<&SourceId>().iter() {
-                    if sid.0 == source_id {
-                        if let Ok(mut anim) = world.world_mut().query_one_mut::<AnimationPlayer>(eid) {
-                            if let Some(clip) = anim.clips_mut().get_mut(&clip_name) {
-                                clip.add_frame(Frame {
-                                    rect: [x as u32, y as u32, w as u32, h as u32],
-                                    pivot: [0.5, 0.5],
-                                    duration: duration as f32,
-                                    events: Vec::new(),
-                                });
-                            } else {
-                                let mut clip = Clip::new(clip_name.clone(), String::new());
-                                clip.add_frame(Frame {
-                                    rect: [x as u32, y as u32, w as u32, h as u32],
-                                    pivot: [0.5, 0.5],
-                                    duration: duration as f32,
-                                    events: Vec::new(),
-                                });
-                                anim.add_clip(clip);
-                            }
+                let target_eid: Option<hecs::Entity> = world.world_ref()
+                    .query::<(hecs::Entity, &SourceId)>()
+                    .iter()
+                    .find_map(|(eid, sid)| if sid.0 == source_id { Some(eid) } else { None});
+                if let Some(eid) = target_eid {
+                    if let Ok(mut anim) = world.world_mut().query_one_mut::<&mut AnimationPlayer>(eid) {
+                        if let Some(clip) = anim.clips_mut().get_mut(&clip_name) {
+                            clip.add_frame(Frame {
+                                rect: [x as u32, y as u32, w as u32, h as u32],
+                                pivot: [0.5, 0.5],
+                                duration: duration as f32,
+                                events: Vec::new(),
+                            });
                         } else {
-                            let mut anim = AnimationPlayer::new();
                             let mut clip = Clip::new(clip_name.clone(), String::new());
                             clip.add_frame(Frame {
                                 rect: [x as u32, y as u32, w as u32, h as u32],
@@ -1801,9 +1816,18 @@ impl SliceSession {
                                 events: Vec::new(),
                             });
                             anim.add_clip(clip);
-                            let _ = world.world_mut().insert_one(eid, anim);
                         }
-                        break;
+                    } else {
+                        let mut anim = AnimationPlayer::new();
+                        let mut clip = Clip::new(clip_name.clone(), String::new());
+                        clip.add_frame(Frame {
+                            rect: [x as u32, y as u32, w as u32, h as u32],
+                            pivot: [0.5, 0.5],
+                            duration: duration as f32,
+                            events: Vec::new(),
+                        });
+                        anim.add_clip(clip);
+                        let _ = world.world_mut().insert_one(eid, anim);
                     }
                 }
             }
@@ -1814,30 +1838,30 @@ impl SliceSession {
             } => {
                 use crate::sprite::AnimationPlayer;
                 use crate::SourceId;
-                for (eid, sid) in world.world_ref().query::<&SourceId>().iter() {
-                    if sid.0 == source_id {
-                        if let Ok(mut anim) = world.world_mut().query_one_mut::<AnimationPlayer>(eid) {
-                            if let Some(clip) = anim.clips_mut().get_mut(&clip_name) {
-                                clip.loops = loops;
-                            }
+                let target_eid: Option<hecs::Entity> = world.world_ref()
+                    .query::<(hecs::Entity, &SourceId)>()
+                    .iter()
+                    .find_map(|(eid, sid)| if sid.0 == source_id { Some(eid) } else { None});
+                if let Some(eid) = target_eid {
+                    if let Ok(mut anim) = world.world_mut().query_one_mut::<&mut AnimationPlayer>(eid) {
+                        if let Some(clip) = anim.clips_mut().get_mut(&clip_name) {
+                            clip.loops = loops;
                         }
-                        break;
                     }
                 }
             }
             SliceCommand::CreateParticleSystem { source_id } => {
                 use crate::sprite::ParticleSystemComponent;
                 use crate::SourceId;
-                for (eid, sid) in world.world_ref().query::<&SourceId>().iter() {
-                    if sid.0 == source_id {
-                        if let Ok(mut ps) =
-                            world.world_mut().query_one_mut::<ParticleSystemComponent>(eid)
-                        {
-                            // Already has a particle system
-                        } else {
-                            let _ = world.world_mut().insert_one(eid, ParticleSystemComponent::new());
-                        }
-                        break;
+                let target_eid: Option<hecs::Entity> = world.world_ref()
+                    .query::<(hecs::Entity, &SourceId)>()
+                    .iter()
+                    .find_map(|(eid, sid)| if sid.0 == source_id { Some(eid) } else { None});
+                if let Some(eid) = target_eid {
+                    if let Ok(mut ps) = world.world_mut().query_one_mut::<&mut ParticleSystemComponent>(eid) {
+                        // Already has a particle system
+                    } else {
+                        let _ = world.world_mut().insert_one(eid, ParticleSystemComponent::new());
                     }
                 }
             }
@@ -1858,42 +1882,41 @@ impl SliceSession {
             } => {
                 use crate::sprite::ParticleSystemComponent;
                 use crate::SourceId;
-                for (eid, sid) in world.world_ref().query::<&SourceId>().iter() {
-                    if sid.0 == source_id {
-                        if let Ok(mut ps) =
-                            world.world_mut().query_one_mut::<ParticleSystemComponent>(eid)
-                        {
-                            ps.system_mut().add_emitter(kiln_vfx::Emitter::new(
-                                kiln_vfx::EmitterConfig {
-                                    shape: kiln_vfx::EmissionShape::Point,
-                                    rate: rate as f32,
-                                    speed_range: [speed_min as f32, speed_max as f32],
-                                    angle_range: [angle_min as f32, angle_max as f32],
-                                    lifetime_range: [lifetime_min as f32, lifetime_max as f32],
-                                    size_range: [size_min as f32, size_max as f32],
-                                    color: [color[0] as f32, color[1] as f32, color[2] as f32, color[3] as f32],
-                                    gravity: [gravity[0] as f32, gravity[1] as f32],
-                                    fade_out,
-                                },
-                            ));
-                        } else {
-                            let mut ps = ParticleSystemComponent::new();
-                            ps.system_mut().add_emitter(kiln_vfx::Emitter::new(
-                                kiln_vfx::EmitterConfig {
-                                    shape: kiln_vfx::EmissionShape::Point,
-                                    rate: rate as f32,
-                                    speed_range: [speed_min as f32, speed_max as f32],
-                                    angle_range: [angle_min as f32, angle_max as f32],
-                                    lifetime_range: [lifetime_min as f32, lifetime_max as f32],
-                                    size_range: [size_min as f32, size_max as f32],
-                                    color: [color[0] as f32, color[1] as f32, color[2] as f32, color[3] as f32],
-                                    gravity: [gravity[0] as f32, gravity[1] as f32],
-                                    fade_out,
-                                },
-                            ));
-                            let _ = world.world_mut().insert_one(eid, ps);
-                        }
-                        break;
+                let target_eid: Option<hecs::Entity> = world.world_ref()
+                    .query::<(hecs::Entity, &SourceId)>()
+                    .iter()
+                    .find_map(|(eid, sid)| if sid.0 == source_id { Some(eid) } else { None});
+                if let Some(eid) = target_eid {
+                    if let Ok(mut ps) = world.world_mut().query_one_mut::<&mut ParticleSystemComponent>(eid) {
+                        ps.system_mut().add_emitter(kiln_vfx::Emitter::new(
+                            kiln_vfx::EmitterConfig {
+                                shape: kiln_vfx::EmissionShape::Point,
+                                rate: rate as f32,
+                                speed_range: [speed_min as f32, speed_max as f32],
+                                angle_range: [angle_min as f32, angle_max as f32],
+                                lifetime_range: [lifetime_min as f32, lifetime_max as f32],
+                                size_range: [size_min as f32, size_max as f32],
+                                color: [color[0] as f32, color[1] as f32, color[2] as f32, color[3] as f32],
+                                gravity: [gravity[0] as f32, gravity[1] as f32],
+                                fade_out,
+                            },
+                        ));
+                    } else {
+                        let mut ps = ParticleSystemComponent::new();
+                        ps.system_mut().add_emitter(kiln_vfx::Emitter::new(
+                            kiln_vfx::EmitterConfig {
+                                shape: kiln_vfx::EmissionShape::Point,
+                                rate: rate as f32,
+                                speed_range: [speed_min as f32, speed_max as f32],
+                                angle_range: [angle_min as f32, angle_max as f32],
+                                lifetime_range: [lifetime_min as f32, lifetime_max as f32],
+                                size_range: [size_min as f32, size_max as f32],
+                                color: [color[0] as f32, color[1] as f32, color[2] as f32, color[3] as f32],
+                                gravity: [gravity[0] as f32, gravity[1] as f32],
+                                fade_out,
+                            },
+                        ));
+                        let _ = world.world_mut().insert_one(eid, ps);
                     }
                 }
             }
@@ -1904,23 +1927,16 @@ impl SliceSession {
             SliceCommand::StopParticleSystem { source_id } => {
                 use crate::sprite::ParticleSystemComponent;
                 use crate::SourceId;
-                for (eid, sid) in world.world_ref().query::<&SourceId>().iter() {
-                    if sid.0 == source_id {
-                        if let Ok(mut ps) =
-                            world.world_mut().query_one_mut::<ParticleSystemComponent>(eid)
-                        {
-                            // Stop all emitters by setting rate to 0
-                            // (No direct stop method; emitters with rate 0 don't emit)
-                        }
-                        break;
+                let target_eid: Option<hecs::Entity> = world.world_ref()
+                    .query::<(hecs::Entity, &SourceId)>()
+                    .iter()
+                    .find_map(|(eid, sid)| if sid.0 == source_id { Some(eid) } else { None});
+                if let Some(eid) = target_eid {
+                    if let Ok(mut ps) = world.world_mut().query_one_mut::<&mut ParticleSystemComponent>(eid) {
+                        // Stop all emitters by setting rate to 0
+                        // (No direct stop method; emitters with rate 0 don't emit)
                     }
                 }
-            }
-            SliceCommand::CreateJoint { source_id_a, source_id_b, joint_type, anchor_a, anchor_b, .. } => {
-                // TODO: Update to use the new rapier2d 0.36+ joint API
-                // The old JointBuilder/RevoluteJointBuilder/etc have been removed
-                // Use ImpulseJointBuilder with GenericJoint instead
-                log::warn!("CreateJoint command is not yet implemented for rapier2d 0.36+");
             }
         }
     }
@@ -1963,8 +1979,8 @@ fn find_entities(world: &mut GameWorld, role: &str) -> Vec<WorldEntity> {
         if entity_role.as_str() == role {
             found.push(WorldEntity {
                 source_id: source_id.0.clone(),
-                x: transform.position.x,
-                y: transform.position.y,
+                x: transform.position[0],
+                y: transform.position[1],
                 size: sprite.size,
             });
         }
@@ -1984,8 +2000,8 @@ fn set_player_position(world: &mut GameWorld, source_id: &str, x: f64, y: f64) {
         .query_mut::<(&SourceId, &mut kiln_core::Transform)>()
     {
         if entity_source.0 == source_id {
-            transform.position.x = x as f32;
-            transform.position.y = y as f32;
+            transform.position[0] = x as f32;
+            transform.position[1] = y as f32;
         }
     }
 }

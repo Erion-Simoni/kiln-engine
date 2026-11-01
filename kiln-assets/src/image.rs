@@ -4,6 +4,7 @@
 //! RGBA, 16-bit, `tRNS`) into straight 8-bit RGBA so the renderer only ever
 //! deals with one pixel layout.
 
+use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 
 /// PNG signature bytes (`\x89PNG\r\n\x1a\n`).
@@ -30,7 +31,7 @@ pub enum ImageError {
 }
 
 /// A decoded image stored as straight 8-bit RGBA, row-major, top-left origin.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Image {
     /// Image width in pixels.
     pub width: u32,
