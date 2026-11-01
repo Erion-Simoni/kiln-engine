@@ -179,6 +179,17 @@ pub struct Joint2D {
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Velocity(pub [f32; 2]);
 
+/// Parent-child relationship for 2D scene hierarchy.
+///
+/// When an entity has a Parent component, it is considered a child of the
+/// referenced parent entity. The parent's transform affects the child's
+/// world transform (position, rotation, scale are relative to the parent).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Parent {
+    /// Source id of the parent entity.
+    pub parent_id: String,
+}
+
 pub struct GameWorld {
     world: World,
 }

@@ -4112,21 +4112,70 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     self.entity_id_to_hecs.insert(source_id, entity);
                                     self.hierarchy_panel.rebuild(project, &scene_id);
                                 }
-                                crate::hierarchy::HierarchyAction::RemoveEntity(project_id) => {
-                                    if let Some(&hecs_entity) = self.entity_id_to_hecs.get(&project_id) {
-                                        self.record_scene();
-                                        if crate::editing::remove_entity(self.world, hecs_entity) {
-                                            *self.selected_entity = None;
+                                crate::hierarchy::HierarchyAction::Reparent {
+                                    child_id,
+                                    parent_id,
+                                } => {
+                                    self.record_scene();
+                                    if let Some(scene) = project.scenes.get_mut(&scene_id) {
+                                        if let Some(entity) = scene
+                                            .entities
+                                            .iter_mut()
+                                            .find(|e| e.id == child_id)
+                                        {
+                                            entity.components.retain(|c| !matches!(
+                                                c,
+                                                kiln_core::project::Component::Parent { .. }
+                                            ));
+                                            if let Some(parent_id) = &parent_id {
+                                                entity.components.push(
+                                                    kiln_core::project::Component::Parent {
+                                                        parent_id: parent_id.clone(),
+                                                    },
+                                                );
+                                            }
                                         }
-                                        // Remove from project
-                                        if let Some(scene) = project.scenes.get_mut(&scene_id) {
-                                            scene.entities.retain(|e| e.id != project_id);
-                                        }
-                                        self.entity_id_to_hecs.remove(&project_id);
-                                        self.entity_textures.remove(&project_id);
-                                        self.entity_roles.remove(&project_id);
-                                        self.hierarchy_panel.rebuild(project, &scene_id);
                                     }
+                                    self.hierarchy_panel.rebuild(project, &scene_id);
+                                }
+                                crate::hierarchy::HierarchyAction::DuplicateEntity(source_id) => {
+                                    self.record_scene();
+                                    if let Some(&hecs_entity) = self.entity_id_to_hecs.get(&source_id)
+                                    {
+                                        if let Some(world_entity) = self.world.world_ref().query_one_mut::<(
+                                            &kiln_core::Transform,
+                                            &crate::world::Role,
+                                            &crate::sprite::Sprite,
+                                        )>(hecs_entity)
+                                        {
+                                            let (transform, role, sprite) = world_entity;
+                                            let new_source_id =
+                                                crate::world::next_entity_id(
+                                                    &self
+                                                        .entity_id_to_hecs
+                                                        .keys()
+                                                        .cloned()
+                                                        .collect::<Vec<_>>(),
+                                                );
+                                            world.world_mut().spawn((
+                                                kiln_core::Transform {
+                                                    position: transform.position,
+                                                    rotation: transform.rotation,
+                                                    scale: transform.scale,
+                                                },
+                                                kiln_core::project::Component::Role(
+                                                    role.0.clone(),
+                                                ),
+                                                kiln_core::project::Component::Sprite(
+                                                    sprite.clone(),
+                                                ),
+                                                crate::world::SourceId::new(
+                                                    new_source_id.clone(),
+                                                ),
+                                            ));
+                                        }
+                                    }
+                                    self.hierarchy_panel.rebuild(project, &scene_id);
                                 }
                             }
                         }
