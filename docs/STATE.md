@@ -192,8 +192,8 @@ checkbox optimism in `docs/ROADMAP.md`.
 — closing remaining 2D gaps so the engine is shippable for 2D games. M29 (3D
 foundation) remains in progress but is not the active milestone.
 
-**Next:** Phase F-1 of 2D v1.0 — SDF font pipeline: automate TTF → SDF
-atlas import via `kiln-cli` (V1-6). After that: Phase G (frame budget),
+**Next:** Phase G of 2D v1.0 — frame budget: measure frame time on
+reference Low/Medium GPU and record in BUDGETS.md (V1-8). After that:
 Phase H (close TODO_LIST.md items), Phase I (v0.5 gate re-verification).
 
 ---

@@ -200,6 +200,30 @@ enum Commands {
         #[arg(short, long, default_value = "export")]
         build_dir: PathBuf,
     },
+    /// Import a TTF font and build an SDF atlas (requires --features fonts)
+    ImportFont {
+        /// Input TTF font file
+        #[arg(short, long)]
+        input: PathBuf,
+        /// Output atlas PNG path
+        #[arg(short, long, default_value = "font_atlas.png")]
+        output: PathBuf,
+        /// Output font metadata RON path
+        #[arg(short, long, default_value = "font.ron")]
+        metadata: PathBuf,
+        /// Font size in pixels
+        #[arg(short, long, default_value = "32")]
+        size: f32,
+        /// Atlas width in pixels
+        #[arg(long, default_value = "512")]
+        width: u32,
+        /// Atlas height in pixels
+        #[arg(long, default_value = "512")]
+        height: u32,
+        /// Characters to include (default: ASCII printable + space)
+        #[arg(long, default_value = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,!?:;'\"-()[]{}")]
+        chars: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -524,6 +548,45 @@ fn main() -> Result<()> {
                     anyhow::bail!("Unknown storefront: {}. Supported: itch, steam", storefront);
                 }
             }
+        }
+        Commands::ImportFont {
+            input,
+            output,
+            metadata,
+            size,
+            width,
+            height,
+            chars,
+        } => {
+            let ttf_data = std::fs::read(&input)
+                .map_err(|e| anyhow::anyhow!("Failed to read TTF file '{:?}': {e}", input))?;
+
+            let config = kiln_ui::sdf_builder::SdfBuilderConfig {
+                font_size: size,
+                atlas_width: width,
+                atlas_height: height,
+                padding: 2,
+                chars: chars.chars().collect(),
+                spread: 8,
+            };
+
+            let result = kiln_ui::sdf_builder::build_sdf_atlas(&ttf_data, &config)
+                .map_err(|e| anyhow::anyhow!("SDF atlas build failed: {e}"))?;
+
+            // Save atlas PNG.
+            let mut buf = Vec::new();
+            result.atlas.write_to(&mut buf, image::ImageFormat::Png)
+                .map_err(|e| anyhow::anyhow!("Failed to encode PNG: {e}"))?;
+            std::fs::write(&output, &buf)
+                .map_err(|e| anyhow::anyhow!("Failed to write atlas '{:?}': {e}", output))?;
+            println!("SDF atlas written to: {}", output.display());
+
+            // Save font metadata RON.
+            let ron_str = ron::to_string(&result.font)
+                .map_err(|e| anyhow::anyhow!("Failed to serialize font metadata: {e}"))?;
+            std::fs::write(&metadata, ron_str)
+                .map_err(|e| anyhow::anyhow!("Failed to write metadata '{:?}': {e}", metadata))?;
+            println!("Font metadata written to: {}", metadata.display());
         }
         Commands::Export {
             platform,

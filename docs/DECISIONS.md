@@ -942,4 +942,42 @@ web size budget. A separate feature-gated crate keeps the cost opt-in.
 - Any future extension of `kiln-gltf` beyond M29's subset needs a follow-up
   ADR.
 
+---
+
+## ADR-0036: TTF font parsing dependency for SDF atlas generation (accepted)
+
+**Date:** 2026-11-01  
+**Status:** accepted  
+
+**Decision:** Add the `fontdue` crate (pure-Rust TTF/OTF parser and rasterizer)
+as a dependency of `kiln-ui` for SDF font atlas generation. `fontdue` parses
+TTF files, extracts glyph outlines, and rasterizes them to bitmap at a given
+pixel size. Kiln then computes signed-distance fields from the bitmaps and
+packs them into a texture atlas with `SdfFont` metadata. The `fontdue` crate
+is feature-gated behind a `sdc`/`fonts` Cargo feature in `kiln-ui` so a
+2D-only web build that doesn't use SDF fonts pays no size cost.
+
+**Rationale:** TTF parsing is complex (glyph outlines, hinting, kerning,
+subtables). Implementing it from scratch would be error-prone and
+unmaintained. `fontdue` is a small, pure-Rust, MIT/Apache-2.0 licensed crate
+with no C dependencies, making it safe for WASM/web builds.
+
+**Alternatives considered:**
+- Write a custom TTF parser: rejected — error-prone, large code surface,
+  would need ongoing maintenance for hinting, variable fonts, etc.
+- Use `ttf-parser`: considered — lower-level than `fontdue`, requires more
+  manual rasterization work; `fontdue`'s built-in rasterization is a better
+  fit for Kiln's needs.
+- Use `ab_glyph` + custom rasterizer: considered — more crates, more code;
+  `fontdue` is a single dependency that does both parsing and rasterization.
+
+**Consequences:**
+- `kiln-ui` gains a `fonts` feature (default off) that pulls in `fontdue`.
+- When `fonts` is off, `SdfTextRenderer` still works with manually-authored
+  SDF atlas data (as before).
+- A `kiln-cli import-font` command is added to automate TTF → SDF atlas
+  generation (Phase F-1 of 2D v1.0).
+- Binary size impact of `fontdue` is small (~100–200 KB) and only when the
+  `fonts` feature is enabled.
+
 

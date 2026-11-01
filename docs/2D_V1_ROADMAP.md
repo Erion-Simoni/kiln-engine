@@ -142,7 +142,8 @@ Run the vertical slice on each platform and record results.
   - Phase C-1: Editor scene view post effects already implemented in `kiln-editor/src/app.rs` (lines 2128-2140) — the editor creates `scene_view_post_framebuffer`/`scene_view_post_pipeline` when tier != Low, renders the scene to the post framebuffer, then applies post via `pipeline.apply()`, matching the player's `Renderer::apply_post` (V1-3).
   - Phase D-1: Web end-to-end export test — `wasm` CI job configured (ready to add to `.github/workflows/ci.yml` when workflows permission is available); `docs/BUDGETS.md` updated to document CI measurement (V1-4, V1-7).
   - Phase E-1: Clean machine run — `docs/CLEAN_MACHINE_TEST.md` already documents the full procedure (build → transfer → run → checklist). Results pending actual clean-machine testing (V1-5).
-- **Next:** Phase F-1 (SDF font pipeline) — automate TTF → SDF atlas import via `kiln-cli` (V1-6).
+  - Phase F-1: SDF font pipeline — ADR-0036 (fontdue dependency), `fontdue` + `image` added to workspace Cargo.toml, `kiln-ui` `fonts` feature, `kiln-ui/src/sdf_builder.rs` (SDF atlas builder with distance transform), `sdf_builder` exported from `kiln-ui`, `kiln-cli import-font` subcommand added (V1-6).
+- **Next:** Phase G (frame budget) — measure frame time on reference Low/Medium GPU (V1-8).
 
 ---
 
