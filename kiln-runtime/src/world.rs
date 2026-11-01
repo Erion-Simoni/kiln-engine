@@ -6,7 +6,7 @@ use kiln_core::EntityId;
 /// The gameplay role of an entity, e.g. `"player"` or `"coin"`.
 ///
 /// Roles let a scene's script find entities by purpose instead of by index.
-#[derive(Debug, Clone, PartialEq, Eq, hecs::Component)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Role(pub String);
 
 impl Role {
@@ -25,7 +25,7 @@ impl Role {
 ///
 /// The id survives save/load, so a save file can refer to the same entity
 /// after the world is rebuilt.
-#[derive(Debug, Clone, PartialEq, Eq, hecs::Component)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceId(pub String);
 
 impl SourceId {
@@ -111,7 +111,7 @@ pub enum ColliderShape {
 }
 
 /// Handle linking an ECS entity to a rapier2d rigid body.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, hecs::Component)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PhysicsBody {
     /// rapier2d rigid body handle index.
     pub handle: u32,
@@ -178,7 +178,7 @@ pub struct Joint2D {
 }
 
 /// Linear velocity in world units per second.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, hecs::Bundle)]
 pub struct Velocity(pub [f32; 2]);
 
 pub struct GameWorld {

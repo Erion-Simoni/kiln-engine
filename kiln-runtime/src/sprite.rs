@@ -6,7 +6,7 @@ use kiln_vfx::{Emitter, EmitterConfig, ParticleSystem};
 use std::collections::HashMap;
 
 /// CPU-side sprite drawn via [`kiln_render::SpriteRenderer`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, hecs::Bundle)]
 pub struct Sprite {
     pub color: [f32; 4],
     pub size: [f32; 2],
@@ -76,7 +76,7 @@ impl Default for Sprite {
 /// Tracks a set of named animation clips and advances the current frame
 /// based on elapsed time. The current frame's UV rect can be read and
 /// applied to a sprite's `uv_rect` each frame.
-#[derive(Debug, hecs::Component)]
+#[derive(Debug)]
 pub struct AnimationPlayer {
     clips: HashMap<String, Clip>,
     /// Texture dimensions for each clip (width, height) - used to convert
@@ -175,7 +175,6 @@ impl AnimationPlayer {
 /// Particle system component for 2D visual effects (smoke, fire, magic, etc.).
 ///
 /// Drives a CPU particle system and can be rendered as sprite instances.
-#[derive(hecs::Component)]
 pub struct ParticleSystemComponent {
     system: ParticleSystem,
 }
@@ -235,7 +234,7 @@ impl Default for ParticleSystemComponent {
 /// System to update animations and apply UV rects to sprites.
 /// Reads AnimationPlayer and Sprite, writes Sprite (uv_rect).
 pub fn update_animations(world: &mut hecs::World) {
-    for (_, (anim, sprite)) in world.query_mut::<(&mut AnimationPlayer, &mut Sprite)>() {
+    for (anim, sprite) in world.query_mut::<(&mut AnimationPlayer, &mut Sprite)>() {
         anim.update(1.0 / 60.0); // Fixed timestep
         if let Some(uv_rect) = anim.current_uv_rect() {
             sprite.uv_rect = uv_rect;
@@ -245,7 +244,7 @@ pub fn update_animations(world: &mut hecs::World) {
 
 /// Emit particles from particle system components for one frame.
 pub fn update_particle_systems(world: &mut hecs::World, dt: f32) {
-    for (_, ps) in world.query_mut::<&mut ParticleSystemComponent>() {
+    for ps in world.query_mut::<&mut ParticleSystemComponent>() {
         ps.system_mut().update(dt);
     }
 }

@@ -174,22 +174,23 @@ pub fn sync_physics_with_ecs(
     use kiln_core::Transform;
 
     // Register new bodies: entities with RigidBody2D + Collider2D but no PhysicsBody
-    let to_register: Vec<(hecs::Entity, RigidBody2D, Collider2D, Option<SourceId>)> = world
-        .query::<(&RigidBody2D, &Collider2D, Option<&SourceId>)>()
-        .iter()
-        .filter_map(|(e, (rb, col, sid))| {
-            if world.get::<&PhysicsBody>(e).is_err() {
-                Some((e, *rb, *col, sid.cloned()))
-            } else {
-                None
-            }
-        })
-        .collect();
+    let to_register: Vec<(hecs::Entity, RigidBody2D, Collider2D, Option<SourceId>)> = {
+        let mut query = world.query::<(hecs::Entity, &RigidBody2D, &Collider2D, Option<&SourceId>)>();
+        (&mut query).into_iter()
+            .filter_map(|(e, rb, col, sid)| {
+                if world.get::<&PhysicsBody>(e).is_err() {
+                    Some((e, *rb, *col, sid.cloned()))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    };
 
     for (entity, rb, col, source_id) in to_register {
         // Get the transform for this entity to set initial position
-        let transform = world.get::<&Transform>(entity).copied();
-        let pos = transform.map(|t| t.position).unwrap_or([0.0, 0.0]);
+        let transform = world.get::<&Transform>(entity).ok().map(|t| *t);
+        let pos = transform.map(|t| [t.position.x, t.position.y]).unwrap_or([0.0, 0.0]);
         
         let body_builder = match rb.body_type {
             RigidBodyType::Static => rapier2d::prelude::RigidBodyBuilder::fixed(),
@@ -239,8 +240,8 @@ pub fn sync_physics_with_ecs(
     // TODO: Update to use the new rapier2d contact events API when available
 
     // Sync physics positions back to ECS transforms
-    for (entity, physics_body, transform) in
-        world.query_mut::<(&mut PhysicsBody, &mut Transform)>().iter()
+    for (physics_body, transform) in
+        world.query_mut::<(&mut PhysicsBody, &mut Transform)>()
     {
         let handle = rapier2d::prelude::RigidBodyHandle::from_raw_parts(physics_body.handle, physics_body.generation);
         if let Some(body) = physics.rigid_body_set.get(handle) {
