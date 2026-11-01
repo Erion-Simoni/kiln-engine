@@ -58,7 +58,7 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("play_music", 14, 1),
     ("stop_music", 15, 0),
     ("set_volume", 16, 1),
-    // Audio extended (17-24)
+    // Audio extended (17-25)
     ("set_sfx_volume", 17, 1),        // volume 0-1
     ("set_music_volume", 18, 1),      // volume 0-1
     ("pause_sound", 19, 1),           // sound_name -> void
@@ -108,7 +108,7 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     // Save/load (53-54)
     ("save_game", 53, 1),        // slot_id -> bool
     ("load_game", 54, 1),        // slot_id -> bool
-    // Animation clip creation (55-57)
+    // Animation clip creation (55)
     ("create_animation_clip", 55, 3),  // source_id, clip_name, texture_path -> void
 
 ];
@@ -761,13 +761,13 @@ impl SliceHost {
                 });
                 Ok(Value::I64(0))
             }
-            18 => {
+            27 => {
                 // despawn_entity(source_id)
                 let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 self.commands.push(SliceCommand::DespawnEntity(source_id));
                 Ok(Value::I64(0))
             }
-            19 => {
+            28 => {
                 // get_entity_pos(source_id) -> (x, y) or null
                 let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
                 if let Some((x, y)) = self.facts.entity_positions.get(source_id) {
@@ -776,7 +776,7 @@ impl SliceHost {
                     Ok(Value::Bool(false))
                 }
             }
-            20 => {
+            29 => {
                 // set_entity_pos(source_id, x, y)
                 let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let x = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
@@ -784,8 +784,8 @@ impl SliceHost {
                 self.commands.push(SliceCommand::SetEntityPos { source_id, x, y });
                 Ok(Value::I64(0))
             }
-            // Query builtins (21-25)
-            21 => {
+            // Query builtins (30-34)
+            30 => {
                 // get_entities_with_role(role) -> array of source_ids
                 let role = args.first().and_then(|v| v.as_str()).unwrap_or("");
                 let entities: Vec<Value> = self
@@ -797,7 +797,7 @@ impl SliceHost {
                     .collect();
                 Ok(Value::Array(entities))
             }
-            22 => {
+            31 => {
                 // get_entity_component(source_id, component_name) -> value
                 let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
                 let component = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
@@ -826,7 +826,7 @@ impl SliceHost {
                     _ => Ok(Value::Bool(false)),
                 }
             }
-            23 => {
+            32 => {
                 // set_entity_component(source_id, component_name, value)
                 let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let component = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
@@ -838,8 +838,8 @@ impl SliceHost {
                 });
                 Ok(Value::I64(0))
             }
-            // World queries (24-25)
-            24 => {
+            // World queries (33-34)
+            33 => {
                 // find_nearest(x, y, role) -> source_id or null
                 let x = args.first().and_then(|v| v.to_f64()).unwrap_or(0.0);
                 let y = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
@@ -860,7 +860,7 @@ impl SliceHost {
                     Ok(Value::Bool(false))
                 }
             }
-            25 => {
+            34 => {
                 // raycast(x, y, dx, dy) -> [source_id, distance] or false
                 let x = args.first().and_then(|v| v.to_f64()).unwrap_or(0.0);
                 let y = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
@@ -889,33 +889,11 @@ impl SliceHost {
                 let _ = (x, y, dx, dy);
                 Ok(Value::Bool(false))
             }
-            // Audio extended (26-27)
-            26 => {
-                // sound_playing(name) -> bool
-                #[cfg(feature = "audio")]
-                {
-                    let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
-                    let playing = self.audio.as_ref().map(|a| a.is_playing(name)).unwrap_or(false);
-                    Ok(Value::Bool(playing))
-                }
-                #[cfg(not(feature = "audio"))]
-                Ok(Value::Bool(false))
-            }
-            27 => {
-                // music_playing() -> bool
-                #[cfg(feature = "audio")]
-                {
-                    let playing = self.audio.as_ref().map(|a| a.is_music_playing()).unwrap_or(false);
-                    Ok(Value::Bool(playing))
-                }
-                #[cfg(not(feature = "audio"))]
-                Ok(Value::Bool(false))
-            }
-            // Time/frame (28-29)
-            28 => Ok(Value::I64(self.frame_count as i64)),
-            29 => Ok(Value::F64(self.time_scale)),
-            // Extended entity API (30-34)
-            30 => {
+            // Time/frame (35-36)
+            35 => Ok(Value::I64(self.frame_count as i64)),
+            36 => Ok(Value::F64(self.time_scale)),
+            // Extended entity API (37-40)
+            37 => {
                 // set_entity_vel(source_id, vx, vy)
                 #[cfg(feature = "physics")]
                 {
@@ -926,7 +904,7 @@ impl SliceHost {
                 }
                 Ok(Value::I64(0))
             }
-            31 => {
+            38 => {
                 // get_entities_at_position(x, y, radius) -> array of source_ids
                 let x = args.first().and_then(|v| v.to_f64()).unwrap_or(0.0);
                 let y = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
@@ -941,7 +919,7 @@ impl SliceHost {
                 }
                 Ok(Value::Array(found))
             }
-            32 => {
+            39 => {
                 // get_entity_role(source_id) -> role string
                 let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
                 if let Some(role) = self.facts.entity_roles.get(source_id) {
@@ -950,7 +928,7 @@ impl SliceHost {
                     Ok(Value::Str(String::new()))
                 }
             }
-            33 => {
+            40 => {
                 // add_component(source_id, component_type, value_json)
                 let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let component_type = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
@@ -962,7 +940,7 @@ impl SliceHost {
                 });
                 Ok(Value::I64(0))
             }
-            34 => {
+            41 => {
                 // remove_component(source_id, component_type)
                 let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let component_type = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
@@ -972,27 +950,27 @@ impl SliceHost {
                 });
                 Ok(Value::I64(0))
             }
-            35 => {
+            42 => {
                 // play_animation(source_id, clip_name)
                 let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let clip_name = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
                 self.commands.push(SliceCommand::PlayAnimation { source_id, clip_name });
                 Ok(Value::I64(0))
             }
-            36 => {
+            43 => {
                 // stop_animation(source_id)
                 let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 self.commands.push(SliceCommand::StopAnimation { source_id });
                 Ok(Value::I64(0))
             }
-            37 => {
+            44 => {
                 // set_animation_speed(source_id, speed)
                 let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let speed = args.get(1).and_then(|v| v.to_f64()).unwrap_or(1.0);
                 self.commands.push(SliceCommand::SetAnimationSpeed { source_id, speed });
                 Ok(Value::I64(0))
             }
-            38 => {
+            45 => {
                 // get_collision_events() -> array of [entity_a, entity_b, started]
                 let events: Vec<Value> = self
                     .facts
@@ -1008,8 +986,8 @@ impl SliceHost {
                     .collect();
                 Ok(Value::Array(events))
             }
-            // UI widgets (39-42)
-            39 => {
+            // UI widgets (46-49)
+            46 => {
                 // ui_button(id, x, y) -> clicked bool
                 let id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let x = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
@@ -1020,7 +998,7 @@ impl SliceHost {
                 let clicked = self.ui_widgets.get(&id).copied().unwrap_or(false);
                 Ok(Value::Bool(clicked))
             }
-            40 => {
+            47 => {
                 // ui_label(id, x, y, text) -> void
                 let id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let x = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
@@ -1029,7 +1007,7 @@ impl SliceHost {
                 self.commands.push(SliceCommand::UiLabel { id, x, y, text });
                 Ok(Value::I64(0))
             }
-            41 => {
+            48 => {
                 // ui_panel(id, x, y, w, h) -> void
                 let id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let x = args.get(1).and_then(|v| v.to_f64()).unwrap_or(0.0);
@@ -1039,27 +1017,27 @@ impl SliceHost {
                 self.commands.push(SliceCommand::UiPanel { id, x, y, w, h });
                 Ok(Value::I64(0))
             }
-            42 => {
+            49 => {
                 // ui_clicked(id) -> clicked bool
                 let id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let clicked = self.ui_widgets.get(&id).copied().unwrap_or(false);
                 Ok(Value::Bool(clicked))
             }
-            // Input actions (43-44)
-            43 => {
+            // Input actions (50-51)
+            50 => {
                 // get_action(action_name) -> pressed bool
                 let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
                 let pressed = self.is_action_pressed(name);
                 Ok(Value::Bool(pressed))
             }
-            44 => {
+            51 => {
                 // get_action_axis(action_name) -> -1 to 1 value
                 let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
                 let axis = self.get_action_axis(name);
                 Ok(Value::F64(axis))
             }
-            // Localization (45)
-            45 => {
+            // Localization (52)
+            52 => {
                 // localize(key) -> localized string
                 let key = args.first().and_then(|v| v.as_str()).unwrap_or("");
                 if let Some(loc) = &self.localization {
@@ -1073,8 +1051,8 @@ impl SliceHost {
                     Ok(Value::Str(key.to_string()))
                 }
             }
-            // Save/load (46-47)
-            46 => {
+            // Save/load (53-54)
+            53 => {
                 // save_game(slot_id) -> bool
                 let slot = args.first().and_then(|v| v.as_i64()).unwrap_or(0) as u32;
                 let Some(dir) = &self.save_dir else {
@@ -1085,14 +1063,14 @@ impl SliceHost {
                     Err(_) => Ok(Value::Bool(false)),
                 }
             }
-            47 => {
+            54 => {
                 // load_game(slot_id) -> bool
                 let slot = args.first().and_then(|v| v.as_i64()).unwrap_or(0) as u32;
                 self.commands.push(SliceCommand::LoadGame { slot });
                 Ok(Value::Bool(true))
             }
-            // Animation clip creation (48-50)
-            48 => {
+            // Animation clip creation (55)
+            55 => {
                 // create_animation_clip(source_id, clip_name, texture_path) -> void
                 let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let clip_name = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
@@ -1102,108 +1080,6 @@ impl SliceHost {
                     clip_name,
                     texture_path,
                 });
-                Ok(Value::I64(0))
-            }
-            49 => {
-                // add_animation_frame(source_id, clip_name, x, y, w, h, duration) -> void
-                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let clip_name = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let x = args.get(2).and_then(|v| v.to_f64()).unwrap_or(0.0);
-                let y = args.get(3).and_then(|v| v.to_f64()).unwrap_or(0.0);
-                let w = args.get(4).and_then(|v| v.to_f64()).unwrap_or(32.0);
-                let h = args.get(5).and_then(|v| v.to_f64()).unwrap_or(32.0);
-                let duration = args.get(6).and_then(|v| v.to_f64()).unwrap_or(0.1);
-                self.commands.push(SliceCommand::AddAnimationFrame {
-                    source_id,
-                    clip_name,
-                    x,
-                    y,
-                    w,
-                    h,
-                    duration,
-                });
-                Ok(Value::I64(0))
-            }
-            50 => {
-                // set_animation_loop(source_id, clip_name, loops) -> void
-                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let clip_name = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let loops = args.get(2).and_then(|v| v.as_bool()).unwrap_or(true);
-                self.commands.push(SliceCommand::SetAnimationLoop {
-                    source_id,
-                    clip_name,
-                    loops,
-                });
-                Ok(Value::I64(0))
-            }
-            // Particle system (51-54)
-            51 => {
-                // create_particle_system(source_id) -> void
-                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
-                self.commands.push(SliceCommand::CreateParticleSystem { source_id });
-                Ok(Value::I64(0))
-            }
-            52 => {
-                // add_particle_emitter(source_id, rate, speed_min, speed_max, angle_min, angle_max,
-                //   lifetime_min, lifetime_max, size_min, size_max, r, g, b, a, gx, gy, fade_out)
-                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let rate = args.get(1).and_then(|v| v.to_f64()).unwrap_or(10.0);
-                let speed_min = args.get(2).and_then(|v| v.to_f64()).unwrap_or(10.0);
-                let speed_max = args.get(3).and_then(|v| v.to_f64()).unwrap_or(20.0);
-                let angle_min = args.get(4).and_then(|v| v.to_f64()).unwrap_or(0.0);
-                let angle_max = args.get(5).and_then(|v| v.to_f64()).unwrap_or(6.28);
-                let lifetime_min = args.get(6).and_then(|v| v.to_f64()).unwrap_or(1.0);
-                let lifetime_max = args.get(7).and_then(|v| v.to_f64()).unwrap_or(2.0);
-                let size_min = args.get(8).and_then(|v| v.to_f64()).unwrap_or(0.5);
-                let size_max = args.get(9).and_then(|v| v.to_f64()).unwrap_or(1.0);
-                let r = args.get(10).and_then(|v| v.to_f64()).unwrap_or(1.0);
-                let g = args.get(11).and_then(|v| v.to_f64()).unwrap_or(1.0);
-                let b = args.get(12).and_then(|v| v.to_f64()).unwrap_or(1.0);
-                let a = args.get(13).and_then(|v| v.to_f64()).unwrap_or(1.0);
-                let gx = args.get(14).and_then(|v| v.to_f64()).unwrap_or(0.0);
-                let gy = args.get(15).and_then(|v| v.to_f64()).unwrap_or(-9.8);
-                let fade_out = args.get(16).and_then(|v| v.as_bool()).unwrap_or(true);
-                self.commands.push(SliceCommand::AddParticleEmitter {
-                    source_id,
-                    rate,
-                    speed_min,
-                    speed_max,
-                    angle_min,
-                    angle_max,
-                    lifetime_min,
-                    lifetime_max,
-                    size_min,
-                    size_max,
-                    color: [r, g, b, a],
-                    gravity: [gx, gy],
-                    fade_out,
-                });
-                Ok(Value::I64(0))
-            }
-            53 => {
-                // start_particle_system(source_id) -> void
-                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
-                self.commands.push(SliceCommand::StartParticleSystem { source_id });
-                Ok(Value::I64(0))
-            }
-            54 => {
-                // stop_particle_system(source_id) -> void
-                let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
-                self.commands.push(SliceCommand::StopParticleSystem { source_id });
-                Ok(Value::I64(0))
-            }
-            // Audio editing (55-56)
-            55 => {
-                // register_audio(name, path) -> void
-                let name = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let path = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
-                self.host_mut().register_audio(&name, &path);
-                Ok(Value::I64(0))
-            }
-            56 => {
-                // play_audio_preview(name) -> void
-                let name = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
-                self.host_mut().play_audio_preview(&name);
                 Ok(Value::I64(0))
             }
             _ => Err(VmError::HostCallError(format!(

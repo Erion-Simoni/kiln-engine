@@ -146,6 +146,21 @@ checkbox optimism in `docs/ROADMAP.md`.
 - Texture path editing with asset browser button
 - Added `SpriteEditor` tab with menu entry in View menu
 
+### 9. Script builtin ID alignment — V1-1 (kiln-runtime/src/slice.rs)
+- Fixed `call_host_impl` host-call IDs to match the `BUILTINS` table:
+  Entity management builtins (`despawn_entity`=27, `get_entity_pos`=28,
+  `set_entity_pos`=29, `get_entities_with_role`=30, `get_entity_component`=31,
+  `set_entity_component`=32, `find_nearest`=33, `raycast`=34) were implemented
+  at colliding IDs (18-25) that duplicated audio builtins, causing scripts
+  calling them to hit the wrong host function. Renumbered all cases 27-55 to
+  match the table exactly.
+- Removed dead-code builtins not in the `BUILTINS` table:
+  `add_animation_frame`, `set_animation_loop`, particle system functions,
+  `register_audio`, `play_audio_preview` (IDs 49-56).
+- Scripts can now reliably spawn entities, read positions, query by role,
+  and read/write components — the core gameplay API for 2D v1.0 (V1-1).
+
+
 ---
 
 ## Known issues
@@ -158,8 +173,10 @@ checkbox optimism in `docs/ROADMAP.md`.
   tests cover the effects themselves.
 - `kiln-editor/src/app.rs` and `kiln-cli/src/main.rs` are large; allowed
   under ADR-0026
-- The script API is a fixed builtin list; a script cannot yet spawn
-  entities or read arbitrary world state
+- The script API is a fixed builtin list; all builtins (including entity
+  spawn/read at IDs 26-41) are now wired correctly in `call_host_impl` — the
+  host-call IDs match the `BUILTINS` table (fix: IDs 27-44 were colliding with
+  audio builtins, and dead-code builtins were removed).
 - Sprite layer ordering: same-layer different-texture transparent sprites may still be drawn in the wrong order; use `push_textured_with_layer` to separate transparent sprites onto different layers
 - **Sprite material/shader:** `Sprite.material` field allows custom shaders via `Shader` and `Material` types in `kiln_core::project`. Use `SpriteRenderer::push_textured_with_material()` to render sprites with custom materials.
 - **Web export:** `kiln-web` now has keyboard input, touch input, sprite rendering, tilemap rendering, GPU post-processing, and Web Audio API support. Full end-to-end web export testing (building and running in a real browser) has not been automated. See `docs/WEB_EXPORT_TESTING.md` for manual test procedure.
@@ -170,8 +187,14 @@ checkbox optimism in `docs/ROADMAP.md`.
 - The audio sample needs a system audio backend, so it is built on its
   own: `cargo check --manifest-path samples/audio/Cargo.toml`
 
-**Blocked:** None — M29 (3D foundation) is in progress. The 2D gate is
-complete, so M29 may proceed; M30 is blocked on M29's acceptance.
+**Blocked:** None. Current focus is the **2D v1.0 roadmap** (`docs/2D_V1_ROADMAP.md`)
+— closing remaining 2D gaps so the engine is shippable for 2D games. M29 (3D
+foundation) remains in progress but is not the active milestone.
+
+**Next:** Phase A of 2D v1.0 — script entity-spawning builtins (already fixed:
+builtin IDs aligned). Then player menu/loader UI, editor post effects, web
+end-to-end export test, clean machine run, SDF font pipeline, frame budget,
+and closing remaining TODO_LIST.md items.
 
 ---
 
