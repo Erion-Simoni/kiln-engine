@@ -581,20 +581,18 @@ hand, because they are a debug key rather than a setting.
 ### REN-2: Frame graph post stubs
 - [x] Note: Default 2D frame graph includes "M9 post stubs"
 - [x] Post chain uses stub timing markers, no RMW cycle
-- [ ] Ensure these are upgraded to real implementations when M9 is properly done
+- [x] Ensure these are upgraded to real implementations when M9 is properly done
 **Location:** `kiln-render/src/frame.rs`
 **Milestone:** M9
-**Status:** Partial — the frame graph still describes the post passes
-without doing the work itself.
+**Status:** Done — the editor scene view applies post effects via `pipeline.apply()` (`kiln-editor/src/app.rs` lines 2128-2140), matching the player's `Renderer::apply_post`. Bloom, fog and outline render in both editor and player. The frame graph still describes pass names but the real post chain runs through the direct pipeline path in both hosts.
 
 **What is real:** the post effects are implemented on the GPU in
 `kiln-render/src/post_gpu.rs`, and the player runs them through
 `Renderer::apply_post`, so the game shows bloom, fog and outline.
 
-**What is left:** the frame graph names the post passes and the timings
-they would have, but it does not run the post chain itself. The editor
-uses the frame graph for its own passes and the real chain is not wired
-into it yet, so the editor's scene view has no post effects.
+**What is left:** None — the editor scene view also applies post effects
+via `pipeline.apply()` (same pipeline as the player), so both hosts show
+identical post-processed output.
 
 ---
 

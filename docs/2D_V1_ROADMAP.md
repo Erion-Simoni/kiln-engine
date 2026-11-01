@@ -139,7 +139,8 @@ Run the vertical slice on each platform and record results.
   - Phase A-1: Script builtin ID alignment fixed in `kiln-runtime/src/slice.rs` — all host-call IDs (0–55) now match the `BUILTINS` table; scripts can spawn/read entities (V1-1).
   - Phase A-2: Complete script API surface documented in `docs/KILNSCRIPT.md` — audio, entity, animation, UI, input, localization, save/load builtins all listed (V1-1).
   - Phase B-1: Player main menu + scene loader already implemented in `kiln-player/src/main.rs` — `MenuState` enum with Main/LoadGame/Playing/Settings, keyboard navigation, `start_game()`, save/load slots (V1-2).
-- **Next:** Phase C-1 (editor scene view post effects) — wire `Renderer::apply_post` into editor scene view so bloom/fog/outline match the player (V1-3).
+  - Phase C-1: Editor scene view post effects already implemented in `kiln-editor/src/app.rs` (lines 2128-2140) — the editor creates `scene_view_post_framebuffer`/`scene_view_post_pipeline` when tier != Low, renders the scene to the post framebuffer, then applies post via `pipeline.apply()`, matching the player's `Renderer::apply_post` (V1-3).
+- **Next:** Phase D-1 (web end-to-end export test) — CI builds `kiln-web` WASM, runs `wasm-opt -Oz` + `brotli`, verifies output under size budget (V1-4, V1-7).
 
 ---
 
