@@ -76,6 +76,11 @@ pub fn build_sdf_atlas(
         let glyph_w = metrics.width as u32;
         let glyph_h = metrics.height as u32;
 
+        // Convert fontdue's flat byte buffer into a GrayImage.
+        let bitmap_img =
+            GrayImage::from_raw(glyph_w, glyph_h, bitmap)
+                .ok_or_else(|| format!("Failed to create bitmap for glyph '{ch}'"))?;
+
         // Check if the glyph fits on the current row.
         if x + glyph_w + config.padding > config.atlas_width {
             x = config.padding;
@@ -90,7 +95,7 @@ pub fn build_sdf_atlas(
         }
 
         // Generate SDF from the bitmap.
-        let sdf = bitmap_to_sdf(&bitmap, config.spread);
+        let sdf = bitmap_to_sdf(&bitmap_img, config.spread);
 
         // Copy the SDF into the atlas (all channels = SDF value).
         for (dy, row) in sdf.rows().enumerate() {
@@ -108,7 +113,7 @@ pub fn build_sdf_atlas(
         }
 
         let advance = metrics.advance as f32;
-        let bearing = [metrics.bearing[0] as f32, metrics.bearing[1] as f32];
+        let bearing = metrics.bearing;
 
         glyphs.insert(
             *ch,
