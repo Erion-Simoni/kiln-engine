@@ -10,10 +10,12 @@ path = "src/main.rs"
 [dependencies]
 clap = { workspace = true }
 kiln-assets = { workspace = true }
-kiln-updater = { workspace = true }
 kiln-core = { workspace = true }
+kiln-updater = { workspace = true }
+kiln-ui = { workspace = true, features = ["fonts"] }
 anyhow = { workspace = true }
 serde_json = { workspace = true }
 ron = { workspace = true }
 uuid = { workspace = true }
 walkdir = { workspace = true }
+image = { workspace = true }

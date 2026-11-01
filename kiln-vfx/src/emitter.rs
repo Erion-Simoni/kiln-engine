@@ -2,6 +2,20 @@
 
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static RNG_STATE: AtomicU64 = AtomicU64::new(0x1234567890abcdef);
+
+fn random_f32() -> f32 {
+    let state = RNG_STATE.fetch_add(1, Ordering::Relaxed);
+    let x = state
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+    let x = x ^ (x >> 29);
+    let x = x.wrapping_mul(0x6D2B79F5CE6A6B5B);
+    let x = x ^ (x >> 32);
+    x as f32 / u64::MAX as f32
+}
 
 /// Emission shape for particle spawning.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
@@ -113,16 +127,16 @@ impl Emitter {
         match self.config.shape {
             EmissionShape::Point => self.position,
             EmissionShape::Circle { radius } => {
-                let angle = rand::random::<f32>() * 2.0 * PI;
-                let r = radius * rand::random::<f32>().sqrt();
+                let angle = random_f32() * 2.0 * PI;
+                let r = radius * random_f32().sqrt();
                 [
                     self.position[0] + r * angle.cos(),
                     self.position[1] + r * angle.sin(),
                 ]
             }
             EmissionShape::Rectangle { width, height } => [
-                self.position[0] + (rand::random::<f32>() - 0.5) * width,
-                self.position[1] + (rand::random::<f32>() - 0.5) * height,
+                self.position[0] + (random_f32() - 0.5) * width,
+                self.position[1] + (random_f32() - 0.5) * height,
             ],
         }
     }
@@ -165,7 +179,7 @@ fn rand_range(min: f32, max: f32) -> f32 {
     if min >= max {
         return min;
     }
-    min + rand::random::<f32>() * (max - min)
+    min + random_f32() * (max - min)
 }
 
 #[cfg(test)]

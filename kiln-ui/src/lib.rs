@@ -9,6 +9,9 @@ pub mod text;
 pub mod ui_renderer;
 pub mod widget;
 
+#[cfg(feature = "fonts")]
+pub mod sdf_builder;
+
 pub use layout::{Anchor, Layout, LayoutConstraints, Rect, Size};
 pub use localization::{Localization, LocalizationKey};
 pub use navigation::{FocusDirection, FocusManager, Focusable};
@@ -16,3 +19,6 @@ pub use render::{NineSlice, NineSliceRenderer};
 pub use text::TextRenderer;
 pub use ui_renderer::{UiQuad, UiRenderer};
 pub use widget::{Button, Canvas, Label, List, Panel, Widget, WidgetId};
+
+#[cfg(feature = "fonts")]
+pub use sdf_builder::{SdfAtlasResult, SdfBuilderConfig, build_sdf_atlas};

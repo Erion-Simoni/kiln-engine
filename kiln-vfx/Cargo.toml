@@ -9,6 +9,5 @@ license.workspace = true
 kiln-core = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
-rand = "0.8"
 bytemuck = { workspace = true }
 wgpu = { workspace = true }

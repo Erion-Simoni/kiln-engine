@@ -1,6 +1,7 @@
 //! Prefab system for reusable entity templates
 
 use crate::project::{Component, Entity};
+use crate::next_id;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -48,7 +49,7 @@ pub struct PrefabInstance {
 impl Prefab {
     pub fn new(name: String, root_entity: Entity) -> Self {
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: next_id().to_string(),
             name,
             root_entity,
         }
@@ -109,7 +110,7 @@ impl Prefab {
     /// Create an entity instance from this prefab
     pub fn instantiate(&self, overrides: Option<PrefabOverride>) -> Entity {
         let mut entity = self.root_entity.clone();
-        entity.id = uuid::Uuid::new_v4().to_string(); // New instance ID
+        entity.id = next_id().to_string();
 
         if let Some(overrides) = overrides {
             self.apply_overrides(&mut entity, &overrides);

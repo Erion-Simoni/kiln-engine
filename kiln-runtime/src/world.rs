@@ -6,6 +6,7 @@ use kiln_core::EntityId;
 /// The gameplay role of an entity, e.g. `"player"` or `"coin"`.
 ///
 /// Roles let a scene's script find entities by purpose instead of by index.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Role(pub String);
 
 impl Role {
@@ -110,6 +111,7 @@ pub enum ColliderShape {
 }
 
 /// Handle linking an ECS entity to a rapier2d rigid body.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PhysicsBody {
     /// rapier2d rigid body handle index.
     pub handle: u32,
@@ -176,19 +178,8 @@ pub struct Joint2D {
 }
 
 /// Linear velocity in world units per second.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, hecs::Bundle)]
 pub struct Velocity(pub [f32; 2]);
-
-/// Parent-child relationship for 2D scene hierarchy.
-///
-/// When an entity has a Parent component, it is considered a child of the
-/// referenced parent entity. The parent's transform affects the child's
-/// world transform (position, rotation, scale are relative to the parent).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Parent {
-    /// Source id of the parent entity.
-    pub parent_id: String,
-}
 
 pub struct GameWorld {
     world: World,

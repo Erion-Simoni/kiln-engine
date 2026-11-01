@@ -6,7 +6,7 @@ use kiln_vfx::{Emitter, EmitterConfig, ParticleSystem};
 use std::collections::HashMap;
 
 /// CPU-side sprite drawn via [`kiln_render::SpriteRenderer`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, hecs::Bundle)]
 pub struct Sprite {
     pub color: [f32; 4],
     pub size: [f32; 2],

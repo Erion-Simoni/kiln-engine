@@ -10,10 +10,10 @@ use kiln_player::textures::TextureLibrary;
 use kiln_render::{camera::Camera, sprite_renderer::SpriteInstance, Renderer, SpriteRenderer};
 use kiln_runtime::{
     GameLoop, GameWorld, InputState, SliceSession, Sprite, Tilemap,
-    sync_physics_with_ecs,
 };
 use kiln_ui::{
     layout::Rect,
+    text::TextRenderer,
     ui_renderer::UiRenderer,
     widget::{Button, Label, Panel, WidgetId, Widget},
     localization::LocalizationKey,
@@ -21,6 +21,7 @@ use kiln_ui::{
 };
 use log::info;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::event::KeyEvent;
@@ -160,7 +161,7 @@ fn key_name_string(key: &winit::keyboard::Key) -> String {
             NamedKey::Shift => "Shift".to_string(),
             NamedKey::Control => "Control".to_string(),
             NamedKey::Alt => "Alt".to_string(),
-            _ => named.as_ref().to_string(),
+            _ => format!("{:?}", named).to_string(),
         },
         winit::keyboard::Key::Character(c) => c.to_string(),
         winit::keyboard::Key::Dead(_) => "Dead".to_string(),
@@ -474,12 +475,22 @@ impl PlayerApp {
     /// Handle key input when in the main menu.
     fn handle_main_menu(&mut self, key: Key) {
         match key {
-            Key::Named(NamedKey::ArrowUp) | Key::Character(c) if c.as_str() == "w" || c.as_str() == "W" => {
+            Key::Named(NamedKey::ArrowUp) => {
                 if self.menu_selected > 0 {
                     self.menu_selected -= 1;
                 }
             }
-            Key::Named(NamedKey::ArrowDown) | Key::Character(c) if c.as_str() == "s" || c.as_str() == "S" => {
+            Key::Character(c) if matches!(c.as_str(), "w" | "W") => {
+                if self.menu_selected > 0 {
+                    self.menu_selected -= 1;
+                }
+            }
+            Key::Named(NamedKey::ArrowDown) => {
+                if self.menu_selected < 3 {
+                    self.menu_selected += 1;
+                }
+            }
+            Key::Character(c) if matches!(c.as_str(), "s" | "S") => {
                 if self.menu_selected < 3 {
                     self.menu_selected += 1;
                 }
@@ -500,18 +511,28 @@ impl PlayerApp {
     /// Handle key input when in the load game menu.
     fn handle_load_game_menu(&mut self, key: Key) {
         match key {
-            Key::Named(NamedKey::ArrowUp) | Key::Character(c) if c.as_str() == "w" || c.as_str() == "W" => {
+            Key::Named(NamedKey::ArrowUp) => {
                 if self.menu_selected > 0 {
                     self.menu_selected -= 1;
                 }
             }
-            Key::Named(NamedKey::ArrowDown) | Key::Character(c) if c.as_str() == "s" || c.as_str() == "S" => {
+            Key::Character(c) if matches!(c.as_str(), "w" | "W") => {
+                if self.menu_selected > 0 {
+                    self.menu_selected -= 1;
+                }
+            }
+            Key::Named(NamedKey::ArrowDown) => {
+                if self.menu_selected < 9 {
+                    self.menu_selected += 1;
+                }
+            }
+            Key::Character(c) if matches!(c.as_str(), "s" | "S") => {
                 if self.menu_selected < 9 {
                     self.menu_selected += 1;
                 }
             }
             Key::Named(NamedKey::Enter) => {
-                self.save_slot = self.menu_selected;
+                self.save_slot = self.menu_selected as u32;
                 self.load_game();
                 self.start_game();
             }
@@ -561,28 +582,26 @@ impl PlayerApp {
         // The scene script drives the game: it reads the input axis and
         // moves the player, collects pickups and keeps the score.
         let axis = self.axis();
-        let PlayerApp {
-            game_loop,
-            world,
-            slice,
-            ui_commands,
-            action_map,
-            mouse_x,
-            mouse_y,
-            mouse_pressed,
-            pressed_keys,
-            ..
-        } = self;
-        game_loop.tick(|dt| {
+        let save_dir = self.save_dir.clone();
+        let mouse_x = self.mouse_x;
+        let mouse_y = self.mouse_y;
+        let mouse_pressed = self.mouse_pressed;
+        let world = &mut self.world;
+        let slice = &mut self.slice;
+        let ui_commands = &mut self.ui_commands;
+        let action_map = &mut self.action_map;
+        let pressed_keys = &mut self.pressed_keys;
+        let ui_widgets = &mut self.ui_widgets;
+        self.game_loop.tick(|dt| {
             if let Some(slice) = slice.as_mut() {
                 // Pass mouse state to the slice host for UI click detection.
-                slice.set_mouse_state(*mouse_x, *mouse_y, *mouse_pressed);
+                slice.host_mut().set_mouse_state(mouse_x, mouse_y, mouse_pressed);
                 // Pass action map for get_action/get_action_axis builtins.
-                slice.set_action_map(action_map.clone());
+                slice.host_mut().set_action_map(action_map.clone());
                 // Pass pressed keys for get_action/get_action_axis builtins.
-                slice.set_pressed_keys(pressed_keys);
+                slice.host_mut().set_pressed_keys(pressed_keys);
                 // Pass save directory for save_game/load_game builtins.
-                slice.set_save_dir(&self.save_dir);
+                slice.host_mut().set_save_dir(&save_dir);
                 if let Err(e) = slice.step(world, axis, dt.as_secs_f64()) {
                     log::error!("scene script failed: {e}");
                 }
@@ -594,10 +613,15 @@ impl PlayerApp {
                     .filter_map(|cmd| match cmd {
                         kiln_runtime::SliceCommand::UiButton { id, x, y } => {
                             let bounds = Rect::new(*x as f32, *y as f32, 64.0, 32.0);
-                            let hovered = self.is_mouse_over(bounds);
-                            let pressed = hovered && self.mouse_pressed;
+                            let hovered = mouse_x >= bounds.x as f64
+                                && mouse_x < (bounds.x + bounds.width) as f64
+                                && mouse_y >= bounds.y as f64
+                                && mouse_y < (bounds.y + bounds.height) as f64;
+                            let pressed = hovered && mouse_pressed;
+                            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                            id.hash(&mut hasher);
                             Some(UiWidget::Button {
-                                id: WidgetId::from_u64(id.hash()),
+                                id: WidgetId::from_u64(hasher.finish()),
                                 bounds,
                                 text_key: LocalizationKey::new(format!("btn_{id}")),
                                 hovered,
@@ -606,16 +630,20 @@ impl PlayerApp {
                         }
                         kiln_runtime::SliceCommand::UiLabel { id, x, y, text } => {
                             let bounds = Rect::new(*x as f32, *y as f32, 200.0, 24.0);
+                            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                            id.hash(&mut hasher);
                             Some(UiWidget::Label {
-                                id: WidgetId::from_u64(id.hash()),
+                                id: WidgetId::from_u64(hasher.finish()),
                                 bounds,
                                 text_key: LocalizationKey::new(text.clone()),
                             })
                         }
                         kiln_runtime::SliceCommand::UiPanel { id, x, y, w, h } => {
                             let bounds = Rect::new(*x as f32, *y as f32, *w as f32, *h as f32);
+                            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                            id.hash(&mut hasher);
                             Some(UiWidget::Panel {
-                                id: WidgetId::from_u64(id.hash()),
+                                id: WidgetId::from_u64(hasher.finish()),
                                 bounds,
                             })
                         }
@@ -625,7 +653,6 @@ impl PlayerApp {
             }
             // Step physics (if the physics feature is enabled)
             // Physics stepping happens inside slice.step() via sync_physics_with_ecs().
-            let _ = (world, dt);
 
             // Poll gamepad state (gamepad feature only).
             #[cfg(feature = "gamepad")]
@@ -748,6 +775,7 @@ impl PlayerApp {
                     size: sprite.size,
                     color: sprite.color,
                     uv_rect: sprite.uv_rect,
+                    material_id: 0,
                 },
             );
         }
@@ -846,7 +874,7 @@ impl PlayerApp {
                         ));
                         let quads = self.ui_renderer.render_label(&label);
                         for instance in quads {
-                            gpu.hud_sprite_renderer.push(kiln_render::TextureId::WHITE, instance);
+                            gpu.hud_sprite_renderer.push_textured(instance.texture, instance.instance);
                         }
                     }
                     UiWidget::Panel { id, bounds } => {
@@ -859,7 +887,7 @@ impl PlayerApp {
                         ));
                         let quads = self.ui_renderer.render_panel(&panel);
                         for instance in quads {
-                            gpu.hud_sprite_renderer.push_textured(quad.texture, quad.instance);
+                            gpu.hud_sprite_renderer.push_textured(instance.texture, instance.instance);
                         }
                     }
                 }

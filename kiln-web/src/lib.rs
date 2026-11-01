@@ -125,6 +125,7 @@ impl App {
     fn get_canvas_element(&self) -> Option<web_sys::HtmlCanvasElement> {
         self.canvas_element.clone()
     }
+}
 
 impl App {
     async fn new(

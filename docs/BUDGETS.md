@@ -68,7 +68,11 @@ brotli output.wasm -o output.wasm.br
 ls -l output.wasm.br
 ```
 
-**Current status:** 36 KB uncompressed (measured in M12, release build); brotli compression not yet measured (wasm-opt not installed locally)
+**Current status:** CI measures brotli-compressed WASM size on every push
+via the `wasm` job (`.github/workflows/ci.yml`). Build: `cargo build --release
+--target wasm32-unknown-unknown -p kiln-web`, then `wasm-opt -Oz` + `brotli`.
+Budget: <1.5 MB brotli-compressed. Local measurement requires `wasm-opt`
+and `brotli` tools (see "Measurement" above).
 
 **Notes:**
 - Measure with `wasm-opt -Oz` and brotli

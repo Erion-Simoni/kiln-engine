@@ -5,6 +5,9 @@ use crate::localization::LocalizationKey;
 use crate::navigation::Focusable;
 use crate::render::NineSlice;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static WIDGET_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 /// Unique identifier for a widget instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -12,7 +15,7 @@ pub struct WidgetId(u64);
 
 impl WidgetId {
     pub fn new() -> Self {
-        Self(rand::random::<u64>())
+        Self(WIDGET_ID_COUNTER.fetch_add(1, Ordering::Relaxed))
     }
 
     pub fn from_u64(value: u64) -> Self {
