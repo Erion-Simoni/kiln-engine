@@ -136,6 +136,7 @@ impl Tilemap {
                                     size: ts,
                                     color: self.color,
                                     uv_rect,
+                                    material_id: 0,
                                 },
                             ));
                         }

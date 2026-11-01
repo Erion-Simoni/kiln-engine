@@ -555,7 +555,7 @@ mod tests {
 /// making it ideal for HUDs, menus, and other screen-space UI elements.
 /// Unlike regular widgets which are positioned relative to their parent,
 /// canvas children are positioned in absolute screen coordinates.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Canvas {
     id: WidgetId,
     layout: Layout,
@@ -568,6 +568,20 @@ pub struct Canvas {
     /// Child widgets contained in this canvas.
     #[serde(skip)]
     pub children: Vec<Box<dyn Widget>>,
+}
+
+impl std::fmt::Debug for Canvas {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Canvas")
+            .field("id", &self.id)
+            .field("layout", &self.layout)
+            .field("bounds", &self.bounds)
+            .field("visible", &self.visible)
+            .field("background_color", &self.background_color)
+            .field("captures_input", &self.captures_input)
+            .field("children", &self.children.len())
+            .finish()
+    }
 }
 
 impl Canvas {

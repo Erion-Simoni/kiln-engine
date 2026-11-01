@@ -56,7 +56,7 @@ toml         = "0.8"
 ron          = "0.8"
 uuid         = { version = "1.0", features = ["v4", "serde"] }
 kiln-plugin-api = { path = "kiln-plugin-api" }
-getrandom    = { version = "0.4", features = ["std"], optional = true }
+getrandom    = { version = "0.4", features = ["std"] }
 bytemuck     = { version = "1.0", features = ["derive"] }
 log          = "0.4"
 env_logger   = "0.11"
@@ -70,14 +70,13 @@ dirs         = "5.0"
 egui         = "0.29"
 egui_dock    = "0.14"
 qbsdiff      = "1.4"
-android-activity = { version = "0.6", features = ["native-activity"], optional = true }
 rand         = "0.8"
 chrono       = "0.4"
 gilrs        = "0.10"
 mdbook       = "0.4"
-rodio        = { version = "0.19", optional = true }
-symphonia    = { version = "0.7", features = ["vorbis", "ogg"], optional = true }
-cpal         = { version = "0.15", optional = true }
+rodio        = { version = "0.19" }
+symphonia    = { version = "0.7", features = ["vorbis", "ogg"] }
+cpal         = { version = "0.15" }
 kiln-core    = { path = "kiln-core" }
 kiln-render  = { path = "kiln-render" }
 kiln-runtime = { path = "kiln-runtime" }

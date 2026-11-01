@@ -16,6 +16,8 @@ pub enum Value {
     Bool(bool),
     /// UTF-8 string (heap-allocated).
     Str(String),
+    /// Homogeneous-enough list of values (positions, entity ids, colors).
+    Array(Vec<Value>),
 }
 
 impl Value {
@@ -64,7 +66,7 @@ impl Value {
         match self {
             Value::I64(v) => Some(*v as f64),
             Value::F64(v) => Some(*v),
-            Value::Bool(_) | Value::Str(_) => None,
+            Value::Bool(_) | Value::Str(_) | Value::Array(_) => None,
         }
     }
 
@@ -98,6 +100,12 @@ impl Value {
             }
             (Value::Bool(x), Value::Bool(y)) => x == y,
             (Value::Str(x), Value::Str(y)) => x == y,
+            (Value::Array(x), Value::Array(y)) => {
+                x.len() == y.len()
+                    && x.into_iter()
+                        .zip(y)
+                        .all(|(a, b)| Value::values_equal(a, b))
+            }
             _ => false,
         }
     }

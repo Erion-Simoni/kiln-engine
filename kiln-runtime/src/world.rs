@@ -6,7 +6,7 @@ use kiln_core::EntityId;
 /// The gameplay role of an entity, e.g. `"player"` or `"coin"`.
 ///
 /// Roles let a scene's script find entities by purpose instead of by index.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, hecs::Component)]
 pub struct Role(pub String);
 
 impl Role {
@@ -25,7 +25,7 @@ impl Role {
 ///
 /// The id survives save/load, so a save file can refer to the same entity
 /// after the world is rebuilt.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, hecs::Component)]
 pub struct SourceId(pub String);
 
 impl SourceId {
@@ -100,7 +100,9 @@ pub struct Collider2D {
     pub mask: u16,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Collider shape variants. Uses `PartialEq` only (no `Eq`) because radii
+/// are `f32`.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ColliderShape {
     /// A circle with the given radius.
     Circle { radius: f32 },
@@ -109,10 +111,12 @@ pub enum ColliderShape {
 }
 
 /// Handle linking an ECS entity to a rapier2d rigid body.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, hecs::Component)]
 pub struct PhysicsBody {
     /// rapier2d rigid body handle index.
     pub handle: u32,
+    /// rapier2d arena generation for [`Self::handle`].
+    pub generation: u32,
 }
 
 impl Default for Collider2D {
@@ -126,10 +130,14 @@ impl Default for Collider2D {
             friction: 0.5,
             restitution: 0.0,
             density: 1.0,
+            layer: 0xFFFF,
+            mask: 0xFFFF,
         }
+    }
+}
 
-/// A 2D joint that connects two entities via their physics bodies.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Joint type for 2D physics joints.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JointType {
     /// Keeps two bodies at a fixed distance from each other.
     Distance,
@@ -140,7 +148,7 @@ pub enum JointType {
 }
 
 /// A 2D joint component connecting two entities via their physics bodies.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Joint2D {
     /// First entity in the joint.
     pub entity_a: String,
@@ -168,8 +176,10 @@ pub struct Joint2D {
     /// Enable motor.
     pub enable_motor: bool,
 }
-    }
-}
+
+/// Linear velocity in world units per second.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Velocity(pub [f32; 2]);
 
 pub struct GameWorld {
     world: World,
