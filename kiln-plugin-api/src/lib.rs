@@ -12,7 +12,7 @@
 
 use kiln_core::Project;
 use kiln_runtime::{GameWorld, SliceSession};
-use kiln_ui::Ui;
+use kiln_ui::UiRenderer;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use thiserror::Error;
@@ -103,7 +103,7 @@ pub struct PluginContext {
     /// Project being edited
     pub project: Option<kiln_core::Project>,
     /// Editor UI instance
-    pub ui: Option<kiln_ui::Ui>,
+    pub ui: Option<kiln_ui::UiRenderer>,
     /// Game world (for runtime plugins)
     pub world: Option<kiln_runtime::GameWorld>,
     /// Script session (for script-related plugins)
@@ -131,7 +131,7 @@ pub trait EditorPlugin: Send + Sync {
 
     /// Called each frame in the editor.
     /// Return true if the plugin wants to render UI.
-    fn ui(&mut self, ui: &mut kiln_ui::Ui, context: &mut PluginContext) -> bool;
+    fn ui(&mut self, ui: &mut kiln_ui::UiRenderer, context: &mut PluginContext) -> bool;
 
     /// Handle editor events (keyboard, mouse, etc.)
     fn handle_event(&mut self, event: &EditorEvent, context: &mut PluginContext) -> bool;
@@ -140,7 +140,7 @@ pub trait EditorPlugin: Send + Sync {
     fn on_project_change(&mut self, project: Option<&kiln_core::Project>) {}
 
     /// Get custom configuration UI for the plugin settings.
-    fn settings_ui(&mut self, ui: &mut kiln_ui::Ui) {}
+    fn settings_ui(&mut self, ui: &mut kiln_ui::UiRenderer) {}
 }
 
 /// Events that can be sent to plugins.
@@ -236,22 +236,26 @@ impl PluginRegistry {
     }
     
     /// Get a plugin by ID.
-    pub fn get(&self, id: &str) -> Option<&dyn EditorPlugin> {
+    pub fn get(&self, id: &str) -> Option<&(dyn EditorPlugin + '_)> {
         self.plugins.get(id).map(|p| p.as_ref())
     }
     
     /// Get mutable reference to a plugin.
-    pub fn get_mut(&mut self, id: &str) -> Option<&mut dyn EditorPlugin> {
-        self.plugins.get_mut(id).map(|p| p.as_mut())
+    pub fn get_mut(&mut self, id: &str) -> Option<&mut (dyn EditorPlugin + '_)> {
+        match self.plugins.get_mut(id) {
+            Some(plugin) => Some(plugin.as_mut()),
+            None => None,
+        }
     }
-    
+
+    /// Get all registered plugin manifests.
     /// Get all registered plugin manifests.
     pub fn manifests(&self) -> Vec<&PluginManifest> {
         self.manifests.values().collect()
     }
     
     /// Get plugins in load order.
-    pub fn plugins_in_order(&self) -> Vec<&dyn EditorPlugin> {
+    pub fn plugins_in_order(&self) -> Vec<&(dyn EditorPlugin + '_)> {
         self.load_order.iter()
             .filter_map(|id| self.plugins.get(id).map(|p| p.as_ref()))
             .collect()
@@ -278,7 +282,7 @@ impl PluginRegistry {
     }
     
     /// Call ui on all plugins.
-    pub fn ui_all(&mut self, ui: &mut kiln_ui::Ui, context: &mut PluginContext) {
+    pub fn ui_all(&mut self, ui: &mut kiln_ui::UiRenderer, context: &mut PluginContext) {
         for id in &self.load_order {
             if let Some(plugin) = self.plugins.get_mut(id) {
                 plugin.ui(ui, context);
