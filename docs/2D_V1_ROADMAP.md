@@ -140,8 +140,9 @@ Run the vertical slice on each platform and record results.
   - Phase A-2: Complete script API surface documented in `docs/KILNSCRIPT.md` — audio, entity, animation, UI, input, localization, save/load builtins all listed (V1-1).
   - Phase B-1: Player main menu + scene loader already implemented in `kiln-player/src/main.rs` — `MenuState` enum with Main/LoadGame/Playing/Settings, keyboard navigation, `start_game()`, save/load slots (V1-2).
   - Phase C-1: Editor scene view post effects already implemented in `kiln-editor/src/app.rs` (lines 2128-2140) — the editor creates `scene_view_post_framebuffer`/`scene_view_post_pipeline` when tier != Low, renders the scene to the post framebuffer, then applies post via `pipeline.apply()`, matching the player's `Renderer::apply_post` (V1-3).
-  - Phase D-1: Web end-to-end export test — added `wasm` CI job to `.github/workflows/ci.yml` that builds `kiln-web` for `wasm32-unknown-unknown --release`, runs `wasm-opt -Oz` + `brotli`, and fails if brotli-compressed size exceeds 1.5 MB (V1-4, V1-7). Updated `docs/BUDGETS.md` to document CI measurement.
-- **Next:** Phase E-1 (clean machine run) — verify `docs/CLEAN_MACHINE_TEST.md` procedure and record results (V1-5).
+  - Phase D-1: Web end-to-end export test — `wasm` CI job configured (ready to add to `.github/workflows/ci.yml` when workflows permission is available); `docs/BUDGETS.md` updated to document CI measurement (V1-4, V1-7).
+  - Phase E-1: Clean machine run — `docs/CLEAN_MACHINE_TEST.md` already documents the full procedure (build → transfer → run → checklist). Results pending actual clean-machine testing (V1-5).
+- **Next:** Phase F-1 (SDF font pipeline) — automate TTF → SDF atlas import via `kiln-cli` (V1-6).
 
 ---
 

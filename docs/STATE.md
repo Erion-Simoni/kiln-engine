@@ -192,10 +192,9 @@ checkbox optimism in `docs/ROADMAP.md`.
 — closing remaining 2D gaps so the engine is shippable for 2D games. M29 (3D
 foundation) remains in progress but is not the active milestone.
 
-**Next:** Phase E-1 of 2D v1.0 — clean machine run: verify
-`docs/CLEAN_MACHINE_TEST.md` procedure and record results (V1-5). After
-that: Phase F (SDF font pipeline), Phase G (frame budget), Phase H (close
-TODO_LIST.md items), Phase I (v0.5 gate re-verification).
+**Next:** Phase F-1 of 2D v1.0 — SDF font pipeline: automate TTF → SDF
+atlas import via `kiln-cli` (V1-6). After that: Phase G (frame budget),
+Phase H (close TODO_LIST.md items), Phase I (v0.5 gate re-verification).
 
 ---
 
