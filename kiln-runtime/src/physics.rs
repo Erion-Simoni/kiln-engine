@@ -1,7 +1,7 @@
 //! Physics module (feature-gated)
 //! Uses rapier2d for 2D rigid body physics
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[cfg(feature = "physics")]
 use rapier2d::prelude::*;
@@ -21,6 +21,13 @@ pub struct PhysicsWorld {
     multibody_joint_set: MultibodyJointSet,
     ccd_solver: CCDSolver,
     soft_body_set: SoftBodySet,
+    created_joints: HashSet<(String, String)>,
+}
+
+impl std::fmt::Debug for PhysicsWorld {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PhysicsWorld").finish()
+    }
 }
 
 #[cfg(feature = "physics")]
@@ -40,6 +47,7 @@ impl PhysicsWorld {
             multibody_joint_set: MultibodyJointSet::new(),
             ccd_solver: CCDSolver::new(),
             soft_body_set: SoftBodySet::new(),
+            created_joints: HashSet::new(),
         }
     }
 
@@ -106,29 +114,34 @@ impl PhysicsWorld {
         direction: [f32; 2],
         max_distance: f32,
     ) -> Option<(u32, f32)> {
-        use rapier2d::math::Vector;
-        let origin = Vector::new(origin[0], origin[1]);
-        let dir = Vector::new(direction[0], direction[1]).normalize();
-        let mut hit_info = None;
-        let mut max_toi = max_distance;
-
-        let _ = self.physics_pipeline.cast_ray(
-            &self.rigid_body_set,
-            &self.collider_set,
-            origin,
-            dir,
-            max_toi,
-            true,
-            rapier2d::prelude::QueryFilter::default(),
-            &mut |handle, toi| {
-                if toi < max_toi {
-                    max_toi = toi;
-                    hit_info = Some((handle.index() as u32, toi));
-                }
-            },
+        let dir = Vector::new(direction[0], direction[1]);
+        let dir_len = dir.norm();
+        if dir_len <= f32::EPSILON {
+            return None;
+        }
+        let ray = rapier2d::prelude::Ray::new(
+            rapier2d::prelude::Point::new(origin[0], origin[1]),
+            dir / dir_len,
         );
-
-        hit_info
+        let filter = QueryFilter::default();
+        let mut hit: Option<(u32, f32)> = None;
+        for (handle, collider) in self.collider_set.iter() {
+            if !filter.test(&self.rigid_body_set, handle, collider) {
+                continue;
+            }
+            if let Some(toi) = collider.cast_ray(
+                collider.position(),
+                &ray,
+                max_distance,
+                true,
+            ) {
+                if toi <= max_distance && hit.map(|(_, t)| toi < t).unwrap_or(true) {
+                    let body = collider.parent().map(|h| h.into_raw_parts().0).unwrap_or(0);
+                    hit = Some((body, toi));
+                }
+            }
+        }
+        hit
     }
 }
 

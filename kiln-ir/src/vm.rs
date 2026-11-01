@@ -428,7 +428,7 @@ impl<H: HostContext> Vm<H> {
         Ok(args)
     }
 
-    /// Get a reference to the current stack contents.
+    /// Current stack contents (tests and the debugger).
     pub fn stack(&self) -> &[Value] {
         &self.stack
     }

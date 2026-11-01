@@ -2,11 +2,11 @@
 
 use kiln_anim::Clip;
 use kiln_render::{TextureId, FULL_UV};
-use kiln_vfx::{Emitter, EmitterConfig, EmissionShape, ParticleSystem};
+use kiln_vfx::{Emitter, EmitterConfig, ParticleSystem};
 use std::collections::HashMap;
 
 /// CPU-side sprite drawn via [`kiln_render::SpriteRenderer`].
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Sprite {
     pub color: [f32; 4],
     pub size: [f32; 2],
@@ -18,11 +18,9 @@ pub struct Sprite {
     /// Preserves painter order for transparent sprites across textures.
     pub layer: f32,
     /// Optional material reference for custom shader rendering.
-    #[serde(default)]
     pub material: Option<String>,
     /// Optional name of an animation clip from `animation_clips` to play
     /// on this sprite.
-    #[serde(default)]
     pub animation_clip: Option<String>,
 }
 
@@ -34,6 +32,8 @@ impl Sprite {
             uv_rect: FULL_UV,
             texture: TextureId::WHITE,
             layer: 0.0,
+            material: None,
+            animation_clip: None,
         }
     }
 
@@ -86,6 +86,12 @@ pub struct AnimationPlayer {
     elapsed: f32,
     /// Playback speed multiplier (1.0 = normal speed).
     speed: f32,
+}
+
+impl Default for AnimationPlayer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AnimationPlayer {
@@ -169,9 +175,25 @@ impl AnimationPlayer {
 /// Particle system component for 2D visual effects (smoke, fire, magic, etc.).
 ///
 /// Drives a CPU particle system and can be rendered as sprite instances.
-#[derive(Debug, Clone)]
 pub struct ParticleSystemComponent {
     system: ParticleSystem,
+}
+
+impl std::fmt::Debug for ParticleSystemComponent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ParticleSystemComponent")
+            .field("particle_count", &self.system.particle_count())
+            .finish()
+    }
+}
+
+impl Clone for ParticleSystemComponent {
+    fn clone(&self) -> Self {
+        // ParticleSystem doesn't implement Clone, so create a new empty one
+        Self {
+            system: ParticleSystem::new(Default::default()),
+        }
+    }
 }
 
 impl ParticleSystemComponent {
@@ -184,7 +206,7 @@ impl ParticleSystemComponent {
 
     /// Add an emitter to the particle system.
     pub fn add_emitter(&mut self, config: EmitterConfig) {
-        self.system.add_emitter(crate::sprite::Emitter::new(config));
+        self.system.add_emitter(Emitter::new(config));
     }
 
     /// Get mutable access to the particle system.
@@ -212,7 +234,7 @@ impl Default for ParticleSystemComponent {
 /// System to update animations and apply UV rects to sprites.
 /// Reads AnimationPlayer and Sprite, writes Sprite (uv_rect).
 pub fn update_animations(world: &mut hecs::World) {
-    for (_, (anim, sprite)) in world.query_mut::<(&mut AnimationPlayer, &mut Sprite)>().iter() {
+    for (_, (anim, sprite)) in world.query_mut::<(&mut AnimationPlayer, &mut Sprite)>() {
         anim.update(1.0 / 60.0); // Fixed timestep
         if let Some(uv_rect) = anim.current_uv_rect() {
             sprite.uv_rect = uv_rect;
@@ -222,7 +244,7 @@ pub fn update_animations(world: &mut hecs::World) {
 
 /// Emit particles from particle system components for one frame.
 pub fn update_particle_systems(world: &mut hecs::World, dt: f32) {
-    for (_, ps) in world.query_mut::<&mut ParticleSystemComponent>().iter() {
+    for (_, ps) in world.query_mut::<&mut ParticleSystemComponent>() {
         ps.system_mut().update(dt);
     }
 }
