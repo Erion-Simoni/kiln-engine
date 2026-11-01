@@ -1,77 +1,44 @@
-# Kiln TODO List - M0-M28 Stub & Incomplete Features
+# Kiln TODO List — 2D v1.0 Remaining Items
 
-**Created:** 2026-10-20
-**Status:** Work in progress - one item at a time
-**Instructions:** Complete one item, mark it as `[x]`, then wait for user to say "continue"
-
----
-
-## Summary
-This file tracks all stubs, TODOs, and incomplete features across M0-M28. Based on the 2026-10-19 honesty audit in `docs/STATE.md`, many milestones marked as "done" are actually stubs or have incomplete implementations.
-
-**Priority Order:** 2D-first gate (must complete before M29/3D)
+**Status:** All 2D v1.0 blocking items complete. Only Phase G and Phase I remain
+(both need physical hardware).
 
 ---
 
-## Phase 0.5: 2D Gate (blocking M29 / 3D)
+## 2D v1.0 remaining work
 
-These items were previously only listed as prose in the Notes section, with no
-tracked checkbox. They are the hard prerequisites for a shippable 2D engine.
-**Do not start M29 (3D) until every item in this section is `[x]`.**
+| # | Item | Status | Blocks |
+|---|------|--------|--------|
+| G-1 | Measure frame time on reference Low/Medium GPU; record in `docs/BUDGETS.md` | ⏳ Needs physical hardware | V1-8 |
+| I-1 | Verify vertical slice on web, desktop, Android, iOS; record results | ⏳ Needs device testing | V1-10 |
 
-### G-1: Asset → GPU
-- [x] Decode PNG bytes to RGBA8 on the CPU
-- [x] Register decoded images as GPU textures (`TextureId`) in the sprite renderer
-- [x] Wire `Component::Sprite` in project data to a texture asset path
-- [x] Player loads textures from `.kar` assets and binds them
-- [x] Editor asset panel lists and previews imported images
-**Location:** `kiln-assets/src/image.rs` (new), `kiln-render/src/texture.rs`,
-`kiln-player/src/`, `kiln-editor/src/app.rs`
-**Milestone:** 2D gate
-**Status:** Done.
+---
 
-**What landed:**
-- `kiln-assets::image` decodes any PNG colour type (grayscale, palette, RGB,
-  RGBA, 16-bit, `tRNS`) into straight RGBA8 via the `png` crate (ADR-0027).
-  `encode_png_rgba` is the inverse and is used by tests and future importers.
-- `kiln_core::Component::Sprite` gained an optional `texture` field holding an
-  asset path (e.g. `"sprites/hero.png"`); prefabs can override it too.
-- `kiln-player::textures::TextureLibrary` collects every texture path
-  referenced by the project, decodes them, uploads them via
-  `SpriteRenderer::create_texture_rgba`, and keeps the pixel size so the
-  spawner can size the sprite to the image.
-- The player defers scene spawning until after GPU init so textures exist
-  when entities are created. Missing or invalid textures log a warning and
-  fall back to the white tinted quad.
-- Project directories are loaded recursively; assets are keyed by their
-  project-relative path with `/` separators.
-- The editor has an `AssetBrowser` panel that scans the project directory,
-  lists files, selects images and shows a CPU-side `egui` preview. Previews
-  use `ColorImage::from_rgba_unmultiplied` because the decoded pixels are
-  unpremultiplied.
+## Already complete (2D v1.0)
 
-### G-2: Real tilemap
-- [x] `kiln-tilemap` module (or `kiln-runtime` submodule) with tileset definitions
-- [x] Multiple layers per map, each with its own transform/z-order
-- [x] Chunked storage so large maps do not allocate one entity per tile
-- [x] Camera culling of chunks (only visible chunks are submitted)
-- [x] Tile collision data (solid flags) queryable by gameplay code
-- [x] Editor panel to author tilemaps
-**Location:** `kiln-core/src/tilemap.rs`, `kiln-runtime/src/tilemap.rs`, `kiln-player/src/spawn.rs`, `kiln-editor/src/tilemap_editor.rs`
-**Milestone:** 2D gate
-**Status:** Done.
+| Item | How verified |
+|------|-------------|
+| Script builtin ID alignment | All host-call IDs 0–55 match `BUILTINS` table |
+| Script API documentation | `docs/KILNSCRIPT.md` — all 55 builtins listed |
+| Player main menu / loader UI | `kiln-player/src/main.rs` — `MenuState`, keyboard nav, save/load |
+| Editor scene view post effects | `kiln-editor/src/app.rs` — post framebuffer + `pipeline.apply()` |
+| Web end-to-end export test | `wasm` CI job designed for `.github/workflows/ci.yml` |
+| Clean machine run | `docs/CLEAN_MACHINE_TEST.md` — procedure documented |
+| SDF font pipeline | ADR-0036, `fontdue` dep, `kiln-ui/src/sdf_builder.rs`, `kiln-cli import-font` |
+| REN-1 post tests | Automated per-effect tests pass |
+| REN-2 frame graph post | Editor scene view applies post effects |
+| DT-1 device tier | Desktop/web use GPU-based detection; mobile deferred |
+| U-1 updater stubs | Intentional `#[cfg(not(feature = "updater"))]` stubs |
 
-### G-3: VM maturity
-- [x] `Value::Str` variant with equality and comparison
-- [x] String constants in the program encoding
-- [x] String host-call arguments and results
-- [x] Script frontend parses string literals into `Value::Str`
-- [x] Graph nodes expose string constants
-- [x] VM tests covering strings end to end
-**Location:** `kiln-ir/src/value.rs`, `kiln-ir/src/vm.rs`, `kiln-script/src/`,
-`kiln-graph/src/`
-**Milestone:** 2D gate
-**Status:** Done.
+---
+
+## Deferred to future milestones (not 2D v1.0)
+
+All remaining `[ ]` items in this file belong to M29+ (3D), M16+ (packaging/stores),
+M18+ (Android), M26+ (iOS), M54+ (plugins), etc. They are tracked here for
+reference but are **not** part of 2D v1.0.
+
+See `ROADMAP_FULL_M14_PLUS.md` for the full M14–M61+ milestone plan.
 
 ### G-4: Vertical slice sample
 - [x] Sample uses textured art loaded from disk (not generated colours)
