@@ -12,6 +12,7 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 rand = { workspace = true }
 fontdue = { workspace = true, optional = true }
+image = { workspace = true }
 
 [features]
 default = []

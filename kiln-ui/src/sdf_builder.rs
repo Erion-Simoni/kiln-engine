@@ -8,7 +8,6 @@
 //! in `kiln-ui` (which pulls in `fontdue`). Without the feature, SDF fonts
 //! can still be used with manually-authored atlas data.
 
-use crate::SdfTextRenderer;
 use std::collections::HashMap;
 use image::{GrayImage, Luma, RgbaImage};
 use kiln_core::project::{GlyphMetrics, SdfFont};
@@ -46,6 +45,15 @@ impl Default for SdfBuilderConfig {
     }
 }
 
+/// Result of building an SDF atlas.
+#[derive(Debug)]
+pub struct SdfAtlasResult {
+    /// RGBA8 atlas texture data (all channels hold the SDF value).
+    pub atlas: RgbaImage,
+    /// Font metadata suitable for `SdfTextRenderer` or `kiln_core::SdfFont`.
+    pub font: SdfFont,
+}
+
 /// Build an SDF atlas from TTF bytes.
 ///
 /// # Errors
@@ -67,7 +75,7 @@ pub fn build_sdf_atlas(
 
     for ch in &config.chars {
         // Rasterize the glyph to a bitmap.
-        let (metrics, bitmap) = font.rasterize(*ch, config.font_size as f32);
+        let (metrics, bitmap) = font.rasterize(*ch, config.font_size);
         if bitmap.is_empty() {
             // Skip glyphs that have no visible pixels (e.g. space).
             continue;
@@ -99,7 +107,8 @@ pub fn build_sdf_atlas(
 
         // Copy the SDF into the atlas (all channels = SDF value).
         for (dy, row) in sdf.rows().enumerate() {
-            for (dx, &val) in row.iter().enumerate() {
+            for (dx, pixel) in row.enumerate() {
+                let val = pixel[0];
                 let ax = x + dx as u32;
                 let ay = y + dy as u32;
                 if ax < config.atlas_width && ay < config.atlas_height {
@@ -112,8 +121,8 @@ pub fn build_sdf_atlas(
             }
         }
 
-        let advance = metrics.advance as f32;
-        let bearing = metrics.bearing;
+        let advance = metrics.advance_width;
+        let bearing = [metrics.xmin as f32, metrics.ymin as f32];
 
         glyphs.insert(
             *ch,

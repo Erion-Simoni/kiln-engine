@@ -574,8 +574,9 @@ fn main() -> Result<()> {
                 .map_err(|e| anyhow::anyhow!("SDF atlas build failed: {e}"))?;
 
             // Save atlas PNG.
+            use std::io::Cursor;
             let mut buf = Vec::new();
-            result.atlas.write_to(&mut buf, image::ImageFormat::Png)
+            result.atlas.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::Png)
                 .map_err(|e| anyhow::anyhow!("Failed to encode PNG: {e}"))?;
             std::fs::write(&output, &buf)
                 .map_err(|e| anyhow::anyhow!("Failed to write atlas '{:?}': {e}", output))?;
