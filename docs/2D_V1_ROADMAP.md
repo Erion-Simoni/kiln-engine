@@ -134,10 +134,12 @@ Run the vertical slice on each platform and record results.
 ## Done / In progress / Next
 
 - **Done:** 2D gate (G-1 … G-6) complete; M0–M28 complete (Partial verdicts)
-- **In progress:** None for 2D v1.0 yet
-- **Next:** Start Phase A (script entity-spawning builtins). First step:
-  inspect `kiln-ir` host-call table and `kiln-runtime::slice` to design the
-  spawn/read host calls.
+- **In progress:** None
+- **Done this session (2D v1.0):**
+  - Phase A-1: Script builtin ID alignment fixed in `kiln-runtime/src/slice.rs` — all host-call IDs (0–55) now match the `BUILTINS` table; scripts can spawn/read entities (V1-1).
+  - Phase A-2: Complete script API surface documented in `docs/KILNSCRIPT.md` — audio, entity, animation, UI, input, localization, save/load builtins all listed (V1-1).
+  - Phase B-1: Player main menu + scene loader already implemented in `kiln-player/src/main.rs` — `MenuState` enum with Main/LoadGame/Playing/Settings, keyboard navigation, `start_game()`, save/load slots (V1-2).
+- **Next:** Phase C-1 (editor scene view post effects) — wire `Renderer::apply_post` into editor scene view so bloom/fog/outline match the player (V1-3).
 
 ---
 

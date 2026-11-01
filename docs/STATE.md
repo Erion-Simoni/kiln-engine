@@ -165,10 +165,10 @@ checkbox optimism in `docs/ROADMAP.md`.
 
 ## Known issues
 
-- Carry forward prior M14–M28 gaps (player has no menu/loader UI, web
-  Workers ping-only, iOS device testing needs Mac, etc.)
+- Carry forward prior M14–M28 gaps (web Workers ping-only, iOS device
+  testing needs Mac, etc.)
 - The frame graph's post passes are still stubs: the editor's scene view
-  has no post effects, while the player has them.
+  has no post effects, while the player has them. (Phase C-1, next)
 - The effect toggles (B/O/F) are only verified by hand; the automatic
   tests cover the effects themselves.
 - `kiln-editor/src/app.rs` and `kiln-cli/src/main.rs` are large; allowed
@@ -191,10 +191,11 @@ checkbox optimism in `docs/ROADMAP.md`.
 — closing remaining 2D gaps so the engine is shippable for 2D games. M29 (3D
 foundation) remains in progress but is not the active milestone.
 
-**Next:** Phase A of 2D v1.0 — script entity-spawning builtins (already fixed:
-builtin IDs aligned). Then player menu/loader UI, editor post effects, web
-end-to-end export test, clean machine run, SDF font pipeline, frame budget,
-and closing remaining TODO_LIST.md items.
+**Next:** Phase C-1 of 2D v1.0 — editor scene view post effects: wire
+`Renderer::apply_post` into the editor scene view so bloom/fog/outline match
+the player (V1-3). After that: Phase D (web end-to-end export test), Phase E
+(clean machine run), Phase F (SDF font pipeline), Phase G (frame budget),
+Phase H (close TODO_LIST.md items), Phase I (v0.5 gate re-verification).
 
 ---
 

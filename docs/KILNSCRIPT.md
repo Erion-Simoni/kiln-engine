@@ -71,7 +71,84 @@ Builtins are host functions registered by the runtime. The standard slice builti
 | `get_status()` | 0 | str | Current status message |
 | `get_delta_time()` | 0 | f64 | Seconds this frame |
 
-### Example
+### Audio builtins
+
+| Function | Arguments | Returns | Description |
+|----------|-----------|---------|-------------|
+| `play_sound(name)` | 1 (str) | — | Play a sound effect |
+| `stop_sound(name)` | 1 (str) | — | Stop a sound effect |
+| `play_music(name)` | 1 (str) | — | Start music playback |
+| `stop_music()` | 0 | — | Stop music playback |
+| `set_volume(volume)` | 1 (f64) | — | Master volume 0–1 |
+| `set_sfx_volume(volume)` | 1 (f64) | — | SFX volume 0–1 |
+| `set_music_volume(volume)` | 1 (f64) | — | Music volume 0–1 |
+| `pause_sound(name)` | 1 (str) | — | Pause a sound effect |
+| `resume_sound(name)` | 1 (str) | — | Resume a sound effect |
+| `pause_music()` | 0 | — | Pause music |
+| `resume_music()` | 0 | — | Resume music |
+| `stop_all_sounds()` | 0 | — | Stop all sounds |
+| `sound_playing(name)` | 1 (str) | bool | Whether a sound is playing |
+| `music_playing()` | 0 | bool | Whether music is playing |
+
+### Entity builtins
+
+| Function | Arguments | Returns | Description |
+|----------|-----------|---------|-------------|
+| `spawn_entity(name, x, y, texture_path?)` | 4 (str, f64, f64, str?) | — | Spawn a new sprite entity |
+| `despawn_entity(source_id)` | 1 (str) | — | Despawn an entity |
+| `get_entity_pos(source_id)` | 1 (str) | [x, y] or false | Read entity position |
+| `set_entity_pos(source_id, x, y)` | 3 (str, f64, f64) | — | Set entity position |
+| `get_entities_with_role(role)` | 1 (str) | [source_id...] | Find entities by role |
+| `get_entity_component(source_id, component_name)` | 2 (str, str) | value | Read a component value |
+| `set_entity_component(source_id, component_name, value)` | 3 (str, str, value) | — | Set a component value |
+| `find_nearest(x, y, role)` | 3 (f64, f64, str) | source_id or false | Find nearest entity with role |
+| `raycast(x, y, dx, dy)` | 4 (f64, f64, f64, f64) | [distance, body_index] or false | Raycast query |
+| `get_frame_count()` | 0 | i64 | Current frame number |
+| `get_time_scale()` | 0 | f64 | Current time scale |
+| `set_entity_vel(source_id, vx, vy)` | 3 (str, f64, f64) | — | Set entity velocity |
+| `get_entities_at_position(x, y, radius)` | 3 (f64, f64, f64) | [source_id...] | Find entities near position |
+| `get_entity_role(source_id)` | 1 (str) | str | Read entity role |
+| `add_component(source_id, component_type, value_json)` | 3 (str, str, value) | — | Add a component |
+| `remove_component(source_id, component_type)` | 2 (str, str) | — | Remove a component |
+
+### Animation builtins
+
+| Function | Arguments | Returns | Description |
+|----------|-----------|---------|-------------|
+| `play_animation(source_id, clip_name)` | 2 (str, str) | — | Play an animation clip |
+| `stop_animation(source_id)` | 1 (str) | — | Stop animation |
+| `set_animation_speed(source_id, speed)` | 2 (str, f64) | — | Set playback speed |
+| `get_collision_events()` | 0 | [[a, b, started]...] | Collision events this frame |
+
+### UI builtins
+
+| Function | Arguments | Returns | Description |
+|----------|-----------|---------|-------------|
+| `ui_button(id, x, y)` | 3 (str, f64, f64) | bool | Draw a button, returns clicked |
+| `ui_label(id, x, y, text)` | 4 (str, f64, f64, str) | — | Draw a label |
+| `ui_panel(id, x, y, w, h)` | 5 (str, f64, f64, f64, f64) | — | Draw a panel |
+| `ui_clicked(id)` | 1 (str) | bool | Check if button was clicked |
+
+### Input builtins
+
+| Function | Arguments | Returns | Description |
+|----------|-----------|---------|-------------|
+| `get_action(action_name)` | 1 (str) | bool | Whether an action is pressed |
+| `get_action_axis(action_name)` | 1 (str) | f64 | Axis value -1 to 1 |
+
+### Localization builtins
+
+| Function | Arguments | Returns | Description |
+|----------|-----------|---------|-------------|
+| `localize(key)` | 1 (str) | str | Localized string for key |
+
+### Save/load builtins
+
+| Function | Arguments | Returns | Description |
+|----------|-----------|---------|-------------|
+| `save_game(slot_id)` | 1 (i64) | bool | Save game to slot |
+| `load_game(slot_id)` | 1 (i64) | bool | Load game from slot |
+
 
 ```ks
 let speed = 120.0;
