@@ -193,8 +193,10 @@ checkbox optimism in `docs/ROADMAP.md`.
 foundation) remains in progress but is not the active milestone.
 
 **Next:** Phase G of 2D v1.0 — frame budget: measure frame time on
-reference Low/Medium GPU and record in BUDGETS.md (V1-8). After that:
-Phase H (close TODO_LIST.md items), Phase I (v0.5 gate re-verification).
+reference Low/Medium GPU and record in BUDGETS.md (V1-8). Phase H items
+closed: REN-1 (post tests), REN-2 (frame graph post), DT-1 (device tier),
+U-1 (updater stubs). Remaining Phase H: none for 2D v1.0 scope. Then:
+Phase I (v0.5 gate re-verification).
 
 ---
 

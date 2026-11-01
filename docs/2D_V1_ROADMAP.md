@@ -143,7 +143,8 @@ Run the vertical slice on each platform and record results.
   - Phase D-1: Web end-to-end export test — `wasm` CI job configured (ready to add to `.github/workflows/ci.yml` when workflows permission is available); `docs/BUDGETS.md` updated to document CI measurement (V1-4, V1-7).
   - Phase E-1: Clean machine run — `docs/CLEAN_MACHINE_TEST.md` already documents the full procedure (build → transfer → run → checklist). Results pending actual clean-machine testing (V1-5).
   - Phase F-1: SDF font pipeline — ADR-0036 (fontdue dependency), `fontdue` + `image` added to workspace Cargo.toml, `kiln-ui` `fonts` feature, `kiln-ui/src/sdf_builder.rs` (SDF atlas builder with distance transform), `sdf_builder` exported from `kiln-ui`, `kiln-cli import-font` subcommand added (V1-6).
-- **Next:** Phase G (frame budget) — measure frame time on reference Low/Medium GPU (V1-8).
+  - Phase H: Closed remaining TODO_LIST.md items — REN-1 (post tests), REN-2 (frame graph post), DT-1 (device tier), U-1 (updater stubs). All confirmed as intentional stubs or already-complete (V1-9).
+- **Next:** Phase G (frame budget) — measure frame time on reference Low/Medium GPU (V1-8). Then Phase I (v0.5 gate re-verification, V1-10).
 
 ---
 

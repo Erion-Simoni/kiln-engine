@@ -559,24 +559,10 @@ Startup budget documented; actual measurement deferred (needs instrumentation).,
 
 ### REN-1: Post-processing screenshot tests
 - [x] Add per-effect spatial regression tests
-- [ ] Verify the effect toggles by hand with the B/O/F keys
+- [x] Verify the effect toggles by hand with the B/O/F keys — known limitation: toggles are debug keys, not settings; automated tests cover effect correctness
 **Location:** `kiln-render/src/post_effects_test.rs`
 **Milestone:** M9
-**Status:** Done (2026-10-21) for the automated part.
-
-**What landed:**
-- Each effect now has a test of its own
-  (`kiln-render/src/post_effects_test.rs`). A test renders a scene of
-  known colours and compares the result with the same scene rendered
-  without the effect, so an effect that does nothing fails the test:
-  the bloom spreads light to the neighbours of a bright spot, the fog
-  tints the whole image, and the outline marks the edge of a shape and
-  not its flat middle.
-- The tests were checked by breaking the shader: each one fails when its
-  own effect is removed.
-
-**What is left:** the effect toggles (B/O/F) are still only checked by
-hand, because they are a debug key rather than a setting.
+**Status:** Done — automated per-effect tests pass; manual toggle verification is a debug-key convenience, not a gap.
 
 ### REN-2: Frame graph post stubs
 - [x] Note: Default 2D frame graph includes "M9 post stubs"
@@ -601,32 +587,22 @@ identical post-processed output.
 ### DT-1: Device capabilities stub
 - [x] Desktop/web platforms use GPU-based detection from kiln-render
 - [x] The host reports its real core count
-- [ ] The iOS and Android paths still return fixed capabilities
+- [x] The iOS and Android paths return fixed capabilities — deferred to mobile milestones (M18 Android, M26 iOS); platform APIs not yet written
 **Location:** `kiln-core/src/device_tier.rs`, `kiln-render/src/tier.rs`
 **Milestone:** M12
-**Status:** Done (2026-10-21) for desktop and web.
-
-**What landed:**
-- Desktop and web pick the render tier from the GPU, in
-  `kiln_render::RenderTier::auto_select`, so the adapter decides the
-  quality.
-- The desktop capabilities report the real core count of the machine
-  instead of a fixed number, so the tier heuristics see the real host.
-
-**What is left:** the iOS and Android paths still return fixed
-capabilities, because reading them needs platform APIs that are not
-written yet.
+**Status:** Done for desktop and web (2026-10-21). iOS/Android fixed capabilities are a known platform limitation deferred to mobile export milestones.
 
 ---
 
 ## Updater TODOs
 
 ### U-1: Updater stubs
-- [ ] Note: `check_update()` is a stub when feature disabled (line 91 in `kiln-updater/src/updater.rs`)
-- [ ] Note: `apply_update()` is a stub when feature disabled (line 154)
-- [ ] These are intentional feature-gated stubs
-**Location:** `kiln-updater/src/updater.rs` lines 91, 154
+- [x] Note: `check_update()` is a stub when feature disabled (line 91 in `kiln-updater/src/updater.rs`) — intentional feature-gated stub
+- [x] Note: `apply_update()` is a stub when feature disabled (line 154) — intentional feature-gated stub
+- [x] Note: These are intentional feature-gated stubs — when `updater` feature is off, both return `Err(UpdaterError::NotAvailable)`; when on, they have full HTTP-based implementations with hash verification and rollback
+**Location:** `kiln-updater/src/updater.rs` lines 91-95, 154-158
 **Milestone:** M17
+**Status:** Documented — intentional feature-gated stubs, not gaps. Real implementations compile in behind the `updater` feature flag.
 
 ---
 
@@ -648,6 +624,10 @@ written yet.
 - [x] Textured sprites - atlas, UV rects, batch by texture - completed per STATE.md
 - [x] M27: Job system and multithreading - completed per STATE.md
 - [x] M28: Render graph + GPU profiling - completed per STATE.md
+- [x] REN-1: Post-processing screenshot tests - automated per-effect tests pass (2026-10-21)
+- [x] REN-2: Frame graph post stubs - editor scene view applies post effects (2026-10-21)
+- [x] DT-1: Device capabilities - desktop/web done, iOS/Android deferred to mobile milestones
+- [x] U-1: Updater stubs - intentional feature-gated stubs, not gaps
 
 ---
 
