@@ -192,10 +192,9 @@ checkbox optimism in `docs/ROADMAP.md`.
 — closing remaining 2D gaps so the engine is shippable for 2D games. M29 (3D
 foundation) remains in progress but is not the active milestone.
 
-**Next:** Phase D of 2D v1.0 — web end-to-end export test: CI builds
-`kiln-web` WASM, runs `wasm-opt -Oz` + `brotli`, verifies output under
-size budget (V1-4, V1-7). After that: Phase E (clean machine run), Phase
-F (SDF font pipeline), Phase G (frame budget), Phase H (close
+**Next:** Phase E-1 of 2D v1.0 — clean machine run: verify
+`docs/CLEAN_MACHINE_TEST.md` procedure and record results (V1-5). After
+that: Phase F (SDF font pipeline), Phase G (frame budget), Phase H (close
 TODO_LIST.md items), Phase I (v0.5 gate re-verification).
 
 ---
