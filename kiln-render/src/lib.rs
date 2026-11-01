@@ -2,6 +2,7 @@
 
 pub mod camera;
 pub mod frame;
+pub mod pixel_perfect;
 pub mod graph;
 pub mod lighting;
 pub mod particle_renderer;
