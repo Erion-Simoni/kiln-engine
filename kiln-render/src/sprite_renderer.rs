@@ -12,7 +12,14 @@ use wgpu::{Device, Queue};
 
 use crate::camera::Camera;
 use crate::texture::{create_rgba8_texture, TextureId, FULL_UV};
-use kiln_core::project::Material;
+
+/// Placeholder for Material - should be imported from kiln-core once dependency is resolved
+/// TODO: Import from kiln-core::project::Material
+#[derive(Debug, Clone)]
+pub struct Material {
+    pub shader_source: String,
+    pub entry_point: String,
+}
 
 /// Maximum sprites per frame (prevents unbounded allocations).
 pub const MAX_SPRITES: usize = 16_384;
@@ -49,14 +56,15 @@ impl SpriteInstance {
     }
 
     /// `wgpu` vertex attributes for the instance step.
-    pub fn vertex_attributes() -> [wgpu::VertexAttribute; 5] {
-        wgpu::vertex_attr_array![
+    pub fn vertex_attributes() -> &'static [wgpu::VertexAttribute; 5] {
+        static ATTRIBUTES: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
             1 => Float32x2,   // position
             2 => Float32x2,   // size
             3 => Float32x4,   // color
             4 => Float32x4,   // uv_rect
             5 => Uint32,      // material_id
-        ]
+        ];
+        &ATTRIBUTES
     }
 
     /// `wgpu` vertex buffer layout for instanced rendering.
@@ -64,10 +72,9 @@ impl SpriteInstance {
         wgpu::VertexBufferLayout {
             array_stride: SpriteInstance::STRIDE,
             step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &Self::vertex_attributes(),
+            attributes: Self::vertex_attributes(),
         }
     }
-}
 }
 
 #[repr(C)]
@@ -236,7 +243,7 @@ impl SpriteRenderer {
                     wgpu::VertexBufferLayout {
                         array_stride: SpriteInstance::STRIDE,
                         step_mode: wgpu::VertexStepMode::Instance,
-                        attributes: &inst_attr,
+                        attributes: inst_attr,
                     },
                 ],
                 compilation_options: Default::default(),
@@ -426,6 +433,7 @@ impl SpriteRenderer {
                 module: &shader,
                 entry_point,
                 buffers: &[SpriteInstance::vertex_layout()],
+                compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -435,6 +443,7 @@ impl SpriteRenderer {
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
+                compilation_options: Default::default(),
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -448,6 +457,7 @@ impl SpriteRenderer {
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
+            cache: None,
         });
 
         self.material_pipelines.insert(material_id, pipeline);
@@ -456,7 +466,7 @@ impl SpriteRenderer {
 
     /// Get a material by ID.
     pub fn material(&self, id: u32) -> Option<&Material> {
-        self.materials.get(id as usize).as_ref()
+        self.materials.get(id as usize)
     }
 
     /// Upload instances and draw one instanced call per distinct (material, texture) pair.

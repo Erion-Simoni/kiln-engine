@@ -87,7 +87,7 @@ impl Prefab {
                         }
                     }
                     (
-                        Component::Sprite { color, texture },
+                        Component::Sprite { color, texture, .. },
                         ComponentOverride::Sprite {
                             color: color_override,
                             texture: texture_override,
@@ -151,6 +151,9 @@ mod tests {
                 Component::Sprite {
                     color: [1.0, 0.0, 0.0, 1.0],
                     texture: None,
+                    layer: 0.0,
+                    material: None,
+                    animation_clip: None,
                 },
             ],
         };
@@ -287,6 +290,9 @@ mod tests {
                 Component::Sprite {
                     color: [1.0, 0.0, 0.0, 1.0],
                     texture: None,
+                    layer: 0.0,
+                    material: None,
+                    animation_clip: None,
                 },
             ],
         };

@@ -1,8 +1,8 @@
 //! Project file format
 
+use crate::clip::Clip;
+use crate::input::ActionMap;
 use crate::tilemap::{TileMap, TileSet};
-use kiln_anim::Clip;
-use kiln_input::{ActionMap, Binding, BindingType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -34,9 +34,9 @@ pub struct Project {
     /// Shader programs of the project, keyed by their id.
     #[serde(default)]
     pub shaders: HashMap<String, Shader>,
-    /// Materials of the project, keyed by their id.
+    /// 2D sprite materials of the project, keyed by their id.
     #[serde(default)]
-    pub materials: HashMap<String, Material>,
+    pub materials: HashMap<String, SpriteMaterial>,
     /// Audio assets of the project, keyed by their name.
     #[serde(default)]
     pub audio_assets: Vec<AudioAsset>,
@@ -49,7 +49,7 @@ pub struct Project {
 }
 
 /// An audio asset reference in the project.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AudioAsset {
     /// Unique audio identifier.
     pub id: String,
@@ -61,7 +61,7 @@ pub struct AudioAsset {
     #[serde(default)]
     pub is_music: bool,
     /// Volume (0.0 to 1.0).
-    #[serde(default = "1.0")]
+    #[serde(default = "default_volume")]
     pub volume: f32,
 }
 
@@ -93,6 +93,9 @@ fn default_window_height() -> u32 {
 }
 fn default_high_dpi() -> bool {
     true
+}
+fn default_volume() -> f32 {
+    1.0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -282,6 +285,12 @@ impl Default for Project {
             scenes: HashMap::new(),
             tilemaps: HashMap::new(),
             tilesets: HashMap::new(),
+            animation_clips: HashMap::new(),
+            shaders: HashMap::new(),
+            materials: HashMap::new(),
+            audio_assets: vec![],
+            sdf_fonts: HashMap::new(),
+            action_map: ActionMap::new(),
         }
     }
 }
@@ -526,6 +535,38 @@ pub struct Shader {
     /// Entry point function name.
     #[serde(default)]
     pub entry_point: String,
+    /// Shader parameters exposed in the editor.
+    #[serde(default)]
+    pub parameters: HashMap<String, MaterialParam>,
+}
+
+/// A 2D sprite material referencing a [`Shader`].
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SpriteMaterial {
+    /// Unique material identifier.
+    pub id: String,
+    /// Human-readable name.
+    pub name: String,
+    /// Id of the shader in [`Project::shaders`].
+    #[serde(default)]
+    pub shader: String,
+    /// Parameter overrides.
+    #[serde(default)]
+    pub parameters: HashMap<String, MaterialParam>,
+}
+
+/// Editor alias for a 2D sprite material.
+pub type Material = SpriteMaterial;
+
+/// A shader/material parameter value.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MaterialParam {
+    Float(f32),
+    Vec2([f32; 2]),
+    Vec3([f32; 3]),
+    Vec4([f32; 4]),
+    Color([f32; 4]),
+    Texture(String),
 }
 
 /// Signed Distance Field font asset for high-quality text rendering.

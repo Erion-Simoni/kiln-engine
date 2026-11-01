@@ -1,0 +1,3510 @@
+﻿cargo :     Checking 
+kiln-runtime v0.1.0 (C:\Users
+\C.S.T\Downloads\kiln\kiln-ru
+ntime)
+At line:1 char:1
++ cargo check 2>&1 | 
+Out-File -FilePath C:\Users\C
+.S.T\Downloads\kiln\b ...
++ ~~~~~~~~~~~~~~~~
+    + CategoryInfo           
+   : NotSpecified: (    Che  
+  cking ki...n\kiln-runtim   
+ e):String) [], RemoteExc    
+eption
+    + FullyQualifiedErrorId  
+   : NativeCommandError
+ 
+   Compiling libgit2-sys 
+v0.16.2+1.7.2
+    Checking ndk-sys 
+v0.6.0+11769913
+   Compiling jni v0.22.4
+error[E0658]: attributes on 
+expressions are experimental
+    --> kiln-runtime\src\slic
+e.rs:1324:32
+     |
+1324 |         let 
+collision_events = 
+#[cfg(feature = "physics")]
+     |                       
+         
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: see issue 
+#15701 <https://github.com/ru
+st-lang/rust/issues/15701> 
+for more information
+
+error: expected one of `.`, 
+`;`, `?`, `}`, or an 
+operator, found doc comment 
+`/// A 2D joint that 
+connects two entities via 
+their physics bodies.`
+   --> kiln-runtime\src\world
+.rs:131:1
+    |
+129 |         }
+    |          - expected 
+one of `.`, `;`, `?`, `}`, 
+or an operator
+130 |
+131 | /// A 2D joint that 
+connects two entities via 
+their physics bodies.
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^ unexpected 
+token
+    |
+help: add a space before the 
+last `/` to write a regular 
+comment
+    |
+131 | // / A 2D joint that 
+connects two entities via 
+their physics bodies.
+    |   +
+
+error: expected identifier, 
+found keyword `static`
+   --> kiln-runtime\src\physi
+cs.rs:206:75
+    |
+206 |             
+RigidBodyType::Static => rapi
+er2d::prelude::RigidBodyBuild
+er::static(),
+    |                        
+                             
+                      ^^^^^^ 
+expected identifier, found 
+keyword
+    |
+help: escape `static` to use 
+it as an identifier
+    |
+206 |             
+RigidBodyType::Static => rapi
+er2d::prelude::RigidBodyBuild
+er::r#static(),
+    |                        
+                             
+                      ++
+
+error: ndk-sys only supports 
+compiling for Android
+  --> C:\Users\C.S.T\.cargo\r
+egistry\src\index.crates.io-1
+949cf8c6b5b557f\ndk-sys-0.6.0
++11769913\src\lib.rs:22:1
+   |
+22 | compile_error!("ndk-sys 
+only supports compiling for 
+Android");
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^
+
+    Checking num_enum v0.7.6
+error: could not compile 
+`ndk-sys` (lib) due to 1 
+previous error
+warning: build failed, 
+waiting for other jobs to 
+finish...
+error[E0432]: unresolved 
+imports `rapier2d::prelude::J
+ointBuilder`, `rapier2d::prel
+ude::DistanceJointBuilder`
+    --> kiln-runtime\src\slic
+e.rs:1912:41
+     |
+1912 |                 use ra
+pier2d::prelude::{JointBuilde
+r, RevoluteJointBuilder, 
+DistanceJointBuilder, 
+PrismaticJointBuilder};
+     |                       
+                  
+^^^^^^^^^^^^                 
+       ^^^^^^^^^^^^^^^^^^^^ 
+no `DistanceJointBuilder` in 
+`prelude`
+     |                       
+                  |
+     |                       
+                  no 
+`JointBuilder` in `prelude`
+     |
+help: a similar name exists 
+in the module
+     |
+1912 |                 use ra
+pier2d::prelude::{RopeJointBu
+ilder, RevoluteJointBuilder, 
+DistanceJointBuilder, 
+PrismaticJointBuilder};
+     |                       
+                  ++++
+help: a similar name exists 
+in the module
+     |
+1912 -                 use ra
+pier2d::prelude::{JointBuilde
+r, RevoluteJointBuilder, 
+DistanceJointBuilder, 
+PrismaticJointBuilder};
+1912 +                 use ra
+pier2d::prelude::{JointBuilde
+r, RevoluteJointBuilder, 
+PrismaticJointBuilder, 
+PrismaticJointBuilder};
+     |
+
+error[E0432]: unresolved 
+import `rapier2d::prelude::Co
+ntactEvent`
+   --> kiln-runtime\src\physi
+cs.rs:353:13
+    |
+353 |         use rapier2d::p
+relude::ContactEvent;
+    |             ^^^^^^^^^^^
+^^^^^^^^------------
+    |                        
+        |
+    |                        
+        no `ContactEvent` in 
+`prelude`
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1423:13
+     |
+1423 |         use 
+kiln_runtime::{Role, 
+SourceId, Transform, 
+Velocity};
+     |             
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1423 -         use 
+kiln_runtime::{Role, 
+SourceId, Transform, 
+Velocity};
+1423 +         use 
+kiln_anim::{Role, SourceId, 
+Transform, Velocity};
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1499:21
+     |
+1499 |                 use 
+kiln_runtime::{SourceId, 
+Transform, Sprite, Role};
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1499 -                 use 
+kiln_runtime::{SourceId, 
+Transform, Sprite, Role};
+1499 +                 use 
+kiln_anim::{SourceId, 
+Transform, Sprite, Role};
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1511:21
+     |
+1511 |                 use 
+kiln_runtime::SourceId;
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1511 -                 use 
+kiln_runtime::SourceId;
+1511 +                 use 
+kiln_anim::SourceId;
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1520:21
+     |
+1520 |                 use 
+kiln_runtime::{SourceId, 
+Transform};
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1520 -                 use 
+kiln_runtime::{SourceId, 
+Transform};
+1520 +                 use 
+kiln_anim::{SourceId, 
+Transform};
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1534:25
+     |
+1534 |                     
+use kiln_runtime::{SourceId, 
+Velocity};
+     |                       
+  ^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1534 -                     
+use kiln_runtime::{SourceId, 
+Velocity};
+1534 +                     
+use kiln_anim::{SourceId, 
+Velocity};
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1547:21
+     |
+1547 |                 use 
+kiln_runtime::{SourceId, 
+Transform, Sprite};
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1547 -                 use 
+kiln_runtime::{SourceId, 
+Transform, Sprite};
+1547 +                 use 
+kiln_anim::{SourceId, 
+Transform, Sprite};
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1549:21
+     |
+1549 |                 use 
+kiln_runtime::Velocity;
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1549 -                 use 
+kiln_runtime::Velocity;
+1549 +                 use 
+kiln_anim::Velocity;
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1602:21
+     |
+1602 |                 use 
+kiln_runtime::{SourceId, 
+Transform, Sprite};
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1602 -                 use 
+kiln_runtime::{SourceId, 
+Transform, Sprite};
+1602 +                 use 
+kiln_anim::{SourceId, 
+Transform, Sprite};
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1604:21
+     |
+1604 |                 use 
+kiln_runtime::Velocity;
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1604 -                 use 
+kiln_runtime::Velocity;
+1604 +                 use 
+kiln_anim::Velocity;
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1653:21
+     |
+1653 |                 use 
+kiln_runtime::{SourceId, 
+Transform, Sprite, Velocity};
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1653 -                 use 
+kiln_runtime::{SourceId, 
+Transform, Sprite, Velocity};
+1653 +                 use 
+kiln_anim::{SourceId, 
+Transform, Sprite, Velocity};
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1679:21
+     |
+1679 |                 use 
+kiln_runtime::SourceId;
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1679 -                 use 
+kiln_runtime::SourceId;
+1679 +                 use 
+kiln_anim::SourceId;
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1695:21
+     |
+1695 |                 use 
+kiln_runtime::SourceId;
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1695 -                 use 
+kiln_runtime::SourceId;
+1695 +                 use 
+kiln_anim::SourceId;
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1707:21
+     |
+1707 |                 use 
+kiln_runtime::SourceId;
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1707 -                 use 
+kiln_runtime::SourceId;
+1707 +                 use 
+kiln_anim::SourceId;
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1738:21
+     |
+1738 |                 use 
+kiln_runtime::SourceId;
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1738 -                 use 
+kiln_runtime::SourceId;
+1738 +                 use 
+kiln_anim::SourceId;
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1763:21
+     |
+1763 |                 use 
+kiln_runtime::SourceId;
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1763 -                 use 
+kiln_runtime::SourceId;
+1763 +                 use 
+kiln_anim::SourceId;
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1806:21
+     |
+1806 |                 use 
+kiln_runtime::SourceId;
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1806 -                 use 
+kiln_runtime::SourceId;
+1806 +                 use 
+kiln_anim::SourceId;
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1820:21
+     |
+1820 |                 use 
+kiln_runtime::SourceId;
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1820 -                 use 
+kiln_runtime::SourceId;
+1820 +                 use 
+kiln_anim::SourceId;
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1850:21
+     |
+1850 |                 use 
+kiln_runtime::SourceId;
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1850 -                 use 
+kiln_runtime::SourceId;
+1850 +                 use 
+kiln_anim::SourceId;
+     |
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1896:21
+     |
+1896 |                 use 
+kiln_runtime::SourceId;
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1896 -                 use 
+kiln_runtime::SourceId;
+1896 +                 use 
+kiln_anim::SourceId;
+     |
+
+error[E0432]: unresolved 
+import `crate::sprite::Physic
+sBodyComponent`
+    --> kiln-runtime\src\slic
+e.rs:1910:21
+     |
+1910 |                 use cr
+ate::sprite::PhysicsBodyCompo
+nent;
+     |                     ^^
+^^^^^^^^^^^^^----------------
+----
+     |                       
+             |
+     |                       
+             no 
+`PhysicsBodyComponent` in 
+`sprite`
+
+error[E0432]: unresolved 
+import `kiln_runtime`
+    --> kiln-runtime\src\slic
+e.rs:1911:21
+     |
+1911 |                 use 
+kiln_runtime::SourceId;
+     |                     
+^^^^^^^^^^^^ use of 
+unresolved module or 
+unlinked crate `kiln_runtime`
+     |
+help: there is a crate or 
+module with a similar name
+     |
+1911 -                 use 
+kiln_runtime::SourceId;
+1911 +                 use 
+kiln_anim::SourceId;
+     |
+
+error[E0432]: unresolved 
+imports 
+`crate::world::Joint2D`, 
+`crate::world::JointType`, 
+`crate::world::Transform`
+   --> kiln-runtime\src\physi
+cs.rs:184:36
+    |
+184 |         Collider2D, 
+ColliderShape, Joint2D, 
+JointType, PhysicsBody, 
+RigidBody2D, RigidBodyType, 
+SourceId, Transform,
+    |                        
+            ^^^^^^^  
+^^^^^^^^^ no `JointType` in 
+`world`                      
+     ^^^^^^^^^ no 
+`Transform` in `world`
+    |                        
+            |
+    |                        
+            no `Joint2D` in 
+`world`
+
+error: cannot find attribute 
+`serde` in this scope
+  --> kiln-runtime\src\sprite
+.rs:25:7
+   |
+25 |     #[serde(default)]
+   |       ^^^^^
+   |
+   = note: `serde` is an 
+attribute that can be used 
+by the derive macros 
+`Deserialize` and 
+`Serialize`, you might be 
+missing a `derive` attribute
+   = note: `serde` is in 
+scope, but it is a crate, 
+not an attribute
+
+error: cannot find attribute 
+`serde` in this scope
+  --> kiln-runtime\src\sprite
+.rs:21:7
+   |
+21 |     #[serde(default)]
+   |       ^^^^^
+   |
+   = note: `serde` is an 
+attribute that can be used 
+by the derive macros 
+`Deserialize` and 
+`Serialize`, you might be 
+missing a `derive` attribute
+   = note: `serde` is in 
+scope, but it is a crate, 
+not an attribute
+
+error[E0433]: cannot find 
+`JointBuilder` in `prelude`
+    --> kiln-runtime\src\slic
+e.rs:1928:66
+     |
+1928 | ...                   
+let mut builder = rapier2d::p
+relude::JointBuilder::new()
+     |                       
+                             
+        ^^^^^^^^^^^^ could 
+not find `JointBuilder` in 
+`prelude`
+     |
+help: a struct with a 
+similar name exists
+     |
+1928 |                       
+      let mut builder = rapie
+r2d::prelude::RopeJointBuilde
+r::new()
+     |                       
+                             
+              ++++
+
+error[E0433]: cannot find 
+`CollisionGroups` in 
+`pipeline`
+   --> kiln-runtime\src\physi
+cs.rs:224:55
+    |
+224 |                 .collis
+ion_groups(rapier2d::pipeline
+::CollisionGroups::new(col.la
+yer, col.mask)),
+    |                        
+                             
+  ^^^^^^^^^^^^^^^ could not 
+find `CollisionGroups` in 
+`pipeline`
+
+error[E0433]: cannot find 
+`CollisionGroups` in 
+`pipeline`
+   --> kiln-runtime\src\physi
+cs.rs:233:55
+    |
+233 |                 .collis
+ion_groups(rapier2d::pipeline
+::CollisionGroups::new(col.la
+yer, col.mask)),
+    |                        
+                             
+  ^^^^^^^^^^^^^^^ could not 
+find `CollisionGroups` in 
+`pipeline`
+
+error[E0425]: cannot find 
+value `project` in this scope
+   --> kiln-runtime\src\scene
+.rs:129:45
+    |
+129 |                        
+ if let Some(clip) = project.
+animation_clips.get(clip_name
+) {
+    |                        
+                     ^^^^^^^ 
+not found in this scope
+
+error[E0425]: cannot find 
+value `project` in this scope
+   --> kiln-runtime\src\scene
+.rs:153:45
+    |
+153 |                        
+ if let Some(clip) = project.
+animation_clips.get(clip_name
+) {
+    |                        
+                     ^^^^^^^ 
+not found in this scope
+
+error[E0425]: cannot find 
+type `ActionMap` in this 
+scope
+    --> kiln-runtime\src\slic
+e.rs:1238:54
+     |
+1238 |     pub fn 
+with_action_map(source: 
+&str, action_map: ActionMap) 
+-> Result<Self, 
+Vec<Diagnostic>> {
+     |                       
+                             
+  ^^^^^^^^^ not found in 
+this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1926:39
+     |
+1926 |                     
+let joint = match 
+joint.joint_type {
+     |                       
+                ^^^^^ not 
+found in this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1929:76
+     |
+1929 | ...                   
+.local_anchor1(rapier2d::math
+::Vector::new(joint.anchor_a[
+0], joint.anchor_a[1]))
+     |                       
+                             
+              ^^^^^ not 
+found in this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1929:95
+     |
+1929 | ...                   
+.local_anchor1(rapier2d::math
+::Vector::new(joint.anchor_a[
+0], joint.anchor_a[1]))
+     |                       
+                             
+                             
+    ^^^^^ not found in this 
+scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1930:76
+     |
+1930 | ...                   
+.local_anchor2(rapier2d::math
+::Vector::new(joint.anchor_b[
+0], joint.anchor_b[1]))
+     |                       
+                             
+              ^^^^^ not 
+found in this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1930:95
+     |
+1930 | ...                   
+.local_anchor2(rapier2d::math
+::Vector::new(joint.anchor_b[
+0], joint.anchor_b[1]))
+     |                       
+                             
+                             
+    ^^^^^ not found in this 
+scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1934:32
+     |
+1934 | ...                   
+if joint.length > 0.0 {
+     |                       
+   ^^^^^ not found in this 
+scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1935:59
+     |
+1935 | ...                   
+builder = builder.limits([joi
+nt.length, joint.length]);
+     |                       
+                          
+^^^^^ not found in this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1935:73
+     |
+1935 | ...                   
+builder = builder.limits([joi
+nt.length, joint.length]);
+     |                       
+                             
+           ^^^^^ not found 
+in this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1941:76
+     |
+1941 | ...                   
+.local_anchor1(rapier2d::math
+::Vector::new(joint.anchor_a[
+0], joint.anchor_a[1]))
+     |                       
+                             
+              ^^^^^ not 
+found in this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1941:95
+     |
+1941 | ...                   
+.local_anchor1(rapier2d::math
+::Vector::new(joint.anchor_a[
+0], joint.anchor_a[1]))
+     |                       
+                             
+                             
+    ^^^^^ not found in this 
+scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1942:76
+     |
+1942 | ...                   
+.local_anchor2(rapier2d::math
+::Vector::new(joint.anchor_b[
+0], joint.anchor_b[1]))
+     |                       
+                             
+              ^^^^^ not 
+found in this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1942:95
+     |
+1942 | ...                   
+.local_anchor2(rapier2d::math
+::Vector::new(joint.anchor_b[
+0], joint.anchor_b[1]))
+     |                       
+                             
+                             
+    ^^^^^ not found in this 
+scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1943:40
+     |
+1943 | ...                   
+.angle(joint.reference_angle)
+;
+     |                       
+       ^^^^^ not found in 
+this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1944:32
+     |
+1944 | ...                   
+if joint.enable_limit {
+     |                       
+   ^^^^^ not found in this 
+scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1945:59
+     |
+1945 | ...                   
+builder = builder.limits([joi
+nt.lower_translation, 
+joint.upper_translation]);
+     |                       
+                          
+^^^^^ not found in this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1945:84
+     |
+1945 | ...                   
+builder = builder.limits([joi
+nt.lower_translation, 
+joint.upper_translation]);
+     |                       
+                             
+                      ^^^^^ 
+not found in this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1947:32
+     |
+1947 | ...                   
+if joint.enable_motor {
+     |                       
+   ^^^^^ not found in this 
+scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1948:57
+     |
+1948 | ...                   
+builder = builder.motor(joint
+.motor_speed, 
+joint.max_motor_torque);
+     |                       
+                        
+^^^^^ not found in this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1948:76
+     |
+1948 | ...                   
+builder = builder.motor(joint
+.motor_speed, 
+joint.max_motor_torque);
+     |                       
+                             
+              ^^^^^ not 
+found in this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1955:76
+     |
+1955 | ...                   
+.local_anchor1(rapier2d::math
+::Vector::new(joint.anchor_a[
+0], joint.anchor_a[1]))
+     |                       
+                             
+              ^^^^^ not 
+found in this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1955:95
+     |
+1955 | ...                   
+.local_anchor1(rapier2d::math
+::Vector::new(joint.anchor_a[
+0], joint.anchor_a[1]))
+     |                       
+                             
+                             
+    ^^^^^ not found in this 
+scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1956:76
+     |
+1956 | ...                   
+.local_anchor2(rapier2d::math
+::Vector::new(joint.anchor_b[
+0], joint.anchor_b[1]))
+     |                       
+                             
+              ^^^^^ not 
+found in this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1956:95
+     |
+1956 | ...                   
+.local_anchor2(rapier2d::math
+::Vector::new(joint.anchor_b[
+0], joint.anchor_b[1]))
+     |                       
+                             
+                             
+    ^^^^^ not found in this 
+scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1958:32
+     |
+1958 | ...                   
+if joint.enable_limit {
+     |                       
+   ^^^^^ not found in this 
+scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1959:59
+     |
+1959 | ...                   
+builder = builder.limits([joi
+nt.lower_translation, 
+joint.upper_translation]);
+     |                       
+                          
+^^^^^ not found in this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1959:84
+     |
+1959 | ...                   
+builder = builder.limits([joi
+nt.lower_translation, 
+joint.upper_translation]);
+     |                       
+                             
+                      ^^^^^ 
+not found in this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1961:32
+     |
+1961 | ...                   
+if joint.enable_motor {
+     |                       
+   ^^^^^ not found in this 
+scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1962:57
+     |
+1962 | ...                   
+builder = builder.motor(joint
+.motor_speed, 
+joint.max_motor_torque);
+     |                       
+                        
+^^^^^ not found in this scope
+
+error[E0425]: cannot find 
+value `joint` in this scope
+    --> kiln-runtime\src\slic
+e.rs:1962:76
+     |
+1962 | ...                   
+builder = builder.motor(joint
+.motor_speed, 
+joint.max_motor_torque);
+     |                       
+                             
+              ^^^^^ not 
+found in this scope
+
+error[E0425]: cannot find 
+value `handle_to_source` in 
+this scope
+   --> kiln-runtime\src\physi
+cs.rs:356:25
+    |
+356 |                 let a 
+= handle_to_source.get(&(h1.i
+ndex() as u32)).cloned();
+    |                        
+ ^^^^^^^^^^^^^^^^
+    |
+help: a local variable with 
+a similar name exists
+    |
+356 -                 let a 
+= handle_to_source.get(&(h1.i
+ndex() as u32)).cloned();
+356 +                 let a 
+= source_to_handle.get(&(h1.i
+ndex() as u32)).cloned();
+    |
+
+error[E0425]: cannot find 
+value `handle_to_source` in 
+this scope
+   --> kiln-runtime\src\physi
+cs.rs:357:25
+    |
+357 |                 let b 
+= handle_to_source.get(&(h2.i
+ndex() as u32)).cloned();
+    |                        
+ ^^^^^^^^^^^^^^^^
+    |
+help: a local variable with 
+a similar name exists
+    |
+357 -                 let b 
+= handle_to_source.get(&(h2.i
+ndex() as u32)).cloned();
+357 +                 let b 
+= source_to_handle.get(&(h2.i
+ndex() as u32)).cloned();
+    |
+
+error[E0425]: cannot find 
+value `handle_to_source` in 
+this scope
+   --> kiln-runtime\src\physi
+cs.rs:367:25
+    |
+367 |                 let a 
+= handle_to_source.get(&(h1.i
+ndex() as u32)).cloned();
+    |                        
+ ^^^^^^^^^^^^^^^^
+    |
+help: a local variable with 
+a similar name exists
+    |
+367 -                 let a 
+= handle_to_source.get(&(h1.i
+ndex() as u32)).cloned();
+367 +                 let a 
+= source_to_handle.get(&(h1.i
+ndex() as u32)).cloned();
+    |
+
+error[E0425]: cannot find 
+value `handle_to_source` in 
+this scope
+   --> kiln-runtime\src\physi
+cs.rs:368:25
+    |
+368 |                 let b 
+= handle_to_source.get(&(h2.i
+ndex() as u32)).cloned();
+    |                        
+ ^^^^^^^^^^^^^^^^
+    |
+help: a local variable with 
+a similar name exists
+    |
+368 -                 let b 
+= handle_to_source.get(&(h2.i
+ndex() as u32)).cloned();
+368 +                 let b 
+= source_to_handle.get(&(h2.i
+ndex() as u32)).cloned();
+    |
+
+warning: unused import: `kiln
+_core::project::Component`
+    --> kiln-runtime\src\slic
+e.rs:1424:13
+     |
+1424 |         use kiln_core:
+:project::Component;
+     |             
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: 
+`#[warn(unused_imports)]` 
+(part of `#[warn(unused)]`) 
+on by default
+
+warning: unused imports: 
+`PrismaticJointBuilder` and 
+`RevoluteJointBuilder`
+    --> kiln-runtime\src\slic
+e.rs:1912:55
+     |
+1912 |                 use ra
+pier2d::prelude::{JointBuilde
+r, RevoluteJointBuilder, 
+DistanceJointBuilder, 
+PrismaticJointBuilder};
+     |                       
+                             
+   ^^^^^^^^^^^^^^^^^^^^      
+                  
+^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: 
+`EmissionShape`
+ --> kiln-runtime\src\sprite.
+rs:5:40
+  |
+5 | use kiln_vfx::{Emitter, 
+EmitterConfig, 
+EmissionShape, 
+ParticleSystem};
+  |                          
+              ^^^^^^^^^^^^^
+
+warning: unused import: 
+`std::collections::HashMap`
+ --> kiln-runtime\src\physics
+.rs:4:5
+  |
+4 | use 
+std::collections::HashMap;
+  |     
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0204]: the trait 
+`std::marker::Copy` cannot 
+be implemented for this type
+  --> kiln-runtime\src\sprite
+.rs:10:12
+   |
+ 9 | #[derive(Debug, Clone, 
+Copy)]
+   |                        
+---- in this derive macro 
+expansion
+10 | pub struct Sprite {
+   |            ^^^^^^
+...
+22 |     pub material: 
+Option<String>,
+   |     
+---------------------------- 
+this field does not 
+implement `std::marker::Copy`
+   |
+note: the 
+`std::marker::Copy` impl for 
+`std::option::Option<std::str
+ing::String>` requires that 
+`std::string::String: 
+std::marker::Copy`
+  --> kiln-runtime\src\sprite
+.rs:22:19
+   |
+22 |     pub material: 
+Option<String>,
+   |                   
+^^^^^^^^^^^^^^
+
+error[E0277]: 
+`physics::PhysicsWorld` 
+doesn't implement 
+`std::fmt::Debug`
+   --> kiln-runtime\src\slice
+.rs:344:5
+    |
+337 | #[derive(Debug, 
+Default)]
+    |          ----- in this 
+derive macro expansion
+...
+344 |     physics: 
+Option<PhysicsWorld>,
+    |     ^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^ unsatisfied trait 
+bound
+    |
+help: the trait 
+`std::fmt::Debug` is not 
+implemented for 
+`physics::PhysicsWorld`
+   --> kiln-runtime\src\physi
+cs.rs:11:1
+    |
+ 11 | pub struct 
+PhysicsWorld {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+    = note: add 
+`#[derive(Debug)]` to 
+`physics::PhysicsWorld` or 
+manually `impl 
+std::fmt::Debug for 
+physics::PhysicsWorld`
+help: the trait 
+`std::fmt::Debug` is 
+conditionally implemented 
+for `std::option::Option<T>`
+   --> C:\Users\C.S.T\.rustup
+\toolchains\stable-x86_64-pc-
+windows-msvc\lib/rustlib/src/
+rust\library\core\src\option.
+rs:592:16
+    |
+592 | #[derive(Copy, Debug, 
+Hash)]
+    |                ^^^^^
+...
+598 | pub enum Option<T> {
+    |                 - 
+unsatisfied requirement 
+introduced here: 
+`physics::PhysicsWorld: 
+std::fmt::Debug`
+
+error[E0599]: no method 
+named `ok` found for struct 
+`physics::PhysicsWorld` in 
+the current scope
+   --> kiln-runtime\src\slice
+.rs:387:42
+    |
+387 |             physics: 
+PhysicsWorld::new().ok(),
+    |                        
+                  ^^ method 
+not found in 
+`physics::PhysicsWorld`
+    |
+   ::: kiln-runtime\src\physi
+cs.rs:11:1
+    |
+ 11 | pub struct 
+PhysicsWorld {
+    | 
+----------------------- 
+method `ok` not found for 
+this struct
+
+error[E0599]: no variant, 
+associated function, or 
+constant named `Array` found 
+for enum `kiln_ir::Value` in 
+the current scope
+   --> kiln-runtime\src\slice
+.rs:762:31
+    |
+762 |                     Ok(
+Value::Array(vec![Value::F64(
+*x), Value::F64(*y)]))
+    |                        
+       ^^^^^ variant, 
+associated function, or 
+constant not found in 
+`kiln_ir::Value`
+
+error[E0599]: no variant, 
+associated function, or 
+constant named `Array` found 
+for enum `kiln_ir::Value` in 
+the current scope
+   --> kiln-runtime\src\slice
+.rs:786:27
+    |
+786 |                 
+Ok(Value::Array(entities))
+    |                        
+   ^^^^^ variant, associated 
+function, or constant not 
+found in `kiln_ir::Value`
+
+error[E0599]: no variant, 
+associated function, or 
+constant named `Array` found 
+for enum `kiln_ir::Value` in 
+the current scope
+   --> kiln-runtime\src\slice
+.rs:795:39
+    |
+795 | ...                   O
+k(Value::Array(vec![Value::F6
+4(*x), Value::F64(*y)]))
+    |                        
+         ^^^^^ variant, 
+associated function, or 
+constant not found in 
+`kiln_ir::Value`
+
+error[E0599]: no variant, 
+associated function, or 
+constant named `Array` found 
+for enum `kiln_ir::Value` in 
+the current scope
+   --> kiln-runtime\src\slice
+.rs:802:39
+    |
+802 | ...                   O
+k(Value::Array(color.iter().m
+ap(|&c| 
+Value::F64(c)).collect()))
+    |                        
+         ^^^^^ variant, 
+associated function, or 
+constant not found in 
+`kiln_ir::Value`
+
+error[E0599]: no variant, 
+associated function, or 
+constant named `Array` found 
+for enum `kiln_ir::Value` in 
+the current scope
+   --> kiln-runtime\src\slice
+.rs:809:39
+    |
+809 | ...                   O
+k(Value::Array(size.iter().ma
+p(|&s| 
+Value::F64(s)).collect()))
+    |                        
+         ^^^^^ variant, 
+associated function, or 
+constant not found in 
+`kiln_ir::Value`
+
+error[E0599]: no variant, 
+associated function, or 
+constant named `Array` found 
+for enum `kiln_ir::Value` in 
+the current scope
+   --> kiln-runtime\src\slice
+.rs:869:46
+    |
+869 | ...                   
+return Ok(Value::Array(vec![
+    |                        
+                ^^^^^ 
+variant, associated 
+function, or constant not 
+found in `kiln_ir::Value`
+
+error[E0599]: no variant, 
+associated function, or 
+constant named `Array` found 
+for enum `kiln_ir::Value` in 
+the current scope
+   --> kiln-runtime\src\slice
+.rs:930:27
+    |
+930 |                 
+Ok(Value::Array(found))
+    |                        
+   ^^^^^ variant, associated 
+function, or constant not 
+found in `kiln_ir::Value`
+
+error[E0599]: no variant, 
+associated function, or 
+constant named `Array` found 
+for enum `kiln_ir::Value` in 
+the current scope
+   --> kiln-runtime\src\slice
+.rs:990:32
+    |
+990 |                        
+ Value::Array(vec![
+    |                        
+        ^^^^^ variant, 
+associated function, or 
+constant not found in 
+`kiln_ir::Value`
+
+error[E0599]: no variant, 
+associated function, or 
+constant named `Array` found 
+for enum `kiln_ir::Value` in 
+the current scope
+   --> kiln-runtime\src\slice
+.rs:997:27
+    |
+997 |                 
+Ok(Value::Array(events))
+    |                        
+   ^^^^^ variant, associated 
+function, or constant not 
+found in `kiln_ir::Value`
+
+error[E0599]: no method 
+named `host_mut` found for 
+mutable reference `&mut 
+SliceHost` in the current 
+scope
+    --> kiln-runtime\src\slic
+e.rs:1188:22
+     |
+1188 |                 self.h
+ost_mut().register_audio(&nam
+e, &path);
+     |                      
+^^^^^^^^ method not found in 
+`&mut SliceHost`
+
+error[E0599]: no method 
+named `host_mut` found for 
+mutable reference `&mut 
+SliceHost` in the current 
+scope
+    --> kiln-runtime\src\slic
+e.rs:1194:22
+     |
+1194 |                 self.h
+ost_mut().play_audio_preview(
+&name);
+     |                      
+^^^^^^^^ method not found in 
+`&mut SliceHost`
+
+error[E0433]: cannot find 
+type `ActionMap` in this 
+scope
+    --> kiln-runtime\src\slic
+e.rs:1234:39
+     |
+1234 |         Self::with_act
+ion_map(source, 
+ActionMap::new())
+     |                       
+                ^^^^^^^^^ 
+use of undeclared type 
+`ActionMap`
+
+error[E0599]: no method 
+named `clone` found for 
+struct `SliceHost` in the 
+current scope
+    --> kiln-runtime\src\slic
+e.rs:1246:31
+     |
+ 338 | pub struct SliceHost {
+     | -------------------- 
+method `clone` not found for 
+this struct
+...
+1246 |         let vm = 
+Vm::new(host.clone());
+     |                       
+        ^^^^^ method not 
+found in `SliceHost`
+     |
+     = help: items from 
+traits can only be used if 
+the trait is implemented and 
+in scope
+     = note: the following 
+trait defines an item 
+`clone`, perhaps you need to 
+implement it:
+             candidate #1: 
+`Clone`
+
+error[E0609]: no field 
+`ui_widgets` on type `&mut 
+SliceSession`
+    --> kiln-runtime\src\slic
+e.rs:1321:14
+     |
+1321 |         
+self.ui_widgets.clear();
+     |              
+^^^^^^^^^^ unknown field
+     |
+     = note: available 
+fields are: `program`, `vm`, 
+`debugger`, `state`, 
+`ui_commands`
+
+error[E0308]: mismatched 
+types
+    --> kiln-runtime\src\slic
+e.rs:1342:58
+     |
+1342 |         let facts = 
+self.collect_facts(world, 
+input, dt, collision_events);
+     |                       
+   -------------             
+      ^^^^^^^^^^^^^^^^ 
+expected `Vec<(String, 
+String, bool)>`, found 
+`Vec<CollisionEvent>`
+     |                       
+   |
+     |                       
+   arguments to this method 
+are incorrect
+     |
+     = note: expected struct 
+`Vec<(std::string::String, 
+std::string::String, bool)>`
+                found struct 
+`Vec<physics::CollisionEvent>
+`
+note: method defined here
+    --> kiln-runtime\src\slic
+e.rs:1390:8
+     |
+1390 |     fn collect_facts(
+     |        ^^^^^^^^^^^^^
+...
+1395 |         
+collision_events: 
+Vec<(String, String, bool)>,
+     |         --------------
+-----------------------------
+--
+
+error[E0609]: no field 
+`mouse_pressed` on type 
+`&mut SliceSession`
+    --> kiln-runtime\src\slic
+e.rs:1371:17
+     |
+1371 |         if 
+self.mouse_pressed {
+     |                 
+^^^^^^^^^^^^^ unknown field
+     |
+     = note: available 
+fields are: `program`, `vm`, 
+`debugger`, `state`, 
+`ui_commands`
+
+error[E0609]: no field 
+`ui_buttons` on type `&mut 
+SliceSession`
+    --> kiln-runtime\src\slic
+e.rs:1372:47
+     |
+1372 |             for (id, 
+bx, by, bw, bh) in 
+&self.ui_buttons {
+     |                       
+                        
+^^^^^^^^^^ unknown field
+     |
+     = note: available 
+fields are: `program`, `vm`, 
+`debugger`, `state`, 
+`ui_commands`
+
+error[E0609]: no field 
+`mouse_x` on type `&mut 
+SliceSession`
+    --> kiln-runtime\src\slic
+e.rs:1373:25
+     |
+1373 |                 if 
+self.mouse_x >= *bx
+     |                       
+  ^^^^^^^ unknown field
+     |
+     = note: available 
+fields are: `program`, `vm`, 
+`debugger`, `state`, 
+`ui_commands`
+
+error[E0609]: no field 
+`mouse_x` on type `&mut 
+SliceSession`
+    --> kiln-runtime\src\slic
+e.rs:1374:29
+     |
+1374 |                     
+&& self.mouse_x < bx + bw
+     |                       
+      ^^^^^^^ unknown field
+     |
+     = note: available 
+fields are: `program`, `vm`, 
+`debugger`, `state`, 
+`ui_commands`
+
+error[E0609]: no field 
+`mouse_y` on type `&mut 
+SliceSession`
+    --> kiln-runtime\src\slic
+e.rs:1375:29
+     |
+1375 |                     
+&& self.mouse_y >= *by
+     |                       
+      ^^^^^^^ unknown field
+     |
+     = note: available 
+fields are: `program`, `vm`, 
+`debugger`, `state`, 
+`ui_commands`
+
+error[E0609]: no field 
+`mouse_y` on type `&mut 
+SliceSession`
+    --> kiln-runtime\src\slic
+e.rs:1376:29
+     |
+1376 |                     
+&& self.mouse_y < by + bh
+     |                       
+      ^^^^^^^ unknown field
+     |
+     = note: available 
+fields are: `program`, `vm`, 
+`debugger`, `state`, 
+`ui_commands`
+
+error[E0609]: no field 
+`ui_widgets` on type `&mut 
+SliceSession`
+    --> kiln-runtime\src\slic
+e.rs:1378:26
+     |
+1378 |                     se
+lf.ui_widgets.insert(id.clone
+(), true);
+     |                       
+   ^^^^^^^^^^ unknown field
+     |
+     = note: available 
+fields are: `program`, `vm`, 
+`debugger`, `state`, 
+`ui_commands`
+
+error[E0609]: no field 
+`ui_buttons` on type `&mut 
+SliceSession`
+    --> kiln-runtime\src\slic
+e.rs:1384:14
+     |
+1384 |         
+self.ui_buttons.clear();
+     |              
+^^^^^^^^^^ unknown field
+     |
+     = note: available 
+fields are: `program`, `vm`, 
+`debugger`, `state`, 
+`ui_commands`
+
+error[E0599]: no variant 
+named `CreateJoint` found 
+for enum `SliceCommand`
+    --> kiln-runtime\src\slic
+e.rs:1909:27
+     |
+ 166 | pub enum SliceCommand 
+{
+     | --------------------- 
+variant `CreateJoint` not 
+found here
+...
+1909 |             
+SliceCommand::CreateJoint { 
+source_id_a, source_id_b, 
+joint_type, anchor_a, 
+anchor_b, .. } => {
+     |                       
+    ^^^^^^^^^^^ variant not 
+found in `SliceCommand`
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1523:70
+     |
+1523 |                       
+  if let Ok(mut transform) = 
+world.world_mut().get_mut::<&
+mut Transform>(eid) {
+     |                       
+                             
+                  ^^^^^^^ 
+method not found in `&mut 
+World`
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1537:73
+     |
+1537 | ...                   
+if let Ok(mut velocity) = wor
+ld.world_mut().get_mut::<&mut
+ Velocity>(eid) {
+     |                       
+                             
+               ^^^^^^^ 
+method not found in `&mut 
+World`
+
+error[E0599]: no variant, 
+associated function, or 
+constant named `Array` found 
+for enum `kiln_ir::Value` in 
+the current scope
+    --> kiln-runtime\src\slic
+e.rs:1554:47
+     |
+1554 | ...                   
+if let Value::Array(arr) = 
+value {
+     |                       
+              ^^^^^ variant, 
+associated function, or 
+constant not found in 
+`kiln_ir::Value`
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1557:90
+     |
+1557 | ...                   
+if let Ok(mut transform) = wo
+rld.world_mut().get_mut::<&mu
+t Transform>(eid) {
+     |                       
+                             
+                ^^^^^^^ 
+method not found in `&mut 
+World`
+
+error[E0614]: type `f64` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1558:72
+     |
+1558 | ...                   
+transform.position.x = *x as 
+f32;
+     |                       
+                       ^^ 
+can't be dereferenced
+
+error[E0614]: type `f64` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1559:72
+     |
+1559 | ...                   
+transform.position.y = *y as 
+f32;
+     |                       
+                       ^^ 
+can't be dereferenced
+
+error[E0599]: no variant, 
+associated function, or 
+constant named `Array` found 
+for enum `kiln_ir::Value` in 
+the current scope
+    --> kiln-runtime\src\slic
+e.rs:1568:51
+     |
+1568 | ...                   
+if let Value::Array(arr) = 
+value {
+     |                       
+              ^^^^^ variant, 
+associated function, or 
+constant not found in 
+`kiln_ir::Value`
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1571:93
+     |
+1571 | ...                   
+if let Ok(mut velocity) = wor
+ld.world_mut().get_mut::<&mut
+ Velocity>(eid) {
+     |                       
+                             
+               ^^^^^^^ 
+method not found in `&mut 
+World`
+
+error[E0614]: type `f64` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1572:68
+     |
+1572 | ...                   
+velocity.0.x = *vx as f32;
+     |                       
+               ^^^ can't be 
+dereferenced
+
+error[E0614]: type `f64` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1573:68
+     |
+1573 | ...                   
+velocity.0.y = *vy as f32;
+     |                       
+               ^^^ can't be 
+dereferenced
+
+error[E0599]: no variant, 
+associated function, or 
+constant named `Array` found 
+for enum `kiln_ir::Value` in 
+the current scope
+    --> kiln-runtime\src\slic
+e.rs:1581:47
+     |
+1581 | ...                   
+if let Value::Array(arr) = 
+value {
+     |                       
+              ^^^^^ variant, 
+associated function, or 
+constant not found in 
+`kiln_ir::Value`
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1584:87
+     |
+1584 | ...                   
+if let Ok(mut sprite) = world
+.world_mut().get_mut::<&mut 
+Sprite>(eid) {
+     |                       
+                             
+             ^^^^^^^ method 
+not found in `&mut World`
+
+error[E0614]: type `f64` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1585:65
+     |
+1585 | ...                   
+sprite.color = [*r as f32, 
+*g as f32, *b as f32, *a as 
+f32];
+     |                       
+                ^^ can't be 
+dereferenced
+
+error[E0614]: type `f64` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1585:76
+     |
+1585 | ...                   
+sprite.color = [*r as f32, 
+*g as f32, *b as f32, *a as 
+f32];
+     |                       
+                           
+^^ can't be dereferenced
+
+error[E0614]: type `f64` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1585:87
+     |
+1585 | ...                   
+sprite.color = [*r as f32, 
+*g as f32, *b as f32, *a as 
+f32];
+     |                       
+                             
+         ^^ can't be 
+dereferenced
+
+error[E0614]: type `f64` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1585:98
+     |
+1585 | ...                   
+sprite.color = [*r as f32, 
+*g as f32, *b as f32, *a as 
+f32];
+     |                       
+                             
+                    ^^ can't 
+be dereferenced
+
+error[E0599]: no variant, 
+associated function, or 
+constant named `Array` found 
+for enum `kiln_ir::Value` in 
+the current scope
+    --> kiln-runtime\src\slic
+e.rs:1609:47
+     |
+1609 | ...                   
+if let Value::Array(arr) = 
+value {
+     |                       
+              ^^^^^ variant, 
+associated function, or 
+constant not found in 
+`kiln_ir::Value`
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1612:90
+     |
+1612 | ...                   
+if let Ok(mut transform) = wo
+rld.world_mut().get_mut::<&mu
+t Transform>(eid) {
+     |                       
+                             
+                ^^^^^^^ 
+method not found in `&mut 
+World`
+
+error[E0614]: type `f64` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1613:72
+     |
+1613 | ...                   
+transform.position.x = *x as 
+f32;
+     |                       
+                       ^^ 
+can't be dereferenced
+
+error[E0614]: type `f64` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1614:72
+     |
+1614 | ...                   
+transform.position.y = *y as 
+f32;
+     |                       
+                       ^^ 
+can't be dereferenced
+
+error[E0599]: no variant, 
+associated function, or 
+constant named `Array` found 
+for enum `kiln_ir::Value` in 
+the current scope
+    --> kiln-runtime\src\slic
+e.rs:1623:51
+     |
+1623 | ...                   
+if let Value::Array(arr) = 
+value {
+     |                       
+              ^^^^^ variant, 
+associated function, or 
+constant not found in 
+`kiln_ir::Value`
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1626:93
+     |
+1626 | ...                   
+if let Ok(mut velocity) = wor
+ld.world_mut().get_mut::<&mut
+ Velocity>(eid) {
+     |                       
+                             
+               ^^^^^^^ 
+method not found in `&mut 
+World`
+
+error[E0614]: type `f64` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1627:68
+     |
+1627 | ...                   
+velocity.0.x = *vx as f32;
+     |                       
+               ^^^ can't be 
+dereferenced
+
+error[E0614]: type `f64` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1628:68
+     |
+1628 | ...                   
+velocity.0.y = *vy as f32;
+     |                       
+               ^^^ can't be 
+dereferenced
+
+error[E0599]: no variant, 
+associated function, or 
+constant named `Array` found 
+for enum `kiln_ir::Value` in 
+the current scope
+    --> kiln-runtime\src\slic
+e.rs:1636:47
+     |
+1636 | ...                   
+if let Value::Array(arr) = 
+value {
+     |                       
+              ^^^^^ variant, 
+associated function, or 
+constant not found in 
+`kiln_ir::Value`
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1639:87
+     |
+1639 | ...                   
+if let Ok(mut sprite) = world
+.world_mut().get_mut::<&mut 
+Sprite>(eid) {
+     |                       
+                             
+             ^^^^^^^ method 
+not found in `&mut World`
+
+error[E0614]: type `f64` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1640:65
+     |
+1640 | ...                   
+sprite.color = [*r as f32, 
+*g as f32, *b as f32, *a as 
+f32];
+     |                       
+                ^^ can't be 
+dereferenced
+
+error[E0614]: type `f64` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1640:76
+     |
+1640 | ...                   
+sprite.color = [*r as f32, 
+*g as f32, *b as f32, *a as 
+f32];
+     |                       
+                           
+^^ can't be dereferenced
+
+error[E0614]: type `f64` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1640:87
+     |
+1640 | ...                   
+sprite.color = [*r as f32, 
+*g as f32, *b as f32, *a as 
+f32];
+     |                       
+                             
+         ^^ can't be 
+dereferenced
+
+error[E0614]: type `f64` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1640:98
+     |
+1640 | ...                   
+sprite.color = [*r as f32, 
+*g as f32, *b as f32, *a as 
+f32];
+     |                       
+                             
+                    ^^ can't 
+be dereferenced
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1682:65
+     |
+1682 |                       
+  if let Ok(mut anim) = world
+.world_mut().get_mut::<&mut 
+AnimationPlayer>(eid) {
+     |                       
+                             
+             ^^^^^^^ method 
+not found in `&mut World`
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1698:65
+     |
+1698 |                       
+  if let Ok(mut anim) = world
+.world_mut().get_mut::<&mut 
+AnimationPlayer>(eid) {
+     |                       
+                             
+             ^^^^^^^ method 
+not found in `&mut World`
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1710:65
+     |
+1710 |                       
+  if let Ok(mut anim) = world
+.world_mut().get_mut::<&mut 
+AnimationPlayer>(eid) {
+     |                       
+                             
+             ^^^^^^^ method 
+not found in `&mut World`
+
+error[E0609]: no field 
+`save_dir` on type `&mut 
+SliceSession`
+    --> kiln-runtime\src\slic
+e.rs:1725:42
+     |
+1725 |                 if 
+let Some(dir) = 
+&self.save_dir {
+     |                       
+                   ^^^^^^^^ 
+unknown field
+     |
+     = note: available 
+fields are: `program`, `vm`, 
+`debugger`, `state`, 
+`ui_commands`
+
+error[E0614]: type `u32` 
+cannot be dereferenced
+    --> kiln-runtime\src\slic
+e.rs:1726:57
+     |
+1726 |                     
+if let Ok(loaded) = 
+load_state(dir, *slot) {
+     |                       
+                             
+     ^^^^^ can't be 
+dereferenced
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1741:65
+     |
+1741 |                       
+  if let Ok(mut anim) = world
+.world_mut().get_mut::<&mut 
+AnimationPlayer>(eid) {
+     |                       
+                             
+             ^^^^^^^ method 
+not found in `&mut World`
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1766:65
+     |
+1766 |                       
+  if let Ok(mut anim) = world
+.world_mut().get_mut::<&mut 
+AnimationPlayer>(eid) {
+     |                       
+                             
+             ^^^^^^^ method 
+not found in `&mut World`
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1809:65
+     |
+1809 |                       
+  if let Ok(mut anim) = world
+.world_mut().get_mut::<&mut 
+AnimationPlayer>(eid) {
+     |                       
+                             
+             ^^^^^^^ method 
+not found in `&mut World`
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1824:47
+     |
+1824 | ...                   
+world.world_mut().get_mut::<&
+mut 
+ParticleSystemComponent>(eid)
+     |                       
+                  ^^^^^^^ 
+method not found in `&mut 
+World`
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1854:47
+     |
+1854 | ...                   
+world.world_mut().get_mut::<&
+mut 
+ParticleSystemComponent>(eid)
+     |                       
+                  ^^^^^^^ 
+method not found in `&mut 
+World`
+
+error[E0599]: no method 
+named `get_mut` found for 
+mutable reference `&mut 
+World` in the current scope
+    --> kiln-runtime\src\slic
+e.rs:1900:47
+     |
+1900 | ...                   
+world.world_mut().get_mut::<&
+mut 
+ParticleSystemComponent>(eid)
+     |                       
+                  ^^^^^^^ 
+method not found in `&mut 
+World`
+
+error[E0599]: no associated 
+function or constant named 
+`from_index` found for 
+struct `rapier2d::dynamics::R
+igidBodyHandle` in the 
+current scope
+    --> kiln-runtime\src\slic
+e.rs:1923:66
+     |
+1923 |                     
+let ha = rapier2d::prelude::R
+igidBodyHandle::from_index(ha
+ as usize);
+     |                       
+                             
+              ^^^^^^^^^^ 
+associated function or 
+constant not found in `rapier
+2d::dynamics::RigidBodyHandle
+`
+     |
+note: if you're trying to 
+build a new `rapier2d::dynami
+cs::RigidBodyHandle` 
+consider using one of the 
+following associated 
+functions:
+      rapier2d::dynamics::Rig
+idBodyHandle::from_raw_parts
+      rapier2d::dynamics::Rig
+idBodyHandle::invalid
+    --> C:\Users\C.S.T\.cargo
+\registry\src\index.crates.io
+-1949cf8c6b5b557f\rapier2d-0.
+36.1\src\dynamics\rigid_body_
+handle.rs:14:5
+     |
+  14 |     pub fn 
+from_raw_parts(id: u32, 
+generation: u32) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^
+...
+  19 |     pub fn invalid() 
+-> Self {
+     |     
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0599]: no associated 
+function or constant named 
+`from_index` found for 
+struct `rapier2d::dynamics::R
+igidBodyHandle` in the 
+current scope
+    --> kiln-runtime\src\slic
+e.rs:1924:66
+     |
+1924 |                     
+let hb = rapier2d::prelude::R
+igidBodyHandle::from_index(hb
+ as usize);
+     |                       
+                             
+              ^^^^^^^^^^ 
+associated function or 
+constant not found in `rapier
+2d::dynamics::RigidBodyHandle
+`
+     |
+note: if you're trying to 
+build a new `rapier2d::dynami
+cs::RigidBodyHandle` 
+consider using one of the 
+following associated 
+functions:
+      rapier2d::dynamics::Rig
+idBodyHandle::from_raw_parts
+      rapier2d::dynamics::Rig
+idBodyHandle::invalid
+    --> C:\Users\C.S.T\.cargo
+\registry\src\index.crates.io
+-1949cf8c6b5b557f\rapier2d-0.
+36.1\src\dynamics\rigid_body_
+handle.rs:14:5
+     |
+  14 |     pub fn 
+from_raw_parts(id: u32, 
+generation: u32) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^
+...
+  19 |     pub fn invalid() 
+-> Self {
+     |     
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0599]: no method 
+named `angle` found for 
+struct 
+`RevoluteJointBuilder` in 
+the current scope
+    --> kiln-runtime\src\slic
+e.rs:1943:34
+     |
+1940 |   ...                 
+  let mut builder = rapier2d:
+:prelude::RevoluteJointBuilde
+r::new()
+     |  _____________________
+____________________-
+1941 | | ...                 
+      .local_anchor1(rapier2d
+::math::Vector::new(joint.anc
+hor_a[0], joint.anchor_a[1]))
+1942 | | ...                 
+      .local_anchor2(rapier2d
+::math::Vector::new(joint.anc
+hor_b[0], joint.anchor_b[1]))
+1943 | | ...                 
+      .angle(joint.reference_
+angle);
+     | |                     
+      -^^^^^ method not 
+found in 
+`RevoluteJointBuilder`
+     | 
+|___________________________|
+     |
+     |
+help: one of the 
+expressions' fields has a 
+method of the same name
+     |
+1943 |                       
+          .0.angle(joint.refe
+rence_angle);
+     |                       
+           ++
+
+error[E0061]: this function 
+takes 1 argument but 0 
+arguments were supplied
+    --> kiln-runtime\src\slic
+e.rs:1954:47
+     |
+1954 | ...                   
+let mut builder = rapier2d::p
+relude::PrismaticJointBuilder
+::new()
+     |                       
+                  ^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^-- argument #1 of type 
+`rapier2d::math::Vec2` is 
+missing
+     |
+note: associated function 
+defined here
+    --> C:\Users\C.S.T\.cargo
+\registry\src\index.crates.io
+-1949cf8c6b5b557f\rapier2d-0.
+36.1\src\dynamics\joint\prism
+atic_joint.rs:212:12
+     |
+ 212 |     pub fn new(axis: 
+Vector) -> Self {
+     |            ^^^
+help: provide the argument
+     |
+1954 |                       
+      let mut builder = rapie
+r2d::prelude::PrismaticJointB
+uilder::new(/* Vec2 */)
+     |                       
+                             
+                             
+            ++++++++++
+
+error[E0599]: no method 
+named `axis` found for 
+struct 
+`PrismaticJointBuilder` in 
+the current scope
+    --> kiln-runtime\src\slic
+e.rs:1957:34
+     |
+1954 |   ...                 
+  let mut builder = rapier2d:
+:prelude::PrismaticJointBuild
+er::new()
+     |  _____________________
+____________________-
+1955 | | ...                 
+      .local_anchor1(rapier2d
+::math::Vector::new(joint.anc
+hor_a[0], joint.anchor_a[1]))
+1956 | | ...                 
+      .local_anchor2(rapier2d
+::math::Vector::new(joint.anc
+hor_b[0], joint.anchor_b[1]))
+1957 | | ...                 
+      .axis(rapier2d::math::V
+ector::new(1.0, 0.0));
+     | |                     
+      -^^^^ method not found 
+in `PrismaticJointBuilder`
+     | 
+|___________________________|
+     |
+
+error[E0308]: mismatched 
+types
+    --> kiln-runtime\src\slic
+e.rs:1968:28
+     |
+1968 |                     
+if let Some(world_mut) = 
+world.world_mut() {
+     |                       
+     ^^^^^^^^^^^^^^^   
+----------------- this 
+expression has type `&mut 
+World`
+     |                       
+     |
+     |                       
+     expected `World`, found 
+`Option<_>`
+     |
+     = note: expected struct 
+`World`
+                  found enum 
+`std::option::Option<_>`
+
+error[E0063]: missing fields 
+`animation_clip` and 
+`material` in initializer of 
+`sprite::Sprite`
+  --> kiln-runtime\src\sprite
+.rs:31:9
+   |
+31 |         Self {
+   |         ^^^^ missing 
+`animation_clip` and 
+`material`
+
+error[E0277]: 
+`ParticleSystem` doesn't 
+implement `std::fmt::Debug`
+   --> kiln-runtime\src\sprit
+e.rs:174:5
+    |
+172 | #[derive(Debug, Clone)]
+    |          ----- in this 
+derive macro expansion
+173 | pub struct 
+ParticleSystemComponent {
+174 |     system: 
+ParticleSystem,
+    |     
+^^^^^^^^^^^^^^^^^^^^^^ the 
+trait `std::fmt::Debug` is 
+not implemented for 
+`ParticleSystem`
+
+error[E0277]: the trait 
+bound `ParticleSystem: 
+Clone` is not satisfied
+   --> kiln-runtime\src\sprit
+e.rs:174:5
+    |
+172 | #[derive(Debug, Clone)]
+    |                 ----- 
+in this derive macro 
+expansion
+173 | pub struct 
+ParticleSystemComponent {
+174 |     system: 
+ParticleSystem,
+    |     
+^^^^^^^^^^^^^^^^^^^^^^ the 
+trait `Clone` is not 
+implemented for 
+`ParticleSystem`
+
+error[E0599]: no method 
+named `iter` found for 
+struct `QueryMut<'q, Q>` in 
+the current scope
+   --> kiln-runtime\src\sprit
+e.rs:215:89
+    |
+215 |     for (_, (anim, 
+sprite)) in 
+world.query_mut::<(&mut 
+AnimationPlayer, &mut 
+Sprite)>().iter() {
+    |                        
+        ----- method `iter` 
+is available on `&mut World` 
+        ^^^^ method not 
+found in `QueryMut<'_, (&mut 
+AnimationPlayer, &mut 
+sprite::Sprite)>`
+
+error[E0599]: no method 
+named `iter` found for 
+struct `QueryMut<'q, Q>` in 
+the current scope
+   --> kiln-runtime\src\sprit
+e.rs:225:70
+    |
+225 |     for (_, ps) in 
+world.query_mut::<&mut Partic
+leSystemComponent>().iter() {
+    |                    
+----- method `iter` is 
+available on `&mut World`  
+^^^^ method not found in 
+`QueryMut<'_, &mut 
+ParticleSystemComponent>`
+
+error[E0063]: missing field 
+`material_id` in initializer 
+of `SpriteInstance`
+   --> kiln-runtime\src\tilem
+ap.rs:134:33
+    |
+134 | ...                   
+SpriteInstance {
+    |                       
+^^^^^^^^^^^^^^ missing 
+`material_id`
+
+error[E0277]: the trait 
+bound `f32: std::cmp::Eq` is 
+not satisfied
+   --> kiln-runtime\src\world
+.rs:106:14
+    |
+103 | #[derive(Debug, Clone, 
+Copy, PartialEq, Eq)]
+    |                        
+                 -- in this 
+derive macro expansion
+...
+106 |     Circle { radius: 
+f32 },
+    |              
+^^^^^^^^^^^ the trait 
+`std::cmp::Eq` is not 
+implemented for `f32`
+    |
+    = help: the following 
+other types implement trait 
+`std::cmp::Eq`:
+              i128
+              i16
+              i32
+              i64
+              i8
+              isize
+              u128
+              u16
+            and 4 others
+note: required by a bound in 
+`std::cmp::AssertParamIsEq`
+   --> C:\Users\C.S.T\.rustup
+\toolchains\stable-x86_64-pc-
+windows-msvc\lib/rustlib/src/
+rust\library\core\src\cmp.rs:
+392:31
+    |
+392 | pub struct 
+AssertParamIsEq<T: Eq + 
+PointeeSized> {
+    |                        
+       ^^ required by this 
+bound in `AssertParamIsEq`
+
+error[E0599]: no method 
+named `cast_ray` found for 
+struct `rapier2d::pipeline::P
+hysicsPipeline` in the 
+current scope
+   --> kiln-runtime\src\physi
+cs.rs:115:39
+    |
+115 |         let _ = self.ph
+ysics_pipeline.cast_ray(
+    |                 -------
+---------------^^^^^^^^ 
+method not found in `rapier2d
+::pipeline::PhysicsPipeline`
+
+error[E0308]: mismatched 
+types
+   --> kiln-runtime\src\physi
+cs.rs:191:22
+    |
+191 |         
+.filter_map(|(e, (rb, col, 
+sid))| {
+    |                      
+^^^^^^^^^^^^^^^^^^^
+    |                      |
+    |                      
+expected a tuple with 3 
+elements, found one with 2 
+elements
+    |                      
+expected due to this
+    |
+    = note: expected tuple 
+`(&RigidBody2D, &Collider2D, 
+std::option::Option<&SourceId
+>)`
+               found tuple 
+`(_, _)`
+
+error[E0277]: the trait 
+bound `PhysicsBody: 
+ComponentRef<'_>` is not 
+satisfied
+   --> kiln-runtime\src\physi
+cs.rs:192:22
+    |
+192 |             if world.ge
+t::<PhysicsBody>(e).is_err() 
+{
+    |                      
+^^^ unsatisfied trait bound
+    |
+help: the trait 
+`ComponentRef<'_>` is not 
+implemented for `PhysicsBody`
+   --> kiln-runtime\src\world
+.rs:113:1
+    |
+113 | pub struct PhysicsBody 
+{
+    | ^^^^^^^^^^^^^^^^^^^^^^
+help: the following other 
+types implement trait 
+`ComponentRef<'a>`
+   --> C:\Users\C.S.T\.cargo\
+registry\src\index.crates.io-
+1949cf8c6b5b557f\hecs-0.11.2\
+src\entity_ref.rs:322:1
+    |
+322 | impl<'a, T: Component> 
+ComponentRef<'a> for &'a T {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^ 
+`&'a T`
+...
+342 | impl<'a, T: Component> 
+ComponentRef<'a> for &'a mut 
+T {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^ `&'a mut T`
+
+error[E0599]: no associated 
+function or constant named 
+`r#static` found for struct `
+rapier2d::dynamics::RigidBody
+Builder` in the current scope
+    --> kiln-runtime\src\phys
+ics.rs:206:75
+     |
+ 206 |             
+RigidBodyType::Static => rapi
+er2d::prelude::RigidBodyBuild
+er::static(),
+     |                       
+                             
+                       
+^^^^^^ associated function 
+or constant not found in `rap
+ier2d::dynamics::RigidBodyBui
+lder`
+     |
+note: if you're trying to 
+build a new `rapier2d::dynami
+cs::RigidBodyBuilder` 
+consider using one of the 
+following associated 
+functions:
+      rapier2d::dynamics::Rig
+idBodyBuilder::new
+      rapier2d::dynamics::Rig
+idBodyBuilder::new_static
+      rapier2d::dynamics::Rig
+idBodyBuilder::new_kinematic_
+velocity_based
+      rapier2d::dynamics::Rig
+idBodyBuilder::new_kinematic_
+position_based
+      and 4 others
+    --> C:\Users\C.S.T\.cargo
+\registry\src\index.crates.io
+-1949cf8c6b5b557f\rapier2d-0.
+36.1\src\dynamics\rigid_body.
+rs:1706:5
+     |
+1706 |     pub fn 
+new(body_type: 
+RigidBodyType) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1738 |     pub fn 
+new_static() -> Self {
+     |     
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1743 |     pub fn new_kinemat
+ic_velocity_based() -> Self {
+     |     ^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1748 |     pub fn new_kinemat
+ic_position_based() -> Self {
+     |     ^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: there is an associated 
+function `new_static` with a 
+similar name
+     |
+ 206 |             
+RigidBodyType::Static => rapi
+er2d::prelude::RigidBodyBuild
+er::new_static(),
+     |                       
+                             
+                       ++++
+
+error[E0599]: no associated 
+function or constant named 
+`kinematic` found for struct 
+`rapier2d::dynamics::RigidBod
+yBuilder` in the current 
+scope
+    --> kiln-runtime\src\phys
+ics.rs:208:78
+     |
+ 208 |             
+RigidBodyType::Kinematic => r
+apier2d::prelude::RigidBodyBu
+ilder::kinematic(),
+     |                       
+                             
+                          
+^^^^^^^^^ associated 
+function or constant not 
+found in `rapier2d::dynamics:
+:RigidBodyBuilder`
+     |
+note: if you're trying to 
+build a new `rapier2d::dynami
+cs::RigidBodyBuilder` 
+consider using one of the 
+following associated 
+functions:
+      rapier2d::dynamics::Rig
+idBodyBuilder::new
+      rapier2d::dynamics::Rig
+idBodyBuilder::new_static
+      rapier2d::dynamics::Rig
+idBodyBuilder::new_kinematic_
+velocity_based
+      rapier2d::dynamics::Rig
+idBodyBuilder::new_kinematic_
+position_based
+      and 4 others
+    --> C:\Users\C.S.T\.cargo
+\registry\src\index.crates.io
+-1949cf8c6b5b557f\rapier2d-0.
+36.1\src\dynamics\rigid_body.
+rs:1706:5
+     |
+1706 |     pub fn 
+new(body_type: 
+RigidBodyType) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1738 |     pub fn 
+new_static() -> Self {
+     |     
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1743 |     pub fn new_kinemat
+ic_velocity_based() -> Self {
+     |     ^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1748 |     pub fn new_kinemat
+ic_position_based() -> Self {
+     |     ^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0599]: no method 
+named `index` found for 
+struct `rapier2d::dynamics::R
+igidBodyHandle` in the 
+current scope
+   --> kiln-runtime\src\physi
+cs.rs:238:71
+    |
+238 |         let _ = 
+world.insert_one(entity, 
+PhysicsBody { handle: 
+handle.index() as u32 });
+    |                        
+                             
+                  ^^^^^ 
+method not found in `rapier2d
+::dynamics::RigidBodyHandle`
+
+error[E0308]: mismatched 
+types
+   --> kiln-runtime\src\physi
+cs.rs:246:19
+    |
+246 |         .map(|(_, (pb, 
+sid))| (sid.0.clone(), 
+pb.handle))
+    |               
+----^^^^^^^^^-
+    |               |   |
+    |               |   
+expected `SourceId`, found 
+`(_, _)`
+    |               expected 
+due to this
+    |
+    = note: expected struct 
+`SourceId`
+                found tuple 
+`(_, _)`
+
+error[E0599]: no method 
+named `world_ref` found for 
+mutable reference `&mut 
+World` in the current scope
+   --> kiln-runtime\src\physi
+cs.rs:267:10
+    |
+266 |       let 
+joint_entities: 
+Vec<hecs::Entity> = world
+    |  ______________________
+_______________________-
+267 | |         .world_ref()
+    | |_________-^^^^^^^^^
+    |
+help: there is a method 
+`deref` with a similar name
+    |
+267 -         .world_ref()
+267 +         .deref()
+    |
+
+error[E0599]: no associated 
+function or constant named 
+`from_index` found for 
+struct `rapier2d::dynamics::R
+igidBodyHandle` in the 
+current scope
+   --> kiln-runtime\src\physi
+cs.rs:279:62
+    |
+279 |                 let ha 
+= rapier2d::prelude::RigidBod
+yHandle::from_index(ha as 
+usize);
+    |                        
+                             
+         ^^^^^^^^^^ 
+associated function or 
+constant not found in `rapier
+2d::dynamics::RigidBodyHandle
+`
+    |
+note: if you're trying to 
+build a new `rapier2d::dynami
+cs::RigidBodyHandle` 
+consider using one of the 
+following associated 
+functions:
+      rapier2d::dynamics::Rig
+idBodyHandle::from_raw_parts
+      rapier2d::dynamics::Rig
+idBodyHandle::invalid
+   --> C:\Users\C.S.T\.cargo\
+registry\src\index.crates.io-
+1949cf8c6b5b557f\rapier2d-0.3
+6.1\src\dynamics\rigid_body_h
+andle.rs:14:5
+    |
+ 14 |     pub fn 
+from_raw_parts(id: u32, 
+generation: u32) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^
+...
+ 19 |     pub fn invalid() 
+-> Self {
+    |     
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0599]: no associated 
+function or constant named 
+`from_index` found for 
+struct `rapier2d::dynamics::R
+igidBodyHandle` in the 
+current scope
+   --> kiln-runtime\src\physi
+cs.rs:280:62
+    |
+280 |                 let hb 
+= rapier2d::prelude::RigidBod
+yHandle::from_index(hb as 
+usize);
+    |                        
+                             
+         ^^^^^^^^^^ 
+associated function or 
+constant not found in `rapier
+2d::dynamics::RigidBodyHandle
+`
+    |
+note: if you're trying to 
+build a new `rapier2d::dynami
+cs::RigidBodyHandle` 
+consider using one of the 
+following associated 
+functions:
+      rapier2d::dynamics::Rig
+idBodyHandle::from_raw_parts
+      rapier2d::dynamics::Rig
+idBodyHandle::invalid
+   --> C:\Users\C.S.T\.cargo\
+registry\src\index.crates.io-
+1949cf8c6b5b557f\rapier2d-0.3
+6.1\src\dynamics\rigid_body_h
+andle.rs:14:5
+    |
+ 14 |     pub fn 
+from_raw_parts(id: u32, 
+generation: u32) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^
+...
+ 19 |     pub fn invalid() 
+-> Self {
+    |     
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0599]: no associated 
+function or constant named 
+`distance` found for struct 
+`ImpulseJoint` in the 
+current scope
+   --> kiln-runtime\src\physi
+cs.rs:293:62
+    |
+293 | ...                   r
+apier2d::prelude::ImpulseJoin
+t::distance(
+    |                        
+                             
+   ^^^^^^^^ associated 
+function or constant not 
+found in `ImpulseJoint`
+
+error[E0599]: no associated 
+function or constant named 
+`revolute` found for struct 
+`ImpulseJoint` in the 
+current scope
+   --> kiln-runtime\src\physi
+cs.rs:300:62
+    |
+300 | ...                   r
+apier2d::prelude::ImpulseJoin
+t::revolute(
+    |                        
+                             
+   ^^^^^^^^ associated 
+function or constant not 
+found in `ImpulseJoint`
+
+error[E0599]: no associated 
+function or constant named 
+`prismatic` found for struct 
+`ImpulseJoint` in the 
+current scope
+   --> kiln-runtime\src\physi
+cs.rs:306:74
+    |
+306 | ...                   
+let mut j = rapier2d::prelude
+::ImpulseJoint::prismatic(
+    |                        
+                             
+               ^^^^^^^^^ 
+associated function or 
+constant not found in 
+`ImpulseJoint`
+
+error[E0599]: no associated 
+function or constant named 
+`distance` found for struct 
+`ImpulseJoint` in the 
+current scope
+   --> kiln-runtime\src\physi
+cs.rs:319:62
+    |
+319 | ...                   r
+apier2d::prelude::ImpulseJoin
+t::distance(
+    |                        
+                             
+   ^^^^^^^^ associated 
+function or constant not 
+found in `ImpulseJoint`
+
+error[E0599]: no associated 
+function or constant named 
+`revolute` found for struct 
+`ImpulseJoint` in the 
+current scope
+   --> kiln-runtime\src\physi
+cs.rs:326:62
+    |
+326 | ...                   r
+apier2d::prelude::ImpulseJoin
+t::revolute(
+    |                        
+                             
+   ^^^^^^^^ associated 
+function or constant not 
+found in `ImpulseJoint`
+
+error[E0599]: no associated 
+function or constant named 
+`distance` found for struct 
+`ImpulseJoint` in the 
+current scope
+   --> kiln-runtime\src\physi
+cs.rs:332:62
+    |
+332 | ...                   r
+apier2d::prelude::ImpulseJoin
+t::distance(
+    |                        
+                             
+   ^^^^^^^^ associated 
+function or constant not 
+found in `ImpulseJoint`
+
+error[E0599]: no method 
+named `contact_events` found 
+for struct `rapier2d::geometr
+y::NarrowPhase` in the 
+current scope
+   --> kiln-runtime\src\physi
+cs.rs:352:34
+    |
+352 |     let _ = physics.nar
+row_phase.contact_events().fo
+r_each(|event| {
+    |                        
+          ^^^^^^^^^^^^^^ 
+method not found in `rapier2d
+::geometry::NarrowPhase`
+
+error[E0599]: no associated 
+function or constant named 
+`from_index` found for 
+struct `rapier2d::dynamics::R
+igidBodyHandle` in the 
+current scope
+   --> kiln-runtime\src\physi
+cs.rs:386:54
+    |
+386 |             .get(rapier
+2d::prelude::RigidBodyHandle:
+:from_index(physics_body.hand
+le as usize))
+    |                        
+                             
+ ^^^^^^^^^^ associated 
+function or constant not 
+found in `rapier2d::dynamics:
+:RigidBodyHandle`
+    |
+note: if you're trying to 
+build a new `rapier2d::dynami
+cs::RigidBodyHandle` 
+consider using one of the 
+following associated 
+functions:
+      rapier2d::dynamics::Rig
+idBodyHandle::from_raw_parts
+      rapier2d::dynamics::Rig
+idBodyHandle::invalid
+   --> C:\Users\C.S.T\.cargo\
+registry\src\index.crates.io-
+1949cf8c6b5b557f\rapier2d-0.3
+6.1\src\dynamics\rigid_body_h
+andle.rs:14:5
+    |
+ 14 |     pub fn 
+from_raw_parts(id: u32, 
+generation: u32) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^
+...
+ 19 |     pub fn invalid() 
+-> Self {
+    |     
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0004]: non-exhaustive 
+patterns: `&BindingType::Game
+padButton(_)` not covered
+   --> kiln-runtime\src\slice
+.rs:513:19
+    |
+513 |             match 
+&binding.binding_type {
+    |                   
+^^^^^^^^^^^^^^^^^^^^^ 
+pattern `&BindingType::Gamepa
+dButton(_)` not covered
+    |
+note: `BindingType` defined 
+here
+   --> 
+kiln-input\src\binding.rs:8:1
+    |
+  8 | pub enum BindingType {
+    | ^^^^^^^^^^^^^^^^^^^^
+...
+ 12 |     GamepadButton(u8),
+    |     ------------- not 
+covered
+    = note: the matched 
+value is of type 
+`&BindingType`
+help: ensure that all 
+possible cases are being 
+handled by adding a match 
+arm with a wildcard pattern 
+or an explicit pattern as 
+shown
+    |
+543 ~                 },
+544 +                 &Bindin
+gType::GamepadButton(_) => 
+todo!()
+    |
+
+error[E0433]: cannot find 
+type `JointType` in this 
+scope
+    --> kiln-runtime\src\slic
+e.rs:1952:25
+     |
+1952 |                       
+  JointType::Kinematic => {
+     |                       
+  ^^^^^^^^^ use of 
+undeclared type `JointType`
+
+error[E0433]: cannot find 
+type `JointType` in this 
+scope
+    --> kiln-runtime\src\slic
+e.rs:1927:25
+     |
+1927 |                       
+  JointType::Distance => {
+     |                       
+  ^^^^^^^^^ use of 
+undeclared type `JointType`
+
+error[E0433]: cannot find 
+type `JointType` in this 
+scope
+    --> kiln-runtime\src\slic
+e.rs:1939:25
+     |
+1939 |                       
+  JointType::Revolute => {
+     |                       
+  ^^^^^^^^^ use of 
+undeclared type `JointType`
+
+Some errors have detailed 
+explanations: E0004, E0061, 
+E0063, E0204, E0277, E0308, 
+E0425, E0432, E0433...
+For more information about 
+an error, try `rustc 
+--explain E0004`.
+warning: `kiln-runtime` 
+(lib) generated 4 warnings
+error: could not compile 
+`kiln-runtime` (lib) due to 
+171 previous errors; 4 
+warnings emitted

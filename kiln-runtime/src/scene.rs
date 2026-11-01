@@ -73,6 +73,7 @@ pub fn spawn_entities(
     entities: &[Entity],
     offset: SceneOffset,
     make_sprite: &mut SpriteFactory<'_>,
+    project: &kiln_core::Project,
 ) -> Vec<SpawnedEntity> {
     let mut spawned = Vec::new();
 
@@ -118,6 +119,7 @@ pub fn spawn_entities(
         match &role_name {
             Some(role_name_str) => {
                 if let Some(sprite) = sprite {
+                    let animation_clip = sprite.animation_clip.clone();
                     let entity = world.world_mut().spawn((
                         runtime_transform,
                         sprite,
@@ -125,7 +127,7 @@ pub fn spawn_entities(
                         source_id,
                     ));
                     // If the sprite references an animation clip, load it
-                    if let Some(clip_name) = &sprite.animation_clip {
+                    if let Some(clip_name) = &animation_clip {
                         if let Some(clip) = project.animation_clips.get(clip_name) {
                             let mut anim = AnimationPlayer::new();
                             anim.add_clip(clip.clone());
@@ -143,13 +145,14 @@ pub fn spawn_entities(
             }
             None => {
                 if let Some(sprite) = sprite {
+                    let animation_clip = sprite.animation_clip.clone();
                     let entity = world.world_mut().spawn((
                         runtime_transform,
                         sprite,
                         source_id,
                     ));
                     // If the sprite references an animation clip, load it
-                    if let Some(clip_name) = &sprite.animation_clip {
+                    if let Some(clip_name) = &animation_clip {
                         if let Some(clip) = project.animation_clips.get(clip_name) {
                             let mut anim = AnimationPlayer::new();
                             anim.add_clip(clip.clone());
@@ -186,7 +189,7 @@ fn spawn_scene_inner(
     visited: &mut Vec<String>,
     make_sprite: &mut SpriteFactory<'_>,
 ) -> Vec<SpawnedEntity> {
-    let mut spawned = spawn_entities(world, &scene.entities, offset, make_sprite);
+    let mut spawned = spawn_entities(world, &scene.entities, offset, make_sprite, project);
 
     for nested in &scene.nested_scenes {
         if visited.contains(&nested.scene_id) {

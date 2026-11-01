@@ -76,7 +76,7 @@ impl Default for Sprite {
 /// Tracks a set of named animation clips and advances the current frame
 /// based on elapsed time. The current frame's UV rect can be read and
 /// applied to a sprite's `uv_rect` each frame.
-#[derive(Debug)]
+#[derive(Debug, hecs::Component)]
 pub struct AnimationPlayer {
     clips: HashMap<String, Clip>,
     /// Texture dimensions for each clip (width, height) - used to convert
@@ -175,6 +175,7 @@ impl AnimationPlayer {
 /// Particle system component for 2D visual effects (smoke, fire, magic, etc.).
 ///
 /// Drives a CPU particle system and can be rendered as sprite instances.
+#[derive(hecs::Component)]
 pub struct ParticleSystemComponent {
     system: ParticleSystem,
 }

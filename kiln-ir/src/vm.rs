@@ -427,11 +427,6 @@ impl<H: HostContext> Vm<H> {
         args.reverse();
         Ok(args)
     }
-
-    /// Current stack contents (tests and the debugger).
-    pub fn stack(&self) -> &[Value] {
-        &self.stack
-    }
 }
 
 #[cfg(test)]

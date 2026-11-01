@@ -3,9 +3,9 @@
 //! Provides breakpoint management, stepping, and variable inspection for the
 //! KilnScript bytecode VM.
 
-use crate::program::{Instruction, Label, Program};
+use crate::program::{Label, Program};
 use crate::value::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// Debug event that can occur during VM execution.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,7 +92,7 @@ pub struct Debugger<H: crate::HostContext> {
 impl<H: crate::HostContext> Debugger<H> {
     /// Create a new debugger for the given program.
     pub fn new(program: Program, host: H) -> Self {
-        let vm = crate::Vm::new(program.clone(), host);
+        let vm = crate::Vm::new(host);
         Self {
             vm,
             state: DebugState::default(),
@@ -262,10 +262,10 @@ impl<H: crate::HostContext> Debugger<H> {
             }
 
             // Execute one instruction
-            match self.vm.step() {
-                Ok(()) => {
+            match self.vm.step(&self.program) {
+                Ok(should_continue) => {
                     // Check if execution completed
-                    if self.vm.instruction_pointer() >= self.program.instructions().len() {
+                    if !should_continue || self.vm.instruction_pointer() >= self.program.instructions().len() {
                         self.state.last_event = Some(DebugEvent::Completed);
                         self.update_state_from_vm();
                         return DebugEvent::Completed;
@@ -288,7 +288,7 @@ impl<H: crate::HostContext> Debugger<H> {
     }
 
     /// Evaluate a breakpoint condition (simplified).
-    fn evaluate_condition(&self, condition: &str) -> bool {
+    fn evaluate_condition(&self, _condition: &str) -> bool {
         // TODO: Implement condition evaluation
         // For now, always break
         true
