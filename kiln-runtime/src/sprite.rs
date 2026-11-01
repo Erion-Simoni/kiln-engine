@@ -22,6 +22,13 @@ pub struct Sprite {
     /// Optional name of an animation clip from `animation_clips` to play
     /// on this sprite.
     pub animation_clip: Option<String>,
+    /// Horizontal flip: when true, the sprite is flipped horizontally.
+    pub flip_x: bool,
+    /// Vertical flip: when true, the sprite is flipped vertically.
+    pub flip_y: bool,
+    /// Pivot point in local space (0.0 = left/top, 0.5 = center, 1.0 = right/bottom).
+    /// Defaults to (0.5, 0.5) center pivot.
+    pub pivot: [f32; 2],
 }
 
 impl Sprite {
@@ -34,6 +41,9 @@ impl Sprite {
             layer: 0.0,
             material: None,
             animation_clip: None,
+            flip_x: false,
+            flip_y: false,
+            pivot: [0.5, 0.5],
         }
     }
 
@@ -61,6 +71,24 @@ impl Sprite {
     /// Set the animation clip to play on this sprite.
     pub fn with_animation_clip(mut self, clip_name: impl Into<String>) -> Self {
         self.animation_clip = Some(clip_name.into());
+        self
+    }
+
+    /// Set horizontal flipping (flip horizontally).
+    pub fn with_flip_x(mut self, flip: bool) -> Self {
+        self.flip_x = flip;
+        self
+    }
+
+    /// Set vertical flipping (flip vertically).
+    pub fn with_flip_y(mut self, flip: bool) -> Self {
+        self.flip_y = flip;
+        self
+    }
+
+    /// Set the pivot point for the sprite (0.0 = left/top, 0.5 = center, 1.0 = right/bottom).
+    pub fn with_pivot(mut self, x: f32, y: f32) -> Self {
+        self.pivot = [x, y];
         self
     }
 }
