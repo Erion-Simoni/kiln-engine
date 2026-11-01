@@ -8,6 +8,7 @@
 //! Tiles are stored in fixed-size chunks so a large map does not allocate one
 //! entity per tile.
 
+use crate::next_id;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -248,7 +249,7 @@ fn default_tile_world_size() -> [f32; 2] {
 impl Default for TileMap {
     fn default() -> Self {
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: next_id().to_string(),
             name: "Tilemap".to_string(),
             tile_size: default_tile_world_size(),
             layers: Vec::new(),

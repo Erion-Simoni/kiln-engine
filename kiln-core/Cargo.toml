@@ -14,10 +14,6 @@ glam = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
-uuid = { workspace = true }
 dirs = { workspace = true }
 ron = { workspace = true }
 hecs = { workspace = true }
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { workspace = true }

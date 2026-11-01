@@ -2,6 +2,7 @@
 
 use crate::clip::Clip;
 use crate::input::ActionMap;
+use crate::next_id;
 use crate::tilemap::{TileMap, TileSet};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -274,7 +275,7 @@ impl Project {
 impl Default for Project {
     fn default() -> Self {
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: next_id().to_string(),
             name: "Untitled Project".to_string(),
             version: "0.1.0".to_string(),
             publisher: String::new(),

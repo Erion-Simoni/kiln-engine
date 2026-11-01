@@ -34,6 +34,11 @@ web-sys = { version = "0.3.106", features = [
     "WheelEvent",
     "MouseEvent",
     "AddEventListenerOptions",
+    "TouchEvent",
+    "AudioContext",
+    "GainNode",
+    "AudioBuffer",
+    "RequestMode",
 ] }
 console_error_panic_hook = "0.1.7"
 pollster = { workspace = true }
@@ -46,13 +51,8 @@ kiln-assets = { workspace = true }
 kiln-render = { workspace = true }
 kiln-ui = { workspace = true }
 log = { workspace = true }
-getrandom = { workspace = true }
 wasm-bindgen-futures = "0.4"
-uuid = { workspace = true, features = ["rng-getrandom"] }
 image = { version = "0.25", features = ["png"] }
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { workspace = true, features = ["wasm_js"] }
 
 [lib]
 crate-type = ["cdylib", "rlib"]
