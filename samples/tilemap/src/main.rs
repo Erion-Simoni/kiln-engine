@@ -138,6 +138,7 @@ impl TilemapApp {
                     size: sprite.size,
                     color: sprite.color,
                     uv_rect: sprite.uv_rect,
+                    material_id: 0,
                 },
             );
         }

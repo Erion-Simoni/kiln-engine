@@ -86,7 +86,7 @@ impl AtlasBuilder {
     /// Add a sprite to the atlas.
     pub fn add_sprite(&mut self, name: &str, image: Image) -> Result<(), AtlasError> {
         let w = image.width;
-        let h = image.height();
+        let h = image.height;
 
         // Check if the sprite fits in the current shelf
         if self.current_x + self.padding + w > self.max_width {
@@ -128,7 +128,7 @@ impl AtlasBuilder {
 
         for (name, image) in self.sprites {
             let w = image.width;
-            let h = image.height();
+            let h = image.height;
 
             if current_x + self.padding + w > self.max_width {
                 current_y += current_max_h + self.padding;
