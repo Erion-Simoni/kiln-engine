@@ -302,6 +302,27 @@ fn show_grid(
         ui.label(format!("origin {}, {}", start_x, start_y));
         ui.label(format!("tile {} px", tile_size[0] as i32));
     });
+
+    // Tile palette - select which tile to paint with
+    ui.separator();
+    ui.label("Tile Palette");
+    egui::Grid::new("tile_palette").num_cols(8).show(ui, |ui| {
+        let tilemap = state.world_ref();
+        if let Some(map) = state.target_map {
+            let tileset_id = &map.tilesets.values().next().unwrap().id;
+            if let Some(tileset) = project.tilesets.get(tileset_id) {
+                for tile_id in 0..tileset.tile_count.min(64) {
+                    let response = ui.add(egui::Button::new(format!("{}", tile_id)));
+                    if response.clicked() {
+                        state.brush_tile = tile_id as u16;
+                    }
+                    if state.brush_tile == tile_id {
+                        ui.label("●");
+                    }
+                }
+            }
+        }
+    });
 }
 
 /// Colour used to draw a tile in the painting grid.
