@@ -183,6 +183,32 @@ pub struct EditorApp {
     scene_tabs: Vec<SceneTab>,
     /// Currently active scene tab index.
     active_scene_tab: Option<usize>,
+    /// Camera state for the scene view.
+    camera: CameraState,
+}
+
+/// Camera state for the scene editor viewport.
+#[derive(Debug, Clone, Default)]
+pub struct CameraState {
+    /// Entity to follow (if any).
+    target: Option<String>,
+    /// Camera position in world space.
+    position: [f32; 2],
+    /// Camera zoom level.
+    zoom: f32,
+    /// Camera bounds (min_x, min_y, max_x, max_y). None means no bounds.
+    bounds: Option<[f32; 4]>,
+}
+
+impl Default for CameraState {
+    fn default() -> Self {
+        Self {
+            target: None,
+            position: [0.0, 0.0],
+            zoom: 1.0,
+            bounds: None,
+        }
+    }
 }
 
 /// Transform gizmo mode for visual entity manipulation.
@@ -762,6 +788,7 @@ impl EditorApp {
             current_project: None,
             asset_browser: AssetBrowser::new(),
             asset_filter: String::new(),
+            camera: CameraState::default(),
             open_project_requested: false,
             play_toggle_requested: false,
             scene_save_requested: false,
@@ -2074,7 +2101,41 @@ impl winit::application::ApplicationHandler for EditorApp {
                     gpu.scene_view_sprite_renderer.push(line);
                 }
                 let world_camera = scene_view::world_camera(world.0, world.1);
-                let view_bounds = world_camera.view_bounds();
+                // Apply camera state (position, zoom, follow target)
+                let mut camera = world_camera;
+                if let Some(target_id) = &self.camera.target {
+                    if let Some(&hecs_entity) = self.entity_id_to_hecs.get(target_id) {
+                        if let Ok((transform,)) = self
+                            .world
+                            .world_ref()
+                            .query_one_mut::<(&kiln_core::Transform,)>(hecs_entity)
+                        {
+                            camera.position = transform.position;
+                        }
+                    }
+                }
+                camera.position[0] += self.camera.position[0];
+                camera.position[1] += self.camera.position[1];
+                camera.zoom *= self.camera.zoom;
+                // Apply bounds if set
+                if let Some([min_x, min_y, max_x, max_y]) = self.camera.bounds {
+                    let view = camera.view_bounds();
+                    let mut pos = camera.position;
+                    if view[0] < min_x {
+                        pos[0] = min_x;
+                    }
+                    if view[1] < min_y {
+                        pos[1] = min_y;
+                    }
+                    if view[2] > max_x {
+                        pos[0] = max_x - (view[2] - view[0]);
+                    }
+                    if view[3] > max_y {
+                        pos[1] = max_y - (view[3] - view[1]);
+                    }
+                    camera.position = pos;
+                }
+                let view_bounds = camera.view_bounds();
                 for (_, tilemap) in self.world.world().query::<(&Transform, &Tilemap)>().iter() {
                     for (texture, instance) in tilemap.collect_visible(view_bounds) {
                         gpu.scene_view_sprite_renderer.push_textured(texture, instance);
