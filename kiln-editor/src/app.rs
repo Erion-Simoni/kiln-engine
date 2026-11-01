@@ -185,6 +185,10 @@ pub struct EditorApp {
     active_scene_tab: Option<usize>,
     /// Camera state for the scene view.
     camera: CameraState,
+    /// Grid snap settings for the scene editor.
+    grid_snap_size: f32,
+    /// Whether grid snapping is enabled.
+    grid_snap_enabled: bool,
 }
 
 /// Camera state for the scene editor viewport.
@@ -789,6 +793,8 @@ impl EditorApp {
             asset_browser: AssetBrowser::new(),
             asset_filter: String::new(),
             camera: CameraState::default(),
+            grid_snap_size: 32.0,
+            grid_snap_enabled: false,
             open_project_requested: false,
             play_toggle_requested: false,
             scene_save_requested: false,
@@ -2743,6 +2749,17 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 GizmoMode::Scale => GizmoMode::None,
                             };
                         }
+
+                        ui.separator();
+
+                        // Grid snap controls
+                        ui.label("Grid:");
+                        ui.add_sized([60.0, 20.0], egui::DragValue::new(&mut self.grid_snap_size));
+                        if ui.button(format!("{}", if self.grid_snap_enabled { "✓" } else { "○" })).clicked() {
+                            self.grid_snap_enabled = !self.grid_snap_enabled;
+                        }
+                        ui.label("Snap");
+                    });
 
                         if ui.button("Save Scene").clicked() {
                             *self.scene_save_requested = true;
