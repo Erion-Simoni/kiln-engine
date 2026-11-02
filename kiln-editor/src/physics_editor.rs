@@ -1,8 +1,8 @@
 //! Physics Editor panel — rigid body/collider/joint configuration, live preview.
 
 use egui::{Color32, DragValue, RichText, ScrollArea, Ui, Vec2};
-use kiln_runtime::physics::{PhysicsWorld, RigidBodyHandle, ColliderHandle, JointHandle};
-use kiln_runtime::physics::RigidBodyType;
+use kiln_runtime::physics::PhysicsWorld;
+use rapier2d::prelude::{RigidBodyHandle, ColliderHandle, ImpulseJointHandle as JointHandle, RigidBodyType};
 use egui::Stroke;
 
 /// Physics editor state.
@@ -136,7 +136,7 @@ impl PhysicsEditorState {
                     world.set_gravity(0.0, -9.81);
                 }
             }
-        );
+        });
 
         ui.add_space(8.0);
 
@@ -176,7 +176,7 @@ impl PhysicsEditorState {
                 self.new_body_type = RigidBodyType::Dynamic;
                 self.new_body_pos = [0.0, 0.0];
             }
-        );
+        });
 
         ui.add_space(4.0);
 
@@ -226,7 +226,7 @@ impl PhysicsEditorState {
                 if world.rigid_body_set.is_empty() {
                     ui.label("No rigid bodies. Click 'Add Body' to create one.");
                 }
-            }
+            })
         }
 
 
@@ -272,7 +272,7 @@ impl PhysicsEditorState {
                             if let Some(world) = &mut self.physics_world {
                                 let body = match self.new_body_type {
                                     RigidBodyType::Dynamic => rapier2d::prelude::RigidBodyBuilder::dynamic(),
-                                    RigidBodyType::Static => rapier2d::prelude::RigidBodyBuilder::static(),
+                                    RigidBodyType::Static => rapier2d::prelude::RigidBodyBuilder::r#static(),
                                     RigidBodyType::KinematicPositionBased => rapier2d::prelude::RigidBodyBuilder::kinematic_position_based(),
                                     RigidBodyType::KinematicVelocityBased => rapier2d::prelude::RigidBodyBuilder::kinematic_velocity_based(),
                                     _ => rapier2d::prelude::RigidBodyBuilder::dynamic(),
@@ -281,9 +281,9 @@ impl PhysicsEditorState {
                                 world.create_rigid_body(body);
                             }
                             self.show_add_body_dialog = false;
-                        });
-            });
-        }
+                        }});
+            })};
+
 
         ui.add_space(8.0);
 
@@ -301,7 +301,7 @@ impl PhysicsEditorState {
                 // Set parent to selected body if any
                 self.new_collider_parent = self.selected_body;
             }
-        );
+        });
 
         ui.add_space(4.0);
 
@@ -325,7 +325,7 @@ impl PhysicsEditorState {
                         }
                     });
                 }
-            }
+            });
 
             // Add collider dialog
             if self.show_add_collider_dialog {
@@ -497,3 +497,5 @@ impl PhysicsEditorState {
 }
 
 
+
+}

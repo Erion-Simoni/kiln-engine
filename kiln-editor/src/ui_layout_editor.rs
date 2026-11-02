@@ -1,6 +1,6 @@
 //! UI Layout Editor panel — visual canvas for kiln-ui widgets.
 
-use egui::{Color32, DragValue, RichText, ScrollArea, Ui, Vec2, Stroke, Sense, Pos2, Rect, Align2};
+use egui::{Color32, DragValue, RichText, ScrollArea, Ui, Vec2, Stroke, Sense, Pos2, Align2};
 use kiln_ui::{
     Anchor, Layout, LayoutConstraints, Rect, Size, WidgetId,
     Panel, Label, Button, List, NineSlice, NineSliceRenderer,
@@ -183,7 +183,7 @@ impl UiLayoutEditorState {
                     self.add_widget(widget_type);
                 }
             }
-        );
+        });
 
         ui.add_space(8.0);
 

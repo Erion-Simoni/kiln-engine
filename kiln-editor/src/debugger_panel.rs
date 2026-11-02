@@ -130,7 +130,7 @@ impl DebuggerPanel {
                     self.new_breakpoint_instr.clear();
                 }
             }
-        );
+        });
 
         ui.add_space(4.0);
 
@@ -236,7 +236,7 @@ impl DebuggerPanel {
                     self.new_watch_expr.clear();
                 }
             }
-        );
+        });
 
         ui.add_space(4.0);
 

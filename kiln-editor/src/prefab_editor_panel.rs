@@ -2,7 +2,7 @@
 
 use egui::{Color32, DragValue, RichText, ScrollArea, Ui, Vec2, ComboBox, Stroke, Sense};
 use kiln_core::{Entity, Prefab, PrefabOverride, Component, ComponentOverride};
-use kiln_editor::PrefabEditorState;
+use crate::prefab_editor::PrefabEditorState;
 use std::collections::HashMap;
 
 /// State of the prefab editor panel.
@@ -62,7 +62,7 @@ impl PrefabEditorPanel {
             ui.separator();
             ui.label("Filter:");
             ui.text_edit_singleline(&mut self.filter);
-        );
+        });
 
         ui.add_space(8.0);
 

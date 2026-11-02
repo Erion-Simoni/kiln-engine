@@ -242,10 +242,10 @@ fn relative_path(root: &Path, file: &Path) -> String {
         .ok()
         .and_then(|p| p.to_str())
         .unwrap_or_default()
-        .replace('\', "/")
+        .replace("\\", "/")
 }
 
 /// Check if a path is a project manifest file that should be skipped.
 fn is_manifest(path: &str) -> bool {
-    path == "kiln.toml" || path.ends_with("/kiln.toml") || path.ends_with("\kiln.toml")
+    path == "kiln.toml" || path.ends_with("/kiln.toml") || path.ends_with(r"\kiln.toml")
 }

@@ -75,6 +75,7 @@ impl Default for Preferences {
     }
 
 
+    }
 /// State of the preferences panel.
 #[derive(Debug, Default)]
 pub struct PreferencesPanel {
@@ -243,10 +244,8 @@ impl PreferencesPanel {
                                 self.new_key_binding_key.clear();
                                 self.new_key_binding_modifiers.clear();
                             }
-                        });
-                    });
-            }
-        }
+            }});
+            });
 
         // External Tools tab
         ui.add_space(8.0);
@@ -262,7 +261,7 @@ impl PreferencesPanel {
                 self.new_tool_path = String::new();
                 self.new_tool_args = String::new();
             }
-        );
+        });
 
         ui.add_space(4.0);
 
@@ -343,10 +342,9 @@ impl PreferencesPanel {
                                 self.new_tool_path.clear();
                                 self.new_tool_args.clear();
                             }
-                        });
+                        }});
                     });
             }
-        }
 
         ui.add_space(8.0);
         ui.separator();
@@ -369,3 +367,5 @@ impl PreferencesPanel {
 }
 
 
+
+}

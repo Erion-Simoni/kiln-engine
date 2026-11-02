@@ -319,3 +319,5 @@ fn get_frame_index_at_time(clip: &Clip, time: f32) -> Option<usize> {
 }
 
 
+
+}

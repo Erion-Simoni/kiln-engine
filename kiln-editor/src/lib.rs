@@ -45,6 +45,5 @@ pub use physics_editor::PhysicsEditorState;
 pub use preferences::PreferencesPanel;
 pub use prefab_editor_panel::PrefabEditorPanel;
 pub use version_control_panel::VersionControlPanel;
-pub mod plugin_manager_panel;
 pub use input_rebind_panel::InputRebindPanel;
 pub use sprite_editor::SpriteEditorState;

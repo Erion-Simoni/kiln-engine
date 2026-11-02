@@ -244,7 +244,7 @@ pub fn snap_to_grid(position: [f32; 2], spacing: f32) -> [f32; 2] {
 
 /// The grid lines of the scene view, as world-space quads.
 //
-//! The lines sit on the world grid, so they line up with the world however the
+// The lines sit on the world grid, so they line up with the world however the
 /// viewport is scaled.
 pub fn grid_lines(
     world_w: f32,

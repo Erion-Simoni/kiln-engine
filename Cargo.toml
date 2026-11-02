@@ -95,6 +95,7 @@ kiln-anim    = { path = "kiln-anim" }
 kiln-vfx     = { path = "kiln-vfx" }
 kiln-ui      = { path = "kiln-ui" }
 kiln-input   = { path = "kiln-input" }
+rapier2d   = { version = "0.36.1" }
 kiln-save    = { path = "kiln-save" }
 kiln-ai      = { path = "kiln-ai" }
 kiln-gameplay = { path = "kiln-gameplay" }
