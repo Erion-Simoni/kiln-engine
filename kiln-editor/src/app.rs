@@ -4274,6 +4274,7 @@ impl<'a> TabViewer<'a> {
 
             let children: Vec<WidgetId> = node.children.clone();
             for child_id in children {
+}
                 self.show_widget_tree(ui, child_id, depth + 1);
             }
         }
@@ -4431,4 +4432,8 @@ impl<'a> TabViewer<'a> {
             }
         }
     }
+}
+}
+
+}
 }
