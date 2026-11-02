@@ -1,7 +1,7 @@
 //! Main editor application.
 
 use hecs;
-use kiln_core::project::{Component, Entity, Scene};
+use kiln_core::project::{Component, Entity};
 use kiln_core::{project::{Project, Scene}, Transform};
 use kiln_gameplay::{DataTable, Dialogue, Quest};
 use kiln_graph::{ArithmeticOp, ConstantValue, Graph, Node, NodeType};
@@ -306,49 +306,10 @@ enum Tab {
     InputRebind,
     SpriteEditor,
 }
-
-/// A scene tab entry for the scene tabs bar.
-#[derive(Debug, Clone)]
-struct SceneTab {
-    /// The scene ID.
-    scene_id: String,
-    /// Whether this tab is the active one.
-    is_active: bool,
-    /// Whether the scene has unsaved changes.
-    dirty: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
-enum Tab {
-    SceneView,
-    Inspector,
-    GraphEditor,
-    Assets,
-    Console,
-    Settings,
-    Hierarchy,
-    UIDesigner,
-    PrefabEditor,
-    SceneEditor,
-    GameplayEditor,
-    TilemapEditor,
-    AnimationEditor,
-    BuildPanel,
-    ProjectHub,
-    ProfilerPanel,
-    DebuggerPanel,
-    VfxEditor,
-    AudioEditor,
-    PhysicsEditor,
-    ShaderEditor,
-    UiLayoutEditor,
-    Preferences,
-}
-
 struct GpuState {
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
+
     renderer: kiln_render::Renderer,
     egui_renderer: egui_wgpu::Renderer,
     /// Sprite batch renderer for the scene view. Draws scene entities using the
@@ -2257,8 +2218,6 @@ impl winit::application::ApplicationHandler for EditorApp {
             }
         }
 
-            }
-        }
 
         gpu.renderer.queue().submit([encoder.finish()]);
 
@@ -2424,7 +2383,9 @@ fn show_status_bar(
         });
     });
 }
+}
 
+}
 struct TabViewer<'a> {
     world: &'a mut GameWorld,
     selected_entity: &'a mut Option<hecs::Entity>,
@@ -4470,6 +4431,4 @@ impl<'a> TabViewer<'a> {
             }
         }
     }
-}
-
 }

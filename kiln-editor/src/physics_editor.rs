@@ -2,8 +2,7 @@
 
 use egui::{Color32, DragValue, RichText, ScrollArea, Ui, Vec2};
 use kiln_runtime::physics::PhysicsWorld;
-use rapier2d::prelude::{RigidBodyHandle, ColliderHandle, JointHandle, RigidBodyType};
-use kiln_runtime::physics::RigidBodyType;
+use rapier2d::prelude::{RigidBodyHandle, ColliderHandle, ImpulseJointHandle as JointHandle, RigidBodyType};
 use egui::Stroke;
 
 /// Physics editor state.
