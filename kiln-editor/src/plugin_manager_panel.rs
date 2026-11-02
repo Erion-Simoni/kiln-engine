@@ -105,7 +105,7 @@ impl PluginManagerPanel {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(format!("Plugins: {}", self.registry.plugins.len()));
             });
-        );
+        });
 
         ui.add_space(8.0);
 
@@ -188,6 +188,8 @@ impl PluginManagerPanel {
                                         // TODO: Uninstall
                                     }
                                 });
+    }
+    );
                             ui.end_row();
                         }
                     });

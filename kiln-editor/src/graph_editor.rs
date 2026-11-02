@@ -3,7 +3,7 @@
 //! Provides a drag-and-drop node graph editor for KilnScript gameplay logic.
 //! Nodes can be dragged, connected via pins, and compiled to IR bytecode.
 
-use egui::{vec2, Color32, Pos2, Response, Sense, Ui, Stroke, Vec2, ContextMenu, TextStyle, RichText};
+use egui::{vec2, Color32, Pos2, Response, Sense, Ui, Stroke, Vec2, TextStyle, RichText};
 use kiln_graph::{
     compiler::compile_graph,
     node::{ArithmeticOp, ComparisonOp, ConstantValue, Node, NodeType},

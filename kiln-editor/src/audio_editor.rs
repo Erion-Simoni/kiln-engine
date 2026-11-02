@@ -90,7 +90,7 @@ impl AudioEditorState {
             if ui.button("🔇 Mute").clicked() {
                 self.master_volume = 0.0;
             }
-        );
+        });
 
         ui.add_space(8.0);
 
@@ -143,7 +143,7 @@ impl AudioEditorState {
                 self.new_asset_name.clear();
                 self.new_asset_path.clear();
             }
-        );
+        });
 
         ui.add_space(4.0);
 
@@ -201,7 +201,7 @@ impl AudioEditorState {
                 self.new_asset_name.clear();
                 self.new_asset_path.clear();
             }
-        );
+        });
 
         ui.add_space(4.0);
 

@@ -306,7 +306,6 @@ enum Tab {
     InputRebind,
     SpriteEditor,
 }
-}
 
 /// A scene tab entry for the scene tabs bar.
 #[derive(Debug, Clone)]
@@ -2392,8 +2391,6 @@ impl winit::application::ApplicationHandler for EditorApp {
             self.fps = elapsed.as_secs_f32().recip();
         }
         self.last_frame = Instant::now();
-    }
-}
 
 // Standalone function for status bar (no self borrow issues)
 fn show_status_bar(
@@ -2898,7 +2895,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 }
                             }
                         });
-                });
+                }
             }
             Tab::Inspector => {
                 ui.vertical(|ui| {
@@ -3776,7 +3773,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             }
                         }
                     }
-                };
+                });
 
             }
             Tab::SceneEditor => {
@@ -4298,7 +4295,6 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::SpriteEditor => "Sprite Editor".into(),
         }
     }
-}
 
 impl<'a> TabViewer<'a> {
     fn show_widget_tree(&mut self, ui: &mut egui::Ui, widget_id: WidgetId, depth: usize) {
@@ -4476,5 +4472,4 @@ impl<'a> TabViewer<'a> {
     }
 }
 
-}
 }

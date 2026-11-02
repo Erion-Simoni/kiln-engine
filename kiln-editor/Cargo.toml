@@ -20,6 +20,12 @@ path = "tests/vertical_slice.rs"
 name = "scene_view_test"
 path = "src/scene_view_test.rs"
 
+[features]
+default = []
+# Git integration for the Version Control panel. Opt-in because it requires
+# the system OpenSSL development headers (libssl-dev) to compile git2.
+git = ["dep:git2"]
+
 [dependencies]
 kiln-core = { workspace = true }
 kiln-render = { workspace = true }
@@ -29,6 +35,11 @@ kiln-graph = { workspace = true }
 kiln-ui = { workspace = true }
 kiln-ir = { workspace = true }
 uuid = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+kiln-anim = { workspace = true }
+kiln-vfx = { workspace = true }
+kiln-input = { workspace = true }
+rapier2d = { workspace = true }
 kiln-ai = { workspace = true }
 kiln-gameplay = { workspace = true }
 winit = { workspace = true }
@@ -45,4 +56,4 @@ glam = { workspace = true }
 hecs = { workspace = true }
 dirs = { workspace = true }
 kiln-plugin-api = { path = "../kiln-plugin-api" }
-git2         = { workspace = true }
+git2 = { workspace = true, optional = true }
