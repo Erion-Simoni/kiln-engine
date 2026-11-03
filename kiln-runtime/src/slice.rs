@@ -341,6 +341,13 @@ pub fn load_state(dir: &Path, slot: u32) -> Result<SliceState, SaveSlotError> {
     Ok(serde_json::from_str(&saved.data)?)
 }
 
+/// Platform-provided sound playback. Browser callbacks may capture JS handles,
+/// while native callbacks preserve the host's Send/Sync guarantees.
+#[cfg(target_arch = "wasm32")]
+pub type AudioPlayer = Box<dyn Fn(&str)>;
+#[cfg(not(target_arch = "wasm32"))]
+pub type AudioPlayer = Box<dyn Fn(&str) + Send + Sync>;
+
 /// The script host: reads facts and records commands.
 #[derive(Default)]
 pub struct SliceHost {
@@ -379,8 +386,7 @@ pub struct SliceHost {
     #[cfg(feature = "audio")]
     registered_audio: HashMap<String, String>,
     /// Custom audio player callback for platforms without rodio (e.g., WASM).
-    #[cfg(feature = "audio")]
-    audio_player: Option<Box<dyn Fn(&str) + Send + Sync>>,
+    audio_player: Option<AudioPlayer>,
 }
 
 impl std::fmt::Debug for SliceHost {
@@ -416,7 +422,6 @@ impl SliceHost {
             time_scale: 1.0,
             #[cfg(feature = "audio")]
             registered_audio: HashMap::new(),
-            #[cfg(feature = "audio")]
             audio_player: None,
         }
     }
@@ -473,8 +478,7 @@ impl SliceHost {
     }
 
     /// Set a custom audio player callback for platforms without rodio (e.g., WASM).
-    #[cfg(feature = "audio")]
-    pub fn set_audio_player(&mut self, player: Box<dyn Fn(&str) + Send + Sync>) {
+    pub fn set_audio_player(&mut self, player: AudioPlayer) {
         self.audio_player = Some(player);
     }
 
@@ -607,15 +611,12 @@ impl SliceHost {
             10 => Ok(Value::Str(self.facts.status.clone())),
             11 => Ok(Value::F64(self.facts.delta_time)),
             12 => {
-                // play_sound(name) -> void
-                #[cfg(feature = "audio")]
-                {
-                    let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
-                    if let Some(player) = &self.audio_player {
-                        player(name);
-                    } else if let Some(audio) = &mut self.audio {
-                        audio.play_sound(name);
-                    }
+                let name = args.first().and_then(|v| v.as_str()).unwrap_or("");
+                if let Some(player) = &self.audio_player {
+                    player(name);
+                } else {
+                    #[cfg(feature = "audio")]
+                    if let Some(audio) = &mut self.audio { audio.play_sound(name); }
                 }
                 Ok(Value::I64(0))
             }
@@ -1933,6 +1934,20 @@ mod tests {
         let position = find_player(&mut world).unwrap();
         assert!((position.x - 15.0).abs() < 0.001);
         assert!((position.y - 17.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn platform_sound_callback_works_without_a_native_audio_device() {
+        let calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let recorded = calls.clone();
+        let mut session = SliceSession::new("play_sound(\"hit\");").unwrap();
+        session.host_mut().set_audio_player(Box::new(move |name| {
+            recorded.lock().unwrap().push(name.to_string());
+        }));
+        let mut world = GameWorld::new();
+        session.step(&mut world, (0.0, 0.0), 0.016).unwrap();
+        session.step(&mut world, (0.0, 0.0), 0.016).unwrap();
+        assert_eq!(*calls.lock().unwrap(), vec!["hit", "hit"]);
     }
 
     #[test]

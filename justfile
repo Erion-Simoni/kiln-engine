@@ -61,3 +61,10 @@ package:
 # default recipe
 default:
     just --list
+
+# Real browser check; requires matching wasm-bindgen CLI and Playwright Chromium
+web-smoke:
+    cargo build --target wasm32-unknown-unknown -p kiln-web
+    wasm-bindgen target/wasm32-unknown-unknown/debug/kiln_web.wasm --target web --out-dir target/web-smoke
+    npm ci --prefix tests/web --ignore-scripts
+    node tests/web/smoke.cjs target/web-smoke

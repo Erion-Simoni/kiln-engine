@@ -144,3 +144,30 @@ jobs:
         run: cargo dist upload --target=${{ matrix.target }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  web-smoke:
+    name: Browser WASM smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tests/web/package-lock.json
+      - name: Build the browser runtime
+        run: cargo build --target wasm32-unknown-unknown -p kiln-web
+      - name: Install matching wasm-bindgen CLI
+        run: cargo install wasm-bindgen-cli --version "$(cargo tree -p wasm-bindgen --depth 0 | awk '{print substr($2,2)}')" --locked
+      - name: Generate JavaScript bindings
+        run: wasm-bindgen target/wasm32-unknown-unknown/debug/kiln_web.wasm --target web --out-dir target/web-smoke
+      - name: Install browser test dependencies
+        working-directory: tests/web
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+      - name: Exercise rendering and input
+        run: node tests/web/smoke.cjs target/web-smoke

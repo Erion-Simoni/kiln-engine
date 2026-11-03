@@ -981,3 +981,35 @@ with no C dependencies, making it safe for WASM/web builds.
   `fonts` feature is enabled.
 
 
+
+## ADR-0037: Browser sound bridge and executable web smoke coverage (accepted)
+
+**Date:** 2026-11-03
+**Status:** accepted
+
+Browser sound playback callbacks may capture JavaScript audio handles and must
+remain on the browser thread. SliceHost exposes its sound-player setter without
+requiring the native Rodio audio feature. The callback type retains Send + Sync
+on native targets; only wasm32 relaxes these bounds. This avoids exposing VM
+internals or enabling an OS audio backend in a browser. This bridge currently
+covers play_sound; complete browser music/mixer behavior remains in task 7.
+
+The web shell uses the shared runtime scene spawner to preserve roles, source
+IDs, and animation setup. WebGPU availability is probed before claiming the
+canvas; when no adapter exists, use a separate WebGL instance with downlevel
+limits. Startup rejects its JavaScript promise on failure.
+
+Development-only browser verification uses pinned Playwright in tests/web,
+with its npm lockfile. It adds no engine or exported-game runtime dependency.
+Playwright is Apache-2.0 licensed; its browser binaries are test tooling only.
+The smoke test serves real generated bindings and sample assets, detects page
+and asset errors, checks rendered hero pixels, and verifies keyboard movement.
+A no-error console alone is insufficient evidence. WebGPU, touch devices,
+complete audio playback, and other browsers require separate checks.
+
+Browser execution also revealed that std::time::Instant panics on
+wasm32-unknown-unknown. kiln-core's Clock uses web-time 1.1 on wasm32 only,
+retaining std::time::Instant on native targets. web-time is MIT OR Apache-2.0
+licensed and already appears in the dependency graph; it supplies the browser
+monotonic clock rather than a timer stub. Its maintenance/size cost is limited
+to the WASM target. The browser movement regression exercises the real clock.

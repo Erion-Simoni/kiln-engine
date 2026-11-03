@@ -6,6 +6,10 @@ This document describes how to test the Kiln web export (WASM) to ensure it work
 
 The Kiln web export uses WASM + WebGPU/WebGL2 to run Kiln 2D games in the browser. The kiln-web crate provides the runtime that loads a project (kiln.toml + PNG assets), runs the fixed-timestep game loop with the KilnScript slice runtime, and renders 2D sprites through the engine's sprite batcher.
 
+## Automated regression
+
+Run `just web-smoke` first; see [tests/web/README.md](../tests/web/README.md) for the matching wasm-bindgen CLI and browser prerequisites. This exercises real WASM assets/rendering/input in Chromium software WebGL. Passing it does not establish complete CLI exports, WebGPU, other browsers, or the manual checks below.
+
 ## Prerequisites
 
 - A built Kiln engine binary (kiln-cli)
@@ -19,7 +23,7 @@ The Kiln web export uses WASM + WebGPU/WebGL2 to run Kiln 2D games in the browse
 
 Build the web runtime:
 
-cargo build --release -p kiln-web
+cargo build --release --target wasm32-unknown-unknown -p kiln-web
 
 Build your game project:
 

@@ -17,7 +17,7 @@ Each task needs implementation, meaningful regression tests, and an exercised ed
 - [x] Repair native workspace syntax/API/test-fixture blockers (web target errors remain below).
 - [x] Make default native workspace builds and existing tests pass.
 - [x] Repair audio feature compilation and exercise the standalone audio sample build (playback remains unverified).
-- [ ] Make the WASM target compile; add browser smoke coverage before claiming web support.
+- [x] Make the WASM target compile; add a real Chromium WebGL smoke test (other browser/device paths remain unverified).
 - [ ] Restore formatting and strict lint checks without blanket lint suppressions or weakening CI.
 - [ ] Keep CI aligned with the actual supported toolchain, system dependencies, features, and test commands.
 
@@ -114,3 +114,14 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Browser APIs are explicitly confined to wasm32. A separate actual `cargo check -p kiln-web --target wasm32-unknown-unknown` was run and still fails with 35 API errors. Native tests are not proof of browser readiness.
 - `just check`: fails at existing workspace formatting differences; strict lint/build stages in that recipe did not execute. No lint suppression, test exclusion, or CI weakening was introduced. Task 1 is still IN PROGRESS; next is actual WASM API repair and full formatting/lint restoration, before task 2.
 - Native editor startup/workspace rendering was verified in the prior merged editor fix. This checkpoint changes runtime state, fixtures, and feature compilation, not the redraw loop; device, browser, and audio playback checks remain explicitly unrun here.
+
+### 2026-11-03 — Task 1 browser checkpoint
+
+- Actual `cargo build -p kiln-web --target wasm32-unknown-unknown`: passed, with generated JS bindings from matching wasm-bindgen 0.2.130.
+- `CHROMIUM_PATH=/usr/bin/chromium just web-smoke`: passed end to end. It builds WASM/bindings and installs locked development-only browser tooling. The test rejects a missing canvas, loads all sample resources, finds 392 hero pixels, observes rightward movement, and verifies key release stops movement. Browser errors and asset HTTP failures fail the test.
+- `cargo nextest run --workspace --no-fail-fast`: 453 passed, zero failed/skipped, including a new platform sound-callback regression without an OS audio device.
+- Fixed browser Web Audio promises and public host access; reused native scene spawning to retain SourceId/Role; enabled real WebGL fallback when WebGPU has no adapter; configured the canvas surface before rendering; replaced unsupported std Instant on wasm32 with web-time.
+- Visual verification exposed a shared-buffer bug: HUD uploads overwrote world sprites before GPU submission. World/overlay now have separate renderers and UI/HUD are batched. The browser pixel test catches this regression.
+- Input verification exposed an animation-callback lifetime bug. The callback now owns its Window and reports requestAnimationFrame failures, instead of retaining a scoped borrowed handle that stopped later frames.
+- Added `tests/web/README.md`, pinned npm test dependencies, `just web-smoke`, and a GitHub Actions browser job. Local execution passed; remote CI execution has not been claimed.
+- Remaining Task 1 work: full-workspace formatting and strict lint gates. Browser smoke is a software-WebGL sample test, not proof of complete CLI exports, physical WebGPU, other browsers, touch, or full audio/save support. Tasks 2–9 remain pending.

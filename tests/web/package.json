@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "name": "kiln-web-smoke",
+  "version": "0.0.0",
+  "scripts": {"test": "node smoke.cjs"},
+  "devDependencies": {"playwright": "1.62.1"}
+}
