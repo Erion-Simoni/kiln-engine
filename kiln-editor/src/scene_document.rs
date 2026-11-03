@@ -12,7 +12,19 @@ pub fn snapshot(
     roles: &HashMap<String, String>,
     project: Option<&Project>,
 ) -> Scene {
-    let original = project.and_then(|p| p.default_scene_id().and_then(|id| p.scenes.get(&id)));
+    let id = project.and_then(Project::default_scene_id);
+    snapshot_for_scene(world, textures, roles, project, id.as_deref())
+}
+
+/// Reconcile a specific editor scene without changing the project's startup scene.
+pub fn snapshot_for_scene(
+    world: &GameWorld,
+    textures: &HashMap<String, String>,
+    roles: &HashMap<String, String>,
+    project: Option<&Project>,
+    scene_id: Option<&str>,
+) -> Scene {
+    let original = project.and_then(|p| scene_id.and_then(|id| p.scenes.get(id)));
     let mut scene = original.cloned().unwrap_or_else(|| Scene {
         id: "main_scene".into(),
         name: "Main Scene".into(),

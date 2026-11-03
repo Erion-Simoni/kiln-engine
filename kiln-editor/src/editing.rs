@@ -43,6 +43,19 @@ pub fn next_entity_id(existing: &[String]) -> String {
     }
 }
 
+// Resource maps omit untextured/nonvisual entities. Always reserve live IDs too.
+fn next_world_entity_id(world: &GameWorld, existing_ids: &[String]) -> String {
+    let mut reserved = existing_ids.to_vec();
+    reserved.extend(
+        world
+            .world_ref()
+            .query::<(hecs::Entity, &SourceId)>()
+            .iter()
+            .map(|(_, id)| id.0.clone()),
+    );
+    next_entity_id(&reserved)
+}
+
 /// Add an entity to the world and return its source id and handle.
 ///
 /// The entity gets a transform, a sprite and a source id, so it is saved with
@@ -53,7 +66,7 @@ pub fn add_entity(
     position: [f32; 2],
     defaults: EntityDefaults,
 ) -> (String, hecs::Entity) {
-    let id = next_entity_id(existing_ids);
+    let id = next_world_entity_id(world, existing_ids);
     let entity = world.world_mut().spawn((
         Transform::new(position[0], position[1]),
         Sprite::new(
@@ -207,7 +220,7 @@ pub fn instantiate_prefab(
     position: [f32; 2],
 ) -> Option<String> {
     let instance = prefab.instantiate(None);
-    let id = next_entity_id(existing_ids);
+    let id = next_world_entity_id(world, existing_ids);
 
     // The transform of the instance starts at the given position, and the
     // sprite keeps the size and the tint of the prefab.

@@ -1061,3 +1061,35 @@ later task and must fail explicitly rather than produce broken references.
 
 This checkpoint does not claim complete undo coverage, scene-tab switching,
 project relocation, native file pickers, or autosave/recovery.
+
+## ADR-0040 — Explicit editor scene selection and isolated scene history
+
+**Status:** accepted
+
+The editor's active scene is separate from the project's startup scene. A native
+editor workspace owns open scene tabs, selection, saved scene baselines, and one
+undo/redo history per scene. Switching first reconciles the outgoing world into
+the project document, then loads the selected scene and clears transient entity
+selection/gizmo state. UI requests execute after dock rendering, so no frame can
+edit one world's entities under another scene's metadata. All editor snapshots
+receive the active scene ID explicitly; the legacy public snapshot helper keeps
+its default-scene behavior for existing callers.
+
+Scene creation inserts a real document and opens it. Closing a dirty tab is
+blocked until the project is saved; closing a clean tab never deletes its scene.
+At least one tab stays open. Saved baselines update only after successful writes.
+Play still starts the project startup scene; before replacing the editor world,
+capture the active authoring scene, then restore that scene on Stop. Switching,
+creating, closing, undo, redo, and scene reload are blocked during Play.
+
+This extends ADR-0039's bridge rather than claiming the complete command model.
+Global project-close prompts, autosave/recovery, complete gizmo undo, and
+parent/local transform semantics remain subsequent Task 2 work. No dependency
+or runtime/browser architecture changes are required.
+
+Visible acceptance also exposed two UI composition defects: the FPS row consumed
+remaining height, and scene rendering cleared the frame after the UI. Constrain
+status/entity rows, derive the viewport from the current frame, and draw scene
+pixels before the UI with transparent scene-canvas background. This preserves
+menus and floating dialogs above the rendered world. Reserve all live SourceIds
+when adding entities; texture/resource maps are not identity registries.

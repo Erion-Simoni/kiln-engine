@@ -23,6 +23,7 @@ pub mod project_files;
 pub mod project_hub;
 pub mod scene_document;
 pub mod scene_view;
+pub mod scene_workspace;
 pub mod shader_editor;
 pub mod sprite_editor;
 pub mod tilemap_editor;
