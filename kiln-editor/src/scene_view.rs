@@ -106,6 +106,41 @@ pub fn rect_to_pixels(rect: egui::Rect, pixels_per_point: f32) -> ViewportRect {
     }
 }
 
+/// Absolute viewport shared by scene rendering and pointer interaction.
+pub fn canvas_viewport(
+    panel: egui::Rect,
+    pixels_per_point: f32,
+    world: (f32, f32),
+) -> ViewportRect {
+    let panel = rect_to_pixels(panel, pixels_per_point);
+    let inner = letterbox(panel.width, panel.height, world.0, world.1);
+    ViewportRect {
+        x: panel.x + inner.x,
+        y: panel.y + inner.y,
+        ..inner
+    }
+}
+
+/// World units per logical pointer point, including DPI and camera zoom.
+pub fn units_per_point(
+    viewport: ViewportRect,
+    pixels_per_point: f32,
+    camera: &Camera,
+) -> Option<[f32; 2]> {
+    if viewport.is_empty()
+        || !pixels_per_point.is_finite()
+        || pixels_per_point <= 0.0
+        || !camera.zoom.is_finite()
+        || camera.zoom <= 0.0
+    {
+        return None;
+    }
+    Some([
+        camera.viewport_size[0] * pixels_per_point / (viewport.width as f32 * camera.zoom),
+        camera.viewport_size[1] * pixels_per_point / (viewport.height as f32 * camera.zoom),
+    ])
+}
+
 /// A project texture that has been uploaded to the GPU.
 #[derive(Debug, Clone, Copy)]
 pub struct SceneTexture {

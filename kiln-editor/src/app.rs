@@ -44,6 +44,7 @@ use crate::scene_workspace::SceneWorkspace;
 use crate::shader_editor::ShaderEditorState;
 use crate::sprite_editor::SpriteEditorState;
 use crate::tilemap_editor::TilemapEditorState;
+use crate::transform_edit::{SetTransform, TransformTransaction, TranslationDrag};
 use crate::ui_layout_editor::UiLayoutEditorState;
 use crate::version_control_panel::VersionControlPanel;
 use crate::vfx_editor::VfxEditorState;
@@ -57,6 +58,7 @@ enum SceneAction {
 }
 
 enum ProjectRequest {
+    CancelTransform,
     Leave(ProjectAction),
     Resolve(SaveDecision),
     Scene(SceneAction),
@@ -218,6 +220,7 @@ pub struct EditorApp {
     asset_filter: String,
     /// Transform gizmo state for visual entity manipulation.
     gizmo: GizmoState,
+    transform_edit: Option<TransformTransaction>,
     /// Set by the welcome screen, handled after the UI pass.
     open_project_requested: bool,
     /// Set by the scene toolbar, handled after the UI pass.
@@ -232,9 +235,6 @@ pub struct EditorApp {
     grid_snap_size: f32,
     /// Whether grid snapping is enabled.
     grid_snap_enabled: bool,
-    /// Last known mouse position in screen space.
-    mouse_x: f32,
-    mouse_y: f32,
 }
 
 /// Camera state for the scene editor viewport.
@@ -275,24 +275,7 @@ enum GizmoMode {
 #[derive(Debug, Clone, Default)]
 struct GizmoState {
     mode: GizmoMode,
-    /// Screen-space position where the drag started (pixels, top-left origin).
-    drag_start_screen_pos: Option<(f64, f64)>,
-    /// World-space position where the drag started.
-    drag_start_world_pos: Option<(f32, f32)>,
-}
-
-/// Convert screen-space mouse position to world-space using the camera.
-fn screen_to_world(
-    camera: &CameraState,
-    screen_x: f64,
-    screen_y: f64,
-    _viewport_width: f64,
-    viewport_height: f64,
-) -> (f32, f32) {
-    let world_x = camera.position[0] + screen_x as f32 / camera.zoom;
-    // Y grows up in world space, down in screen space
-    let world_y = camera.position[1] + (viewport_height as f32 - screen_y as f32) / camera.zoom;
-    (world_x, world_y)
+    drag: Option<(String, TranslationDrag, [f32; 2])>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -698,13 +681,12 @@ impl EditorApp {
             camera: CameraState::default(),
             grid_snap_size: 32.0,
             grid_snap_enabled: false,
-            mouse_x: 0.0,
-            mouse_y: 0.0,
             open_project_requested: false,
             play_toggle_requested: false,
             scene_save_requested: false,
             scene_load_requested: false,
             gizmo: GizmoState::default(),
+            transform_edit: None,
         })
     }
 
@@ -770,6 +752,7 @@ impl EditorApp {
     /// The scene of the world is written into the project first, so the
     /// edits of the inspector are not lost.
     pub fn save_project(&mut self) -> Result<(), String> {
+        self.finish_transform_edit();
         let path = self
             .project_path
             .clone()
@@ -797,6 +780,7 @@ impl EditorApp {
 
     /// Save another manifest in the same asset directory, committing state only on success.
     pub fn save_project_as(&mut self, path: PathBuf) -> Result<(), String> {
+        self.finish_transform_edit();
         let source = self
             .project_path
             .as_ref()
@@ -815,6 +799,7 @@ impl EditorApp {
     /// Load a project from a file path.
     pub fn load_project(&mut self, path: PathBuf) -> Result<(), String> {
         let loaded = crate::project_files::load(&path)?;
+        self.finish_transform_edit();
         if self.play.is_some() {
             self.stop_play();
         }
@@ -859,6 +844,21 @@ impl EditorApp {
         self.load_project(loaded.path)
     }
 
+    fn finish_transform_edit(&mut self) {
+        if let Some(edit) = self.transform_edit.take() {
+            edit.commit(&mut self.scenes.history);
+        }
+        self.gizmo.drag = None;
+    }
+
+    fn cancel_transform_edit(&mut self) {
+        if let Some(edit) = self.transform_edit.take() {
+            let before = edit.cancel();
+            let _ = self.apply_scene(before);
+        }
+        self.gizmo.drag = None;
+    }
+
     fn authoring_document(&self) -> Result<Option<Project>, String> {
         if self.current_project.is_none() || self.play.is_some() {
             return Ok(self.current_project.clone());
@@ -873,8 +873,8 @@ impl EditorApp {
         if self.play.is_some() {
             self.stop_play();
         }
-        self.gizmo.drag_start_screen_pos = None;
-        self.gizmo.drag_start_world_pos = None;
+        self.finish_transform_edit();
+        self.gizmo.drag = None;
         let document = self.authoring_document()?;
         if let Some(action) = self.lifecycle.request(action, document.as_ref())? {
             self.execute_project_action(action)?;
@@ -956,6 +956,7 @@ impl EditorApp {
     /// The game runs the scene's script against a fresh world, exactly like
     /// the standalone player does.
     fn start_play(&mut self) -> Result<(), String> {
+        self.finish_transform_edit();
         self.capture_active_scene()?;
         let project = self
             .current_project
@@ -1022,6 +1023,40 @@ impl EditorApp {
             max_y = max_y.max(bottom);
         }
         (max_x, max_y)
+    }
+
+    fn scene_camera(&self) -> kiln_render::camera::Camera {
+        let world = self.world_size();
+        let mut camera = scene_view::world_camera(world.0, world.1);
+        if let Some(target_id) = &self.camera.target {
+            if let Some(&hecs_entity) = self.entity_id_to_hecs.get(target_id) {
+                if let Ok(transform) = self.world.world_ref().get::<&Transform>(hecs_entity) {
+                    camera.position = transform.position.into();
+                }
+            }
+        }
+        camera.position[0] += self.camera.position[0];
+        camera.position[1] += self.camera.position[1];
+        camera.zoom *= self.camera.zoom;
+        // Apply bounds if set
+        if let Some([min_x, min_y, max_x, max_y]) = self.camera.bounds {
+            let view = camera.view_bounds();
+            let mut pos = camera.position;
+            if view[0] < min_x {
+                pos[0] = min_x;
+            }
+            if view[1] < min_y {
+                pos[1] = min_y;
+            }
+            if view[2] > max_x {
+                pos[0] = max_x - (view[2] - view[0]);
+            }
+            if view[3] > max_y {
+                pos[1] = max_y - (view[3] - view[1]);
+            }
+            camera.position = pos;
+        }
+        camera
     }
 
     /// Reload the edited scene into the editor world.
@@ -1211,6 +1246,7 @@ impl EditorApp {
 
     /// Undo the last scene edit.
     pub fn undo(&mut self) -> Result<(), String> {
+        self.finish_transform_edit();
         self.require_edit_mode()?;
         let current = self.scene_from_world();
         let Some(previous) = self.scenes.history.undo(current) else {
@@ -1221,6 +1257,7 @@ impl EditorApp {
 
     /// Redo the last undone scene edit.
     pub fn redo(&mut self) -> Result<(), String> {
+        self.finish_transform_edit();
         self.require_edit_mode()?;
         let current = self.scene_from_world();
         let Some(next) = self.scenes.history.redo(current) else {
@@ -1231,11 +1268,20 @@ impl EditorApp {
 
     /// Apply a scene to the project and the editor world.
     fn apply_scene(&mut self, scene: Scene) -> Result<(), String> {
+        let selected_source = self.selected_entity.and_then(|entity| {
+            self.world
+                .world_ref()
+                .get::<&SourceId>(entity)
+                .ok()
+                .map(|id| id.0.clone())
+        });
         let scene_id = scene.id.clone();
         if let Some(project) = &mut self.current_project {
             project.scenes.insert(scene_id, scene);
         }
         self.load_project_scene();
+        self.selected_entity =
+            selected_source.and_then(|id| self.entity_id_to_hecs.get(&id).copied());
         Ok(())
     }
 
@@ -1284,6 +1330,7 @@ impl EditorApp {
 
     /// Load a scene into the current world.
     pub fn load_scene(&mut self) -> Result<(), String> {
+        self.finish_transform_edit();
         self.require_edit_mode()?;
         self.capture_active_scene()?;
         self.reset_scene_view();
@@ -1311,6 +1358,7 @@ impl EditorApp {
     }
 
     fn change_scene(&mut self, action: SceneAction) -> Result<(), String> {
+        self.finish_transform_edit();
         self.require_edit_mode()?;
         let current = self.scenes.active_id().map(|_| self.scene_from_world());
         let project = self.current_project.as_mut().ok_or("No project loaded")?;
@@ -1407,78 +1455,7 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                 }
             }
-            WindowEvent::MouseInput {
-                state,
-                button: winit::event::MouseButton::Left,
-                ..
-            } => {
-                // Gizmo drag start/stop on the scene view canvas
-                if self.gizmo.mode == GizmoMode::Translate {
-                    if let Some(rect) = self.scene_view_rect {
-                        let mouse_over = self.mouse_x >= rect.min.x
-                            && self.mouse_x < rect.max.x
-                            && self.mouse_y >= rect.min.y
-                            && self.mouse_y < rect.max.y;
-                        if mouse_over {
-                            if state.is_pressed() {
-                                // Start drag
-                                if let Some(entity) = self.selected_entity {
-                                    let (wx, wy) = screen_to_world(
-                                        &self.camera,
-                                        self.mouse_x as f64,
-                                        self.mouse_y as f64,
-                                        rect.width() as f64,
-                                        rect.height() as f64,
-                                    );
-                                    self.gizmo.drag_start_screen_pos =
-                                        Some((self.mouse_x.into(), self.mouse_y.into()));
-                                    self.gizmo.drag_start_world_pos = Some((wx, wy));
-                                    // Record current transform for undo
-                                    if let Some((_, transform)) = self
-                                        .world
-                                        .world()
-                                        .query::<(hecs::Entity, &Transform)>()
-                                        .iter()
-                                        .find(|(e, _)| *e == entity)
-                                    {
-                                        self.gizmo.drag_start_world_pos =
-                                            Some((transform.position.x, transform.position.y));
-                                    }
-                                }
-                            } else {
-                                // End drag - record history
-                                if let Some(entity) = self.selected_entity {
-                                    let before = crate::scene_document::snapshot_for_scene(
-                                        &self.world,
-                                        &self.entity_textures,
-                                        &self.entity_roles,
-                                        self.current_project.as_ref(),
-                                        self.scenes.active_id(),
-                                    );
-                                    if self.world.world_ref().get::<&Transform>(entity).is_ok() {
-                                        // Record the change for undo
-                                        let after = crate::scene_document::snapshot_for_scene(
-                                            &self.world,
-                                            &self.entity_textures,
-                                            &self.entity_roles,
-                                            self.current_project.as_ref(),
-                                            self.scenes.active_id(),
-                                        );
-                                        // Only record if something changed
-                                        if serde_json::to_string(&before).ok()
-                                            != serde_json::to_string(&after).ok()
-                                        {
-                                            self.scenes.history.record(before);
-                                        }
-                                    }
-                                    self.gizmo.drag_start_screen_pos = None;
-                                    self.gizmo.drag_start_world_pos = None;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            WindowEvent::Focused(false) => self.finish_transform_edit(),
             _ => {}
         }
 
@@ -1495,10 +1472,17 @@ impl winit::application::ApplicationHandler for EditorApp {
         {
             if !response.consumed {
                 match key {
-                    Key::Character(key) if key == "w" => self.gizmo.mode = GizmoMode::Translate,
-                    Key::Character(key) if key == "e" => self.gizmo.mode = GizmoMode::Rotate,
-                    Key::Character(key) if key == "r" => self.gizmo.mode = GizmoMode::Scale,
-                    Key::Named(NamedKey::Escape) => self.gizmo.mode = GizmoMode::None,
+                    Key::Character(key) if ["w", "e", "r"].contains(&key.as_str()) => {
+                        self.finish_transform_edit();
+                        self.gizmo.mode = match key.as_str() {
+                            "w" => GizmoMode::Translate,
+                            "e" => GizmoMode::Rotate,
+                            _ => GizmoMode::Scale,
+                        };
+                    }
+                    Key::Named(NamedKey::Escape) if self.transform_edit.is_none() => {
+                        self.gizmo.mode = GizmoMode::None
+                    }
                     _ => {}
                 }
             }
@@ -1524,12 +1508,29 @@ impl winit::application::ApplicationHandler for EditorApp {
 
 impl EditorApp {
     fn render_frame(&mut self) {
+        if !self
+            .project_requests
+            .iter()
+            .any(|request| matches!(request, ProjectRequest::CancelTransform))
+            && self.gizmo.drag.is_none()
+            && !self.egui_winit.egui_ctx().wants_keyboard_input()
+            && !self
+                .egui_winit
+                .egui_ctx()
+                .input(|input| input.pointer.primary_down())
+        {
+            self.finish_transform_edit();
+        }
         for request in std::mem::take(&mut self.project_requests) {
             if self.lifecycle.pending().is_some() && !matches!(request, ProjectRequest::Resolve(_))
             {
                 continue;
             }
             let result = match request {
+                ProjectRequest::CancelTransform => {
+                    self.cancel_transform_edit();
+                    Ok(())
+                }
                 ProjectRequest::Leave(action) => self.request_project_action(action),
                 ProjectRequest::Resolve(decision) => self.resolve_project_action(decision),
                 ProjectRequest::Scene(action) => self.change_scene(action),
@@ -1597,41 +1598,13 @@ impl EditorApp {
         // The world size and the scene view rectangle are read before the GPU
         // state is borrowed, so the scene can be drawn into the panel.
         let world = self.world_size();
+        let scene_camera = self.scene_camera();
         self.scene_view_rect = None;
 
         let gpu = self.gpu.as_mut().unwrap();
         let size = gpu.window.inner_size();
         if size.width == 0 || size.height == 0 {
             return;
-        }
-
-        // Apply gizmo drag to selected entity (translate mode)
-        if self.gizmo.mode == GizmoMode::Translate {
-            if let Some((start_world_x, start_world_y)) = self.gizmo.drag_start_world_pos {
-                if let Some(entity) = self.selected_entity {
-                    let (current_world_x, current_world_y) = screen_to_world(
-                        &self.camera,
-                        self.mouse_x as f64,
-                        self.mouse_y as f64,
-                        size.width as f64,
-                        size.height as f64,
-                    );
-                    let dx = current_world_x - start_world_x;
-                    let dy = current_world_y - start_world_y;
-                    if dx != 0.0 || dy != 0.0 {
-                        if let Some((_, transform)) = self
-                            .world
-                            .world_mut()
-                            .query_mut::<(hecs::Entity, &mut Transform)>()
-                            .into_iter()
-                            .find(|(e, _)| *e == entity)
-                        {
-                            transform.position.x += dx;
-                            transform.position.y += dy;
-                        }
-                    }
-                }
-            }
         }
 
         // Apply tier change if needed
@@ -2055,6 +2028,9 @@ impl EditorApp {
                         console_log: &mut self.console_log,
                         scene_view_rect: &mut self.scene_view_rect,
                         gizmo: &mut self.gizmo,
+                        transform_edit: &mut self.transform_edit,
+                        scene_camera: &scene_camera,
+                        scene_world_size: world,
                         entity_id_to_hecs: &mut self.entity_id_to_hecs,
                         grid_snap_enabled: &mut self.grid_snap_enabled,
                         audio_editor: &mut self.audio_editor,
@@ -2118,6 +2094,20 @@ impl EditorApp {
                 self.project_requests
                     .push(ProjectRequest::Resolve(SaveDecision::Cancel));
             }
+        }
+
+        // A hidden canvas or a release outside its bounds must still end the drag.
+        if self.gizmo.drag.is_some()
+            && !ctx.input(|input| input.pointer.primary_down())
+            && !self
+                .project_requests
+                .iter()
+                .any(|request| matches!(request, ProjectRequest::CancelTransform))
+        {
+            if let Some(edit) = self.transform_edit.take() {
+                edit.commit(&mut self.scenes.history);
+            }
+            self.gizmo.drag = None;
         }
 
         // Text fields retain their own editing shortcuts. Scene shortcuts apply
@@ -2218,16 +2208,12 @@ impl EditorApp {
         // player uses, and the HUD is drawn on top in screen space. The
         // engine owns every pixel of the panel, so the editor shows what the
         // player shows.
-        let panel = self
-            .scene_view_rect
-            .map(|rect| scene_view::rect_to_pixels(rect, full_output.pixels_per_point));
-        if let Some(panel) = panel {
-            let viewport = scene_view::letterbox(panel.width, panel.height, world.0, world.1);
-
+        if let Some(panel) = self.scene_view_rect {
+            let viewport = scene_view::canvas_viewport(panel, full_output.pixels_per_point, world);
             if !viewport.is_empty() {
                 let queue = gpu.renderer.queue();
-                let origin_x = panel.x + viewport.x;
-                let origin_y = panel.y + viewport.y;
+                let origin_x = viewport.x;
+                let origin_y = viewport.y;
 
                 // Queue the world: background, grid, tilemaps, sprites.
                 gpu.scene_view_sprite_renderer.begin_frame();
@@ -2239,41 +2225,7 @@ impl EditorApp {
                 for line in scene_view::grid_lines(world.0, world.1, GRID_SPACING, GRID_COLOR) {
                     gpu.scene_view_sprite_renderer.push(line);
                 }
-                let world_camera = scene_view::world_camera(world.0, world.1);
-                // Apply camera state (position, zoom, follow target)
-                let mut camera = scene_view::world_camera(world.0, world.1);
-                if let Some(target_id) = &self.camera.target {
-                    if let Some(&hecs_entity) = self.entity_id_to_hecs.get(target_id) {
-                        if let Ok((transform,)) = self
-                            .world
-                            .world_mut()
-                            .query_one_mut::<(&kiln_core::Transform,)>(hecs_entity)
-                        {
-                            camera.position = transform.position.into();
-                        }
-                    }
-                }
-                camera.position[0] += self.camera.position[0];
-                camera.position[1] += self.camera.position[1];
-                camera.zoom *= self.camera.zoom;
-                // Apply bounds if set
-                if let Some([min_x, min_y, max_x, max_y]) = self.camera.bounds {
-                    let view = camera.view_bounds();
-                    let mut pos = camera.position;
-                    if view[0] < min_x {
-                        pos[0] = min_x;
-                    }
-                    if view[1] < min_y {
-                        pos[1] = min_y;
-                    }
-                    if view[2] > max_x {
-                        pos[0] = max_x - (view[2] - view[0]);
-                    }
-                    if view[3] > max_y {
-                        pos[1] = max_y - (view[3] - view[1]);
-                    }
-                    camera.position = pos;
-                }
+                let camera = &scene_camera;
                 let view_bounds = camera.view_bounds();
                 for (_, tilemap) in self.world.world().query::<(&Transform, &Tilemap)>().iter() {
                     for (texture, instance) in tilemap.collect_visible(view_bounds) {
@@ -2334,7 +2286,7 @@ impl EditorApp {
                     );
                     pass.set_scissor_rect(origin_x, origin_y, viewport.width, viewport.height);
                     gpu.scene_view_sprite_renderer
-                        .flush(&mut pass, &world_camera, queue);
+                        .flush(&mut pass, camera, queue);
                 }
 
                 // Apply post-processing if available.
@@ -2635,7 +2587,9 @@ struct TabViewer<'a> {
     scene_view_rect: &'a mut Option<egui::Rect>,
     /// Transform gizmo state for visual entity manipulation.
     gizmo: &'a mut GizmoState,
-    /// Last known mouse position in screen space.
+    transform_edit: &'a mut Option<TransformTransaction>,
+    scene_camera: &'a kiln_render::camera::Camera,
+    scene_world_size: (f32, f32),
     /// Mapping from project entity ID (source_id) to hecs Entity for selection sync.
     entity_id_to_hecs: &'a mut HashMap<String, hecs::Entity>,
     /// Whether grid snapping is enabled.
@@ -2680,8 +2634,157 @@ struct TabViewer<'a> {
 }
 
 impl TabViewer<'_> {
+    fn finish_transform_edit(&mut self) {
+        if let Some(edit) = self.transform_edit.take() {
+            edit.commit(&mut self.scenes.history);
+        }
+        self.gizmo.drag = None;
+    }
+
+    fn preview_transform(&mut self, source_id: &str, value: Transform) {
+        if self.editing_locked() || self.project_blocked {
+            return;
+        }
+        let before = crate::scene_document::snapshot_for_scene(
+            self.world,
+            self.entity_textures,
+            self.entity_roles,
+            self.current_project.as_ref(),
+            self.scenes.active_id(),
+        );
+        if self
+            .transform_edit
+            .as_ref()
+            .is_some_and(|edit| !edit.targets(&before.id, source_id))
+        {
+            self.finish_transform_edit();
+        }
+        let mut after = before.clone();
+        let scene_id = after.id.clone();
+        let result = SetTransform {
+            scene_id: &scene_id,
+            entity_id: source_id,
+            value,
+        }
+        .apply(&mut after, self.world);
+        match result {
+            Ok(true) => {
+                let edit = self
+                    .transform_edit
+                    .get_or_insert_with(|| TransformTransaction::new(before, source_id.into()));
+                edit.update(after.clone());
+                if let Some(project) = self.current_project.as_mut() {
+                    project.scenes.insert(scene_id, after);
+                }
+            }
+            Ok(false) => {}
+            Err(error) => self.log(&format!("[ERROR] {error}")),
+        }
+    }
+
+    fn transform_response(
+        &mut self,
+        entity: hecs::Entity,
+        value: Transform,
+        response: &egui::Response,
+    ) {
+        if response.changed() {
+            if self
+                .transform_edit
+                .as_ref()
+                .is_some_and(|edit| !edit.owns_widget(response.id))
+            {
+                self.finish_transform_edit();
+            }
+            let source = self
+                .world
+                .world_ref()
+                .get::<&SourceId>(entity)
+                .ok()
+                .map(|id| id.0.clone());
+            if let Some(source) = source {
+                self.preview_transform(&source, value);
+            }
+            if let Some(edit) = self.transform_edit.as_mut() {
+                edit.set_widget(response.id);
+            }
+        }
+        if self
+            .transform_edit
+            .as_ref()
+            .is_some_and(|edit| edit.owns_widget(response.id))
+            && (response.drag_stopped()
+                || response.lost_focus()
+                || (response.changed() && !response.dragged() && !response.has_focus()))
+        {
+            self.finish_transform_edit();
+        }
+    }
+
+    fn translation_canvas(&mut self, ui: &mut egui::Ui, panel: egui::Rect) {
+        if self.editing_locked() || self.project_blocked || self.gizmo.mode != GizmoMode::Translate
+        {
+            return;
+        }
+        let ppp = ui.ctx().pixels_per_point();
+        let viewport = scene_view::canvas_viewport(panel, ppp, self.world_size());
+        let Some(units) = scene_view::units_per_point(viewport, ppp, self.scene_camera) else {
+            return;
+        };
+        let canvas = egui::Rect::from_min_size(
+            egui::pos2(viewport.x as f32 / ppp, viewport.y as f32 / ppp),
+            egui::vec2(viewport.width as f32 / ppp, viewport.height as f32 / ppp),
+        );
+        let response = ui.interact(
+            canvas,
+            ui.id().with("translation_canvas"),
+            egui::Sense::drag(),
+        );
+        if response.drag_started() {
+            self.finish_transform_edit();
+            if let Some(entity) = *self.selected_entity {
+                let source = self
+                    .world
+                    .world_ref()
+                    .get::<&SourceId>(entity)
+                    .ok()
+                    .map(|id| id.0.clone());
+                let initial = self
+                    .world
+                    .world_ref()
+                    .get::<&Transform>(entity)
+                    .ok()
+                    .map(|t| *t);
+                let origin = ui.input(|input| input.pointer.press_origin());
+                if let (Some(source), Some(initial), Some(origin)) = (source, initial, origin) {
+                    self.gizmo.drag = Some((source, TranslationDrag { origin, initial }, units));
+                }
+            }
+        }
+        if self.gizmo.drag.is_some()
+            && ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+        {
+            self.project_requests.push(ProjectRequest::CancelTransform);
+            self.gizmo.drag = None;
+            return;
+        }
+        if response.dragged() || response.drag_stopped() {
+            if let (Some((source, drag, units)), Some(pointer)) = (
+                self.gizmo.drag.clone(),
+                ui.input(|input| input.pointer.interact_pos()),
+            ) {
+                let grid = (*self.grid_snap_enabled).then_some(*self.grid_snap_size);
+                self.preview_transform(&source, drag.at(pointer, units, grid));
+            }
+        }
+        if response.drag_stopped() {
+            self.finish_transform_edit();
+        }
+    }
+
     /// Record the current scene, so the edit can be undone.
     fn record_scene(&mut self) {
+        self.finish_transform_edit();
         let scene = crate::scene_document::snapshot_for_scene(
             &*self.world,
             self.entity_textures,
@@ -2716,14 +2819,12 @@ impl TabViewer<'_> {
 
     /// The size of the world the scene view shows, in world units.
     fn world_size(&self) -> (f32, f32) {
-        match self.current_project.as_ref() {
-            Some(project) => (project.window.width as f32, project.window.height as f32),
-            None => (DEFAULT_WORLD_SIZE.0, DEFAULT_WORLD_SIZE.1),
-        }
+        self.scene_world_size
     }
 
     /// Remove a component from an entity.
     fn remove_component(&mut self, entity: hecs::Entity, kind: ComponentKind) {
+        self.finish_transform_edit();
         if self.editing_locked() {
             return;
         }
@@ -2751,6 +2852,7 @@ impl TabViewer<'_> {
 
     /// Add a component to an entity.
     fn add_component(&mut self, entity: hecs::Entity, kind: ComponentKind) {
+        self.finish_transform_edit();
         if self.editing_locked() {
             return;
         }
@@ -2828,6 +2930,7 @@ impl TabViewer<'_> {
 
     /// Add an instance of the selected prefab to the scene.
     fn instantiate_selected_prefab(&mut self) {
+        self.finish_transform_edit();
         let Some(prefab) = self.prefab_editor.state.selected_prefab().cloned() else {
             self.log("[INFO] Select a prefab to instantiate it");
             return;
@@ -2863,6 +2966,7 @@ impl TabViewer<'_> {
 
     /// Add another scene as a nested scene of the current one.
     fn nest_scene(&mut self) {
+        self.finish_transform_edit();
         let Some(project) = self.current_project.as_mut() else {
             self.log("[INFO] Open a project to nest a scene in it");
             return;
@@ -2962,6 +3066,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             GizmoMode::None => "Gizmo: None",
                         };
                         if ui.button(gizmo_mode_label).clicked() {
+                            self.finish_transform_edit();
                             self.gizmo.mode = match self.gizmo.mode {
                                 GizmoMode::None => GizmoMode::Translate,
                                 GizmoMode::Translate => GizmoMode::Rotate,
@@ -3093,6 +3198,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             );
                             let selected = *self.selected_entity == Some(entity);
                             if ui.selectable_label(selected, label).clicked() {
+                                self.finish_transform_edit();
                                 *self.selected_entity = Some(entity);
                             }
                         }
@@ -3106,6 +3212,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 // loop, which converts it to pixels and draws the scene
                 // with the engine's sprite renderer.
                 *self.scene_view_rect = Some(rect);
+                self.translation_canvas(ui, rect);
 
                 // Draw gizmo mode indicator in the top-left of the scene view
                 if self.gizmo.mode != GizmoMode::None {
@@ -3202,17 +3309,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                             egui::DragValue::new(&mut transform.position.x)
                                                 .speed(1.0),
                                         );
-                                        // A drag is one edit, so the scene is
-                                        // recorded when the drag starts.
-                                        if response.drag_started() {
-                                            self.record_scene();
-                                        }
-                                        if response.changed() {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut t) = world.get::<&mut Transform>(entity) {
-                                                t.position.x = transform.position.x;
-                                            }
-                                        }
+                                        self.transform_response(entity, transform, &response);
                                         ui.add_space(8.0);
                                         ui.label("Y:");
                                         let response = ui.add_enabled(
@@ -3220,15 +3317,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                             egui::DragValue::new(&mut transform.position.y)
                                                 .speed(1.0),
                                         );
-                                        if response.drag_started() {
-                                            self.record_scene();
-                                        }
-                                        if response.changed() {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut t) = world.get::<&mut Transform>(entity) {
-                                                t.position.y = transform.position.y;
-                                            }
-                                        }
+                                        self.transform_response(entity, transform, &response);
                                     });
                                 });
                         }
@@ -4390,6 +4479,10 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             project,
                             &scene_id,
                         ) {
+                            if let Some(edit) = self.transform_edit.take() {
+                                edit.commit(&mut self.scenes.history);
+                            }
+                            self.gizmo.drag = None;
                             match action {
                                 crate::hierarchy::HierarchyAction::SelectEntity(project_id) => {
                                     // Sync selection: project entity ID -> hecs Entity

@@ -1117,3 +1117,26 @@ Keep low-level loading available for startup and already-resolved transitions.
 This checkpoint covers project transitions; individual dirty scene-tab prompts,
 autosave/recovery, unsaved external script buffers, and the complete authoring
 command model remain separate work. No new dependency is required.
+
+## ADR-0042 — Shared transform commands and gesture transactions
+
+**Status:** accepted
+
+Position inspector edits and viewport translation use the same validated
+SetTransform command over the serialized root scene plus its runtime projection.
+Commands address scene/entity SourceIds, preserve unrelated metadata, reject
+missing/ambiguous runtime identities and non-finite/nonuniform values before
+mutation, and insert an authored Transform when a default projection is edited.
+A gesture captures the scene before its first change and records exactly one
+snapshot on completion. No-op gestures preserve redo. Escape cancels viewport
+translation without recording history. Complete pending gestures before scene,
+save, Play, project-transition, and undo/redo operations.
+
+Use egui canvas interactions rather than raw window mouse events, respecting
+floating windows and input capture. Convert drag displacement using the rendered
+letterboxed viewport, DPI, and camera zoom; compute from the initial transform
+rather than accumulating per-frame deltas. Share the camera with rendering.
+Inspector typing must be undoable as well as dragging. Translation snapping
+uses world grid units. This does not implement parent/local transforms,
+multi-selection, rotation/scale gizmos, or complete component command coverage.
+No dependency or serialized format change is required.
