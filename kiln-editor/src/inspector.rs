@@ -80,6 +80,7 @@ pub fn render_inspector_panel(
     ui.add_space(4.0);
     
     // Add Component dropdown
+    let mut add_component_action = None;
     ui.horizontal(|ui| {
         ui.label("Add Component:");
         egui::ComboBox::from_label("")
@@ -87,11 +88,14 @@ pub fn render_inspector_panel(
             .show_ui(ui, |ui| {
                 for name in available_component_types() {
                     if ui.selectable_label(false, name).clicked() {
-                        return Some(InspectorAction::AddComponent(name.to_string()));
+                        add_component_action = Some(InspectorAction::AddComponent(name.to_string()));
                     }
                 }
             });
     });
+    if let Some(action) = add_component_action {
+        return Some(action);
+    }
 
     None
 }
@@ -102,11 +106,12 @@ fn component_header_name(component: &Component) -> String {
         Component::Sprite { .. } => "🖼 Sprite".to_string(),
         Component::Tilemap { .. } => "🗺 Tilemap".to_string(),
         Component::Role { .. } => "🎭 Role".to_string(),
+        Component::Parent { .. } => "🔗 Parent".to_string(),
     }
 }
 
 fn available_component_types() -> Vec<&'static str> {
-    vec!["Transform", "Sprite", "Tilemap", "Role"]
+    vec!["Transform", "Sprite", "Tilemap", "Role", "Parent"]
 }
 
 fn render_component(
@@ -237,9 +242,13 @@ fn render_component(
             if let Some(tilemap) = project.tilemaps.get(map) {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
+                    let total_chunks: usize = tilemap.layers.iter().map(|l| l.chunks.len()).sum();
+                    let total_tiles: usize = tilemap.layers.iter()
+                        .flat_map(|l| l.chunks.values())
+                        .map(|c| c.tiles.len())
+                        .sum();
                     ui.label("Size:");
-                    ui.label(format!("{}×{} chunks", tilemap.chunks.len(), 
-                        tilemap.chunks.first().map(|(_, c)| c.tiles.len()).unwrap_or(0)));
+                    ui.label(format!("{}×{} chunks", total_chunks, total_tiles));
                     ui.label("Tile size:");
                     ui.label(format!("{}×{}", tilemap.tile_size[0], tilemap.tile_size[1]));
                 });
@@ -253,6 +262,18 @@ fn render_component(
                     changed = true;
                 }
                 ui.label("(used by scripts to find entities)");
+            });
+        }
+        Component::Parent { parent } => {
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.label("Parent:");
+                let mut parent_id = parent.clone();
+                if ui.text_edit_singleline(&mut parent_id).changed() {
+                    *parent = parent_id;
+                    changed = true;
+                }
+                ui.label("(parent entity source id)");
             });
         }
     }

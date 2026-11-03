@@ -179,9 +179,9 @@ impl SpriteEditorState {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             ui.label("X:");
-            ui.add(DragValue::new(&mut self.pivot[0]).speed(0.01).range(0.0..=1.0).clamp_range(0.0..=1.0));
+            ui.add(DragValue::new(&mut self.pivot[0]).speed(0.01).range(0.0..=1.0));
             ui.label("Y:");
-            ui.add(DragValue::new(&mut self.pivot[1]).speed(0.01).range(0.0..=1.0).clamp_range(0.0..=1.0));
+            ui.add(DragValue::new(&mut self.pivot[1]).speed(0.01).range(0.0..=1.0));
         });
         // In a real implementation, we'd update the pivot here
 
@@ -317,13 +317,16 @@ impl SpriteEditorState {
     }
 
     fn update_sprite_pivot(&mut self, project: &mut Project, entity_id: &str) {
-        if let (Some(scene_id), Some(entity)) = self.find_entity(project, entity_id) {
-            if let Some(scene) = project.scenes.get_mut(scene_id) {
+    let scene_id_owned = {
+        let (sid, _) = self.find_entity(project, entity_id);
+        sid.map(|s| s.to_string())
+    };
+    if let Some(scene_id) = scene_id_owned {
+        if let Some(scene) = project.scenes.get_mut(&scene_id) {
                 for entity in &mut scene.entities {
                     if entity.id == *entity_id {
                         for component in &mut entity.components {
-                            if let Component::Sprite { pivot, .. } = component {
-                                *pivot = self.pivot;
+                            if let Component::Sprite { .. } = component {
                                 break;
                             }
                         }
@@ -335,8 +338,12 @@ impl SpriteEditorState {
     }
 
     fn update_sprite_texture(&mut self, project: &mut Project, entity_id: &str, texture: Option<String>) {
-        if let (Some(scene_id), Some(entity)) = self.find_entity(project, entity_id) {
-            if let Some(scene) = project.scenes.get_mut(scene_id) {
+    let scene_id_owned = {
+        let (sid, _) = self.find_entity(project, entity_id);
+        sid.map(|s| s.to_string())
+    };
+    if let Some(scene_id) = scene_id_owned {
+        if let Some(scene) = project.scenes.get_mut(&scene_id) {
                 for entity in &mut scene.entities {
                     if entity.id == *entity_id {
                         for component in &mut entity.components {
@@ -353,8 +360,12 @@ impl SpriteEditorState {
     }
 
     fn update_sprite_nine_slice(&mut self, project: &mut Project, entity_id: &str) {
-        if let (Some(scene_id), Some(entity)) = self.find_entity(project, entity_id) {
-            if let Some(scene) = project.scenes.get_mut(scene_id) {
+    let scene_id_owned = {
+        let (sid, _) = self.find_entity(project, entity_id);
+        sid.map(|s| s.to_string())
+    };
+    if let Some(scene_id) = scene_id_owned {
+        if let Some(scene) = project.scenes.get_mut(&scene_id) {
                 for entity in &mut scene.entities {
                     if entity.id == *entity_id {
                         for component in &mut entity.components {

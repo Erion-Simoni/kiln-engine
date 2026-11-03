@@ -23,6 +23,9 @@ const TILE_PIXELS: f32 = 16.0;
 pub struct TilemapEditorState {
     /// Id of the tilemap being edited.
     pub selected_map: Option<String>,
+    /// Target map id for tile palette lookup.
+    pub target_map: Option<String>,
+
     /// Index of the layer being edited inside the selected tilemap.
     pub selected_layer: usize,
     /// Tile id painted with the brush.
@@ -45,6 +48,12 @@ impl TilemapEditorState {
 
     /// The tilemap that is currently being edited, mutably.
     pub fn current_map_mut<'a>(&mut self, project: &'a mut Project) -> Option<&'a mut TileMap> {
+
+    /// Get a reference to the world (used by render loop).
+    pub fn world_ref(&self, project: &Project) -> Option<&World> {
+        let _ = project;
+        None
+    }
         let id = self.selected_map.clone()?;
         project.tilemaps.get_mut(&id)
     }
@@ -307,8 +316,8 @@ fn show_grid(
     ui.separator();
     ui.label("Tile Palette");
     egui::Grid::new("tile_palette").num_cols(8).show(ui, |ui| {
-        let tilemap = state.world_ref();
-        if let Some(map) = state.target_map {
+                let tilemap = project.tilemaps.values().next();
+        if let Some(map) = tilemap {
             let tileset_id = &map.tilesets.values().next().unwrap().id;
             if let Some(tileset) = project.tilesets.get(tileset_id) {
                 for tile_id in 0..tileset.tile_count.min(64) {

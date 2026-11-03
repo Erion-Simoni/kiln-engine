@@ -249,17 +249,10 @@ pub fn update_prefab_instances(
     let mut updated = 0;
 
     // Collect entities that are instances of this prefab
-    let instance_entities: Vec<hecs::Entity> = world
-        .world_ref()
-        .query::<(&PrefabInstance, &SourceId)>()
+    let instance_entities: Vec<hecs::Entity> = world_ref.query::<&PrefabInstance>()
         .iter()
-        .filter_map(|(entity, (prefab_instance, source_id))| {
-            if prefab_instance.prefab_id == prefab.id {
-                Some(entity)
-            } else {
-                None
-            }
-        })
+        .filter(|(_, prefab_instance)| prefab_instance.prefab_id == prefab.id)
+        .map(|(entity, _)| entity)
         .collect();
 
     for entity in instance_entities {
@@ -283,10 +276,10 @@ pub fn update_prefab_instances(
                         .with_rotation(*rotation)
                         .with_scale(kiln_core::Vec2::splat(*scale));
                 }
-                kiln_core::project::Component::Sprite { color, texture, layer } => {
+                kiln_core::project::Component::Sprite { color, texture, layer, material: _, animation_clip: _ } => {
                     sprite = Sprite::new(color[0], color[1], color[2], color[3])
                         .with_size(DEFAULT_SPRITE_SIZE[0], DEFAULT_SPRITE_SIZE[1])
-                        .with_layer(layer);
+                        .with_layer(*layer);
                     if let Some(path) = texture {
                         // Texture override would need asset loading; skip for now
                         let _ = path;
@@ -297,20 +290,20 @@ pub fn update_prefab_instances(
         }
 
         // Apply instance overrides
-        if let Ok(mut prefab_inst) = world.world_mut().get_one::<&mut PrefabInstance>(entity) {
+        if let Some(mut prefab_inst) = self.world.world_mut().query_one_mut::<&mut PrefabInstance>(entity).next() {
             for (comp_name, comp_override) in &prefab_inst.overrides.overrides {
-                match comp_name.as_str() {
+                match comp_name {
                     "transform" | "Transform" => {
                         if let kiln_core::prefab::ComponentOverride::Transform { x, y, rotation, scale } = comp_override {
-                            if let Some(v) = x { transform.position.x = *v; }
-                            if let Some(v) = y { transform.position.y = *v; }
-                            if let Some(v) = rotation { transform.rotation = *v; }
-                            if let Some(v) = scale { transform.scale = kiln_core::Vec2::splat(*v); }
+                            if let Some(v) = x { transform.position.x = v; }
+                            if let Some(v) = y { transform.position.y = v; }
+                            if let Some(v) = rotation { transform.rotation = v; }
+                            if let Some(v) = scale { transform.scale = kiln_core::Vec2::splat(v); }
                         }
                     }
                     "sprite" | "Sprite" => {
                         if let kiln_core::prefab::ComponentOverride::Sprite { color, texture } = comp_override {
-                            if let Some(c) = color { sprite.color = *c; }
+                            if let Some(c) = color { sprite.color = c; }
                             if let Some(t) = texture {
                                 let _ = t; // Texture override handled by asset system
                             }

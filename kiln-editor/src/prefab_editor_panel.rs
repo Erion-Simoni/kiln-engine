@@ -56,7 +56,8 @@ impl PrefabEditorPanel {
             }
             if ui.button("🗑 Delete Selected").clicked() {
                 if let Some(id) = self.state.selected_prefab_id() {
-                    self.state.remove_prefab(id);
+                    let id = id.to_string();
+                    self.state.remove_prefab(&id);
                 }
             }
             ui.separator();
@@ -87,7 +88,8 @@ impl PrefabEditorPanel {
                     
                     ui.horizontal(|ui| {
                         if ui.selectable_label(selected, &prefab.name).clicked() {
-                            self.state.select_prefab(&prefab.id);
+                            let prefab_id = prefab.id.clone();
+                            self.state.select_prefab(&prefab_id);
                         }
                         
                         if ui.small_button("✏️").on_hover_text("Edit overrides").clicked() {

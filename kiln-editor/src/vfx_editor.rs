@@ -170,13 +170,13 @@ impl VfxEditorState {
             // Shape-specific parameters
             match &mut config.shape {
                 EmissionShape::Point => {}
-                EmissionShape::Circle { radius } => {
+                EmissionShape::Circle { ref mut radius } => {
                     ui.horizontal(|ui| {
                         ui.label("Radius:");
                         ui.add(DragValue::new(radius).speed(0.1).suffix(" px"));
                     });
                 }
-                EmissionShape::Rectangle { width, height } => {
+                EmissionShape::Rectangle { ref mut width, ref mut height } => {
                     ui.horizontal(|ui| {
                         ui.label("Width:");
                         ui.add(DragValue::new(width).speed(0.1).suffix(" px"));

@@ -6,7 +6,7 @@ use rapier2d::prelude::{RigidBodyHandle, ColliderHandle, ImpulseJointHandle as J
 use egui::Stroke;
 
 /// Physics editor state.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct PhysicsEditorState {
     /// Physics world being edited.
     pub physics_world: Option<PhysicsWorld>,
@@ -49,8 +49,9 @@ pub struct PhysicsEditorState {
     pub new_collider_parent: Option<RigidBodyHandle>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ColliderShape {
+    #[default]
     Ball,
     Cuboid,
     Capsule,
@@ -101,15 +102,6 @@ impl PhysicsEditorState {
         }
     }
 
-
-    /// Update the preview.
-    pub fn update_preview(&mut self, dt: f32) {
-        if self.preview_playing {
-            if let Some(world) = &mut self.physics_world {
-                world.step();
-            }
-        }
-    }
 
     /// Render the physics editor panel.
     pub fn render(&mut self, ui: &mut egui::Ui) {
@@ -181,14 +173,14 @@ impl PhysicsEditorState {
         ui.add_space(4.0);
 
         if let Some(world) = &self.physics_world {
-            egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
+            egui::ScrollArea::vertical().max_height(150.0_f32).show(ui, |ui| {
                 let mut remove_body = None;
                 for (handle, body) in world.rigid_body_set.iter() {
                     let pos = body.translation();
                     let vel = body.linvel();
                     let body_type = match body.body_type() {
                         RigidBodyType::Dynamic => "Dynamic",
-                        RigidBodyType::Static => "Static",
+                        RigidBodyType::Fixed => "Static",
                         RigidBodyType::KinematicPositionBased => "Kinematic (Pos)",
                         RigidBodyType::KinematicVelocityBased => "Kinematic (Vel)",
                         _ => "Other",
@@ -216,6 +208,7 @@ impl PhysicsEditorState {
                             handle,
                             &mut world.collider_set,
                             &mut world.joint_set,
+                            &mut world.multibody_joint_set,
                         );
                         if self.selected_body == Some(handle) {
                             self.selected_body = None;
@@ -243,14 +236,14 @@ impl PhysicsEditorState {
                     egui::ComboBox::from_label("")
                         .selected_text(match self.new_body_type {
                             RigidBodyType::Dynamic => "Dynamic",
-                            RigidBodyType::Static => "Static",
+                            RigidBodyType::Fixed => "Static",
                             RigidBodyType::KinematicPositionBased => "Kinematic (Pos)",
                             RigidBodyType::KinematicVelocityBased => "Kinematic (Vel)",
                             _ => "Other",
                         })
                         .show_ui(ui, |ui| {
                             ui.selectable_value(&mut self.new_body_type, RigidBodyType::Dynamic, "Dynamic");
-                            ui.selectable_value(&mut self.new_body_type, RigidBodyType::Static, "Static");
+                            ui.selectable_value(&mut self.new_body_type, RigidBodyType::Fixed, "Static");
                             ui.selectable_value(&mut self.new_body_type, RigidBodyType::KinematicPositionBased, "Kinematic (Position)");
                             ui.selectable_value(&mut self.new_body_type, RigidBodyType::KinematicVelocityBased, "Kinematic (Velocity)");
                         });
@@ -272,7 +265,7 @@ impl PhysicsEditorState {
                             if let Some(world) = &mut self.physics_world {
                                 let body = match self.new_body_type {
                                     RigidBodyType::Dynamic => rapier2d::prelude::RigidBodyBuilder::dynamic(),
-                                    RigidBodyType::Static => rapier2d::prelude::RigidBodyBuilder::r#static(),
+                                    RigidBodyType::Fixed => rapier2d::prelude::RigidBodyBuilder::fixed(),
                                     RigidBodyType::KinematicPositionBased => rapier2d::prelude::RigidBodyBuilder::kinematic_position_based(),
                                     RigidBodyType::KinematicVelocityBased => rapier2d::prelude::RigidBodyBuilder::kinematic_velocity_based(),
                                     _ => rapier2d::prelude::RigidBodyBuilder::dynamic(),
@@ -306,7 +299,7 @@ impl PhysicsEditorState {
         ui.add_space(4.0);
 
         if let Some(world) = &self.physics_world {
-            egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
+            egui::ScrollArea::vertical().max_height(150.0_f32).show(ui, |ui| {
                 for (handle, collider) in world.collider_set.iter() {
                     let shape_type = format!("{:?}", collider.shape().shape_type());
                     let parent = collider.parent();
@@ -320,7 +313,7 @@ impl PhysicsEditorState {
                         ui.label(format!("Parent: {:?}", parent));
                         if ui.small_button("🗑").clicked() {
                             if let Some(world) = &mut self.physics_world {
-                                world.collider_set.remove(handle);
+                                world.collider_set.remove(handle, &mut world.rigid_body_set);
                             }
                         }
                     });
@@ -455,7 +448,7 @@ impl PhysicsEditorState {
                 if let Some(ball) = collider.shape().as_ball() {
                     ui.painter().circle_stroke(center_pos, ball.radius * 20.0, Stroke::new(1.5, Color32::from_rgb(100, 200, 255)));
                 } else if let Some(cuboid) = collider.shape().as_cuboid() {
-                    let half_extents = cuboid.half_extents();
+                    let half_extents = cuboid.half_extents;
                     let rect = egui::Rect::from_min_max(
                         egui::pos2(
                             center_pos.x - half_extents.x * 20.0,

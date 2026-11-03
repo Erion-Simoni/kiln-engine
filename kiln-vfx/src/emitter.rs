@@ -93,6 +93,11 @@ impl Emitter {
         &self.config
     }
 
+    /// Get mutable access to the emitter configuration.
+    pub fn config_mut(&mut self) -> &mut EmitterConfig {
+        &mut self.config
+    }
+
     /// Get the emitter position.
     pub fn position(&self) -> [f32; 2] {
         self.position

@@ -9,15 +9,15 @@ use rapier2d::prelude::*;
 /// Physics world wrapper
 #[cfg(feature = "physics")]
 pub struct PhysicsWorld {
-    rigid_body_set: RigidBodySet,
-    collider_set: ColliderSet,
+    pub rigid_body_set: RigidBodySet,
+    pub collider_set: ColliderSet,
     gravity: Vec2,
     integration_parameters: IntegrationParameters,
     physics_pipeline: PhysicsPipeline,
     island_manager: IslandManager,
     broad_phase: BroadPhaseBvh,
     narrow_phase: NarrowPhase,
-    joint_set: ImpulseJointSet,
+    pub joint_set: ImpulseJointSet,
     multibody_joint_set: MultibodyJointSet,
     ccd_solver: CCDSolver,
     soft_body_set: SoftBodySet,
