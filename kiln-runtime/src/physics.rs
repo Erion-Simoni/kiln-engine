@@ -32,7 +32,17 @@ impl std::fmt::Debug for PhysicsWorld {
 
 #[cfg(feature = "physics")]
 impl PhysicsWorld {
-    /// Create a new physics world with default gravity
+    /// Remove a body and its attached colliders and joints.
+    pub fn remove_body(&mut self, handle: RigidBodyHandle) {
+        self.rigid_body_set.remove(handle, &mut self.island_manager, &mut self.collider_set,
+            &mut self.joint_set, &mut self.multibody_joint_set, &mut self.soft_body_set, true);
+    }
+    /// Remove a collider and update its parent body.
+    pub fn remove_collider(&mut self, handle: ColliderHandle) {
+        self.collider_set.remove(handle, &mut self.island_manager, &mut self.rigid_body_set,
+            &mut self.soft_body_set, true);
+    }
+    /// Create a new physics world with default gravity.
     pub fn new() -> Self {
         PhysicsWorld {
             rigid_body_set: RigidBodySet::new(),

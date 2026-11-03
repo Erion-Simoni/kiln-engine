@@ -172,7 +172,7 @@ impl PhysicsEditorState {
 
         ui.add_space(4.0);
 
-        if let Some(world) = &self.physics_world {
+        if let Some(world) = &mut self.physics_world {
             egui::ScrollArea::vertical().max_height(150.0_f32).show(ui, |ui| {
                 let mut remove_body = None;
                 for (handle, body) in world.rigid_body_set.iter() {
@@ -203,13 +203,8 @@ impl PhysicsEditorState {
                 }
 
                 if let Some(handle) = remove_body {
-                    if let Some(world) = &mut self.physics_world {
-                        world.rigid_body_set.remove(
-                            handle,
-                            &mut world.collider_set,
-                            &mut world.joint_set,
-                            &mut world.multibody_joint_set,
-                        );
+                    {
+                        world.remove_body(handle);
                         if self.selected_body == Some(handle) {
                             self.selected_body = None;
                         }
@@ -219,7 +214,7 @@ impl PhysicsEditorState {
                 if world.rigid_body_set.is_empty() {
                     ui.label("No rigid bodies. Click 'Add Body' to create one.");
                 }
-            })
+            });
         }
 
 
@@ -275,7 +270,8 @@ impl PhysicsEditorState {
                             }
                             self.show_add_body_dialog = false;
                         }});
-            })};
+            });
+        }
 
 
         ui.add_space(8.0);
@@ -298,8 +294,9 @@ impl PhysicsEditorState {
 
         ui.add_space(4.0);
 
-        if let Some(world) = &self.physics_world {
+        if let Some(world) = &mut self.physics_world {
             egui::ScrollArea::vertical().max_height(150.0_f32).show(ui, |ui| {
+                let mut remove_collider = None;
                 for (handle, collider) in world.collider_set.iter() {
                     let shape_type = format!("{:?}", collider.shape().shape_type());
                     let parent = collider.parent();
@@ -312,12 +309,11 @@ impl PhysicsEditorState {
                         }
                         ui.label(format!("Parent: {:?}", parent));
                         if ui.small_button("🗑").clicked() {
-                            if let Some(world) = &mut self.physics_world {
-                                world.collider_set.remove(handle, &mut world.rigid_body_set);
-                            }
+                            remove_collider = Some(handle);
                         }
                     });
                 }
+                if let Some(handle) = remove_collider { world.remove_collider(handle); }
             });
 
             // Add collider dialog
@@ -398,7 +394,7 @@ impl PhysicsEditorState {
                                                 )
                                             }
                                             ColliderShape::Capsule => {
-                                                rapier2d::prelude::ColliderBuilder::capsule(
+                                                rapier2d::prelude::ColliderBuilder::capsule_y(
                                                     self.new_collider_radius,
                                                     self.new_collider_half_extents[1],
                                                 )
@@ -463,7 +459,7 @@ impl PhysicsEditorState {
                 } else if let Some(capsule) = collider.shape().as_capsule() {
                     // Draw capsule as two circles + rectangle
                     let radius = capsule.radius * 20.0;
-                    let half_height = capsule.half_height * 20.0;
+                    let half_height = capsule.half_height() * 20.0;
                     ui.painter().circle_stroke(center_pos + egui::vec2(0.0, -half_height), radius, Stroke::new(1.5, Color32::from_rgb(100, 200, 255)));
                     ui.painter().circle_stroke(center_pos + egui::vec2(0.0, half_height), radius, Stroke::new(1.5, Color32::from_rgb(100, 200, 255)));
                     let rect = egui::Rect::from_min_max(

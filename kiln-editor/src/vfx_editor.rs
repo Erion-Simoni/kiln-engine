@@ -4,7 +4,7 @@ use egui::{Color32, DragValue, RichText, ScrollArea, Ui, Vec2};
 use kiln_vfx::{EmissionShape, Emitter, EmitterConfig, ParticleSystem, ParticleSystemConfig};
 
 /// State of the VFX editor panel.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct VfxEditorState {
     /// Particle system being edited.
     pub particle_system: ParticleSystem,
@@ -73,7 +73,7 @@ impl VfxEditorState {
             }
             if ui.button("⏹ Stop").clicked() {
                 self.preview_playing = false;
-                self.particle_system.particles.clear();
+                self.particle_system.clear();
             }
             ui.separator();
             if ui.button("➕ Add Emitter").clicked() {
@@ -109,7 +109,7 @@ impl VfxEditorState {
 
         // Emitter list
         ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
-            for (idx, emitter) in self.particle_system.emitters.iter().enumerate() {
+            for (idx, emitter) in self.particle_system.emitters.clone().iter().enumerate() {
                 let selected = self.selected_emitter == Some(idx);
                 let mut emitter_selected = selected;
                 

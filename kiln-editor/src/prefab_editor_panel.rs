@@ -77,12 +77,12 @@ impl PrefabEditorPanel {
             let prefabs: Vec<_> = self.state.prefab_list()
                 .into_iter()
                 .filter(|p| self.filter.is_empty() || p.name.to_lowercase().contains(&self.filter.to_lowercase()))
-                .collect();
+                .cloned().collect();
 
             if prefabs.is_empty() {
                 ui.label("No prefabs. Click 'New Prefab' to create one.");
             } else {
-                for prefab in prefabs {
+                for prefab in &prefabs {
                     let is_selected = selected_prefab_id.as_deref() == Some(&prefab.id);
                     let mut selected = is_selected;
                     
@@ -204,7 +204,8 @@ impl PrefabEditorPanel {
                     if let Some(override_data) = self.current_override.take() {
                         if let Some(entity_id) = &self.override_entity_id {
                             if let Some(prefab) = self.state.get_prefab_mut(&override_data.entity_id) {
-                                prefab.apply_overrides(&mut prefab.root_entity, &override_data);
+                                let definition = prefab.clone();
+                                definition.apply_overrides(&mut prefab.root_entity, &override_data);
                                 applied = true;
                             }
                         }

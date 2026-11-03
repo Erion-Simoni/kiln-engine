@@ -47,13 +47,14 @@ impl ShaderEditorState {
 
     pub fn add_shader(&mut self, name: String, source: String) {
         let shader = Shader {
+            parameters: Default::default(),
             id: name.clone(),
             name,
             source,
             entry_point: "main".to_string(),
         };
-        self.shaders.insert(shader.id.clone(), shader);
         self.selected_shader = Some(shader.id.clone());
+        self.shaders.insert(shader.id.clone(), shader);
     }
 
     pub fn remove_shader(&mut self, name: &str) {
@@ -206,8 +207,7 @@ fn fs_main(
                                 }
                             });
                         });
-                    }
-                });
+                }
 
                 ui.add_space(8.0);
 
@@ -217,7 +217,7 @@ fn fs_main(
                     egui::TextEdit::multiline(&mut shader.source)
                         .id_source("shader_source")
                         .desired_width(f32::INFINITY)
-                        .desired_height(400.0)
+                        .desired_rows(20)
                         .show(ui);
                 });
             });
@@ -237,14 +237,14 @@ fn fs_main(
                 ui.painter().rect_stroke(
                     rect,
                     2.0,
-                    Color32::from_rgb(100, 200, 255),
+                    egui::Stroke::new(1.0, Color32::from_rgb(100, 200, 255)),
                 );
 
                 ui.painter().text(
                     rect.center(),
                     egui::Align2::CENTER_CENTER,
                     "Shader Preview",
-                    egui::TextStyle::Small,
+                    egui::FontId::proportional(12.0),
                     Color32::from_rgb(200, 200, 200),
                 );
 
@@ -253,6 +253,7 @@ fn fs_main(
                 ui.label(format!("Entry point: {}", shader.entry_point));
                 ui.label(format!("Parameters: {}", shader.parameters.len()));
             });
+        });
     }
 
     if let Some(shader) = state.selected_shader() {

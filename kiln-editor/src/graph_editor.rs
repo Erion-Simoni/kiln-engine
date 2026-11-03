@@ -426,7 +426,7 @@ fn draw_connections(
             painter.add(egui::Shape::convex_polygon(
                 vec![end, arrow_base + perp.to_vec2(), arrow_base - perp.to_vec2()],
                 CONNECTION_COLOR,
-                egui::epaint::CloseShape::Yes,
+                egui::Stroke::NONE,
             ));
         }
     }
@@ -513,7 +513,6 @@ fn pin_type_color(pin_type: PinType) -> Color32 {
         PinType::Float => Color32::from_rgb(150, 255, 150),
         PinType::Boolean => Color32::from_rgb(255, 150, 255),
         PinType::String => Color32::from_rgb(255, 255, 150),
-        PinType::Any => Color32::from_gray(200),
     }
 }
 
@@ -687,14 +686,14 @@ fn show_add_node_menu(ctx: &egui::Context, state: &mut GraphEditorState, canvas_
         });
 
     // Close menu if clicked elsewhere
-    if ctx.input(|i| i.pointer.any_click()) && !ctx.memory(|m| m.is_window_open("Add Node".into())) {
+    if ctx.input(|i| i.pointer.any_click()) && !ctx.memory(|m| m.area_rect(egui::Id::new("Add Node")).is_some()) {
         state.show_add_menu = false;
     }
 }
 
 /// Show node parameter editor (double-click node).
 fn show_node_editor(ctx: &egui::Context, state: &mut GraphEditorState, node_id: uuid::Uuid) {
-    let Some(node) = state.graph.nodes.get_mut(&node_id) else { return; };
+    let Some(mut node) = state.graph.nodes.get(&node_id).cloned() else { return; };
 
     egui::Window::new(format!("Edit {}", node_type_name(&node.node_type)))
         .collapsible(false)
@@ -733,7 +732,7 @@ fn show_node_editor(ctx: &egui::Context, state: &mut GraphEditorState, node_id: 
                 }
                 NodeType::HostCall { name } => {
                     ui.label("Function:");
-                    egui::ComboBox::from_label("").selected_text(name).show_ui(ui, |ui| {
+                    egui::ComboBox::from_label("").selected_text(name.as_str()).show_ui(ui, |ui| {
                         for fname in ["print", "move_player", "add_score", "collect_coin", "play_sound", "set_status", "spawn_entity", "find_nearest", "get_input_x", "get_input_y", "get_score", "get_delta_time", "play_music", "stop_music", "set_volume"] {
                             ui.selectable_value(name, fname.to_string(), fname);
                         }
@@ -792,6 +791,7 @@ fn show_node_editor(ctx: &egui::Context, state: &mut GraphEditorState, node_id: 
                 }
             });
         });
+    state.graph.nodes.insert(node_id, node);
 }
 
 fn node_type_name(node_type: &NodeType) -> String {

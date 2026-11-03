@@ -22,6 +22,7 @@ path = "src/scene_view_test.rs"
 
 [features]
 default = []
+audio = ["kiln-runtime/audio"]
 # Git integration for the Version Control panel. Opt-in because it requires
 # the system OpenSSL development headers (libssl-dev) to compile git2.
 git = ["dep:git2"]

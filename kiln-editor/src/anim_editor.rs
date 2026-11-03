@@ -66,9 +66,9 @@ impl AnimationEditorState {
     /// Update preview time.
     pub fn update_preview(&mut self, dt: f32) {
         if self.preview_playing {
-            if let Some(clip) = self.selected_clip() {
+            if let Some(duration) = self.selected_clip().map(|clip| clip.total_duration()) {
                 self.preview_time += dt;
-                if self.preview_time > clip.total_duration() {
+                if self.preview_time > duration {
                     self.preview_time = 0.0;
                 }
             }
@@ -80,7 +80,6 @@ impl AnimationEditorState {
 pub fn render_animation_editor(
     ui: &mut Ui,
     state: &mut AnimationEditorState,
-    project: &mut kiln_core::Project,
     animation_clips: &mut HashMap<String, Clip>,
     dt: f32,
 ) {
@@ -137,7 +136,7 @@ pub fn render_animation_editor(
                             let texture_path = state.spritesheet_path.clone();
                             state.add_clip(clip_name.clone(), texture_path.clone());
                             // Sync to project
-                            animation_clips.insert(clip_name, state.clips[&clip_name].clone());
+                            animation_clips.insert(clip_name.clone(), state.clips[&clip_name].clone());
                             state.show_new_clip_dialog = false;
                             state.new_clip_name.clear();
                         }
@@ -151,7 +150,7 @@ pub fn render_animation_editor(
     }
 
     // Main editor area
-    if let Some(clip) = state.selected_clip_mut() {
+    if let Some(mut clip) = state.selected_clip.clone().and_then(|name| state.clips.remove(&name)) {
         // Sync clip texture from project if changed
         if let Some(project_clip) = animation_clips.get(&clip.name) {
             if clip.texture != project_clip.texture {
@@ -160,7 +159,7 @@ pub fn render_animation_editor(
             if clip.loops != project_clip.loops {
                 clip.loops = project_clip.loops;
             }
-            if clip.frames != project_clip.frames {
+            if serde_json::to_string(&clip.frames).ok() != serde_json::to_string(&project_clip.frames).ok() {
                 clip.frames = project_clip.frames.clone();
             }
         }
@@ -184,6 +183,7 @@ pub fn render_animation_editor(
 
                 // Frame list
                 egui::ScrollArea::vertical().show(ui, |ui| {
+                    let mut remove_frame = None;
                     for (idx, frame) in clip.frames.iter_mut().enumerate() {
                         ui.horizontal(|ui| {
                             let frame_label = format!("Frame {}: {}x{} @ {:.2}s", 
@@ -192,10 +192,11 @@ pub fn render_animation_editor(
                                 // Frame selected
                             }
                             if ui.small_button("✕").clicked() {
-                                clip.frames.remove(idx);
+                                remove_frame = Some(idx);
                             }
                         });
                     }
+                    if let Some(idx) = remove_frame { clip.frames.remove(idx); }
                 });
 
                 ui.add_space(8.0);
@@ -228,10 +229,10 @@ pub fn render_animation_editor(
                 ui.painter().rect_filled(preview_rect.rect, 4.0, Color32::from_rgb(30, 30, 35));
                 ui.painter().rect_stroke(preview_rect.rect, 4.0, Stroke::new(1.0, Color32::from_gray(80)));
                 
-                if let Some(frame) = get_frame_at_time(clip, state.preview_time) {
+                if let Some(frame) = Self::get_frame_at_time(&clip, state.preview_time) {
                     ui.add_space(8.0);
                     ui.label(format!("Frame: {} / {}", 
-                        get_frame_index_at_time(clip, state.preview_time).unwrap_or(0),
+                        Self::get_frame_index_at_time(&clip, state.preview_time).unwrap_or(0),
                         clip.frames.len().saturating_sub(1)));
                     ui.label(format!("Time: {:.2}s / {:.2}s", state.preview_time, clip.total_duration()));
                 }
@@ -290,16 +291,8 @@ pub fn render_animation_editor(
             });
         });
 
-        // Sync clip changes back to project
-        if let Some(clip) = state.selected_clip() {
-            if let Some(project_clip) = animation_clips.get_mut(&clip.name) {
-                *project_clip = clip.clone();
-            } else {
-                animation_clips.insert(clip.name.clone(), clip.clone());
-            }
-        }
-
-        // Update preview time
+        animation_clips.insert(clip.name.clone(), clip.clone());
+        state.clips.insert(clip.name.clone(), clip);
         state.update_preview(dt);
     }
 }
@@ -320,4 +313,23 @@ fn get_frame_index_at_time(clip: &Clip, time: f32) -> Option<usize> {
 
 
 
+}
+#[cfg(test)]
+mod panel_tests {
+    use super::*;
+
+    #[test]
+    fn rendering_keeps_the_selected_clip_and_syncs_it_to_the_project() {
+        let mut state = AnimationEditorState::new();
+        state.add_clip("idle".to_string(), "sprite.png".to_string());
+        let mut clips = HashMap::new();
+        let ctx = egui::Context::default();
+        let _ = ctx.run(Default::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                AnimationEditorState::render_animation_editor(ui, &mut state, &mut clips, 0.016);
+            });
+        });
+        assert_eq!(state.selected_clip().unwrap().texture, "sprite.png");
+        assert_eq!(clips["idle"].texture, "sprite.png");
+    }
 }
