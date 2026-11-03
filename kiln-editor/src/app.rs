@@ -75,6 +75,7 @@ impl PlaySession {
     pub fn register_audio(&mut self, name: &str, path: &str) {
         self.slice.register_audio(name, path);
     }
+}
 
 /// The world size the scene view falls back to when no project is open.
 const DEFAULT_WORLD_SIZE: (f32, f32) = (1280.0, 720.0);
@@ -933,7 +934,7 @@ impl EditorApp {
         std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
 
         // Create project file
-        let project = match template.as_str() {
+        let project = match template {
             "empty_2d" => self.create_empty_2d_project(name.to_string(), path)?,
             "platformer" => self.create_platformer_project(name.to_string(), path)?,
             "topdown" => self.create_topdown_project(name.to_string(), path)?,
@@ -954,7 +955,7 @@ impl EditorApp {
         std::fs::write(&script_file, "// Game script\nlet speed = 100.0;\nlet dt = get_delta_time();\nlet dx = get_input_x() * speed * dt;\nlet dy = get_input_y() * speed * dt;\nmove_player(dx, dy);\n").map_err(|e| e.to_string())?;
 
         // Load the new project
-        self.load_project(&path)
+        self.load_project(path.as_path())
     }
 
     /// Create an empty 2D project.
@@ -1144,7 +1145,7 @@ impl EditorApp {
         // Build mapping from project entity ID (SourceId) to hecs Entity.
         let world_ref = world.world_ref();
         for entity in world_ref.iter() {
-            let eid = entity.id();
+            let eid = entity.id;
             if let Some(source_id) = world_ref.get::<&SourceId>(eid).ok() {
                 self.entity_id_to_hecs
                     .insert(source_id.0.clone(), eid);
@@ -1405,7 +1406,7 @@ impl winit::application::ApplicationHandler for EditorApp {
             if let Some(last_project) = self.project_hub.last_project() {
                 let path = last_project.path.clone();
                 if path.exists() {
-                    if let Err(e) = self.load_project(&path) {
+                    if let Err(e) = self.load_project(path.as_path()) {
                         eprintln!("Failed to auto-reopen last project: {}", e);
                     } else {
                         // Add back to recent projects since we just opened it
@@ -2291,7 +2292,7 @@ impl winit::application::ApplicationHandler for EditorApp {
                 }
                 MenuAction::OpenProject => {
                     let path = PathBuf::from(self.project_path_input.trim());
-                    match self.load_project(&path) {
+                    match self.load_project(path.as_path()) {
                         Ok(()) => self.console_log.push("[INFO] Project loaded".to_string()),
                         Err(e) => {
                             let message = format!("[ERROR] Could not load the project: {e}");
@@ -2367,7 +2368,7 @@ impl winit::application::ApplicationHandler for EditorApp {
         // Handle the open-project request from the welcome screen.
         if std::mem::take(&mut self.open_project_requested) {
             let path = PathBuf::from(self.project_path_input.trim());
-            match self.load_project(&path) {
+            match self.load_project(path.as_path()) {
                 Ok(()) => self.console_log.push("[INFO] Project loaded".to_string()),
                 Err(e) => {
                     let message = format!("[ERROR] Could not load the project: {e}");
@@ -2980,7 +2981,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     // borrowed while the inspector edits it.
                     let selected = *self.selected_entity;
                     if let Some(entity) = selected {
-                        ui.label(format!("Entity ID: {:?}", entity.id()));
+                        ui.label(format!("Entity ID: {:?}", entity.id));
                         ui.add_space(8.0);
 
                         // Read current values once
@@ -4062,7 +4063,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         &mut self.project_hub,
                         &mut |path| {
                             // Open project callback
-                            if let Err(e) = self.load_project(&path) {
+                            if let Err(e) = self.load_project(path.as_path()) {
                                 eprintln!("Failed to load project: {}", e);
                             } else {
                                 // Add to recent projects
@@ -4071,7 +4072,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         },
                         &mut |name, path, template| {
                             // Create project callback
-                            if let Err(e) = self.create_project(name.as_str(), path, template) {
+                            if let Err(e) = self.create_project(name, path, template) {
                                 eprintln!("Failed to create project: {}", e);
                             }
                         },

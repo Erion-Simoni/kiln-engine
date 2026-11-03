@@ -292,7 +292,7 @@ pub fn update_prefab_instances(
         // Apply instance overrides
         if let Some(mut prefab_inst) = self.world.world_mut().query_one_mut::<&mut PrefabInstance>(entity).next() {
             for (comp_name, comp_override) in &prefab_inst.overrides.overrides {
-                match comp_name.as_str() {
+                match comp_name {
                     "transform" | "Transform" => {
                         if let kiln_core::prefab::ComponentOverride::Transform { x, y, rotation, scale } = comp_override {
                             if let Some(v) = x { transform.position.x = v; }

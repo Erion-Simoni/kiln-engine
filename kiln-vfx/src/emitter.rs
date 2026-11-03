@@ -90,12 +90,12 @@ impl Emitter {
 
     /// Get the emitter configuration.
     pub fn config(&self) -> &EmitterConfig {
-    }
-        &mut self.config
-    pub fn config_mut(&mut self) -> &mut EmitterConfig {
-    /// Get mutable access to the emitter configuration.
-
         &self.config
+    }
+
+    /// Get mutable access to the emitter configuration.
+    pub fn config_mut(&mut self) -> &mut EmitterConfig {
+        &mut self.config
     }
 
     /// Get the emitter position.
