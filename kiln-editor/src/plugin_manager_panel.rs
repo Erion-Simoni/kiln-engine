@@ -62,27 +62,14 @@ impl PluginManagerPanel {
 
     /// Shutdown all plugins.
     pub async fn shutdown_plugins(&mut self) {
-        if let Err(e) = self.registry.shutdown_plugins().await {
+        if let Err(e) = self.registry.shutdown_all().await {
             eprintln!("Error shutting down plugins: {}", e);
         }
     }
 
     /// Send an event to all plugins.
     pub fn handle_event(&mut self, event: &kiln_plugin_api::EditorEvent, context: &mut kiln_plugin_api::PluginContext) {
-        self.registry.handle_event(event, context);
-    }
-
-
-    /// Shutdown all plugins.
-    pub async fn shutdown_plugins(&mut self) {
-        if let Err(e) = self.registry.shutdown_plugins().await {
-            eprintln!("Error shutting down plugins: {}", e);
-        }
-    }
-
-    /// Send an event to all plugins.
-    pub fn handle_event(&mut self, event: &kiln_plugin_api::EditorEvent, context: &mut kiln_plugin_api::PluginContext) {
-        self.registry.handle_event(event, context);
+        self.registry.handle_event_all(event, context);
     }
 
     /// Render the Plugin Manager panel.

@@ -187,7 +187,7 @@ pub type PluginCreateFn = unsafe extern "C" fn() -> *mut dyn EditorPlugin;
 
 /// Plugin registry for managing loaded plugins.
 pub struct PluginRegistry {
-    plugins: std::collections::HashMap<String, Box<dyn EditorPlugin>>,
+    pub plugins: std::collections::HashMap<String, Box<dyn EditorPlugin>>,
     manifests: std::collections::HashMap<String, PluginManifest>,
     load_order: Vec<String>,
 }

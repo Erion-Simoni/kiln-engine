@@ -136,12 +136,12 @@ impl ProfilerPanel {
             ui.painter().rect_filled(rect, 4.0, Color32::from_rgb(40, 40, 50));
             
             // Budget used
-            let used_width = (bar_width * (budget_pct / 100.0).min(1.0)) as f32;
+            let used_width = (bar_width * ((budget_pct as f32) / 100.0_f32).min(1.0)) as f32;
             let used_rect = egui::Rect::from_min_size(rect.min, Vec2::new(used_width, bar_height));
             ui.painter().rect_filled(used_rect, 4.0, budget_color);
             
             // Target line
-            let target_x = rect.left() + (bar_width * (100.0 / (budget_pct.max(100.0)))) as f32;
+            let target_x = rect.left() + (bar_width * (100.0_f32 / ((budget_pct as f32).max(100.0_f32)))) as f32;
             if target_x < rect.right() {
                 ui.painter().line_segment(
                     [egui::pos2(target_x, rect.top()), egui::pos2(target_x, rect.bottom())],
@@ -157,7 +157,7 @@ impl ProfilerPanel {
             // Frame time history graph
             if !self.frame_time_history.is_empty() {
                 ui.label("Frame Time History (last 120 frames):");
-                let graph_height = 100.0;
+                let graph_height = 100.0_f32;
                 let graph_width = ui.available_width().min(400.0);
                 let graph_rect = egui::Rect::from_min_size(
                     ui.cursor().left_top(),
@@ -170,7 +170,7 @@ impl ProfilerPanel {
                 ui.painter().rect_stroke(graph_rect, 2.0, egui::Stroke::new(1.0, Color32::from_gray(80)));
 
                 // Target line
-                let target_y = graph_rect.bottom() - (graph_height * (self.target_frame_ms / self.max_frame_time())) as f32;
+                let target_y = graph_rect.bottom() - (graph_height * (self.target_frame_ms as f32 / self.max_frame_time() as f32)) as f32;
                 ui.painter().line_segment(
                     [egui::pos2(graph_rect.left(), target_y), egui::pos2(graph_rect.right(), target_y)],
                     egui::Stroke::new(1.0, Color32::from_rgb(100, 200, 100)),
@@ -180,7 +180,7 @@ impl ProfilerPanel {
                 let bar_width = graph_width / self.frame_time_history.len() as f32;
                 for (i, &frame_ms) in self.frame_time_history.iter().enumerate() {
                     let x = graph_rect.left() + i as f32 * bar_width;
-                    let bar_h = (graph_height * (frame_ms / self.max_frame_time())) as f32;
+                    let bar_h = (graph_height * (frame_ms as f32 / self.max_frame_time() as f32)) as f32;
                     let color = if frame_ms > self.target_frame_ms {
                         Color32::RED
                     } else if frame_ms > self.target_frame_ms * 0.8 {

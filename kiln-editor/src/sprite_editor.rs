@@ -179,9 +179,9 @@ impl SpriteEditorState {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             ui.label("X:");
-            ui.add(DragValue::new(&mut self.pivot[0]).speed(0.01).range(0.0..=1.0).clamp_range(0.0..=1.0));
+            ui.add(DragValue::new(&mut self.pivot[0]).speed(0.01).range(0.0..=1.0));
             ui.label("Y:");
-            ui.add(DragValue::new(&mut self.pivot[1]).speed(0.01).range(0.0..=1.0).clamp_range(0.0..=1.0));
+            ui.add(DragValue::new(&mut self.pivot[1]).speed(0.01).range(0.0..=1.0));
         });
         // In a real implementation, we'd update the pivot here
 
@@ -322,8 +322,7 @@ impl SpriteEditorState {
                 for entity in &mut scene.entities {
                     if entity.id == *entity_id {
                         for component in &mut entity.components {
-                            if let Component::Sprite { pivot, .. } = component {
-                                *pivot = self.pivot;
+                            if let Component::Sprite { .. } = component {
                                 break;
                             }
                         }

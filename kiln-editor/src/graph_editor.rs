@@ -251,7 +251,7 @@ pub fn render_graph_editor(ui: &mut egui::Ui, state: &mut GraphEditorState) {
             match result {
                 Ok(_) => ui.label(RichText::new("✓ Compiled successfully").color(Color32::GREEN)),
                 Err(e) => ui.label(RichText::new(format!("✗ {}", e)).color(Color32::RED)),
-            }
+            };
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.label(format!("Zoom: {:.0}%", state.zoom * 100.0));
@@ -424,7 +424,7 @@ fn draw_connections(
             let arrow_base = end - dir * arrow_size;
             let perp = Pos2::new(-dir.y, dir.x) * arrow_size * 0.5;
             painter.add(egui::Shape::convex_polygon(
-                vec![end, arrow_base + perp, arrow_base - perp],
+                vec![end, arrow_base + perp.to_vec2(), arrow_base - perp.to_vec2()],
                 CONNECTION_COLOR,
             ));
         }
@@ -447,8 +447,8 @@ fn draw_nodes(
             let border_color = if is_selected { NODE_SELECTED_BORDER } else { NODE_BORDER_COLOR };
 
             // Node background
-            painter.rect_filled(rect, 4.0, NODE_BG_COLOR);
-            painter.rect_stroke(rect, 4.0, Stroke::new(1.5 * state.zoom, border_color));
+            painter.rect_filled(*rect, 4.0, NODE_BG_COLOR);
+            painter.rect_stroke(*rect, 4.0, Stroke::new(1.5 * state.zoom, border_color));
 
             // Title bar
             let title_rect = egui::Rect::from_min_max(
@@ -469,7 +469,7 @@ fn draw_nodes(
             );
 
             // Draw pins
-            draw_node_pins(painter, node, rect, state.zoom);
+            draw_node_pins(painter, node, *rect, state.zoom);
         }
     }
 }
@@ -757,7 +757,7 @@ fn show_node_editor(ctx: &egui::Context, state: &mut GraphEditorState, node_id: 
                     ui.label("Quest ID:");
                     ui.text_edit_singleline(quest_id);
                 }
-                NodeType::DataTableLookup { table_id, column_name } | NodeType::DataTableRowGet { table_id } => {
+                NodeType::DataTableLookup { table_id, column_name } | NodeType::DataTableRowGet { table_id, .. } => {
                     ui.label("Table ID:");
                     ui.text_edit_singleline(table_id);
                     if let NodeType::DataTableLookup { column_name, .. } = &mut node.node_type {

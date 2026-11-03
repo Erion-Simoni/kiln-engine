@@ -52,7 +52,7 @@ impl Rect {
 }
 
 /// A 2D size.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub struct Size {
     pub width: f32,
     pub height: f32,

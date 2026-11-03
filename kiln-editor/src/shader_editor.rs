@@ -253,7 +253,6 @@ fn fs_main(
                 ui.label(format!("Entry point: {}", shader.entry_point));
                 ui.label(format!("Parameters: {}", shader.parameters.len()));
             });
-        });
     }
 
     if let Some(shader) = state.selected_shader() {

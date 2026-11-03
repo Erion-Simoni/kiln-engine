@@ -7,8 +7,9 @@ use kiln_ui::{
 };
 
 /// UI widget types for the editor.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WidgetType {
+    #[default]
     Panel,
     Label,
     Button,
@@ -196,13 +197,14 @@ impl UiLayoutEditorState {
 
                 let canvas_size = Vec2::new(self.canvas_size.width, self.canvas_size.height);
                 let (canvas_rect, canvas_response) = ui.allocate_exact_size(canvas_size, Sense::click_and_drag());
+                let canvas_rect_kiln = kiln_ui::Rect::new(canvas_rect.min.x, canvas_rect.min.y, canvas_rect.width(), canvas_rect.height());
 
                 // Canvas background
                 ui.painter().rect_filled(canvas_rect, 4.0, Color32::from_rgb(30, 30, 40));
                 
                 // Grid
                 if self.snap_to_grid {
-                    self.draw_grid(ui.painter(), canvas_rect);
+                    self.draw_grid(ui.painter(), canvas_rect_kiln);
                 }
 
                 // Draw widgets
@@ -212,7 +214,11 @@ impl UiLayoutEditorState {
                 for (idx, widget) in self.widgets.iter().enumerate() {
                     if !widget.visible { continue; }
                     
-                    let widget_rect = self.widget_rect_to_canvas(widget, canvas_rect);
+                    let widget_rect_kiln = self.widget_rect_to_canvas(widget, canvas_rect_kiln);
+                    let widget_rect = egui::Rect::from_min_size(
+                        egui::pos2(widget_rect_kiln.x, widget_rect_kiln.y),
+                        egui::vec2(widget_rect_kiln.width, widget_rect_kiln.height),
+                    );
                     
                     // Widget background
                     let bg_color = if self.selected_widget == Some(idx) {
@@ -269,7 +275,11 @@ impl UiLayoutEditorState {
                     self.dragging_widget = Some(idx);
                     if let Some(pos) = canvas_response.interact_pointer_pos() {
                         if let Some(widget) = self.widgets.get(idx) {
-                            let widget_rect = self.widget_rect_to_canvas(widget, canvas_rect);
+                            let widget_rect_kiln = self.widget_rect_to_canvas(widget, canvas_rect_kiln);
+                            let widget_rect = egui::Rect::from_min_size(
+                                egui::pos2(widget_rect_kiln.x, widget_rect_kiln.y),
+                                egui::vec2(widget_rect_kiln.width, widget_rect_kiln.height),
+                            );
                             self.drag_offset = pos - widget_rect.min;
                         }
                     }
@@ -359,15 +369,15 @@ impl UiLayoutEditorState {
                         ui.label("Constraints");
                         ui.horizontal(|ui| {
                             ui.label("Min W:");
-                            ui.add(DragValue::new(widget.layout.constraints.min_width.get_or_insert_mut(0.0)).speed(1.0).suffix("px"));
+                            ui.add(DragValue::new(widget.layout.constraints.min_width.get_or_insert_with(|| 0.0)).speed(1.0).suffix("px"));
                             ui.label("Max W:");
-                            ui.add(DragValue::new(widget.layout.constraints.max_width.get_or_insert_mut(1000.0)).speed(1.0).suffix("px"));
+                            ui.add(DragValue::new(widget.layout.constraints.max_width.get_or_insert_with(|| 1000.0)).speed(1.0).suffix("px"));
                         });
                         ui.horizontal(|ui| {
                             ui.label("Min H:");
-                            ui.add(DragValue::new(widget.layout.constraints.min_height.get_or_insert_mut(0.0)).speed(1.0).suffix("px"));
+                            ui.add(DragValue::new(widget.layout.constraints.min_height.get_or_insert_with(|| 0.0)).speed(1.0).suffix("px"));
                             ui.label("Max H:");
-                            ui.add(DragValue::new(widget.layout.constraints.max_height.get_or_insert_mut(1000.0)).speed(1.0).suffix("px"));
+                            ui.add(DragValue::new(widget.layout.constraints.max_height.get_or_insert_with(|| 1000.0)).speed(1.0).suffix("px"));
                         });
 
                         // Type-specific properties

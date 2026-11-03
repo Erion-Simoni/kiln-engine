@@ -251,6 +251,11 @@ pub enum Component {
         /// Role name, e.g. `"player"` or `"coin"`.
         role: String,
     },
+    /// Parent-child relationship for entity hierarchy.
+    Parent {
+        /// Parent entity's source id.
+        parent: String,
+    },
 }
 
 impl Project {

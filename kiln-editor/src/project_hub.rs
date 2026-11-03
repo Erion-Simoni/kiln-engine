@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use dirs;
 use serde::{Serialize, Deserialize};
+use serde_json;
 
 /// A recent project entry.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

@@ -36,6 +36,7 @@ kiln-ui = { workspace = true }
 kiln-ir = { workspace = true }
 uuid = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 kiln-anim = { workspace = true }
 kiln-vfx = { workspace = true }
 kiln-input = { workspace = true }

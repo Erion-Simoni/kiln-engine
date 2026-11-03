@@ -21,7 +21,7 @@ impl Default for ParticleSystemConfig {
 /// CPU-based particle system.
 pub struct ParticleSystem {
     config: ParticleSystemConfig,
-    emitters: Vec<Emitter>,
+    pub emitters: Vec<Emitter>,
     particles: Vec<Particle>,
 }
 
