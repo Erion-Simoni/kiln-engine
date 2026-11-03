@@ -32,7 +32,7 @@ impl InputRebindPanel {
             return;
         }
 
-        let actions: Vec<Action> = action_map.actions().collect();
+        let actions: Vec<Action> = action_map.actions().cloned().collect();
 
         ScrollArea::vertical().show(ui, |ui| {
             for action in actions {

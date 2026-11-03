@@ -70,25 +70,6 @@ impl SpriteEditorState {
         }
     }
 
-    pub fn new() -> Self {
-        Self {
-            selected_entity: None,
-            spritesheet_path: String::new(),
-            spritesheet_size: (0, 0),
-            pivot: [0.5, 0.5],
-            slice_mode: SliceMode::Manual,
-            grid_cell_size: (32, 32),
-            grid_spacing: (0, 0),
-            grid_offset: (0, 0),
-            nine_slice_borders: (0, 0, 0, 0),
-            show_auto_slice: false,
-            preview_zoom: 1.0,
-            preview_pan: (0.0, 0.0),
-            preview_dragging: false,
-            last_mouse_pos: None,
-        }
-    }
-
     /// Render the sprite editor panel.
     pub fn render(&mut self, ui: &mut Ui, project: &mut Project) {
         ui.heading("Sprite Editor");
@@ -127,7 +108,7 @@ impl SpriteEditorState {
 
         ui.add_space(8.0);
 
-        let entity_id = self.selected_entity.as_ref().unwrap();
+        let entity_id = &self.selected_entity.clone().unwrap();
         let (scene_id, entity) = self.find_entity(project, entity_id);
 
         if entity.is_none() {

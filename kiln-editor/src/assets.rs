@@ -99,10 +99,6 @@ impl AssetBrowser {
         self.preview_pixels.as_deref()
     }
 
-    /// Preview size in pixels.
-    pub fn preview_size(&self) -> Option<(usize, usize)> {
-        self.preview_size
-    }
 
     /// Current filter text.
     pub fn filter(&self) -> &str {
@@ -152,7 +148,7 @@ impl AssetBrowser {
                 continue;
             }
             let size = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
-            let kind = match extension(&file).as_deref() {
+            let kind = match file.extension().and_then(|s| s.to_str()) {
                 Some("png") => AssetKind::Image,
                 _ => AssetKind::Other,
             };

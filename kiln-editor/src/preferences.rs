@@ -277,11 +277,11 @@ impl PreferencesPanel {
                 ui.end_row();
 
                 let mut remove_idx = None;
-                for (idx, tool) in self.preferences.external_tools.iter().enumerate() {
+                for (idx, tool) in self.preferences.external_tools.iter_mut().enumerate() {
                     ui.label(&tool.name);
                     ui.label(tool.path.display().to_string());
                     ui.label(&tool.args);
-                    ui.checkbox(&mut self.preferences.external_tools[idx].enabled, "");
+                    ui.checkbox(&mut tool.enabled, "");
                     if ui.small_button("🗑").clicked() {
                         remove_idx = Some(idx);
                     }

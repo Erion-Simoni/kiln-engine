@@ -14,8 +14,12 @@ check:
 test:
     cargo nextest run --workspace
 
-# run editor or demo window
+# run the native editor
 run:
+    cargo run --bin kiln-editor
+
+# run the standalone demo
+demo:
     cargo run --bin demo
 
 # wasm demo in browser

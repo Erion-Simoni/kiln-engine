@@ -1,53 +1,30 @@
 # Kiln Session Handoff
 
-**Active focus:** Kiln 2D v1.0 roadmap (`docs/2D_V1_ROADMAP.md`)
-**Branch:** `cline/3s2pmrtj` (pushed to origin)
+**Active focus:** Native editor startup repair on top of master `7dc980c` (2026-11-03).
+**Milestones:** M0–M28 and the 2D gate remain complete; Kiln 2D v1.0 hardware/device verification remains outstanding. M29 remains inactive. This session does not advance a milestone.
 
----
+## Done
 
-## Milestone status
+- Updated the clean cloud checkout to the latest merged master.
+- Repaired editor compilation: duplicate definitions, mismatched panel and ECS APIs, missing sprite/shader fields, invalid egui calls, and conflicting UI borrows.
+- Kept plugin configuration per plugin instead of returning a shared mutable static.
+- Encapsulated Rapier body/collider removal so companion sets remain consistent.
+- Routed project hub open/create callbacks to EditorApp rather than stub methods.
+- Fixed the black startup window: render on RedrawRequested, request subsequent redraws, and present submitted surface frames.
+- Honor WGPU_BACKEND for backend selection and propagate main/event-loop startup errors.
+- `just run` now starts kiln-editor; `just demo` retains access to the demo.
 
-| Milestone | Status |
-|-----------|--------|
-| M0–M28 + 2D gate (G-1…G-6) | ✅ Complete |
-| M29 (3D foundation) | In progress (not active) |
-| **Kiln 2D v1.0** | **Active** — closing remaining 2D gaps |
+## Validation
 
----
+- `cargo build -p kiln-editor`: passed with existing warnings.
+- `cargo test -p kiln-editor --lib`: 33 passed, zero failed or ignored; includes animation panel state preservation and isolated plugin settings regressions.
+- Native launch on Xvfb using software OpenGL (`DISPLAY=:99 WGPU_BACKEND=gl`): welcome screen visibly rendered; entered the main workspace with a real pointer click; no panic or GPU validation error. Virtual display/framebuffer warnings remain.
+- `git diff --check`: passed.
+- `just check`: failed during formatting because kiln-web/src/lib.rs:1160 has an existing unmatched closing delimiter. Full-workspace checks are not passing. The user explicitly requested committing and pushing these editor fixes to a new branch despite this previously reported unrelated failure.
 
-## 2D v1.0 acceptance criteria (V1-1 → V1-10)
+## Next
 
-| # | Criterion | Status |
-|---|-----------|--------|
-| V1-1 | Script can spawn entities and read world state | ✅ Done (Phase A-1, A-2) |
-| V1-2 | Player main menu / loader UI | ✅ Done (Phase B-1) |
-| V1-3 | Editor scene view post effects match player | ✅ Done (Phase C-1) |
-| V1-4 | Web end-to-end export test (CI) | ✅ Done (Phase D-1 — CI job ready, needs workflows permission) |
-| V1-5 | Clean machine run documented + tested | ✅ Done (Phase E-1 — procedure documented, results pending hardware) |
-| V1-6 | SDF font pipeline automated | ✅ Done (Phase F-1 — implemented, compiles clean) |
-| V1-7 | Brotli WASM size under 1.5 MB | ✅ Done (Phase D-1 — CI job measures) |
-| V1-8 | Frame budget on reference Low/Medium GPU | ⏳ Phase G — needs physical hardware |
-| V1-9 | All remaining TODO_LIST.md 2D items complete | ✅ Done (Phase H) |
-| V1-10 | v0.5 gate re-verified | ⏳ Phase I — needs device testing |
-
----
-
-## Next actions (in order)
-
-1. **Phase G:** Measure frame time on reference Low/Medium GPU; record in `docs/BUDGETS.md` (V1-8). Needs physical hardware.
-2. **Phase I:** Verify vertical slice runs on web, desktop, Android, iOS; record results (V1-10). Needs device testing.
-
----
-
-## Known issues (not 2D v1.0 blockers)
-
-- Web Workers ping-only (needs crossOriginIsolated)
-- iOS device testing needs macOS runner
-- iOS/Android device tier returns fixed values (deferred to mobile milestones)
-- Effect toggles (B/O/F) are debug keys, not settings
-
----
-
-## Session protocol
-
-Complete one task → update `docs/STATE.md` → commit → push → wait for user to say "continue".
+- Review the editor changes and test on a physical desktop GPU. Launch from the repository with `cargo run --bin kiln-editor` or `just run`.
+- In this cloud machine, source `/workspace/.kiln-tools/activate.sh` before Cargo commands. A graphical display is required. Virtual-display verification used the GL backend; this machine has no Vulkan driver.
+- Separately repair the web crate parser error and the previously identified core/player test and optional audio-feature defects before claiming full-workspace readiness. Audio preview is gated behind the optional editor audio feature, forwarding to kiln-runtime/audio; it is disabled in the validated default build and not validated here.
+- Physical Low/Medium GPU frame budgets and mobile/device acceptance checks remain outstanding.

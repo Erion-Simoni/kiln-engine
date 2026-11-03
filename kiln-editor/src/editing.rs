@@ -249,7 +249,7 @@ pub fn update_prefab_instances(
     let mut updated = 0;
 
     // Collect entities that are instances of this prefab
-    let instance_entities: Vec<hecs::Entity> = world_ref.query::<&PrefabInstance>()
+    let instance_entities: Vec<hecs::Entity> = world.world_ref().query::<(hecs::Entity, &PrefabInstance)>()
         .iter()
         .filter(|(_, prefab_instance)| prefab_instance.prefab_id == prefab.id)
         .map(|(entity, _)| entity)
@@ -290,20 +290,20 @@ pub fn update_prefab_instances(
         }
 
         // Apply instance overrides
-        if let Some(mut prefab_inst) = self.world.world_mut().query_one_mut::<&mut PrefabInstance>(entity).next() {
+        if let Some(mut prefab_inst) = world.world_mut().get::<&mut PrefabInstance>(entity).ok() {
             for (comp_name, comp_override) in &prefab_inst.overrides.overrides {
-                match comp_name {
+                match comp_name.as_str() {
                     "transform" | "Transform" => {
                         if let kiln_core::prefab::ComponentOverride::Transform { x, y, rotation, scale } = comp_override {
-                            if let Some(v) = x { transform.position.x = v; }
-                            if let Some(v) = y { transform.position.y = v; }
-                            if let Some(v) = rotation { transform.rotation = v; }
-                            if let Some(v) = scale { transform.scale = kiln_core::Vec2::splat(v); }
+                            if let Some(v) = x { transform.position.x = *v; }
+                            if let Some(v) = y { transform.position.y = *v; }
+                            if let Some(v) = rotation { transform.rotation = *v; }
+                            if let Some(v) = scale { transform.scale = kiln_core::Vec2::splat(*v); }
                         }
                     }
                     "sprite" | "Sprite" => {
                         if let kiln_core::prefab::ComponentOverride::Sprite { color, texture } = comp_override {
-                            if let Some(c) = color { sprite.color = c; }
+                            if let Some(c) = color { sprite.color = *c; }
                             if let Some(t) = texture {
                                 let _ = t; // Texture override handled by asset system
                             }

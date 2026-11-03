@@ -158,7 +158,7 @@ pub fn render_hierarchy_panel(
 
     // Entity tree
     egui::ScrollArea::vertical().show(ui, |ui| {
-        let nodes: Vec<HierarchyNode> = state.filtered_nodes().iter().cloned().collect();
+        let nodes: Vec<HierarchyNode> = state.filtered_nodes().into_iter().cloned().collect();
         for node in nodes {
             let selected = state.selected_id.as_deref() == Some(&node.entity_id);
             let node_text = if node.has_children {

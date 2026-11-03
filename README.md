@@ -23,7 +23,8 @@ in `kiln-core` (commit `4556431`). See `docs/ROADMAP.md` for milestones and
 # Install just, cargo-nextest
 just check    # fmt + clippy + build
 just test     # run tests
-just run      # editor or demo
+just run      # native editor
+just demo     # standalone demo
 just web      # wasm demo in browser
 ```
 

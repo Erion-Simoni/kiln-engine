@@ -34,6 +34,7 @@ pub fn render_inspector_panel(
         return None;
     };
 
+    let metadata = project.clone();
     let Some(scene) = project.scenes.get_mut(scene_id) else {
         return None;
     };
@@ -62,7 +63,7 @@ pub fn render_inspector_panel(
             .default_open(true)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    changed |= render_component(ui, component, project);
+                    changed |= render_component(ui, component, &metadata);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.small_button("✕").on_hover_text("Remove component").clicked() {
                             remove_idx = Some(idx);

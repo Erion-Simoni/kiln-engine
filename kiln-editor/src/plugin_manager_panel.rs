@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use dirs;
 
 /// State of the Plugin Manager panel.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct PluginManagerPanel {
     /// Registry of loaded plugins.
     registry: PluginRegistry,
@@ -26,6 +26,7 @@ pub struct PluginManagerPanel {
     show_settings: Option<String>,
     /// Error message.
     error: Option<String>,
+    configs: HashMap<String, kiln_plugin_api::PluginConfig>,
 }
 
 impl PluginManagerPanel {
@@ -41,6 +42,7 @@ impl PluginManagerPanel {
             filter: String::new(),
             show_settings: None,
             error: None,
+            configs: HashMap::new(),
         };
         // Create plugins directory if it doesn't exist
         let _ = std::fs::create_dir_all(&panel.plugins_dir);
@@ -107,7 +109,7 @@ impl PluginManagerPanel {
         ui.heading("Installed Plugins");
         ui.add_space(4.0);
 
-        let manifests = self.registry.manifests();
+        let manifests: Vec<_> = self.registry.manifests().into_iter().cloned().collect();
         let filtered: Vec<_> = manifests.iter()
             .filter(|m| self.filter.is_empty() || 
                 m.name.to_lowercase().contains(&self.filter.to_lowercase()) ||
@@ -226,9 +228,7 @@ impl PluginManagerPanel {
     }
 
     fn get_config_mut(&mut self, plugin_id: &str) -> &mut kiln_plugin_api::PluginConfig {
-        // TODO: Implement config storage
-        static mut DUMMY: kiln_plugin_api::PluginConfig = kiln_plugin_api::PluginConfig::default();
-        unsafe { &mut DUMMY }
+        self.configs.entry(plugin_id.to_string()).or_default()
     }
 }
 
@@ -241,5 +241,18 @@ impl PluginManagerPanel {
         } else {
             "Not loaded".to_string()
         }
+    }
+}
+
+#[cfg(test)]
+mod config_tests {
+    use super::*;
+
+    #[test]
+    fn plugin_settings_are_kept_separate() {
+        let mut panel = PluginManagerPanel::default();
+        panel.get_config_mut("first").enabled = true;
+        assert!(!panel.get_config_mut("second").enabled);
+        assert!(panel.get_config_mut("first").enabled);
     }
 }

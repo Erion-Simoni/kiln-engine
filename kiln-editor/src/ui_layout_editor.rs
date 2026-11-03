@@ -211,7 +211,7 @@ impl UiLayoutEditorState {
                 let mut clicked_widget = None;
                 let mut drag_started = None;
                 
-                for (idx, widget) in self.widgets.iter().enumerate() {
+                for (idx, widget) in self.widgets.clone().iter().enumerate() {
                     if !widget.visible { continue; }
                     
                     let widget_rect_kiln = self.widget_rect_to_canvas(widget, canvas_rect_kiln);
@@ -261,9 +261,9 @@ impl UiLayoutEditorState {
                     }
                     if widget_response.dragged() && self.dragging_widget == Some(idx) {
                         if let Some(pos) = widget_response.interact_pointer_pos() {
-                            let new_bounds = self.canvas_pos_to_widget_bounds(pos - self.drag_offset);
+                            let new_bounds = self.snap_bounds(self.canvas_pos_to_widget_bounds(pos - self.drag_offset));
                             if let Some(widget) = self.widgets.get_mut(idx) {
-                                widget.bounds = self.snap_bounds(new_bounds);
+                                widget.bounds = new_bounds;
                             }
                         }
                     }
@@ -450,11 +450,7 @@ impl UiLayoutEditorState {
 
     /// Convert widget bounds to canvas coordinates.
     fn widget_rect_to_canvas(&self, widget: &EditorWidget, canvas_rect: Rect) -> Rect {
-        Rect::from_min_max(
-            Pos2::new(canvas_rect.left() + widget.bounds.x, canvas_rect.top() + widget.bounds.y),
-            Pos2::new(canvas_rect.left() + widget.bounds.x + widget.bounds.width, 
-                     canvas_rect.top() + widget.bounds.y + widget.bounds.height),
-        )
+        Rect::new(canvas_rect.x + widget.bounds.x, canvas_rect.y + widget.bounds.y, widget.bounds.width, widget.bounds.height)
     }
 
     /// Convert canvas position to widget bounds.
@@ -480,8 +476,3 @@ impl UiLayoutEditorState {
 
 
 // Add missing methods to Grid
-impl Grid {
-    pub fn num_cols(&self) -> usize {
-        self.cols
-    }
-}
