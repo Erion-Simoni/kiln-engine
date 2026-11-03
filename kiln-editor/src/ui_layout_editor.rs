@@ -478,3 +478,10 @@ impl UiLayoutEditorState {
 }
 
 
+
+// Add missing methods to Grid
+impl Grid {
+    pub fn num_cols(&self) -> usize {
+        self.cols
+    }
+}

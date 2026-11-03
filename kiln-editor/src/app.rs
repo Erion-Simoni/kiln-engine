@@ -60,6 +60,22 @@ struct PlaySession {
     error: Option<String>,
 }
 
+impl PlaySession {
+    /// Play an audio preview by name.
+    pub fn play_audio_preview(&mut self, name: &str) {
+        self.slice.play_audio_preview(name);
+    }
+
+    /// Stop audio playback preview.
+    pub fn stop_audio_preview(&mut self) {
+        self.slice.stop_audio_preview();
+    }
+
+    /// Register an audio asset with the slice session.
+    pub fn register_audio(&mut self, name: &str, path: &str) {
+        self.slice.register_audio(name, path);
+    }
+
 /// The world size the scene view falls back to when no project is open.
 const DEFAULT_WORLD_SIZE: (f32, f32) = (1280.0, 720.0);
 
@@ -909,18 +925,18 @@ impl EditorApp {
     /// Create a new project from a template.
     pub fn create_project(
         &mut self,
-        name: String,
-        path: PathBuf,
-        template: String,
+        name: &str,
+        path: &Path,
+        template: &str,
     ) -> Result<(), String> {
         // Create project directory
         std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
 
         // Create project file
         let project = match template.as_str() {
-            "empty_2d" => self.create_empty_2d_project(name, &path)?,
-            "platformer" => self.create_platformer_project(name, &path)?,
-            "topdown" => self.create_topdown_project(name, &path)?,
+            "empty_2d" => self.create_empty_2d_project(name.to_string(), path)?,
+            "platformer" => self.create_platformer_project(name.to_string(), path)?,
+            "topdown" => self.create_topdown_project(name.to_string(), path)?,
             _ => return Err(format!("Unknown template: {}", template)),
         };
 
@@ -938,7 +954,7 @@ impl EditorApp {
         std::fs::write(&script_file, "// Game script\nlet speed = 100.0;\nlet dt = get_delta_time();\nlet dx = get_input_x() * speed * dt;\nlet dy = get_input_y() * speed * dt;\nmove_player(dx, dy);\n").map_err(|e| e.to_string())?;
 
         // Load the new project
-        self.load_project(path)
+        self.load_project(&path)
     }
 
     /// Create an empty 2D project.
@@ -1389,7 +1405,7 @@ impl winit::application::ApplicationHandler for EditorApp {
             if let Some(last_project) = self.project_hub.last_project() {
                 let path = last_project.path.clone();
                 if path.exists() {
-                    if let Err(e) = self.load_project(path) {
+                    if let Err(e) = self.load_project(&path) {
                         eprintln!("Failed to auto-reopen last project: {}", e);
                     } else {
                         // Add back to recent projects since we just opened it
@@ -1516,9 +1532,9 @@ impl winit::application::ApplicationHandler for EditorApp {
         {
             if !response.consumed {
                 match key {
-                    Key::Character("w") => self.gizmo.mode = GizmoMode::Translate,
-                    Key::Character("e") => self.gizmo.mode = GizmoMode::Rotate,
-                    Key::Character("r") => self.gizmo.mode = GizmoMode::Scale,
+                    Key::Character(key) if key == "w" => self.gizmo.mode = GizmoMode::Translate,
+                    Key::Character(key) if key == "e" => self.gizmo.mode = GizmoMode::Rotate,
+                    Key::Character(key) if key == "r" => self.gizmo.mode = GizmoMode::Scale,
                     Key::Named(NamedKey::Escape) => self.gizmo.mode = GizmoMode::None,
                     _ => {}
                 }
@@ -1583,7 +1599,7 @@ impl winit::application::ApplicationHandler for EditorApp {
                             .world
                             .world_mut()
                             .query_mut::<(hecs::Entity, &mut Transform)>()
-                            .iter()
+                            .iter_mut()
                             .find(|(e, _)| *e == entity)
                         {
                             transform.position.x += dx;
@@ -2275,7 +2291,7 @@ impl winit::application::ApplicationHandler for EditorApp {
                 }
                 MenuAction::OpenProject => {
                     let path = PathBuf::from(self.project_path_input.trim());
-                    match self.load_project(path) {
+                    match self.load_project(&path) {
                         Ok(()) => self.console_log.push("[INFO] Project loaded".to_string()),
                         Err(e) => {
                             let message = format!("[ERROR] Could not load the project: {e}");
@@ -2351,7 +2367,7 @@ impl winit::application::ApplicationHandler for EditorApp {
         // Handle the open-project request from the welcome screen.
         if std::mem::take(&mut self.open_project_requested) {
             let path = PathBuf::from(self.project_path_input.trim());
-            match self.load_project(path) {
+            match self.load_project(&path) {
                 Ok(()) => self.console_log.push("[INFO] Project loaded".to_string()),
                 Err(e) => {
                     let message = format!("[ERROR] Could not load the project: {e}");
@@ -4046,7 +4062,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         &mut self.project_hub,
                         &mut |path| {
                             // Open project callback
-                            if let Err(e) = self.load_project(path.clone()) {
+                            if let Err(e) = self.load_project(&path) {
                                 eprintln!("Failed to load project: {}", e);
                             } else {
                                 // Add to recent projects
@@ -4055,7 +4071,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         },
                         &mut |name, path, template| {
                             // Create project callback
-                            if let Err(e) = self.create_project(name, path, template) {
+                            if let Err(e) = self.create_project(name.as_str(), path, template) {
                                 eprintln!("Failed to create project: {}", e);
                             }
                         },

@@ -196,6 +196,8 @@ pub fn render_project_hub(
         ui.add_space(8.0);
 
         ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+            let mut projects_to_open: Vec<(PathBuf, String)> = Vec::new();
+            let mut projects_to_remove: Vec<PathBuf> = Vec::new();
             for project in &state.recent_projects {
                 let path = project.path.clone();
                 let name = project.name.clone();
@@ -207,15 +209,21 @@ pub fn render_project_hub(
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.small_button("Open").clicked() {
-                            state.add_recent(path.clone(), name.clone());
-                            open_project_callback(project.path.clone());
+                            projects_to_open.push((path.clone(), name.clone()));
                         }
                         if ui.small_button("Remove").clicked() {
-                            state.remove_recent(&project.path);
+                            projects_to_remove.push(project.path.clone());
                         }
                     });
                 });
                 ui.separator();
+            }
+            for (path, name) in projects_to_open {
+                state.add_recent(path.clone(), name.clone());
+                open_project_callback(path);
+            }
+            for path in projects_to_remove {
+                state.remove_recent(&path);
             }
         });
 

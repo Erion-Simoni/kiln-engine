@@ -426,6 +426,7 @@ fn draw_connections(
             painter.add(egui::Shape::convex_polygon(
                 vec![end, arrow_base + perp.to_vec2(), arrow_base - perp.to_vec2()],
                 CONNECTION_COLOR,
+                egui::epaint::CloseShape::Yes,
             ));
         }
     }
@@ -585,12 +586,13 @@ fn handle_node_interactions(
         }
 
         // Pin interaction
+        let mut connection_to_add: Option<(Uuid, Uuid)> = None;
         if let Some(node) = state.graph.nodes.get(node_id) {
             for pin in &node.pins {
                 let pin_pos = match pin.direction {
-                    PinDirection::Input => Pos2::new(rect.left(), rect.top() + 24.0 * state.zoom + 
+                    PinDirection::Input => Pos2::new(rect.left(), rect.top() + 24.0 * state.zoom +
                         node.pins.iter().position(|p| p.id == pin.id).unwrap_or(0) as f32 * 20.0 * state.zoom),
-                    PinDirection::Output => Pos2::new(rect.right(), rect.top() + 24.0 * state.zoom + 
+                    PinDirection::Output => Pos2::new(rect.right(), rect.top() + 24.0 * state.zoom +
                         node.pins.iter().position(|p| p.id == pin.id).unwrap_or(0) as f32 * 20.0 * state.zoom),
                 };
                 let pin_rect = egui::Rect::from_center_size(pin_pos, Vec2::splat(PIN_RADIUS * 2.0 * state.zoom));
@@ -601,7 +603,7 @@ fn handle_node_interactions(
                         state.creating_connection = Some(pin.id);
                     } else if let Some(source_pin_id) = state.creating_connection {
                         if state.can_connect(source_pin_id, pin.id) {
-                            state.add_connection(source_pin_id, pin.id);
+                            connection_to_add = Some((source_pin_id, pin.id));
                         }
                         state.creating_connection = None;
                     }
@@ -611,8 +613,12 @@ fn handle_node_interactions(
                 }
             }
         }
-    }
 
+        if let Some((source_pin_id, pin_id)) = connection_to_add {
+            state.add_connection(source_pin_id, pin_id);
+        }
+
+    }
     if let Some(id) = clicked_node {
         state.selected_node = Some(id);
     }
@@ -757,7 +763,7 @@ fn show_node_editor(ctx: &egui::Context, state: &mut GraphEditorState, node_id: 
                     ui.label("Quest ID:");
                     ui.text_edit_singleline(quest_id);
                 }
-                NodeType::DataTableLookup { table_id, column_name } | NodeType::DataTableRowGet { table_id, .. } => {
+                NodeType::DataTableLookup { table_id, .. } | NodeType::DataTableRowGet { table_id } => {
                     ui.label("Table ID:");
                     ui.text_edit_singleline(table_id);
                     if let NodeType::DataTableLookup { column_name, .. } = &mut node.node_type {

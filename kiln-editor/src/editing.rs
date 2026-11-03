@@ -249,11 +249,10 @@ pub fn update_prefab_instances(
     let mut updated = 0;
 
     // Collect entities that are instances of this prefab
-    let world_ref = world.world_ref();
-    let instance_entities: Vec<hecs::Entity> = world_ref.iter()
-        .filter(|entity| {
-            world_ref.get::<&PrefabInstance>(entity.id()).map_or(false, |pi| pi.prefab_id == prefab.id)
-        })
+    let instance_entities: Vec<hecs::Entity> = world_ref.query::<&PrefabInstance>()
+        .iter()
+        .filter(|(_, prefab_instance)| prefab_instance.prefab_id == prefab.id)
+        .map(|(entity, _)| entity)
         .collect();
 
     for entity in instance_entities {
@@ -277,7 +276,7 @@ pub fn update_prefab_instances(
                         .with_rotation(*rotation)
                         .with_scale(kiln_core::Vec2::splat(*scale));
                 }
-                kiln_core::project::Component::Sprite { color, texture, layer } => {
+                kiln_core::project::Component::Sprite { color, texture, layer, material: _, animation_clip: _ } => {
                     sprite = Sprite::new(color[0], color[1], color[2], color[3])
                         .with_size(DEFAULT_SPRITE_SIZE[0], DEFAULT_SPRITE_SIZE[1])
                         .with_layer(*layer);
@@ -291,7 +290,7 @@ pub fn update_prefab_instances(
         }
 
         // Apply instance overrides
-        if let Ok(mut prefab_inst) = world.world_mut().get_one::<&mut PrefabInstance>(entity) {
+        if let Some(mut prefab_inst) = self.world.world_mut().query_one_mut::<&mut PrefabInstance>(entity).next() {
             for (comp_name, comp_override) in &prefab_inst.overrides.overrides {
                 match comp_name.as_str() {
                     "transform" | "Transform" => {

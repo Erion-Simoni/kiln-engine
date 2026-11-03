@@ -317,8 +317,12 @@ impl SpriteEditorState {
     }
 
     fn update_sprite_pivot(&mut self, project: &mut Project, entity_id: &str) {
-        if let (Some(scene_id), Some(entity)) = self.find_entity(project, entity_id) {
-            if let Some(scene) = project.scenes.get_mut(scene_id) {
+    let scene_id_owned = {
+        let (sid, _) = self.find_entity(project, entity_id);
+        sid.map(|s| s.to_string())
+    };
+    if let Some(scene_id) = scene_id_owned {
+        if let Some(scene) = project.scenes.get_mut(&scene_id) {
                 for entity in &mut scene.entities {
                     if entity.id == *entity_id {
                         for component in &mut entity.components {
@@ -334,8 +338,12 @@ impl SpriteEditorState {
     }
 
     fn update_sprite_texture(&mut self, project: &mut Project, entity_id: &str, texture: Option<String>) {
-        if let (Some(scene_id), Some(entity)) = self.find_entity(project, entity_id) {
-            if let Some(scene) = project.scenes.get_mut(scene_id) {
+    let scene_id_owned = {
+        let (sid, _) = self.find_entity(project, entity_id);
+        sid.map(|s| s.to_string())
+    };
+    if let Some(scene_id) = scene_id_owned {
+        if let Some(scene) = project.scenes.get_mut(&scene_id) {
                 for entity in &mut scene.entities {
                     if entity.id == *entity_id {
                         for component in &mut entity.components {
@@ -352,8 +360,12 @@ impl SpriteEditorState {
     }
 
     fn update_sprite_nine_slice(&mut self, project: &mut Project, entity_id: &str) {
-        if let (Some(scene_id), Some(entity)) = self.find_entity(project, entity_id) {
-            if let Some(scene) = project.scenes.get_mut(scene_id) {
+    let scene_id_owned = {
+        let (sid, _) = self.find_entity(project, entity_id);
+        sid.map(|s| s.to_string())
+    };
+    if let Some(scene_id) = scene_id_owned {
+        if let Some(scene) = project.scenes.get_mut(&scene_id) {
                 for entity in &mut scene.entities {
                     if entity.id == *entity_id {
                         for component in &mut entity.components {

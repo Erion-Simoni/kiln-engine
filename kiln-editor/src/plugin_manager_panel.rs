@@ -233,3 +233,13 @@ impl PluginManagerPanel {
 }
 
 
+
+impl PluginManagerPanel {
+    pub fn get_status_text(&self, plugin_id: &str) -> String {
+        if self.registry.plugins.contains_key(plugin_id) {
+            "Loaded".to_string()
+        } else {
+            "Not loaded".to_string()
+        }
+    }
+}

@@ -208,6 +208,7 @@ impl PhysicsEditorState {
                             handle,
                             &mut world.collider_set,
                             &mut world.joint_set,
+                            &mut world.multibody_joint_set,
                         );
                         if self.selected_body == Some(handle) {
                             self.selected_body = None;
@@ -312,7 +313,7 @@ impl PhysicsEditorState {
                         ui.label(format!("Parent: {:?}", parent));
                         if ui.small_button("🗑").clicked() {
                             if let Some(world) = &mut self.physics_world {
-                                world.collider_set.remove(handle);
+                                world.collider_set.remove(handle, &mut world.rigid_body_set);
                             }
                         }
                     });
@@ -447,7 +448,7 @@ impl PhysicsEditorState {
                 if let Some(ball) = collider.shape().as_ball() {
                     ui.painter().circle_stroke(center_pos, ball.radius * 20.0, Stroke::new(1.5, Color32::from_rgb(100, 200, 255)));
                 } else if let Some(cuboid) = collider.shape().as_cuboid() {
-                    let half_extents = cuboid.half_extents();
+                    let half_extents = cuboid.half_extents;
                     let rect = egui::Rect::from_min_max(
                         egui::pos2(
                             center_pos.x - half_extents.x * 20.0,
