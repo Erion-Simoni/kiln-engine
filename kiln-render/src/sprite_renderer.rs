@@ -381,7 +381,8 @@ impl SpriteRenderer {
         } else {
             TextureId::WHITE
         };
-        self.pending.push((id, instance.material_id, layer, instance));
+        self.pending
+            .push((id, instance.material_id, layer, instance));
     }
 
     /// Queue a sprite sampled from `texture` on a specific `layer` with an explicit material ID.
@@ -489,11 +490,10 @@ impl SpriteRenderer {
         // sprites are batched into one draw call. The sort is stable, so
         // submission order is preserved within each (layer, material, texture) group.
         self.pending.sort_by(|a, b| {
-            a.2
-                .partial_cmp(&b.2)
+            a.2.partial_cmp(&b.2)
                 .unwrap_or(std::cmp::Ordering::Equal)
                 .then_with(|| a.1.cmp(&b.1))
-                .then_with(|| a.0.0.cmp(&b.0.0))
+                .then_with(|| a.0 .0.cmp(&b.0 .0))
         });
 
         let proj: [f32; 16] = camera.projection_matrix().to_cols_array();
@@ -604,9 +604,24 @@ mod tests {
     fn sort_preserves_layer_order_across_textures() {
         let mut sr = SpriteRendererCpu::default();
         // Submit in painter order: background A, foreground B, background C
-        sr.pending.push((TextureId(0), 0, 0.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // A: layer 0, tex 0
-        sr.pending.push((TextureId(1), 0, 1.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // B: layer 1, tex 1
-        sr.pending.push((TextureId(0), 0, 0.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // C: layer 0, tex 0
+        sr.pending.push((
+            TextureId(0),
+            0,
+            0.0,
+            SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]),
+        )); // A: layer 0, tex 0
+        sr.pending.push((
+            TextureId(1),
+            0,
+            1.0,
+            SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]),
+        )); // B: layer 1, tex 1
+        sr.pending.push((
+            TextureId(0),
+            0,
+            0.0,
+            SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]),
+        )); // C: layer 0, tex 0
 
         // Extract the sort order that flush would use
         let mut ordered: Vec<(f32, u32, u32)> = sr
@@ -631,8 +646,18 @@ mod tests {
     #[test]
     fn sort_preserves_submission_order_within_same_layer_and_texture() {
         let mut sr = SpriteRendererCpu::default();
-        sr.pending.push((TextureId(0), 0, 0.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // first
-        sr.pending.push((TextureId(0), 0, 0.0, SpriteInstance::colored([1.0; 2], [1.0; 2], [1.0; 4]))); // second
+        sr.pending.push((
+            TextureId(0),
+            0,
+            0.0,
+            SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]),
+        )); // first
+        sr.pending.push((
+            TextureId(0),
+            0,
+            0.0,
+            SpriteInstance::colored([1.0; 2], [1.0; 2], [1.0; 4]),
+        )); // second
 
         let mut ordered: Vec<(f32, u32, u32)> = sr
             .pending
@@ -673,11 +698,7 @@ mod tests {
             self.pending.len()
         }
         fn draw_calls_if_flushed(&self) -> u32 {
-            let mut ids: Vec<_> = self
-                .pending
-                .iter()
-                .map(|(t, _, _, _)| t.0)
-                .collect();
+            let mut ids: Vec<_> = self.pending.iter().map(|(t, _, _, _)| t.0).collect();
             ids.sort_unstable();
             ids.dedup();
             ids.len() as u32

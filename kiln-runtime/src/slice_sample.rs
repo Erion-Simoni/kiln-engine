@@ -16,14 +16,11 @@
 //! - Script lifecycle events
 //! - Generic state management
 
-use crate::slice::*;
-use crate::world::{GameWorld, Role, SourceId};
 use crate::sprite::Sprite;
-use kiln_core::Transform;
+use crate::world::{GameWorld, Role, SourceId};
 use kiln_ir::Value;
 use kiln_ir::VmError;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Sample-specific roles.
 pub const ROLE_PLAYER: &str = "player";

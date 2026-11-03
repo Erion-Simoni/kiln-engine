@@ -1,7 +1,5 @@
 //! Version Control panel — Git integration for project files.
 
-use egui::Ui;
-
 // ---------------------------------------------------------------------------
 // Stub: no Git support (default build). The `git` feature requires the system
 // OpenSSL development headers (libssl-dev) to compile git2/libgit2-sys.
@@ -16,6 +14,12 @@ impl VersionControlPanel {
     }
 
     pub fn render(&mut self, _ui: &egui::Ui) {}
+}
+
+impl Default for VersionControlPanel {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -118,7 +122,11 @@ impl VersionControlPanel {
                 || status.contains(git2::Status::INDEX_RENAMED)
                 || status.contains(git2::Status::INDEX_TYPECHANGE);
 
-            self.statuses.push(FileStatus { path, status, staged });
+            self.statuses.push(FileStatus {
+                path,
+                status,
+                staged,
+            });
         }
     }
 
@@ -140,7 +148,9 @@ impl VersionControlPanel {
         };
         let repo = Repository::open(repo_path).map_err(|e| e.to_string())?;
         let mut index = repo.index().map_err(|e| e.to_string())?;
-        index.remove_path(Path::new(path)).map_err(|e| e.to_string())?;
+        index
+            .remove_path(Path::new(path))
+            .map_err(|e| e.to_string())?;
         index.write().map_err(|e| e.to_string())?;
         self.refresh_status();
         Ok(())
@@ -159,7 +169,8 @@ impl VersionControlPanel {
         let tree = repo.find_tree(tree_id).map_err(|e| e.to_string())?;
         let signature = repo.signature().map_err(|e| e.to_string())?;
         let parent_commit = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
-        let parents: Vec<&git2::Commit> = parent_commit.as_ref().map(|c| vec![c]).unwrap_or_default();
+        let parents: Vec<&git2::Commit> =
+            parent_commit.as_ref().map(|c| vec![c]).unwrap_or_default();
         repo.commit(
             Some("HEAD"),
             &signature,
@@ -179,11 +190,14 @@ impl VersionControlPanel {
         };
         let repo = Repository::open(repo_path).map_err(|e| e.to_string())?;
         let (object, reference) = repo.revparse_ext(branch_name).map_err(|e| e.to_string())?;
-        repo.checkout_tree(&object, None).map_err(|e| e.to_string())?;
+        repo.checkout_tree(&object, None)
+            .map_err(|e| e.to_string())?;
         if let Some(ref_ref) = reference {
-            repo.set_head(ref_ref.name().unwrap_or("")).map_err(|e| e.to_string())?;
+            repo.set_head(ref_ref.name().unwrap_or(""))
+                .map_err(|e| e.to_string())?;
         } else {
-            repo.set_head_detached(object.id()).map_err(|e| e.to_string())?;
+            repo.set_head_detached(object.id())
+                .map_err(|e| e.to_string())?;
         }
         self.refresh_status();
         Ok(())

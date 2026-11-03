@@ -2,11 +2,11 @@
 
 pub mod camera;
 pub mod frame;
-pub mod pixel_perfect;
 pub mod graph;
 pub mod lighting;
 pub mod particle_renderer;
 pub mod pass_config;
+pub mod pixel_perfect;
 pub mod post;
 #[cfg(test)]
 mod post_effects_test;

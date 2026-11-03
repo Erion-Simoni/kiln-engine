@@ -3,20 +3,18 @@
 //! Provides a drag-and-drop node graph editor for KilnScript gameplay logic.
 //! Nodes can be dragged, connected via pins, and compiled to IR bytecode.
 
-use egui::{vec2, Color32, Pos2, Response, Sense, Ui, Stroke, Vec2, TextStyle, RichText};
+use egui::{Color32, Pos2, Response, RichText, Sense, Stroke, TextStyle, Vec2};
 use kiln_graph::{
     compiler::compile_graph,
     node::{ArithmeticOp, ComparisonOp, ConstantValue, Node, NodeType},
-    pin::{Pin, PinDirection, PinType},
-    Graph, Connection,
+    pin::{PinDirection, PinType},
+    Connection, Graph,
 };
-use kiln_ir::Program;
 use uuid::Uuid;
 
 const PIN_RADIUS: f32 = 6.0;
 const NODE_WIDTH: f32 = 160.0;
 const NODE_HEIGHT: f32 = 80.0;
-const PIN_LABEL_COLOR: Color32 = Color32::from_gray(180);
 const NODE_BG_COLOR: Color32 = Color32::from_rgb(45, 45, 55);
 const NODE_BORDER_COLOR: Color32 = Color32::from_gray(100);
 const NODE_SELECTED_BORDER: Color32 = Color32::from_rgb(100, 200, 255);
@@ -56,7 +54,7 @@ impl GraphEditorState {
     }
 
     pub fn add_node(&mut self, node_type: NodeType, pos: Pos2) -> uuid::Uuid {
-        let mut node = Node::new(node_type, (pos.x, pos.y));
+        let node = Node::new(node_type, (pos.x, pos.y));
         let id = node.id;
         self.graph.add_node(node);
         self.selected_node = Some(id);
@@ -81,10 +79,14 @@ impl GraphEditorState {
 
     pub fn can_connect(&self, source: uuid::Uuid, target: uuid::Uuid) -> bool {
         let source_pin = self.graph.nodes.values().find_map(|n| {
-            n.pins.iter().find(|p| p.id == source && p.direction == PinDirection::Output)
+            n.pins
+                .iter()
+                .find(|p| p.id == source && p.direction == PinDirection::Output)
         });
         let target_pin = self.graph.nodes.values().find_map(|n| {
-            n.pins.iter().find(|p| p.id == target && p.direction == PinDirection::Input)
+            n.pins
+                .iter()
+                .find(|p| p.id == target && p.direction == PinDirection::Input)
         });
 
         match (source_pin, target_pin) {
@@ -95,9 +97,11 @@ impl GraphEditorState {
 
     pub fn add_connection(&mut self, source: uuid::Uuid, target: uuid::Uuid) {
         if self.can_connect(source, target) {
-            let exists = self.graph.connections.iter().any(|c| {
-                c.source_pin == source && c.target_pin == target
-            });
+            let exists = self
+                .graph
+                .connections
+                .iter()
+                .any(|c| c.source_pin == source && c.target_pin == target);
             if !exists {
                 self.graph.connections.push(Connection {
                     id: uuid::Uuid::new_v4(),
@@ -140,70 +144,261 @@ enum NodeCategory {
 /// Get all available node types organized by category.
 fn node_types_by_category() -> Vec<(NodeCategory, Vec<(NodeType, &'static str)>)> {
     vec![
-        (NodeCategory::Events, vec![
-            (NodeType::Event { name: "On Start".to_string() }, "On Start"),
-            (NodeType::Event { name: "On Update".to_string() }, "On Update"),
-            (NodeType::Event { name: "On Collision".to_string() }, "On Collision"),
-            (NodeType::Event { name: "On Trigger".to_string() }, "On Trigger"),
-        ]),
-        (NodeCategory::Values, vec![
-            (NodeType::Constant { value: ConstantValue::Integer(0) }, "Integer Constant"),
-            (NodeType::Constant { value: ConstantValue::Float(0.0) }, "Float Constant"),
-            (NodeType::Constant { value: ConstantValue::Boolean(false) }, "Boolean Constant"),
-            (NodeType::Constant { value: ConstantValue::String("".to_string()) }, "String Constant"),
-        ]),
-        (NodeCategory::Operations, vec![
-            (NodeType::Arithmetic { op: ArithmeticOp::Add }, "Add"),
-            (NodeType::Arithmetic { op: ArithmeticOp::Sub }, "Subtract"),
-            (NodeType::Arithmetic { op: ArithmeticOp::Mul }, "Multiply"),
-            (NodeType::Arithmetic { op: ArithmeticOp::Div }, "Divide"),
-            (NodeType::Comparison { op: ComparisonOp::Equal }, "Equal"),
-            (NodeType::Comparison { op: ComparisonOp::LessThan }, "Less Than"),
-        ]),
-        (NodeCategory::ControlFlow, vec![
-            (NodeType::Branch, "Branch"),
-        ]),
-        (NodeCategory::HostCalls, vec![
-            (NodeType::HostCall { name: "print".to_string() }, "Print"),
-            (NodeType::HostCall { name: "move_player".to_string() }, "Move Player"),
-            (NodeType::HostCall { name: "add_score".to_string() }, "Add Score"),
-            (NodeType::HostCall { name: "collect_coin".to_string() }, "Collect Coin"),
-            (NodeType::HostCall { name: "play_sound".to_string() }, "Play Sound"),
-            (NodeType::HostCall { name: "set_status".to_string() }, "Set Status"),
-            (NodeType::HostCall { name: "spawn_entity".to_string() }, "Spawn Entity"),
-            (NodeType::HostCall { name: "find_nearest".to_string() }, "Find Nearest"),
-        ]),
-        (NodeCategory::Output, vec![
-            (NodeType::Output, "Output"),
-        ]),
-        (NodeCategory::Animation, vec![
-            (NodeType::AnimationClip { clip_name: "".to_string() }, "Play Clip"),
-            (NodeType::AnimationState { state_name: "".to_string() }, "Anim State"),
-            (NodeType::AnimationTransition, "Anim Transition"),
-        ]),
-        (NodeCategory::Behavior, vec![
-            (NodeType::Selector, "Selector"),
-            (NodeType::Sequence, "Sequence"),
-            (NodeType::BehaviorCondition, "Condition"),
-            (NodeType::BehaviorAction { name: "".to_string() }, "Action"),
-        ]),
-        (NodeCategory::AI, vec![
-            (NodeType::AIState { state_name: "".to_string() }, "AI State"),
-            (NodeType::AITransition, "AI Transition"),
-        ]),
-        (NodeCategory::Dialogue, vec![
-            (NodeType::Dialogue { dialogue_id: "".to_string() }, "Show Dialogue"),
-            (NodeType::DialogueChoice, "Dialogue Choice"),
-        ]),
-        (NodeCategory::Quests, vec![
-            (NodeType::QuestStart { quest_id: "".to_string() }, "Start Quest"),
-            (NodeType::QuestComplete { quest_id: "".to_string() }, "Complete Quest"),
-            (NodeType::QuestObjectiveUpdate { quest_id: "".to_string(), objective_index: 0 }, "Update Objective"),
-        ]),
-        (NodeCategory::DataTables, vec![
-            (NodeType::DataTableLookup { table_id: "".to_string(), column_name: "".to_string() }, "Lookup"),
-            (NodeType::DataTableRowGet { table_id: "".to_string() }, "Get Row"),
-        ]),
+        (
+            NodeCategory::Events,
+            vec![
+                (
+                    NodeType::Event {
+                        name: "On Start".to_string(),
+                    },
+                    "On Start",
+                ),
+                (
+                    NodeType::Event {
+                        name: "On Update".to_string(),
+                    },
+                    "On Update",
+                ),
+                (
+                    NodeType::Event {
+                        name: "On Collision".to_string(),
+                    },
+                    "On Collision",
+                ),
+                (
+                    NodeType::Event {
+                        name: "On Trigger".to_string(),
+                    },
+                    "On Trigger",
+                ),
+            ],
+        ),
+        (
+            NodeCategory::Values,
+            vec![
+                (
+                    NodeType::Constant {
+                        value: ConstantValue::Integer(0),
+                    },
+                    "Integer Constant",
+                ),
+                (
+                    NodeType::Constant {
+                        value: ConstantValue::Float(0.0),
+                    },
+                    "Float Constant",
+                ),
+                (
+                    NodeType::Constant {
+                        value: ConstantValue::Boolean(false),
+                    },
+                    "Boolean Constant",
+                ),
+                (
+                    NodeType::Constant {
+                        value: ConstantValue::String("".to_string()),
+                    },
+                    "String Constant",
+                ),
+            ],
+        ),
+        (
+            NodeCategory::Operations,
+            vec![
+                (
+                    NodeType::Arithmetic {
+                        op: ArithmeticOp::Add,
+                    },
+                    "Add",
+                ),
+                (
+                    NodeType::Arithmetic {
+                        op: ArithmeticOp::Sub,
+                    },
+                    "Subtract",
+                ),
+                (
+                    NodeType::Arithmetic {
+                        op: ArithmeticOp::Mul,
+                    },
+                    "Multiply",
+                ),
+                (
+                    NodeType::Arithmetic {
+                        op: ArithmeticOp::Div,
+                    },
+                    "Divide",
+                ),
+                (
+                    NodeType::Comparison {
+                        op: ComparisonOp::Equal,
+                    },
+                    "Equal",
+                ),
+                (
+                    NodeType::Comparison {
+                        op: ComparisonOp::LessThan,
+                    },
+                    "Less Than",
+                ),
+            ],
+        ),
+        (
+            NodeCategory::ControlFlow,
+            vec![(NodeType::Branch, "Branch")],
+        ),
+        (
+            NodeCategory::HostCalls,
+            vec![
+                (
+                    NodeType::HostCall {
+                        name: "print".to_string(),
+                    },
+                    "Print",
+                ),
+                (
+                    NodeType::HostCall {
+                        name: "move_player".to_string(),
+                    },
+                    "Move Player",
+                ),
+                (
+                    NodeType::HostCall {
+                        name: "add_score".to_string(),
+                    },
+                    "Add Score",
+                ),
+                (
+                    NodeType::HostCall {
+                        name: "collect_coin".to_string(),
+                    },
+                    "Collect Coin",
+                ),
+                (
+                    NodeType::HostCall {
+                        name: "play_sound".to_string(),
+                    },
+                    "Play Sound",
+                ),
+                (
+                    NodeType::HostCall {
+                        name: "set_status".to_string(),
+                    },
+                    "Set Status",
+                ),
+                (
+                    NodeType::HostCall {
+                        name: "spawn_entity".to_string(),
+                    },
+                    "Spawn Entity",
+                ),
+                (
+                    NodeType::HostCall {
+                        name: "find_nearest".to_string(),
+                    },
+                    "Find Nearest",
+                ),
+            ],
+        ),
+        (NodeCategory::Output, vec![(NodeType::Output, "Output")]),
+        (
+            NodeCategory::Animation,
+            vec![
+                (
+                    NodeType::AnimationClip {
+                        clip_name: "".to_string(),
+                    },
+                    "Play Clip",
+                ),
+                (
+                    NodeType::AnimationState {
+                        state_name: "".to_string(),
+                    },
+                    "Anim State",
+                ),
+                (NodeType::AnimationTransition, "Anim Transition"),
+            ],
+        ),
+        (
+            NodeCategory::Behavior,
+            vec![
+                (NodeType::Selector, "Selector"),
+                (NodeType::Sequence, "Sequence"),
+                (NodeType::BehaviorCondition, "Condition"),
+                (
+                    NodeType::BehaviorAction {
+                        name: "".to_string(),
+                    },
+                    "Action",
+                ),
+            ],
+        ),
+        (
+            NodeCategory::AI,
+            vec![
+                (
+                    NodeType::AIState {
+                        state_name: "".to_string(),
+                    },
+                    "AI State",
+                ),
+                (NodeType::AITransition, "AI Transition"),
+            ],
+        ),
+        (
+            NodeCategory::Dialogue,
+            vec![
+                (
+                    NodeType::Dialogue {
+                        dialogue_id: "".to_string(),
+                    },
+                    "Show Dialogue",
+                ),
+                (NodeType::DialogueChoice, "Dialogue Choice"),
+            ],
+        ),
+        (
+            NodeCategory::Quests,
+            vec![
+                (
+                    NodeType::QuestStart {
+                        quest_id: "".to_string(),
+                    },
+                    "Start Quest",
+                ),
+                (
+                    NodeType::QuestComplete {
+                        quest_id: "".to_string(),
+                    },
+                    "Complete Quest",
+                ),
+                (
+                    NodeType::QuestObjectiveUpdate {
+                        quest_id: "".to_string(),
+                        objective_index: 0,
+                    },
+                    "Update Objective",
+                ),
+            ],
+        ),
+        (
+            NodeCategory::DataTables,
+            vec![
+                (
+                    NodeType::DataTableLookup {
+                        table_id: "".to_string(),
+                        column_name: "".to_string(),
+                    },
+                    "Lookup",
+                ),
+                (
+                    NodeType::DataTableRowGet {
+                        table_id: "".to_string(),
+                    },
+                    "Get Row",
+                ),
+            ],
+        ),
     ]
 }
 
@@ -224,7 +419,6 @@ fn category_name(cat: NodeCategory) -> &'static str {
     }
 }
 
-
 /// Render the node graph editor panel.
 pub fn render_graph_editor(ui: &mut egui::Ui, state: &mut GraphEditorState) {
     ui.heading("Node Graph");
@@ -232,16 +426,36 @@ pub fn render_graph_editor(ui: &mut egui::Ui, state: &mut GraphEditorState) {
     // Toolbar
     ui.horizontal(|ui| {
         if ui.button("+ Event").clicked() {
-            state.add_node(NodeType::Event { name: "New Event".to_string() }, Pos2::new(100.0, 100.0));
+            state.add_node(
+                NodeType::Event {
+                    name: "New Event".to_string(),
+                },
+                Pos2::new(100.0, 100.0),
+            );
         }
         if ui.button("+ Constant").clicked() {
-            state.add_node(NodeType::Constant { value: ConstantValue::Integer(0) }, Pos2::new(100.0, 200.0));
+            state.add_node(
+                NodeType::Constant {
+                    value: ConstantValue::Integer(0),
+                },
+                Pos2::new(100.0, 200.0),
+            );
         }
         if ui.button("+ Arithmetic").clicked() {
-            state.add_node(NodeType::Arithmetic { op: ArithmeticOp::Add }, Pos2::new(100.0, 300.0));
+            state.add_node(
+                NodeType::Arithmetic {
+                    op: ArithmeticOp::Add,
+                },
+                Pos2::new(100.0, 300.0),
+            );
         }
         if ui.button("+ Host Call").clicked() {
-            state.add_node(NodeType::HostCall { name: "print".to_string() }, Pos2::new(100.0, 400.0));
+            state.add_node(
+                NodeType::HostCall {
+                    name: "print".to_string(),
+                },
+                Pos2::new(100.0, 400.0),
+            );
         }
         ui.separator();
         if ui.button("Compile to IR").clicked() {
@@ -280,7 +494,8 @@ pub fn render_graph_editor(ui: &mut egui::Ui, state: &mut GraphEditorState) {
     // Handle panning with middle mouse or Shift+Left drag
     if response.dragged() {
         let drag_delta = response.drag_delta();
-        if ui.input(|i| i.pointer.middle_down() || (i.modifiers.shift && i.pointer.primary_down())) {
+        if ui.input(|i| i.pointer.middle_down() || (i.modifiers.shift && i.pointer.primary_down()))
+        {
             state.pan_offset += drag_delta;
         }
     }
@@ -320,7 +535,6 @@ pub fn render_graph_editor(ui: &mut egui::Ui, state: &mut GraphEditorState) {
     }
 }
 
-
 /// Draw grid background.
 fn draw_grid(painter: &egui::Painter, canvas_rect: egui::Rect, state: &GraphEditorState) {
     let grid_size = GRID_SIZE * state.zoom;
@@ -334,8 +548,11 @@ fn draw_grid(painter: &egui::Painter, canvas_rect: egui::Rect, state: &GraphEdit
     let mut x = start_x;
     while x <= canvas_rect.right() {
         painter.line_segment(
-            [Pos2::new(x, canvas_rect.top()), Pos2::new(x, canvas_rect.bottom())],
-            Stroke::new(0.5, GRID_COLOR),
+            [
+                Pos2::new(x, canvas_rect.top()),
+                Pos2::new(x, canvas_rect.bottom()),
+            ],
+            Stroke::new(0.5_f32, GRID_COLOR),
         );
         x += grid_size;
     }
@@ -344,8 +561,11 @@ fn draw_grid(painter: &egui::Painter, canvas_rect: egui::Rect, state: &GraphEdit
     let mut y = start_y;
     while y <= canvas_rect.bottom() {
         painter.line_segment(
-            [Pos2::new(canvas_rect.left(), y), Pos2::new(canvas_rect.right(), y)],
-            Stroke::new(0.5, GRID_COLOR),
+            [
+                Pos2::new(canvas_rect.left(), y),
+                Pos2::new(canvas_rect.right(), y),
+            ],
+            Stroke::new(0.5_f32, GRID_COLOR),
         );
         y += grid_size;
     }
@@ -377,7 +597,11 @@ fn draw_connections(
 
     // First collect all node rects
     for (node_id, node) in &state.graph.nodes {
-        let pos = world_to_canvas(Pos2::new(node.position.0, node.position.1), canvas_rect, state);
+        let pos = world_to_canvas(
+            Pos2::new(node.position.0, node.position.1),
+            canvas_rect,
+            state,
+        );
         let width = NODE_WIDTH * state.zoom;
         let height = (NODE_HEIGHT + node.pins.len() as f32 * 20.0).max(NODE_HEIGHT) * state.zoom;
         let rect = egui::Rect::from_min_size(pos, Vec2::new(width, height));
@@ -386,18 +610,51 @@ fn draw_connections(
 
     // Draw connections
     for conn in &state.graph.connections {
-        let source_pin = state.graph.nodes.values().find_map(|n| n.pins.iter().find(|p| p.id == conn.source_pin));
-        let target_pin = state.graph.nodes.values().find_map(|n| n.pins.iter().find(|p| p.id == conn.target_pin));
-        let source_node = state.graph.nodes.values().find(|n| n.pins.iter().any(|p| p.id == conn.source_pin));
-        let target_node = state.graph.nodes.values().find(|n| n.pins.iter().any(|p| p.id == conn.target_pin));
+        let source_pin = state
+            .graph
+            .nodes
+            .values()
+            .find_map(|n| n.pins.iter().find(|p| p.id == conn.source_pin));
+        let target_pin = state
+            .graph
+            .nodes
+            .values()
+            .find_map(|n| n.pins.iter().find(|p| p.id == conn.target_pin));
+        let source_node = state
+            .graph
+            .nodes
+            .values()
+            .find(|n| n.pins.iter().any(|p| p.id == conn.source_pin));
+        let target_node = state
+            .graph
+            .nodes
+            .values()
+            .find(|n| n.pins.iter().any(|p| p.id == conn.target_pin));
 
-        if let (Some(source_node), Some(target_node), Some(source_pin), Some(target_pin)) = 
-            (source_node, target_node, source_pin, target_pin) {
-            let source_pos = world_to_canvas(Pos2::new(source_node.position.0, source_node.position.1), canvas_rect, state);
-            let target_pos = world_to_canvas(Pos2::new(target_node.position.0, target_node.position.1), canvas_rect, state);
+        if let (Some(source_node), Some(target_node), Some(_source_pin), Some(_target_pin)) =
+            (source_node, target_node, source_pin, target_pin)
+        {
+            let source_pos = world_to_canvas(
+                Pos2::new(source_node.position.0, source_node.position.1),
+                canvas_rect,
+                state,
+            );
+            let target_pos = world_to_canvas(
+                Pos2::new(target_node.position.0, target_node.position.1),
+                canvas_rect,
+                state,
+            );
 
-            let source_pin_idx = source_node.pins.iter().position(|p| p.id == conn.source_pin).unwrap_or(0);
-            let target_pin_idx = target_node.pins.iter().position(|p| p.id == conn.target_pin).unwrap_or(0);
+            let source_pin_idx = source_node
+                .pins
+                .iter()
+                .position(|p| p.id == conn.source_pin)
+                .unwrap_or(0);
+            let target_pin_idx = target_node
+                .pins
+                .iter()
+                .position(|p| p.id == conn.target_pin)
+                .unwrap_or(0);
 
             let start = Pos2::new(
                 source_pos.x + NODE_WIDTH * state.zoom,
@@ -413,10 +670,19 @@ fn draw_connections(
             let ctrl1 = Pos2::new(mid_x, start.y);
             let ctrl2 = Pos2::new(mid_x, end.y);
 
-            let mut path = egui::Shape::line_segment([start, ctrl1], Stroke::new(CONNECTION_WIDTH, CONNECTION_COLOR));
+            let path = egui::Shape::line_segment(
+                [start, ctrl1],
+                Stroke::new(CONNECTION_WIDTH, CONNECTION_COLOR),
+            );
             painter.add(path);
-            painter.add(egui::Shape::line_segment([ctrl1, ctrl2], Stroke::new(CONNECTION_WIDTH, CONNECTION_COLOR)));
-            painter.add(egui::Shape::line_segment([ctrl2, end], Stroke::new(CONNECTION_WIDTH, CONNECTION_COLOR)));
+            painter.add(egui::Shape::line_segment(
+                [ctrl1, ctrl2],
+                Stroke::new(CONNECTION_WIDTH, CONNECTION_COLOR),
+            ));
+            painter.add(egui::Shape::line_segment(
+                [ctrl2, end],
+                Stroke::new(CONNECTION_WIDTH, CONNECTION_COLOR),
+            ));
 
             // Draw arrow at target
             let dir = (end - start).normalized();
@@ -424,7 +690,11 @@ fn draw_connections(
             let arrow_base = end - dir * arrow_size;
             let perp = Pos2::new(-dir.y, dir.x) * arrow_size * 0.5;
             painter.add(egui::Shape::convex_polygon(
-                vec![end, arrow_base + perp.to_vec2(), arrow_base - perp.to_vec2()],
+                vec![
+                    end,
+                    arrow_base + perp.to_vec2(),
+                    arrow_base - perp.to_vec2(),
+                ],
                 CONNECTION_COLOR,
                 egui::Stroke::NONE,
             ));
@@ -438,14 +708,18 @@ fn draw_connections(
 fn draw_nodes(
     ui: &mut egui::Ui,
     state: &mut GraphEditorState,
-    canvas_rect: egui::Rect,
+    _canvas_rect: egui::Rect,
     node_rects: &[(uuid::Uuid, egui::Rect)],
 ) {
     let painter = ui.painter();
     for (node_id, rect) in node_rects {
         if let Some(node) = state.graph.nodes.get(node_id) {
             let is_selected = state.selected_node == Some(*node_id);
-            let border_color = if is_selected { NODE_SELECTED_BORDER } else { NODE_BORDER_COLOR };
+            let border_color = if is_selected {
+                NODE_SELECTED_BORDER
+            } else {
+                NODE_BORDER_COLOR
+            };
 
             // Node background
             painter.rect_filled(*rect, 4.0, NODE_BG_COLOR);
@@ -457,7 +731,7 @@ fn draw_nodes(
                 Pos2::new(rect.max.x, rect.min.y + 24.0 * state.zoom),
             );
             painter.rect_filled(title_rect, 4.0, Color32::from_rgb(60, 60, 75));
-            painter.rect_stroke(title_rect, 4.0, Stroke::new(1.0, border_color));
+            painter.rect_stroke(title_rect, 4.0, Stroke::new(1.0_f32, border_color));
 
             // Node type name
             let type_name = node_type_name(&node.node_type);
@@ -487,14 +761,18 @@ fn draw_node_pins(painter: &egui::Painter, node: &Node, rect: egui::Rect, zoom: 
         // Pin circle
         let pin_color = pin_type_color(pin.pin_type);
         painter.circle_filled(pin_pos, PIN_RADIUS * zoom, pin_color);
-        painter.circle_stroke(pin_pos, PIN_RADIUS * zoom, Stroke::new(1.0 * zoom, NODE_BORDER_COLOR));
+        painter.circle_stroke(
+            pin_pos,
+            PIN_RADIUS * zoom,
+            Stroke::new(1.0 * zoom, NODE_BORDER_COLOR),
+        );
 
         // Pin label
-        let label_pos = match pin.direction {
+        let _label_pos = match pin.direction {
             PinDirection::Input => Pos2::new(pin_pos.x + PIN_RADIUS * zoom + 4.0, y),
             PinDirection::Output => Pos2::new(pin_pos.x - PIN_RADIUS * zoom - 4.0, y),
         };
-        let galign = match pin.direction {
+        let _galign = match pin.direction {
             PinDirection::Input => egui::Align2::LEFT_CENTER,
             PinDirection::Output => egui::Align2::RIGHT_CENTER,
         };
@@ -516,7 +794,6 @@ fn pin_type_color(pin_type: PinType) -> Color32 {
     }
 }
 
-
 /// Draw preview connection being created.
 fn draw_preview_connection(
     painter: &egui::Painter,
@@ -525,10 +802,23 @@ fn draw_preview_connection(
     source_pin_id: uuid::Uuid,
     mouse_pos: Option<Pos2>,
 ) {
-    if let Some(source_node) = state.graph.nodes.values().find(|n| n.pins.iter().any(|p| p.id == source_pin_id)) {
-        if let Some(source_pin) = source_node.pins.iter().find(|p| p.id == source_pin_id) {
-            let source_pos = world_to_canvas(Pos2::new(source_node.position.0, source_node.position.1), canvas_rect, state);
-            let source_pin_idx = source_node.pins.iter().position(|p| p.id == source_pin_id).unwrap_or(0);
+    if let Some(source_node) = state
+        .graph
+        .nodes
+        .values()
+        .find(|n| n.pins.iter().any(|p| p.id == source_pin_id))
+    {
+        if let Some(_source_pin) = source_node.pins.iter().find(|p| p.id == source_pin_id) {
+            let source_pos = world_to_canvas(
+                Pos2::new(source_node.position.0, source_node.position.1),
+                canvas_rect,
+                state,
+            );
+            let source_pin_idx = source_node
+                .pins
+                .iter()
+                .position(|p| p.id == source_pin_id)
+                .unwrap_or(0);
             let start = Pos2::new(
                 source_pos.x + NODE_WIDTH * state.zoom,
                 source_pos.y + 24.0 * state.zoom + source_pin_idx as f32 * 20.0 * state.zoom,
@@ -539,9 +829,18 @@ fn draw_preview_connection(
                 let ctrl1 = Pos2::new(mid_x, start.y);
                 let ctrl2 = Pos2::new(mid_x, mouse_pos.y);
 
-                painter.add(egui::Shape::line_segment([start, ctrl1], Stroke::new(CONNECTION_WIDTH, CONNECTION_COLOR)));
-                painter.add(egui::Shape::line_segment([ctrl1, ctrl2], Stroke::new(CONNECTION_WIDTH, CONNECTION_COLOR)));
-                painter.add(egui::Shape::line_segment([ctrl2, mouse_pos], Stroke::new(CONNECTION_WIDTH, CONNECTION_COLOR)));
+                painter.add(egui::Shape::line_segment(
+                    [start, ctrl1],
+                    Stroke::new(CONNECTION_WIDTH, CONNECTION_COLOR),
+                ));
+                painter.add(egui::Shape::line_segment(
+                    [ctrl1, ctrl2],
+                    Stroke::new(CONNECTION_WIDTH, CONNECTION_COLOR),
+                ));
+                painter.add(egui::Shape::line_segment(
+                    [ctrl2, mouse_pos],
+                    Stroke::new(CONNECTION_WIDTH, CONNECTION_COLOR),
+                ));
             }
         }
     }
@@ -551,7 +850,7 @@ fn draw_preview_connection(
 fn handle_node_interactions(
     ui: &mut egui::Ui,
     state: &mut GraphEditorState,
-    canvas_rect: egui::Rect,
+    _canvas_rect: egui::Rect,
     node_rects: &[(uuid::Uuid, egui::Rect)],
     response: &Response,
 ) {
@@ -560,12 +859,15 @@ fn handle_node_interactions(
 
     for (node_id, rect) in node_rects {
         let node_response = ui.interact(*rect, ui.id().with(node_id), Sense::click_and_drag());
-        
+
         if node_response.clicked() {
             clicked_node = Some(*node_id);
         }
         if node_response.drag_started() {
-            drag_started_node = Some((*node_id, node_response.interact_pointer_pos().unwrap_or(Pos2::ZERO)));
+            drag_started_node = Some((
+                *node_id,
+                node_response.interact_pointer_pos().unwrap_or(Pos2::ZERO),
+            ));
         }
         if node_response.dragged() {
             if let Some((id, _)) = drag_started_node {
@@ -578,7 +880,7 @@ fn handle_node_interactions(
                 }
             }
         }
-        
+
         // Double-click to edit node parameters
         if node_response.double_clicked() {
             state.editing_node = Some(*node_id);
@@ -589,13 +891,29 @@ fn handle_node_interactions(
         if let Some(node) = state.graph.nodes.get(node_id) {
             for pin in &node.pins {
                 let pin_pos = match pin.direction {
-                    PinDirection::Input => Pos2::new(rect.left(), rect.top() + 24.0 * state.zoom +
-                        node.pins.iter().position(|p| p.id == pin.id).unwrap_or(0) as f32 * 20.0 * state.zoom),
-                    PinDirection::Output => Pos2::new(rect.right(), rect.top() + 24.0 * state.zoom +
-                        node.pins.iter().position(|p| p.id == pin.id).unwrap_or(0) as f32 * 20.0 * state.zoom),
+                    PinDirection::Input => Pos2::new(
+                        rect.left(),
+                        rect.top()
+                            + 24.0 * state.zoom
+                            + node.pins.iter().position(|p| p.id == pin.id).unwrap_or(0) as f32
+                                * 20.0
+                                * state.zoom,
+                    ),
+                    PinDirection::Output => Pos2::new(
+                        rect.right(),
+                        rect.top()
+                            + 24.0 * state.zoom
+                            + node.pins.iter().position(|p| p.id == pin.id).unwrap_or(0) as f32
+                                * 20.0
+                                * state.zoom,
+                    ),
                 };
-                let pin_rect = egui::Rect::from_center_size(pin_pos, Vec2::splat(PIN_RADIUS * 2.0 * state.zoom));
-                let pin_response = ui.interact(pin_rect, ui.id().with(pin.id), Sense::click_and_drag());
+                let pin_rect = egui::Rect::from_center_size(
+                    pin_pos,
+                    Vec2::splat(PIN_RADIUS * 2.0 * state.zoom),
+                );
+                let pin_response =
+                    ui.interact(pin_rect, ui.id().with(pin.id), Sense::click_and_drag());
 
                 if pin_response.clicked() {
                     if pin.direction == PinDirection::Output {
@@ -616,7 +934,6 @@ fn handle_node_interactions(
         if let Some((source_pin_id, pin_id)) = connection_to_add {
             state.add_connection(source_pin_id, pin_id);
         }
-
     }
     if let Some(id) = clicked_node {
         state.selected_node = Some(id);
@@ -633,7 +950,6 @@ fn handle_node_interactions(
     }
 }
 
-
 /// Show context menu for adding nodes (right-click on canvas).
 fn show_add_node_menu(ctx: &egui::Context, state: &mut GraphEditorState, canvas_rect: egui::Rect) {
     egui::Window::new("Add Node")
@@ -649,35 +965,38 @@ fn show_add_node_menu(ctx: &egui::Context, state: &mut GraphEditorState, canvas_
             });
             ui.separator();
 
-            egui::ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
-                let filter = state.search_filter.to_lowercase();
-                
-                for (category, nodes) in node_types_by_category() {
-                    let mut has_match = false;
-                    for (_, name) in &nodes {
-                        if filter.is_empty() || name.to_lowercase().contains(&filter) {
-                            has_match = true;
-                            break;
-                        }
-                    }
-                    if !has_match && !filter.is_empty() {
-                        continue;
-                    }
+            egui::ScrollArea::vertical()
+                .max_height(400.0)
+                .show(ui, |ui| {
+                    let filter = state.search_filter.to_lowercase();
 
-                    ui.collapsing(category_name(category), |ui| {
-                        for (node_type, name) in nodes {
-                            if !filter.is_empty() && !name.to_lowercase().contains(&filter) {
-                                continue;
-                            }
-                            if ui.button(name).clicked() {
-                                let world_pos = canvas_to_world(state.add_menu_pos, canvas_rect, state);
-                                state.add_node(node_type, world_pos);
-                                state.show_add_menu = false;
+                    for (category, nodes) in node_types_by_category() {
+                        let mut has_match = false;
+                        for (_, name) in &nodes {
+                            if filter.is_empty() || name.to_lowercase().contains(&filter) {
+                                has_match = true;
+                                break;
                             }
                         }
-                    });
-                }
-            });
+                        if !has_match && !filter.is_empty() {
+                            continue;
+                        }
+
+                        ui.collapsing(category_name(category), |ui| {
+                            for (node_type, name) in nodes {
+                                if !filter.is_empty() && !name.to_lowercase().contains(&filter) {
+                                    continue;
+                                }
+                                if ui.button(name).clicked() {
+                                    let world_pos =
+                                        canvas_to_world(state.add_menu_pos, canvas_rect, state);
+                                    state.add_node(node_type, world_pos);
+                                    state.show_add_menu = false;
+                                }
+                            }
+                        });
+                    }
+                });
 
             ui.separator();
             if ui.button("Close").clicked() {
@@ -686,14 +1005,18 @@ fn show_add_node_menu(ctx: &egui::Context, state: &mut GraphEditorState, canvas_
         });
 
     // Close menu if clicked elsewhere
-    if ctx.input(|i| i.pointer.any_click()) && !ctx.memory(|m| m.area_rect(egui::Id::new("Add Node")).is_some()) {
+    if ctx.input(|i| i.pointer.any_click())
+        && !ctx.memory(|m| m.area_rect(egui::Id::new("Add Node")).is_some())
+    {
         state.show_add_menu = false;
     }
 }
 
 /// Show node parameter editor (double-click node).
 fn show_node_editor(ctx: &egui::Context, state: &mut GraphEditorState, node_id: uuid::Uuid) {
-    let Some(mut node) = state.graph.nodes.get(&node_id).cloned() else { return; };
+    let Some(mut node) = state.graph.nodes.get(&node_id).cloned() else {
+        return;
+    };
 
     egui::Window::new(format!("Edit {}", node_type_name(&node.node_type)))
         .collapsible(false)
@@ -708,35 +1031,65 @@ fn show_node_editor(ctx: &egui::Context, state: &mut GraphEditorState, node_id: 
                 NodeType::Constant { value } => {
                     ui.label("Value:");
                     match value {
-                        ConstantValue::Integer(v) => { ui.add(egui::DragValue::new(v).speed(1)); }
-                        ConstantValue::Float(v) => { ui.add(egui::DragValue::new(v).speed(0.1)); }
-                        ConstantValue::Boolean(v) => { ui.checkbox(v, ""); }
-                        ConstantValue::String(v) => { ui.text_edit_singleline(v); }
+                        ConstantValue::Integer(v) => {
+                            ui.add(egui::DragValue::new(v).speed(1));
+                        }
+                        ConstantValue::Float(v) => {
+                            ui.add(egui::DragValue::new(v).speed(0.1));
+                        }
+                        ConstantValue::Boolean(v) => {
+                            ui.checkbox(v, "");
+                        }
+                        ConstantValue::String(v) => {
+                            ui.text_edit_singleline(v);
+                        }
                     }
                 }
                 NodeType::Arithmetic { op } => {
                     ui.label("Operation:");
-                    egui::ComboBox::from_label("").selected_text(format!("{:?}", op)).show_ui(ui, |ui| {
-                        ui.selectable_value(op, ArithmeticOp::Add, "Add");
-                        ui.selectable_value(op, ArithmeticOp::Sub, "Subtract");
-                        ui.selectable_value(op, ArithmeticOp::Mul, "Multiply");
-                        ui.selectable_value(op, ArithmeticOp::Div, "Divide");
-                    });
+                    egui::ComboBox::from_label("")
+                        .selected_text(format!("{:?}", op))
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(op, ArithmeticOp::Add, "Add");
+                            ui.selectable_value(op, ArithmeticOp::Sub, "Subtract");
+                            ui.selectable_value(op, ArithmeticOp::Mul, "Multiply");
+                            ui.selectable_value(op, ArithmeticOp::Div, "Divide");
+                        });
                 }
                 NodeType::Comparison { op } => {
                     ui.label("Comparison:");
-                    egui::ComboBox::from_label("").selected_text(format!("{:?}", op)).show_ui(ui, |ui| {
-                        ui.selectable_value(op, ComparisonOp::Equal, "Equal");
-                        ui.selectable_value(op, ComparisonOp::LessThan, "Less Than");
-                    });
+                    egui::ComboBox::from_label("")
+                        .selected_text(format!("{:?}", op))
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(op, ComparisonOp::Equal, "Equal");
+                            ui.selectable_value(op, ComparisonOp::LessThan, "Less Than");
+                        });
                 }
                 NodeType::HostCall { name } => {
                     ui.label("Function:");
-                    egui::ComboBox::from_label("").selected_text(name.as_str()).show_ui(ui, |ui| {
-                        for fname in ["print", "move_player", "add_score", "collect_coin", "play_sound", "set_status", "spawn_entity", "find_nearest", "get_input_x", "get_input_y", "get_score", "get_delta_time", "play_music", "stop_music", "set_volume"] {
-                            ui.selectable_value(name, fname.to_string(), fname);
-                        }
-                    });
+                    egui::ComboBox::from_label("")
+                        .selected_text(name.as_str())
+                        .show_ui(ui, |ui| {
+                            for fname in [
+                                "print",
+                                "move_player",
+                                "add_score",
+                                "collect_coin",
+                                "play_sound",
+                                "set_status",
+                                "spawn_entity",
+                                "find_nearest",
+                                "get_input_x",
+                                "get_input_y",
+                                "get_score",
+                                "get_delta_time",
+                                "play_music",
+                                "stop_music",
+                                "set_volume",
+                            ] {
+                                ui.selectable_value(name, fname.to_string(), fname);
+                            }
+                        });
                 }
                 NodeType::AnimationClip { clip_name } => {
                     ui.label("Clip Name:");
@@ -758,11 +1111,14 @@ fn show_node_editor(ctx: &egui::Context, state: &mut GraphEditorState, node_id: 
                     ui.label("Dialogue ID:");
                     ui.text_edit_singleline(dialogue_id);
                 }
-                NodeType::QuestStart { quest_id } | NodeType::QuestComplete { quest_id } | NodeType::QuestObjectiveUpdate { quest_id, .. } => {
+                NodeType::QuestStart { quest_id }
+                | NodeType::QuestComplete { quest_id }
+                | NodeType::QuestObjectiveUpdate { quest_id, .. } => {
                     ui.label("Quest ID:");
                     ui.text_edit_singleline(quest_id);
                 }
-                NodeType::DataTableLookup { table_id, .. } | NodeType::DataTableRowGet { table_id } => {
+                NodeType::DataTableLookup { table_id, .. }
+                | NodeType::DataTableRowGet { table_id } => {
                     ui.label("Table ID:");
                     ui.text_edit_singleline(table_id);
                     if let NodeType::DataTableLookup { column_name, .. } = &mut node.node_type {
@@ -821,5 +1177,3 @@ fn node_type_name(node_type: &NodeType) -> String {
         NodeType::DataTableRowGet { .. } => "DataTable Row".to_string(),
     }
 }
-
-

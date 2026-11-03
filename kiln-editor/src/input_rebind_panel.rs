@@ -1,8 +1,8 @@
 //! Input rebinding panel — allows users to rebind keyboard/gamepad actions.
 
-use egui::{ComboBox, Color32, RichText, ScrollArea, Sense, Ui, Vec2, Widget};
-use kiln_input::{Action, ActionMap, Binding, BindingType};
+use egui::{Color32, RichText, ScrollArea, Ui};
 use kiln_core::Project;
+use kiln_input::{Action, ActionMap, Binding, BindingType};
 
 /// State for the input rebinding panel.
 #[derive(Debug, Default)]
@@ -53,7 +53,8 @@ impl InputRebindPanel {
                     for (idx, binding) in action.bindings.iter().enumerate() {
                         ui.horizontal(|ui| {
                             let label = format_binding(binding);
-                            let button_text = if self.rebinding_action.as_deref() == Some(&action.id)
+                            let button_text = if self.rebinding_action.as_deref()
+                                == Some(&action.id)
                                 && self.rebinding_binding_idx == Some(idx)
                             {
                                 "Press a key..."
@@ -66,7 +67,11 @@ impl InputRebindPanel {
                                 self.start_rebind(&action.id, idx, action_map);
                             }
 
-                            if ui.small_button("✕").on_hover_text("Remove binding").clicked() {
+                            if ui
+                                .small_button("✕")
+                                .on_hover_text("Remove binding")
+                                .clicked()
+                            {
                                 if let Some(action_mut) = action_map.get_action_mut(&action.id) {
                                     action_mut.bindings.remove(idx);
                                 }
@@ -93,7 +98,7 @@ impl InputRebindPanel {
             });
         });
     }
-    fn start_rebind(&mut self, action_id: &str, binding_idx: usize, action_map: &mut ActionMap) {
+    fn start_rebind(&mut self, action_id: &str, binding_idx: usize, _action_map: &mut ActionMap) {
         self.rebinding_action = Some(action_id.to_string());
         self.rebinding_binding_idx = Some(binding_idx);
         self.waiting_for_key = true;
@@ -101,14 +106,18 @@ impl InputRebindPanel {
 
     fn render_waiting_for_key(&mut self, ui: &mut Ui, action_map: &mut ActionMap) {
         ui.add_space(16.0);
-        ui.label(RichText::new("Press a key or gamepad button...").color(Color32::YELLOW).size(18.0));
+        ui.label(
+            RichText::new("Press a key or gamepad button...")
+                .color(Color32::YELLOW)
+                .size(18.0),
+        );
         ui.add_space(8.0);
         ui.label("Press ESC to cancel");
 
         let ctx = ui.ctx();
         let input = ctx.input(|i| i.clone());
 
-        for key in &input.keys_down {
+        if let Some(key) = input.keys_down.iter().next() {
             let key_name = format!("{:?}", key);
             self.apply_rebinding(action_map, BindingType::Key(key_name));
             return;
@@ -141,7 +150,6 @@ impl InputRebindPanel {
         self.rebinding_binding_idx = None;
         self.waiting_for_key = false;
     }
-
 }
 
 /// Format a binding for display.

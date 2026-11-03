@@ -1,11 +1,10 @@
 //! Project Hub panel — create, open, and manage projects.
 
-use egui::{Color32, RichText, ScrollArea, Ui, Vec2};
+use dirs;
+use egui::{Color32, RichText, ScrollArea, Ui};
+use serde_json;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use dirs;
-use serde::{Serialize, Deserialize};
-use serde_json;
 
 /// A recent project entry.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -61,9 +60,7 @@ impl ProjectHubState {
             if let Ok(content) = std::fs::read_to_string(&path) {
                 if let Ok(projects) = serde_json::from_str::<Vec<RecentProject>>(&content) {
                     // Filter out non-existent paths
-                    return projects.into_iter()
-                        .filter(|p| p.path.exists())
-                        .collect();
+                    return projects.into_iter().filter(|p| p.path.exists()).collect();
                 }
             }
         }
@@ -80,7 +77,6 @@ impl ProjectHubState {
         }
     }
 
-
     /// Add a project to recent list.
     pub fn add_recent(&mut self, path: PathBuf, name: String) {
         let now = SystemTime::now()
@@ -92,11 +88,14 @@ impl ProjectHubState {
         self.recent_projects.retain(|p| p.path != path);
 
         // Add to front
-        self.recent_projects.insert(0, RecentProject {
-            path: path.clone(),
-            name,
-            last_opened: now,
-        });
+        self.recent_projects.insert(
+            0,
+            RecentProject {
+                path: path.clone(),
+                name,
+                last_opened: now,
+            },
+        );
 
         // Keep only last 10
         if self.recent_projects.len() > 10 {
@@ -137,7 +136,11 @@ pub fn render_project_hub(
     ui.vertical_centered(|ui| {
         ui.add_space(40.0);
         ui.heading(RichText::new("Kiln Engine").size(48.0).strong());
-        ui.label(RichText::new("Lightweight 2D game engine").size(18.0).color(Color32::GRAY));
+        ui.label(
+            RichText::new("Lightweight 2D game engine")
+                .size(18.0)
+                .color(Color32::GRAY),
+        );
         ui.add_space(40.0);
     });
 
@@ -150,9 +153,10 @@ pub fn render_project_hub(
         cols[0].vertical_centered(|ui| {
             ui.add_space(20.0);
             if ui
-                .add_sized([200.0, 120.0], egui::Button::new(
-                    RichText::new("📄\n\nNew Project").size(24.0).strong()
-                ))
+                .add_sized(
+                    [200.0, 120.0],
+                    egui::Button::new(RichText::new("📄\n\nNew Project").size(24.0).strong()),
+                )
                 .clicked()
             {
                 state.show_new_project_dialog = true;
@@ -168,15 +172,22 @@ pub fn render_project_hub(
         cols[1].vertical_centered(|ui| {
             ui.add_space(20.0);
             if ui
-                .add_sized([200.0, 120.0], egui::Button::new(
-                    RichText::new("📁\n\nOpen Project").size(24.0).strong()
-                ))
+                .add_sized(
+                    [200.0, 120.0],
+                    egui::Button::new(RichText::new("📁\n\nOpen Project").size(24.0).strong()),
+                )
                 .clicked()
             {
                 // TODO: Native file dialog
                 if let Some(path) = native_file_dialog::open_file_dialog() {
                     if path.exists() {
-                        state.add_recent(path.clone(), path.file_name().unwrap_or_default().to_string_lossy().to_string());
+                        state.add_recent(
+                            path.clone(),
+                            path.file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string(),
+                        );
                         open_project_callback(path);
                     }
                 }
@@ -204,7 +215,11 @@ pub fn render_project_hub(
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.label(RichText::new(&project.name).size(16.0).strong());
-                        ui.label(RichText::new(project.path.display().to_string()).size(12.0).color(Color32::GRAY));
+                        ui.label(
+                            RichText::new(project.path.display().to_string())
+                                .size(12.0)
+                                .color(Color32::GRAY),
+                        );
                     });
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -243,7 +258,9 @@ pub fn render_project_hub(
                 ui.add_space(8.0);
                 ui.label("Location:");
                 ui.horizontal(|ui| {
-                    ui.text_edit_singleline(&mut state.new_project_dir.to_string_lossy().to_string());
+                    ui.text_edit_singleline(
+                        &mut state.new_project_dir.to_string_lossy().to_string(),
+                    );
                     if ui.button("Browse...").clicked() {
                         // TODO: Native folder dialog
                     }
@@ -261,7 +278,11 @@ pub fn render_project_hub(
                     )
                     .show_ui(ui, |ui| {
                         for (id, name) in ProjectHubState::templates() {
-                            ui.selectable_value(&mut state.new_project_template, id.to_string(), name);
+                            ui.selectable_value(
+                                &mut state.new_project_template,
+                                id.to_string(),
+                                name,
+                            );
                         }
                     });
 
@@ -270,16 +291,17 @@ pub fn render_project_hub(
                     if ui.button("Cancel").clicked() {
                         state.show_new_project_dialog = false;
                     }
-                    if ui.button("Create").clicked() {
-                        if !state.new_project_name.is_empty() && state.new_project_dir.exists() {
-                            let path = state.new_project_dir.join(&state.new_project_name);
-                            create_project_callback(
-                                state.new_project_name.clone(),
-                                path,
-                                state.new_project_template.clone(),
-                            );
-                            state.show_new_project_dialog = false;
-                        }
+                    if ui.button("Create").clicked()
+                        && !state.new_project_name.is_empty()
+                        && state.new_project_dir.exists()
+                    {
+                        let path = state.new_project_dir.join(&state.new_project_name);
+                        create_project_callback(
+                            state.new_project_name.clone(),
+                            path,
+                            state.new_project_template.clone(),
+                        );
+                        state.show_new_project_dialog = false;
                     }
                 });
             });
@@ -294,5 +316,3 @@ mod native_file_dialog {
         None
     }
 }
-
-

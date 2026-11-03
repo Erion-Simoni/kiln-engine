@@ -1,5 +1,4 @@
 use kiln_core::project::{Component, Project};
-use kiln_core::Transform;
 
 /// Action requested by the inspector panel.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,13 +34,9 @@ pub fn render_inspector_panel(
     };
 
     let metadata = project.clone();
-    let Some(scene) = project.scenes.get_mut(scene_id) else {
-        return None;
-    };
+    let scene = project.scenes.get_mut(scene_id)?;
 
-    let Some(entity) = scene.entities.iter_mut().find(|e| e.id == *entity_id) else {
-        return None;
-    };
+    let entity = scene.entities.iter_mut().find(|e| e.id == *entity_id)?;
 
     ui.heading("Inspector");
     ui.add_space(8.0);
@@ -58,14 +53,18 @@ pub fn render_inspector_panel(
     for (idx, component) in entity.components.iter_mut().enumerate() {
         ui.separator();
         let mut changed = false;
-        
+
         egui::CollapsingHeader::new(component_header_name(component))
             .default_open(true)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     changed |= render_component(ui, component, &metadata);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("✕").on_hover_text("Remove component").clicked() {
+                        if ui
+                            .small_button("✕")
+                            .on_hover_text("Remove component")
+                            .clicked()
+                        {
                             remove_idx = Some(idx);
                         }
                     });
@@ -79,7 +78,7 @@ pub fn render_inspector_panel(
 
     ui.separator();
     ui.add_space(4.0);
-    
+
     // Add Component dropdown
     let mut add_component_action = None;
     ui.horizontal(|ui| {
@@ -89,7 +88,8 @@ pub fn render_inspector_panel(
             .show_ui(ui, |ui| {
                 for name in available_component_types() {
                     if ui.selectable_label(false, name).clicked() {
-                        add_component_action = Some(InspectorAction::AddComponent(name.to_string()));
+                        add_component_action =
+                            Some(InspectorAction::AddComponent(name.to_string()));
                     }
                 }
             });
@@ -115,35 +115,53 @@ fn available_component_types() -> Vec<&'static str> {
     vec!["Transform", "Sprite", "Tilemap", "Role", "Parent"]
 }
 
-fn render_component(
-    ui: &mut egui::Ui,
-    component: &mut Component,
-    project: &Project,
-) -> bool {
+fn render_component(ui: &mut egui::Ui, component: &mut Component, project: &Project) -> bool {
     let mut changed = false;
-    
+
     match component {
-        Component::Transform { x, y, rotation, scale } => {
+        Component::Transform {
+            x,
+            y,
+            rotation,
+            scale,
+        } => {
             ui.add_space(4.0);
             ui.columns(2, |cols| {
                 cols[0].label("Position X:");
-                changed |= cols[1].add(egui::DragValue::new(x).speed(0.5).suffix(" px")).changed();
+                changed |= cols[1]
+                    .add(egui::DragValue::new(x).speed(0.5).suffix(" px"))
+                    .changed();
                 cols[0].label("Position Y:");
-                changed |= cols[1].add(egui::DragValue::new(y).speed(0.5).suffix(" px")).changed();
+                changed |= cols[1]
+                    .add(egui::DragValue::new(y).speed(0.5).suffix(" px"))
+                    .changed();
                 cols[0].label("Rotation:");
-                changed |= cols[1].add(egui::DragValue::new(rotation).speed(0.01).suffix(" rad")).changed();
+                changed |= cols[1]
+                    .add(egui::DragValue::new(rotation).speed(0.01).suffix(" rad"))
+                    .changed();
                 cols[0].label("Scale:");
-                changed |= cols[1].add(egui::DragValue::new(scale).speed(0.01).clamp_range(0.001..=100.0)).changed();
+                changed |= cols[1]
+                    .add(egui::DragValue::new(scale).speed(0.01).range(0.001..=100.0))
+                    .changed();
             });
         }
-        Component::Sprite { color, texture, layer, material, animation_clip } => {
+        Component::Sprite {
+            color,
+            texture,
+            layer,
+            material,
+            animation_clip,
+        } => {
             ui.add_space(4.0);
-            
+
             // Color editor
             ui.horizontal(|ui| {
                 ui.label("Color:");
                 let mut color_arr = [color[0], color[1], color[2], color[3]];
-                if ui.color_edit_button_rgba_unmultiplied(&mut color_arr).changed() {
+                if ui
+                    .color_edit_button_rgba_unmultiplied(&mut color_arr)
+                    .changed()
+                {
                     color[0] = color_arr[0].clamp(0.0, 1.0);
                     color[1] = color_arr[1].clamp(0.0, 1.0);
                     color[2] = color_arr[2].clamp(0.0, 1.0);
@@ -156,7 +174,7 @@ fn render_component(
                 ui.label("Layer:");
                 changed |= ui.add(egui::DragValue::new(layer).speed(0.1)).changed();
             });
-            
+
             // Texture picker
             ui.add_space(4.0);
             ui.horizontal(|ui| {
@@ -171,13 +189,17 @@ fn render_component(
                     }
                     changed = true;
                 }
-                
+
                 // Asset picker button
-                if ui.small_button("📁").on_hover_text("Browse assets").clicked() {
+                if ui
+                    .small_button("📁")
+                    .on_hover_text("Browse assets")
+                    .clicked()
+                {
                     // TODO: Open asset browser modal
                 }
             });
-            
+
             // Animation clip picker
             ui.add_space(4.0);
             ui.horizontal(|ui| {
@@ -192,13 +214,17 @@ fn render_component(
                     }
                     changed = true;
                 }
-                
+
                 // Asset picker button
-                if ui.small_button("📁").on_hover_text("Browse animations").clicked() {
+                if ui
+                    .small_button("📁")
+                    .on_hover_text("Browse animations")
+                    .clicked()
+                {
                     // TODO: Open animation clip browser
                 }
             });
-            
+
             // Material picker
             ui.add_space(4.0);
             ui.horizontal(|ui| {
@@ -213,12 +239,16 @@ fn render_component(
                     }
                     changed = true;
                 }
-                
-                if ui.small_button("📁").on_hover_text("Browse materials").clicked() {
+
+                if ui
+                    .small_button("📁")
+                    .on_hover_text("Browse materials")
+                    .clicked()
+                {
                     // TODO: Open material browser
                 }
             });
-            
+
             // Show texture preview if available
             if let Some(path) = texture {
                 ui.add_space(4.0);
@@ -234,17 +264,23 @@ fn render_component(
                     *map = map_name;
                     changed = true;
                 }
-                if ui.small_button("📁").on_hover_text("Browse tilemaps").clicked() {
+                if ui
+                    .small_button("📁")
+                    .on_hover_text("Browse tilemaps")
+                    .clicked()
+                {
                     // TODO: Open tilemap browser
                 }
             });
-            
+
             // Show tilemap info if it exists in project
             if let Some(tilemap) = project.tilemaps.get(map) {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     let total_chunks: usize = tilemap.layers.iter().map(|l| l.chunks.len()).sum();
-                    let total_tiles: usize = tilemap.layers.iter()
+                    let total_tiles: usize = tilemap
+                        .layers
+                        .iter()
                         .flat_map(|l| l.chunks.values())
                         .map(|c| c.tiles.len())
                         .sum();
@@ -278,6 +314,6 @@ fn render_component(
             });
         }
     }
-    
+
     changed
 }

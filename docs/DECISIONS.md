@@ -1013,3 +1013,21 @@ retaining std::time::Instant on native targets. web-time is MIT OR Apache-2.0
 licensed and already appears in the dependency graph; it supplies the browser
 monotonic clock rather than a timer stub. Its maintenance/size cost is limited
 to the WASM target. The browser movement regression exercises the real clock.
+
+## ADR-0038: Plugin entry points return opaque handles (accepted)
+
+**Date:** 2026-11-03
+**Status:** accepted
+
+Strict compilation found a C entry point returning a Rust trait-object pointer,
+whose fat-pointer/vtable layout is not a C ABI contract. The creation macro also
+allocated a boxed box while declaring a trait-object pointer. Plugin API version
+2 returns an opaque void pointer to plugin-owned storage and supplies a matching
+destroy entry point. The host must never dereference that handle or reconstruct
+a Rust trait object across module boundaries. Creation/destruction use the same
+module allocator. Null destruction is allowed; other handles must come from the
+matching creator and must be released at most once.
+
+This repairs the allocation/lifetime boundary; it does not implement the future
+plugin loader or a cross-module method dispatch protocol. The in-process registry
+continues to accept ordinary Rust trait objects. No dependencies are added.

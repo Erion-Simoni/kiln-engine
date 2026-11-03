@@ -8,8 +8,6 @@
 //! and folder creation.
 
 use kiln_assets::decode_png;
-use egui::{Id, Sense, Ui};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// The kind of an asset listed in the browser.
@@ -99,7 +97,6 @@ impl AssetBrowser {
         self.preview_pixels.as_deref()
     }
 
-
     /// Current filter text.
     pub fn filter(&self) -> &str {
         &self.filter
@@ -174,7 +171,11 @@ impl AssetBrowser {
         let result = (|| {
             let bytes = std::fs::read(&full).map_err(|e| e.to_string())?;
             let image = decode_png(&bytes).map_err(|e| e.to_string())?;
-            Ok::<(usize, usize, Vec<u8>), String>((image.width as usize, image.height as usize, image.pixels))
+            Ok::<(usize, usize, Vec<u8>), String>((
+                image.width as usize,
+                image.height as usize,
+                image.pixels,
+            ))
         })();
 
         match result {
@@ -207,7 +208,10 @@ impl AssetBrowser {
         if pixels.len() != width * height * 4 {
             return None;
         }
-        Some(egui::ColorImage::from_rgba_unmultiplied([width, height], pixels))
+        Some(egui::ColorImage::from_rgba_unmultiplied(
+            [width, height],
+            pixels,
+        ))
     }
 
     /// Size of the current preview in pixels, as `(width, height)`.

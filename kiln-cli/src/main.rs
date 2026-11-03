@@ -221,7 +221,10 @@ enum Commands {
         #[arg(long, default_value = "512")]
         height: u32,
         /// Characters to include (default: ASCII printable + space)
-        #[arg(long, default_value = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,!?:;'\"-()[]{}")]
+        #[arg(
+            long,
+            default_value = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,!?:;'\"-()[]{}"
+        )]
         chars: String,
     },
 }
@@ -576,7 +579,9 @@ fn main() -> Result<()> {
             // Save atlas PNG.
             use std::io::Cursor;
             let mut buf = Vec::new();
-            result.atlas.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::Png)
+            result
+                .atlas
+                .write_to(&mut Cursor::new(&mut buf), image::ImageFormat::Png)
                 .map_err(|e| anyhow::anyhow!("Failed to encode PNG: {e}"))?;
             std::fs::write(&output, &buf)
                 .map_err(|e| anyhow::anyhow!("Failed to write atlas '{:?}': {e}", output))?;

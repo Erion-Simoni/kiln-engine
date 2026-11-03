@@ -101,10 +101,7 @@ impl Value {
             (Value::Bool(x), Value::Bool(y)) => x == y,
             (Value::Str(x), Value::Str(y)) => x == y,
             (Value::Array(x), Value::Array(y)) => {
-                x.len() == y.len()
-                    && x.into_iter()
-                        .zip(y)
-                        .all(|(a, b)| Value::values_equal(a, b))
+                x.len() == y.len() && x.into_iter().zip(y).all(|(a, b)| Value::values_equal(a, b))
             }
             _ => false,
         }

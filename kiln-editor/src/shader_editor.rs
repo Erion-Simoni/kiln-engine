@@ -4,8 +4,8 @@
 //! as inputs and output a color. Materials reference shaders with parameter
 //! overrides.
 
-use egui::{Color32, DragValue, RichText, ScrollArea, Ui, Vec2};
-use kiln_core::project::{Material, MaterialParam, Shader};
+use egui::{Color32, Vec2};
+use kiln_core::project::{MaterialParam, Shader};
 use std::collections::HashMap;
 
 /// State of the shader editor panel.
@@ -38,11 +38,15 @@ impl ShaderEditorState {
     }
 
     pub fn selected_shader(&self) -> Option<&Shader> {
-        self.selected_shader.as_ref().and_then(|name| self.shaders.get(name))
+        self.selected_shader
+            .as_ref()
+            .and_then(|name| self.shaders.get(name))
     }
 
     pub fn selected_shader_mut(&mut self) -> Option<&mut Shader> {
-        self.selected_shader.as_deref().and_then(|name| self.shaders.get_mut(name))
+        self.selected_shader
+            .as_deref()
+            .and_then(|name| self.shaders.get_mut(name))
     }
 
     pub fn add_shader(&mut self, name: String, source: String) {
@@ -75,7 +79,12 @@ pub fn render_shader_editor(
     ui.horizontal(|ui| {
         ui.label("Shaders:");
         egui::ComboBox::from_label("")
-            .selected_text(state.selected_shader.as_deref().unwrap_or("Select a shader..."))
+            .selected_text(
+                state
+                    .selected_shader
+                    .as_deref()
+                    .unwrap_or("Select a shader..."),
+            )
             .show_ui(ui, |ui| {
                 for name in state.shaders.keys().cloned().collect::<Vec<_>>() {
                     if ui
@@ -117,9 +126,8 @@ pub fn render_shader_editor(
                         state.show_new_shader_dialog = false;
                         state.new_shader_name.clear();
                     }
-                    if ui.button("Create").clicked() {
-                        if !state.new_shader_name.is_empty() {
-                            let default_source = r#"// Custom sprite shader
+                    if ui.button("Create").clicked() && !state.new_shader_name.is_empty() {
+                        let default_source = r#"// Custom sprite shader
 // Inputs:
 //   position: vec2<f32> - center of sprite
 //   size: vec2<f32> - size of sprite
@@ -141,11 +149,11 @@ fn fs_main(
     let texel = textureSample(sprite_tex, sprite_sampler, uv);
     return texel * color;
 }
-"#.to_string();
-                            state.add_shader(state.new_shader_name.clone(), default_source);
-                            state.show_new_shader_dialog = false;
-                            state.new_shader_name.clear();
-                        }
+"#
+                        .to_string();
+                        state.add_shader(state.new_shader_name.clone(), default_source);
+                        state.show_new_shader_dialog = false;
+                        state.new_shader_name.clear();
                     }
                 });
             });
@@ -176,37 +184,35 @@ fn fs_main(
                 for (param_name, param) in shader.parameters.iter_mut() {
                     ui.horizontal(|ui| {
                         ui.label(param_name);
-                        ui.with_layout(
-                            egui::Layout::right_to_left(egui::Align::Center),
-                            |ui| {
-                                match param {
-                                    MaterialParam::Float(v) => {
-                                        ui.add(egui::DragValue::new(v).speed(0.1));
-                                    }
-                                    MaterialParam::Vec2(v) => {
-                                        ui.add(egui::DragValue::new(&mut v[0]).speed(0.1));
-                                        ui.add(egui::DragValue::new(&mut v[1]).speed(0.1));
-                                    }
-                                    MaterialParam::Vec3(v) => {
-                                        ui.add(egui::DragValue::new(&mut v[0]).speed(0.1));
-                                        ui.add(egui::DragValue::new(&mut v[1]).speed(0.1));
-                                        ui.add(egui::DragValue::new(&mut v[2]).speed(0.1));
-                                    }
-                                    MaterialParam::Vec4(v) => {
-                                        ui.add(egui::DragValue::new(&mut v[0]).speed(0.1));
-                                        ui.add(egui::DragValue::new(&mut v[1]).speed(0.1));
-                                        ui.add(egui::DragValue::new(&mut v[2]).speed(0.1));
-                                        ui.add(egui::DragValue::new(&mut v[3]).speed(0.1));
-                                    }
-                                    MaterialParam::Color(v) => {
-                                        ui.color_edit_button_rgba_unmultiplied(v);
-                                    }
-                                    MaterialParam::Texture(t) => {
-                                        ui.text_edit_singleline(t);
-                                    }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            match param {
+                                MaterialParam::Float(v) => {
+                                    ui.add(egui::DragValue::new(v).speed(0.1));
                                 }
-                            });
+                                MaterialParam::Vec2(v) => {
+                                    ui.add(egui::DragValue::new(&mut v[0]).speed(0.1));
+                                    ui.add(egui::DragValue::new(&mut v[1]).speed(0.1));
+                                }
+                                MaterialParam::Vec3(v) => {
+                                    ui.add(egui::DragValue::new(&mut v[0]).speed(0.1));
+                                    ui.add(egui::DragValue::new(&mut v[1]).speed(0.1));
+                                    ui.add(egui::DragValue::new(&mut v[2]).speed(0.1));
+                                }
+                                MaterialParam::Vec4(v) => {
+                                    ui.add(egui::DragValue::new(&mut v[0]).speed(0.1));
+                                    ui.add(egui::DragValue::new(&mut v[1]).speed(0.1));
+                                    ui.add(egui::DragValue::new(&mut v[2]).speed(0.1));
+                                    ui.add(egui::DragValue::new(&mut v[3]).speed(0.1));
+                                }
+                                MaterialParam::Color(v) => {
+                                    ui.color_edit_button_rgba_unmultiplied(v);
+                                }
+                                MaterialParam::Texture(t) => {
+                                    ui.text_edit_singleline(t);
+                                }
+                            }
                         });
+                    });
                 }
 
                 ui.add_space(8.0);
@@ -232,12 +238,13 @@ fn fs_main(
                     egui::Sense::hover(),
                 );
 
-                ui.painter().rect_filled(rect, 4.0, Color32::from_rgb(20, 20, 25));
+                ui.painter()
+                    .rect_filled(rect, 4.0, Color32::from_rgb(20, 20, 25));
 
                 ui.painter().rect_stroke(
                     rect,
                     2.0,
-                    egui::Stroke::new(1.0, Color32::from_rgb(100, 200, 255)),
+                    egui::Stroke::new(1.0_f32, Color32::from_rgb(100, 200, 255)),
                 );
 
                 ui.painter().text(

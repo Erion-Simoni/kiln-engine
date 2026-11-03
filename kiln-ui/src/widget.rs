@@ -641,6 +641,12 @@ impl Canvas {
     }
 }
 
+impl Default for Canvas {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Widget for Canvas {
     fn id(&self) -> WidgetId {
         self.id

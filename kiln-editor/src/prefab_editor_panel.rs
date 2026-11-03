@@ -1,9 +1,8 @@
 //! Prefab Editor panel — create, edit, and instantiate prefabs with override view.
 
-use egui::{Color32, DragValue, RichText, ScrollArea, Ui, Vec2, ComboBox, Stroke, Sense};
-use kiln_core::{Entity, Prefab, PrefabOverride, Component, ComponentOverride};
 use crate::prefab_editor::PrefabEditorState;
-use std::collections::HashMap;
+use egui::{DragValue, ScrollArea, Ui};
+use kiln_core::{ComponentOverride, PrefabOverride};
 
 /// State of the prefab editor panel.
 #[derive(Debug, Default)]
@@ -36,7 +35,6 @@ impl PrefabEditorPanel {
             filter: String::new(),
         }
     }
-
 
     /// Render the prefab editor panel.
     ///
@@ -71,40 +69,51 @@ impl PrefabEditorPanel {
         ui.heading("Prefabs");
         ui.add_space(4.0);
 
-        let mut selected_prefab_id = self.state.selected_prefab_id().map(|s| s.to_string());
+        let selected_prefab_id = self.state.selected_prefab_id().map(|s| s.to_string());
 
         ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
-            let prefabs: Vec<_> = self.state.prefab_list()
+            let prefabs: Vec<_> = self
+                .state
+                .prefab_list()
                 .into_iter()
-                .filter(|p| self.filter.is_empty() || p.name.to_lowercase().contains(&self.filter.to_lowercase()))
-                .cloned().collect();
+                .filter(|p| {
+                    self.filter.is_empty()
+                        || p.name.to_lowercase().contains(&self.filter.to_lowercase())
+                })
+                .cloned()
+                .collect();
 
             if prefabs.is_empty() {
                 ui.label("No prefabs. Click 'New Prefab' to create one.");
             } else {
                 for prefab in &prefabs {
                     let is_selected = selected_prefab_id.as_deref() == Some(&prefab.id);
-                    let mut selected = is_selected;
-                    
+                    let selected = is_selected;
+
                     ui.horizontal(|ui| {
                         if ui.selectable_label(selected, &prefab.name).clicked() {
                             let prefab_id = prefab.id.clone();
                             self.state.select_prefab(&prefab_id);
                         }
-                        
-                        if ui.small_button("✏️").on_hover_text("Edit overrides").clicked() {
+
+                        if ui
+                            .small_button("✏️")
+                            .on_hover_text("Edit overrides")
+                            .clicked()
+                        {
                             self.show_override_editor = true;
                             self.override_entity_id = Some(prefab.root_entity.id.clone());
-                            self.current_override = Some(PrefabOverride::new(prefab.root_entity.id.clone()));
+                            self.current_override =
+                                Some(PrefabOverride::new(prefab.root_entity.id.clone()));
                         }
-                        
+
                         if ui.small_button("🗑").clicked() {
                             self.state.remove_prefab(&prefab.id);
                         }
                     });
                 }
             }
-            
+
             if prefabs.is_empty() {
                 ui.label("No prefabs. Click 'New Prefab' to create one.");
             }
@@ -113,7 +122,6 @@ impl PrefabEditorPanel {
         ui.add_space(8.0);
         ui.separator();
         ui.add_space(8.0);
-
 
         // Override editor
         if self.show_override_editor {
@@ -124,7 +132,7 @@ impl PrefabEditorPanel {
                 if let Some(entity_id) = &self.override_entity_id {
                     ui.label(format!("Editing overrides for: {}", entity_id));
                     ui.add_space(4.0);
-                    
+
                     ui.horizontal(|ui| {
                         if ui.button("➕ Add Override").clicked() {
                             // Add a new override
@@ -135,17 +143,23 @@ impl PrefabEditorPanel {
                     });
 
                     ui.add_space(8.0);
-                    
+
                     // Override list
-                    let override_keys: Vec<String> = override_data.overrides.keys().cloned().collect();
-                    
+                    let override_keys: Vec<String> =
+                        override_data.overrides.keys().cloned().collect();
+
                     for entity_id in override_keys {
                         if let Some(override_val) = override_data.overrides.get_mut(&entity_id) {
                             ui.horizontal(|ui| {
                                 ui.label(format!("Entity: {}", entity_id));
-                                
+
                                 match override_val {
-                                    ComponentOverride::Transform { x, y, rotation, scale } => {
+                                    ComponentOverride::Transform {
+                                        x,
+                                        y,
+                                        rotation,
+                                        scale,
+                                    } => {
                                         ui.label("Transform:");
                                         if let Some(x) = x {
                                             ui.add(DragValue::new(x).speed(0.1).suffix(" x"));
@@ -162,7 +176,9 @@ impl PrefabEditorPanel {
                                             }
                                         }
                                         if let Some(rotation) = rotation {
-                                            ui.add(DragValue::new(rotation).speed(0.01).suffix(" rad"));
+                                            ui.add(
+                                                DragValue::new(rotation).speed(0.01).suffix(" rad"),
+                                            );
                                         }
                                         if let Some(scale) = scale {
                                             ui.add(DragValue::new(scale).speed(0.01).suffix(" s"));
@@ -172,7 +188,10 @@ impl PrefabEditorPanel {
                                         ui.label("Sprite:");
                                         if let Some(color) = color {
                                             let mut color_arr = *color;
-                                            if ui.color_edit_button_rgba_unmultiplied(&mut color_arr).changed() {
+                                            if ui
+                                                .color_edit_button_rgba_unmultiplied(&mut color_arr)
+                                                .changed()
+                                            {
                                                 *color = color_arr;
                                             }
                                         } else {
@@ -196,14 +215,16 @@ impl PrefabEditorPanel {
             } else {
                 ui.label("No overrides yet.");
             }
-            
+
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 if ui.button("Done").clicked() {
                     // Apply the override to the prefab in state
                     if let Some(override_data) = self.current_override.take() {
-                        if let Some(entity_id) = &self.override_entity_id {
-                            if let Some(prefab) = self.state.get_prefab_mut(&override_data.entity_id) {
+                        if let Some(_entity_id) = &self.override_entity_id {
+                            if let Some(prefab) =
+                                self.state.get_prefab_mut(&override_data.entity_id)
+                            {
                                 let definition = prefab.clone();
                                 definition.apply_overrides(&mut prefab.root_entity, &override_data);
                                 applied = true;
@@ -214,7 +235,6 @@ impl PrefabEditorPanel {
                 }
             });
         }
-
 
         ui.add_space(8.0);
         ui.separator();
@@ -238,17 +258,14 @@ impl PrefabEditorPanel {
                         if ui.button("Cancel").clicked() {
                             self.show_new_prefab_dialog = false;
                         }
-                        if ui.button("Create").clicked() {
-                            if !self.new_prefab_name.is_empty() {
+                        if ui.button("Create").clicked()
+                            && !self.new_prefab_name.is_empty() {
                                 // TODO: Create prefab from selected entity
                                 self.show_new_prefab_dialog = false;
                             }
-                        }
                     });
             });
         }
         applied
     }
 }
-
-

@@ -1,7 +1,7 @@
 //! Prefab system for reusable entity templates
 
-use crate::project::{Component, Entity};
 use crate::next_id;
+use crate::project::{Component, Entity};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -227,7 +227,9 @@ mod tests {
             id: "entity1".to_string(),
             name: "TestEntity".to_string(),
             components: vec![Component::Sprite {
-                layer: 0.0, material: None, animation_clip: None,
+                layer: 0.0,
+                material: None,
+                animation_clip: None,
                 color: [1.0, 0.0, 0.0, 1.0],
                 texture: None,
             }],

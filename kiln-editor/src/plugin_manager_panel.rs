@@ -1,13 +1,9 @@
 //! Plugin Manager panel — manage and configure WASM plugins.
 
-use egui::{Color32, RichText, ScrollArea, Ui, Vec2, ComboBox, Stroke, Sense};
-use kiln_plugin_api::{
-    EditorPlugin, PluginManifest, PluginCapability, PluginConfig, PluginRegistry,
-    EditorEvent, PluginContext,
-};
+use dirs;
+use kiln_plugin_api::PluginRegistry;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use dirs;
 
 /// State of the Plugin Manager panel.
 #[derive(Default)]
@@ -31,7 +27,7 @@ pub struct PluginManagerPanel {
 
 impl PluginManagerPanel {
     pub fn new() -> Self {
-        let mut panel = Self {
+        let panel = Self {
             registry: PluginRegistry::default(),
             plugins_dir: dirs::data_dir()
                 .unwrap_or_else(|| std::path::PathBuf::from("."))
@@ -70,12 +66,16 @@ impl PluginManagerPanel {
     }
 
     /// Send an event to all plugins.
-    pub fn handle_event(&mut self, event: &kiln_plugin_api::EditorEvent, context: &mut kiln_plugin_api::PluginContext) {
+    pub fn handle_event(
+        &mut self,
+        event: &kiln_plugin_api::EditorEvent,
+        context: &mut kiln_plugin_api::PluginContext,
+    ) {
         self.registry.handle_event_all(event, context);
     }
 
     /// Render the Plugin Manager panel.
-    pub fn render(&mut self, ui: &mut egui::Ui, context: &mut kiln_plugin_api::PluginContext) {
+    pub fn render(&mut self, ui: &mut egui::Ui, _context: &mut kiln_plugin_api::PluginContext) {
         ui.heading("Plugin Manager");
         ui.add_space(8.0);
 
@@ -110,10 +110,13 @@ impl PluginManagerPanel {
         ui.add_space(4.0);
 
         let manifests: Vec<_> = self.registry.manifests().into_iter().cloned().collect();
-        let filtered: Vec<_> = manifests.iter()
-            .filter(|m| self.filter.is_empty() || 
-                m.name.to_lowercase().contains(&self.filter.to_lowercase()) ||
-                m.id.to_lowercase().contains(&self.filter.to_lowercase()))
+        let filtered: Vec<_> = manifests
+            .iter()
+            .filter(|m| {
+                self.filter.is_empty()
+                    || m.name.to_lowercase().contains(&self.filter.to_lowercase())
+                    || m.id.to_lowercase().contains(&self.filter.to_lowercase())
+            })
             .collect();
 
         if manifests.is_empty() {
@@ -126,67 +129,72 @@ impl PluginManagerPanel {
                 }
             });
         } else {
-            egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
-                egui::Grid::new("plugins_grid")
-                    .num_columns(5)
-                    .striped(true)
-                    .show(ui, |ui| {
-                        ui.label(egui::RichText::new("Plugin").strong());
-                        ui.label(egui::RichText::new("Version").strong());
-                        ui.label(egui::RichText::new("Status").strong());
-                        ui.label(egui::RichText::new("Capabilities").strong());
-                        ui.label(egui::RichText::new("Actions").strong());
-                        ui.end_row();
-
-                        for manifest in filtered {
-                            let is_enabled = self.is_plugin_enabled(&manifest.id);
-                            let status_text = if self.is_plugin_loaded(&manifest.id) { "Loaded" } else { "Not Loaded" };
-                            let status_color = if self.is_plugin_loaded(&manifest.id) {
-                                egui::Color32::GREEN
-                            } else {
-                                egui::Color32::GRAY
-                            };
-
-                            ui.horizontal(|ui| {
-                                let mut enabled = self.is_plugin_enabled(&manifest.id);
-                                if ui.checkbox(&mut enabled, "").changed() {
-                                    // Toggle plugin
-                                    if enabled {
-                                        // Enable
-                                    } else {
-                                        // Disable
-                                    }
-                                }
-                                ui.label(&manifest.name);
-                                ui.label(&manifest.version);
-                                ui.colored_label(
-                                    if self.is_plugin_loaded(&manifest.id) { egui::Color32::GREEN } else { egui::Color32::GRAY },
-                                    self.get_status_text(&manifest.id),
-                                );
-                                ui.label(
-                                    manifest.capabilities.iter()
-                                        .map(|c| format!("{:?}", c))
-                                        .collect::<Vec<_>>()
-                                        .join(", ")
-                                );
-                                ui.horizontal(|ui| {
-                                    if ui.small_button("⚙ Settings").clicked() {
-                                        self.show_settings = Some(manifest.id.clone());
-                                    }
-                                    if ui.small_button("🗑 Uninstall").clicked() {
-                                        // TODO: Uninstall
-                                    }
-                                });
-    }
-    );
+            egui::ScrollArea::vertical()
+                .max_height(300.0)
+                .show(ui, |ui| {
+                    egui::Grid::new("plugins_grid")
+                        .num_columns(5)
+                        .striped(true)
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new("Plugin").strong());
+                            ui.label(egui::RichText::new("Version").strong());
+                            ui.label(egui::RichText::new("Status").strong());
+                            ui.label(egui::RichText::new("Capabilities").strong());
+                            ui.label(egui::RichText::new("Actions").strong());
                             ui.end_row();
-                        }
-                    });
-            });
+
+                            for manifest in filtered {
+                                let _is_enabled = self.is_plugin_enabled(&manifest.id);
+                                let _status_text = if self.is_plugin_loaded(&manifest.id) {
+                                    "Loaded"
+                                } else {
+                                    "Not Loaded"
+                                };
+                                let _status_color = if self.is_plugin_loaded(&manifest.id) {
+                                    egui::Color32::GREEN
+                                } else {
+                                    egui::Color32::GRAY
+                                };
+
+                                ui.horizontal(|ui| {
+                                    let mut enabled = self.is_plugin_enabled(&manifest.id);
+                                    if ui.checkbox(&mut enabled, "").changed() {
+                                        self.get_config_mut(&manifest.id).enabled = enabled;
+                                    }
+                                    ui.label(&manifest.name);
+                                    ui.label(&manifest.version);
+                                    ui.colored_label(
+                                        if self.is_plugin_loaded(&manifest.id) {
+                                            egui::Color32::GREEN
+                                        } else {
+                                            egui::Color32::GRAY
+                                        },
+                                        self.get_status_text(&manifest.id),
+                                    );
+                                    ui.label(
+                                        manifest
+                                            .capabilities
+                                            .iter()
+                                            .map(|c| format!("{:?}", c))
+                                            .collect::<Vec<_>>()
+                                            .join(", "),
+                                    );
+                                    ui.horizontal(|ui| {
+                                        if ui.small_button("⚙ Settings").clicked() {
+                                            self.show_settings = Some(manifest.id.clone());
+                                        }
+                                        if ui.small_button("🗑 Uninstall").clicked() {
+                                            // TODO: Uninstall
+                                        }
+                                    });
+                                });
+                                ui.end_row();
+                            }
+                        });
+                });
         }
 
         ui.add_space(8.0);
-
 
         ui.add_space(8.0);
 
@@ -219,8 +227,10 @@ impl PluginManagerPanel {
 
     // Helper methods
     fn is_plugin_enabled(&self, plugin_id: &str) -> bool {
-        // TODO: Check config
-        true
+        self.configs
+            .get(plugin_id)
+            .map(|config| config.enabled)
+            .unwrap_or(true)
     }
 
     fn is_plugin_loaded(&self, plugin_id: &str) -> bool {
@@ -231,8 +241,6 @@ impl PluginManagerPanel {
         self.configs.entry(plugin_id.to_string()).or_default()
     }
 }
-
-
 
 impl PluginManagerPanel {
     pub fn get_status_text(&self, plugin_id: &str) -> String {
@@ -247,6 +255,15 @@ impl PluginManagerPanel {
 #[cfg(test)]
 mod config_tests {
     use super::*;
+
+    #[test]
+    fn plugin_enable_state_reads_the_saved_config() {
+        let mut panel = PluginManagerPanel::default();
+        assert!(panel.is_plugin_enabled("first"));
+        panel.get_config_mut("first").enabled = false;
+        assert!(!panel.is_plugin_enabled("first"));
+        assert!(panel.is_plugin_enabled("second"));
+    }
 
     #[test]
     fn plugin_settings_are_kept_separate() {

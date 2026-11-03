@@ -1,7 +1,7 @@
 //! KilnScript Debugger Panel — breakpoints, stepping, variable inspection.
 
-use egui::{Color32, RichText, ScrollArea, Ui, Vec2};
-use kiln_ir::{Breakpoint, DebugEvent, Debugger, DebugState, StepMode, WatchExpression};
+use egui::{Color32, RichText, ScrollArea, Ui};
+use kiln_ir::Debugger;
 
 /// State of the debugger panel.
 #[derive(Debug, Default)]
@@ -35,13 +35,8 @@ impl DebuggerPanel {
         }
     }
 
-
     /// Render the debugger panel.
-    pub fn render<H: kiln_ir::HostContext>(
-        &mut self,
-        ui: &mut Ui,
-        debugger: &mut Debugger<H>,
-    ) {
+    pub fn render<H: kiln_ir::HostContext>(&mut self, ui: &mut Ui, debugger: &mut Debugger<H>) {
         ui.heading("KilnScript Debugger");
         ui.add_space(8.0);
 
@@ -73,7 +68,11 @@ impl DebuggerPanel {
         // Current instruction display
         if let Some(instr) = debugger.current_instruction() {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("IP: {}", debugger.state().current_instruction)).monospace().strong());
+                ui.label(
+                    RichText::new(format!("IP: {}", debugger.state().current_instruction))
+                        .monospace()
+                        .strong(),
+                );
                 ui.label(RichText::new(format!("{:?}", instr)).monospace());
             });
         } else {
@@ -110,7 +109,6 @@ impl DebuggerPanel {
             self.render_watches(ui, debugger);
         }
     }
-
 
     fn render_breakpoints<H: kiln_ir::HostContext>(
         &mut self,
@@ -168,12 +166,7 @@ impl DebuggerPanel {
         }
     }
 
-
-    fn render_call_stack<H: kiln_ir::HostContext>(
-        &self,
-        ui: &mut Ui,
-        debugger: &mut Debugger<H>,
-    ) {
+    fn render_call_stack<H: kiln_ir::HostContext>(&self, ui: &mut Ui, debugger: &mut Debugger<H>) {
         ui.heading("Call Stack");
         ui.add_space(4.0);
 
@@ -187,11 +180,7 @@ impl DebuggerPanel {
         }
     }
 
-    fn render_locals<H: kiln_ir::HostContext>(
-        &self,
-        ui: &mut Ui,
-        debugger: &mut Debugger<H>,
-    ) {
+    fn render_locals<H: kiln_ir::HostContext>(&self, ui: &mut Ui, debugger: &mut Debugger<H>) {
         ui.heading("Local Variables");
         ui.add_space(4.0);
 
@@ -218,11 +207,7 @@ impl DebuggerPanel {
         }
     }
 
-    fn render_watches<H: kiln_ir::HostContext>(
-        &mut self,
-        ui: &mut Ui,
-        debugger: &mut Debugger<H>,
-    ) {
+    fn render_watches<H: kiln_ir::HostContext>(&mut self, ui: &mut Ui, debugger: &mut Debugger<H>) {
         ui.heading("Watch Expressions");
         ui.add_space(4.0);
 
@@ -230,11 +215,9 @@ impl DebuggerPanel {
         ui.horizontal(|ui| {
             ui.label("Expression:");
             ui.text_edit_singleline(&mut self.new_watch_expr);
-            if ui.button("Add").clicked() {
-                if !self.new_watch_expr.is_empty() {
-                    debugger.add_watch(self.new_watch_expr.clone());
-                    self.new_watch_expr.clear();
-                }
+            if ui.button("Add").clicked() && !self.new_watch_expr.is_empty() {
+                debugger.add_watch(self.new_watch_expr.clone());
+                self.new_watch_expr.clear();
             }
         });
 
@@ -268,5 +251,3 @@ impl DebuggerPanel {
         }
     }
 }
-
-

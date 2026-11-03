@@ -80,14 +80,14 @@ impl UiRenderer {
         if !bounds.contains_point(x, y) {
             return None;
         }
-        
+
         // Check if it's a button with an on_click action
         if let Some(button) = widget.as_any().downcast_ref::<Button>() {
             if let Some(action) = button.on_click() {
                 return Some(action.to_string());
             }
         }
-        
+
         // Check children if it's a Canvas
         if let Some(canvas) = widget.as_any().downcast_ref::<Canvas>() {
             for child in &canvas.children {
@@ -96,7 +96,7 @@ impl UiRenderer {
                 }
             }
         }
-        
+
         None
     }
 
@@ -110,14 +110,14 @@ impl UiRenderer {
         if !bounds.contains_point(x, y) {
             return None;
         }
-        
+
         // Check children in reverse order (topmost first)
         for child in canvas.children.iter().rev() {
             if let Some(action) = self.hit_test_button(child.as_ref(), x, y) {
                 return Some(action);
             }
         }
-        
+
         None
     }
 
@@ -251,12 +251,18 @@ impl UiRenderer {
             return Vec::new();
         }
         let mut out = Vec::new();
-        
+
         // Render background if not transparent
         if canvas.background_color[3] > 0.0 {
-            out.push(UiQuad::rect(b.x, b.y, b.width, b.height, canvas.background_color));
+            out.push(UiQuad::rect(
+                b.x,
+                b.y,
+                b.width,
+                b.height,
+                canvas.background_color,
+            ));
         }
-        
+
         // Render children
         for child in &canvas.children {
             // Downcast to specific widget types and render
@@ -275,7 +281,7 @@ impl UiRenderer {
                 out.extend(self.render_canvas(canvas));
             }
         }
-        
+
         out
     }
 

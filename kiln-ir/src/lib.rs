@@ -6,7 +6,9 @@ pub mod program;
 pub mod value;
 pub mod vm;
 
-pub use debugger::{Breakpoint, DebugEvent, Debugger, DebugState, InstructionLocation, StepMode, WatchExpression};
+pub use debugger::{
+    Breakpoint, DebugEvent, DebugState, Debugger, InstructionLocation, StepMode, WatchExpression,
+};
 pub use opcode::Opcode;
 pub use program::{Instruction, Label, Program, ProgramError};
 pub use value::Value;

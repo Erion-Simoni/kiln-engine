@@ -1,7 +1,7 @@
 //! Profiler panel — GPU pass timings, frame budget overlay.
 
 use egui::{Color32, RichText, ScrollArea, Ui, Vec2};
-use kiln_render::{GpuProfiler, PassTiming};
+use kiln_render::GpuProfiler;
 
 /// State of the profiler panel.
 #[derive(Debug, Default)]
@@ -36,16 +36,13 @@ impl ProfilerPanel {
     pub fn update(&mut self, profiler: &GpuProfiler) {
         if self.show_budget {
             // Add current frame time to history
-            let frame_time_ms = profiler.timings().iter()
-                .map(|t| t.duration_ms())
-                .sum();
+            let frame_time_ms = profiler.timings().iter().map(|t| t.duration_ms()).sum();
             self.frame_time_history.push(frame_time_ms);
             if self.frame_time_history.len() > self.max_history {
                 self.frame_time_history.remove(0);
             }
         }
     }
-
 
     /// Render the profiler panel.
     pub fn render(&mut self, ui: &mut Ui, profiler: &GpuProfiler) {
@@ -58,7 +55,11 @@ impl ProfilerPanel {
             ui.checkbox(&mut self.show_budget, "Frame Budget");
             ui.add_space(16.0);
             ui.label("Target:");
-            ui.add(egui::DragValue::new(&mut self.target_frame_ms).speed(0.1).suffix(" ms"));
+            ui.add(
+                egui::DragValue::new(&mut self.target_frame_ms)
+                    .speed(0.1)
+                    .suffix(" ms"),
+            );
         });
 
         ui.add_space(8.0);
@@ -83,17 +84,21 @@ impl ProfilerPanel {
                             ui.end_row();
 
                             let total_ms: f64 = timings.iter().map(|t| t.duration_ms()).sum();
-                            
+
                             for timing in timings {
                                 let ms = timing.duration_ms();
-                                let pct = if total_ms > 0.0 { (ms / total_ms) * 100.0 } else { 0.0 };
-                                
+                                let pct = if total_ms > 0.0 {
+                                    (ms / total_ms) * 100.0
+                                } else {
+                                    0.0
+                                };
+
                                 ui.label(&timing.name);
                                 ui.label(format!("{:.3}", ms));
                                 ui.label(format!("{:.1}%", pct));
                                 ui.end_row();
                             }
-                            
+
                             ui.label(RichText::new("Total").strong());
                             ui.label(RichText::new(format!("{:.3}", total_ms)).strong());
                             ui.label(RichText::new("100.0%").strong());
@@ -103,14 +108,17 @@ impl ProfilerPanel {
             }
         }
 
-
         if self.show_budget {
             ui.separator();
             ui.label(RichText::new("Frame Budget").strong());
             ui.add_space(4.0);
 
             let total_ms: f64 = profiler.timings().iter().map(|t| t.duration_ms()).sum();
-            let budget_pct = if self.target_frame_ms > 0.0 { (total_ms / self.target_frame_ms) * 100.0 } else { 0.0 };
+            let budget_pct = if self.target_frame_ms > 0.0 {
+                (total_ms / self.target_frame_ms) * 100.0
+            } else {
+                0.0
+            };
 
             // Budget bar
             let budget_color = if budget_pct > 100.0 {
@@ -124,33 +132,47 @@ impl ProfilerPanel {
             ui.horizontal(|ui| {
                 ui.label(format!("Frame: {:.2} ms", total_ms));
                 ui.label(format!("Target: {:.2} ms", self.target_frame_ms));
-                ui.label(RichText::new(format!("{:.1}%", budget_pct)).color(budget_color).strong());
+                ui.label(
+                    RichText::new(format!("{:.1}%", budget_pct))
+                        .color(budget_color)
+                        .strong(),
+                );
             });
 
             // Visual budget bar
             let bar_width = ui.available_width().min(300.0);
             let bar_height = 20.0;
-            let (rect, _) = ui.allocate_exact_size(Vec2::new(bar_width, bar_height), egui::Sense::hover());
-            
+            let (rect, _) =
+                ui.allocate_exact_size(Vec2::new(bar_width, bar_height), egui::Sense::hover());
+
             // Background
-            ui.painter().rect_filled(rect, 4.0, Color32::from_rgb(40, 40, 50));
-            
+            ui.painter()
+                .rect_filled(rect, 4.0, Color32::from_rgb(40, 40, 50));
+
             // Budget used
-            let used_width = (bar_width * ((budget_pct as f32) / 100.0_f32).min(1.0)) as f32;
+            let used_width = bar_width * ((budget_pct as f32) / 100.0_f32).min(1.0);
             let used_rect = egui::Rect::from_min_size(rect.min, Vec2::new(used_width, bar_height));
             ui.painter().rect_filled(used_rect, 4.0, budget_color);
-            
+
             // Target line
-            let target_x = rect.left() + (bar_width * (100.0_f32 / ((budget_pct as f32).max(100.0_f32)))) as f32;
+            let target_x =
+                rect.left() + (bar_width * (100.0_f32 / ((budget_pct as f32).max(100.0_f32))));
             if target_x < rect.right() {
                 ui.painter().line_segment(
-                    [egui::pos2(target_x, rect.top()), egui::pos2(target_x, rect.bottom())],
-                    egui::Stroke::new(2.0, Color32::WHITE),
+                    [
+                        egui::pos2(target_x, rect.top()),
+                        egui::pos2(target_x, rect.bottom()),
+                    ],
+                    egui::Stroke::new(2.0_f32, Color32::WHITE),
                 );
             }
-            
+
             // Border
-            ui.painter().rect_stroke(rect, 4.0, egui::Stroke::new(1.0, Color32::from_gray(100)));
+            ui.painter().rect_stroke(
+                rect,
+                4.0,
+                egui::Stroke::new(1.0_f32, Color32::from_gray(100)),
+            );
 
             ui.add_space(4.0);
 
@@ -166,21 +188,30 @@ impl ProfilerPanel {
                 ui.allocate_rect(graph_rect, egui::Sense::hover());
 
                 // Graph background
-                ui.painter().rect_filled(graph_rect, 2.0, Color32::from_rgb(30, 30, 35));
-                ui.painter().rect_stroke(graph_rect, 2.0, egui::Stroke::new(1.0, Color32::from_gray(80)));
+                ui.painter()
+                    .rect_filled(graph_rect, 2.0, Color32::from_rgb(30, 30, 35));
+                ui.painter().rect_stroke(
+                    graph_rect,
+                    2.0,
+                    egui::Stroke::new(1.0_f32, Color32::from_gray(80)),
+                );
 
                 // Target line
-                let target_y = graph_rect.bottom() - (graph_height * (self.target_frame_ms as f32 / self.max_frame_time() as f32)) as f32;
+                let target_y = graph_rect.bottom()
+                    - (graph_height * (self.target_frame_ms as f32 / self.max_frame_time() as f32));
                 ui.painter().line_segment(
-                    [egui::pos2(graph_rect.left(), target_y), egui::pos2(graph_rect.right(), target_y)],
-                    egui::Stroke::new(1.0, Color32::from_rgb(100, 200, 100)),
+                    [
+                        egui::pos2(graph_rect.left(), target_y),
+                        egui::pos2(graph_rect.right(), target_y),
+                    ],
+                    egui::Stroke::new(1.0_f32, Color32::from_rgb(100, 200, 100)),
                 );
 
                 // Frame time bars
                 let bar_width = graph_width / self.frame_time_history.len() as f32;
                 for (i, &frame_ms) in self.frame_time_history.iter().enumerate() {
                     let x = graph_rect.left() + i as f32 * bar_width;
-                    let bar_h = (graph_height * (frame_ms as f32 / self.max_frame_time() as f32)) as f32;
+                    let bar_h = graph_height * (frame_ms as f32 / self.max_frame_time() as f32);
                     let color = if frame_ms > self.target_frame_ms {
                         Color32::RED
                     } else if frame_ms > self.target_frame_ms * 0.8 {
@@ -199,13 +230,17 @@ impl ProfilerPanel {
 
         if !profiler.supported() {
             ui.separator();
-            ui.label(RichText::new("GPU timestamp queries not supported on this hardware/driver.").color(Color32::YELLOW));
+            ui.label(
+                RichText::new("GPU timestamp queries not supported on this hardware/driver.")
+                    .color(Color32::YELLOW),
+            );
         }
     }
 
     fn max_frame_time(&self) -> f64 {
-        self.frame_time_history.iter().copied().fold(self.target_frame_ms * 2.0, f64::max)
+        self.frame_time_history
+            .iter()
+            .copied()
+            .fold(self.target_frame_ms * 2.0, f64::max)
     }
 }
-
-

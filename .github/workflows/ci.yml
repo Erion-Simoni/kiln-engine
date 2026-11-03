@@ -35,6 +35,14 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Check
         run: cargo check --workspace
+      - name: Install Linux audio development headers
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - name: Check Linux audio configurations
+        if: runner.os == 'Linux'
+        run: |
+          cargo check -p kiln-editor --features audio
+          cargo check --manifest-path samples/audio/Cargo.toml
 
   test:
     name: Test

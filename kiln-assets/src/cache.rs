@@ -134,20 +134,13 @@ impl AssetCache {
     }
 
     /// Register import settings for a specific asset path.
-    pub fn set_import_settings(
-        &mut self,
-        path: &Path,
-        settings: ImportSettings,
-    ) {
+    pub fn set_import_settings(&mut self, path: &Path, settings: ImportSettings) {
         self.import_settings.insert(path.to_path_buf(), settings);
     }
 
     /// Get the import settings for a given path, returning defaults if none set.
     pub fn get_import_settings(&self, path: &Path) -> ImportSettings {
-        self.import_settings
-            .get(path)
-            .copied()
-            .unwrap_or_default()
+        self.import_settings.get(path).copied().unwrap_or_default()
     }
 
     /// Record that `dependent` depends on `dependency`.
@@ -181,7 +174,10 @@ impl AssetCache {
     pub fn duplicate_assets(&self) -> Vec<Vec<PathBuf>> {
         let mut by_hash: HashMap<String, Vec<PathBuf>> = HashMap::new();
         for (path, entry) in &self.entries {
-            by_hash.entry(entry.hash.clone()).or_default().push(path.clone());
+            by_hash
+                .entry(entry.hash.clone())
+                .or_default()
+                .push(path.clone());
         }
         by_hash
             .into_values()

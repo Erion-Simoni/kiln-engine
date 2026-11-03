@@ -1,39 +1,41 @@
 # Kiln Session Handoff
 
-**Active focus:** Task 1 of `docs/2D_COMPLETION_PLAN.md`: build/test baseline.
+**Active focus:** Task 1 of `docs/2D_COMPLETION_PLAN.md` completed locally; next is task 2.
 **Branch:** `feat/2d-production-workflow`.
-**Scope:** Continue the user's ordered 2D completion program one tested task at a time. 3D remains paused. Do not treat historical milestone claims as production-workflow evidence.
+**Scope:** Continue the user's ordered 2D completion program. 3D remains paused. Historical milestone claims are not proof of complete authoring/export workflows.
 
 ## Done
 
-- Native baseline restored in the preceding checkpoint: workspace build, audio-enabled editor/sample checks, persistent script state, nonvisual entity lookup, and existing integration tests.
-- Actual WASM compilation repaired: canvas ownership/configuration, browser API feature declarations, async audio decoding, public script-host access, widget APIs, default scene selection, and shared entity spawning.
-- Sound callback access no longer depends on native Rodio. Native callbacks retain Send/Sync; browser callbacks can capture JS handles. ADR-0037 records this and test-only dependencies.
-- Browser fallback probes WebGPU before claiming the canvas, then uses a separate WebGL instance if there is no adapter. Downlevel device limits work in software WebGL.
-- Clock uses web-time only on wasm32; std Instant caused an actual browser panic.
-- Separate overlay GPU buffers prevent HUD uploads from replacing world sprite data before submission. UI/HUD commands draw as a single overlay batch.
-- Animation callback owns its Window, preserving future frames and input. Startup rejects on missing canvas/initialization errors instead of returning apparent success.
-- Added reproducible `just web-smoke`, pinned Playwright tooling, and a browser CI job. See tests/web/README.md.
+- Native and WASM baseline repairs from prior checkpoints remain validated.
+- Workspace formatted; strict native all-target Clippy now passes without added blanket suppressions. Removed unused duplicate state and legacy methods, corrected API/style diagnostics, and preserved the reachable graph-tab behavior.
+- Existing plugin enable configuration now controls its checkbox state. Regressions verify independent/saved enable state.
+- Replaced the invalid plugin C trait-object return with API v2 opaque handles and paired destruction; tested macro expansion, ABI function types, null handling, and exactly-once destruction. See ADR-0038. A plugin loader/method dispatch protocol remains future work.
+- CI retains strict native checks and now checks Linux audio configurations with the required ALSA headers. Browser smoke coverage remains configured.
 
 ## Validation
 
-- Actual WASM build plus matching wasm-bindgen output: passed.
-- `CHROMIUM_PATH=/usr/bin/chromium just web-smoke`: passed. Loads real assets, checks visible hero pixels and movement/key release, rejects invalid startup, fails on browser/asset errors.
-- Full native nextest suite: 453 passed, zero failed/skipped, including the new platform sound callback regression.
+- `just check`: passed (formatting, strict native all-target Clippy, workspace check, standalone audio sample check).
+- `just test`: 455 passed; zero failed/skipped.
+- `cargo build --workspace`: passed.
+- `CHROMIUM_PATH=/usr/bin/chromium just web-smoke`: passed after cleanup; real assets/rendering/input/startup rejection exercised.
+- Rebuilt native editor welcome and main workspace visually verified in Xvfb/software GL; no panic or GPU validation error. Virtual-display/framebuffer warnings remain.
+- `cargo check -p kiln-editor --features audio`: passed; audible playback not claimed.
 - `git diff --check`: passed.
-- Remote CI execution is not yet verified. Full `just check` remains blocked by pre-existing workspace formatting differences; strict clippy has not been restored. Task 1 is still IN PROGRESS.
+- Remote CI/matrix execution remains pending. Optional audio and WASM builds have warnings outside the strict default-native Clippy invocation; no all-feature lint/physical-device guarantee is claimed.
 
 ## Next
 
-1. Restore full-workspace formatting and strict lint/CI gates without blanket suppressions or weakening tests. Re-run required build/test/browser checks after substantive changes.
-2. Begin task 2 (scene authoring/persistence) only after baseline acceptance criteria pass.
-3. Follow tasks 3–9 in the completion plan; none are complete.
+1. Begin task 2 in `docs/2D_COMPLETION_PLAN.md`: project create/open/save/save-as, authoritative scene edits, round-trip property preservation, scene tabs, undo/redo, and dirty/recovery behavior. Start by reproducing the existing editor workflow and adding focused acceptance tests; document architecture decisions before restructuring.
+2. Keep the restored gates green as changes land. Do not regress browser rendering/input or native script-state persistence.
+3. Tasks 2–9 remain pending; use real reference-game/export evidence rather than panel/type existence.
 
 ## Limits and environment
 
-The browser result is Chromium software WebGL, not physical WebGPU, Safari/Firefox,
-touch-device validation, a complete CLI export, or full audio/music/save support.
-Native audio checks establish compilation, not audible playback. Hardware frame
-budgets, release size budgets, clean-machine packaging, and real-device checks
-remain separate gates. Source `/workspace/.kiln-tools/activate.sh` for cloud Cargo
-commands; `CHROMIUM_PATH=/usr/bin/chromium` uses the installed browser for smoke tests.
+Browser validation is Chromium software WebGL, not physical WebGPU, other browsers,
+touch devices, or complete CLI exports. Full music/mixer/save behavior, physical
+hardware frame budgets, release sizes, clean-machine packaging, and cross-platform
+runner validation remain separate gates. Plugin ABI v2 is a compatibility change;
+handles may only be released by their matching creator module.
+
+Source `/workspace/.kiln-tools/activate.sh` for cloud Cargo commands.
+`CHROMIUM_PATH=/usr/bin/chromium just web-smoke` uses the installed browser.

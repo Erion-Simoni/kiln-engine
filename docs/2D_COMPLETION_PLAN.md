@@ -12,14 +12,14 @@ Each task needs implementation, meaningful regression tests, and an exercised ed
 
 ## Ordered work
 
-### 1. Build and test baseline — IN PROGRESS
+### 1. Build and test baseline — COMPLETE (local Linux validation; remote CI pending)
 
-- [x] Repair native workspace syntax/API/test-fixture blockers (web target errors remain below).
+- [x] Repair native workspace syntax/API/test-fixture blockers; subsequent browser checkpoint repaired the actual WASM target.
 - [x] Make default native workspace builds and existing tests pass.
 - [x] Repair audio feature compilation and exercise the standalone audio sample build (playback remains unverified).
 - [x] Make the WASM target compile; add a real Chromium WebGL smoke test (other browser/device paths remain unverified).
-- [ ] Restore formatting and strict lint checks without blanket lint suppressions or weakening CI.
-- [ ] Keep CI aligned with the actual supported toolchain, system dependencies, features, and test commands.
+- [x] Restore workspace formatting and strict native all-target lint checks without blanket lint suppressions or weakening CI.
+- [x] Keep CI aligned with the native quality gate, browser smoke test, and Linux audio headers/configuration checks. Remote runner execution remains pending.
 
 Acceptance: `just check`, `just test`, native editor build, audio sample check, and WASM build pass. Tests must execute nonzero cases. Graphical/browser/device checks have separate recorded evidence.
 
@@ -125,3 +125,15 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Input verification exposed an animation-callback lifetime bug. The callback now owns its Window and reports requestAnimationFrame failures, instead of retaining a scoped borrowed handle that stopped later frames.
 - Added `tests/web/README.md`, pinned npm test dependencies, `just web-smoke`, and a GitHub Actions browser job. Local execution passed; remote CI execution has not been claimed.
 - Remaining Task 1 work: full-workspace formatting and strict lint gates. Browser smoke is a software-WebGL sample test, not proof of complete CLI exports, physical WebGPU, other browsers, touch, or full audio/save support. Tasks 2–9 remain pending.
+
+### 2026-11-03 — Task 1 quality gate completed locally
+
+- `just check`: PASSED. This executes workspace formatting, strict native all-target Clippy with `-D warnings`, workspace check, and the standalone audio sample check. Optional audio compilation still emits warnings; it is not a claim of audio playback or all-feature lint cleanliness.
+- `just test`: 455 passed, zero failed/skipped. New regressions exercise the exported plugin create/destroy ABI and saved plugin enable state.
+- `cargo build --workspace`: PASSED.
+- `CHROMIUM_PATH=/usr/bin/chromium just web-smoke`: PASSED after the cleanup; real sample assets, visible hero pixels, keyboard movement, key release, and startup-error rejection were exercised.
+- Native editor: rebuilt and visibly verified welcome/main workspace in Xvfb software GL; no panic/GPU validation error. Virtual display/framebuffer warnings remain. This does not establish that every editor panel or authoring workflow is complete.
+- Formatted the workspace, applied compiler-supported lint fixes, removed unused duplicate state/legacy methods, preserved the currently reachable graph tab, corrected egui APIs, and connected existing plugin enable configuration to its checkbox. No blanket lint allowances or required-test exclusions were added.
+- Plugin ABI v2 now uses plugin-owned opaque handles and matching destruction instead of exposing Rust trait-object layout through C. ADR-0038 documents the compatibility change and limits; this does not implement a plugin loader.
+- CI preserves its strict native gates and adds Linux audio development headers plus editor/sample audio checks. The browser job remains enabled. Remote CI/matrix execution has not been observed here.
+- Task 1's specified local acceptance commands now pass. Next is task 2: dependable scene authoring/project lifecycle. Hardware, WebGPU/other browsers, export packaging, release-size/performance budgets, and full audio/UI/save functionality remain separate gates in tasks 2–9.

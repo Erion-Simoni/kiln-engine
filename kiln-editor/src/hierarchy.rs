@@ -4,9 +4,7 @@
 //! component management. Selected entities are highlighted and their
 //! components are shown in the inspector.
 
-use hecs::Entity;
 use kiln_core::project::{Component, Project, Scene};
-use kiln_runtime::world::Role;
 
 /// Action requested by the hierarchy panel.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,7 +16,10 @@ pub enum HierarchyAction {
     /// User wants to duplicate (copy) the entity with the given source id.
     DuplicateEntity(String),
     /// User wants to reparent `child_id` under `parent_id`.
-    Reparent { child_id: String, parent_id: Option<String> },
+    Reparent {
+        child_id: String,
+        parent_id: Option<String>,
+    },
     /// User selected an entity (for syncing with inspector).
     SelectEntity(String),
 }
@@ -161,7 +162,7 @@ pub fn render_hierarchy_panel(
         let nodes: Vec<HierarchyNode> = state.filtered_nodes().into_iter().cloned().collect();
         for node in nodes {
             let selected = state.selected_id.as_deref() == Some(&node.entity_id);
-            let node_text = if node.has_children {
+            let _node_text = if node.has_children {
                 format!("{} ▾", node.name)
             } else {
                 node.name.clone()
@@ -181,7 +182,7 @@ pub fn render_hierarchy_panel(
                 }
 
                 // Entity select button
-                let mut response = ui
+                let response = ui
                     .selectable_label(selected, &node.name)
                     .on_hover_text(&node.entity_id);
 
@@ -208,7 +209,10 @@ pub fn render_hierarchy_panel(
 
                 // Role badge
                 if let Some(role) = get_entity_role(project, scene_id, &node.entity_id) {
-                    ui.colored_label(egui::Color32::from_rgb(100, 200, 100), format!("[{}]", role));
+                    ui.colored_label(
+                        egui::Color32::from_rgb(100, 200, 100),
+                        format!("[{}]", role),
+                    );
                 }
             });
         }
@@ -244,7 +248,8 @@ pub fn render_hierarchy_panel(
                 ui.horizontal(|ui| {
                     if ui.button("Create").clicked() {
                         if !state.new_entity_name.is_empty() {
-                            action = Some(HierarchyAction::AddEntity(state.new_entity_name.clone()));
+                            action =
+                                Some(HierarchyAction::AddEntity(state.new_entity_name.clone()));
                         }
                         state.show_add_dialog = false;
                         state.new_entity_name.clear();

@@ -38,7 +38,6 @@ pub struct Breakpoint {
     pub hit_count: usize,
 }
 
-
 /// Step mode for debugger control.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StepMode {
@@ -80,7 +79,6 @@ pub struct DebugState {
     pub last_event: Option<DebugEvent>,
     pub instruction_locations: HashMap<usize, InstructionLocation>,
 }
-
 
 /// Debugger controller that wraps a VM and provides debugging operations.
 pub struct Debugger<H: crate::HostContext> {
@@ -127,12 +125,15 @@ impl<H: crate::HostContext> Debugger<H> {
 
     /// Set a breakpoint at the given instruction.
     pub fn set_breakpoint(&mut self, instruction: usize, condition: Option<String>) {
-        self.state.breakpoints.insert(instruction, Breakpoint {
+        self.state.breakpoints.insert(
             instruction,
-            condition,
-            enabled: true,
-            hit_count: 0,
-        });
+            Breakpoint {
+                instruction,
+                condition,
+                enabled: true,
+                hit_count: 0,
+            },
+        );
     }
 
     /// Remove a breakpoint.
@@ -211,7 +212,6 @@ impl<H: crate::HostContext> Debugger<H> {
         self.execute_until_event()
     }
 
-
     /// Execute VM until a debug event occurs.
     fn execute_until_event(&mut self) -> DebugEvent {
         loop {
@@ -221,15 +221,27 @@ impl<H: crate::HostContext> Debugger<H> {
             if let Some(bp) = self.state.breakpoints.get(&self.state.current_instruction) {
                 if bp.enabled {
                     // Check condition if present
-                    let should_break = bp.condition.as_ref().map(|c| self.evaluate_condition(c)).unwrap_or(true);
+                    let should_break = bp
+                        .condition
+                        .as_ref()
+                        .map(|c| self.evaluate_condition(c))
+                        .unwrap_or(true);
                     if should_break {
                         // We need mutable access to hit_count
-                        if let Some(bp_mut) = self.state.breakpoints.get_mut(&self.state.current_instruction) {
+                        if let Some(bp_mut) = self
+                            .state
+                            .breakpoints
+                            .get_mut(&self.state.current_instruction)
+                        {
                             bp_mut.hit_count += 1;
                         }
-                        self.state.last_event = Some(DebugEvent::BreakpointHit { instruction: self.state.current_instruction });
+                        self.state.last_event = Some(DebugEvent::BreakpointHit {
+                            instruction: self.state.current_instruction,
+                        });
                         self.update_state_from_vm();
-                        return DebugEvent::BreakpointHit { instruction: self.state.current_instruction };
+                        return DebugEvent::BreakpointHit {
+                            instruction: self.state.current_instruction,
+                        };
                     }
                 }
             }
@@ -238,17 +250,25 @@ impl<H: crate::HostContext> Debugger<H> {
             match self.state.step_mode {
                 StepMode::StepInto => {
                     self.state.step_mode = StepMode::None;
-                    self.state.last_event = Some(DebugEvent::Step { instruction: self.state.current_instruction });
+                    self.state.last_event = Some(DebugEvent::Step {
+                        instruction: self.state.current_instruction,
+                    });
                     self.update_state_from_vm();
-                    return DebugEvent::Step { instruction: self.state.current_instruction };
+                    return DebugEvent::Step {
+                        instruction: self.state.current_instruction,
+                    };
                 }
                 StepMode::StepOver => {
                     // Step over: execute one instruction, but don't stop inside calls
                     // For simplicity, treat as StepInto for now
                     self.state.step_mode = StepMode::None;
-                    self.state.last_event = Some(DebugEvent::Step { instruction: self.state.current_instruction });
+                    self.state.last_event = Some(DebugEvent::Step {
+                        instruction: self.state.current_instruction,
+                    });
                     self.update_state_from_vm();
-                    return DebugEvent::Step { instruction: self.state.current_instruction };
+                    return DebugEvent::Step {
+                        instruction: self.state.current_instruction,
+                    };
                 }
                 StepMode::StepOut => {
                     // Step out: continue until we return from current function
@@ -265,16 +285,22 @@ impl<H: crate::HostContext> Debugger<H> {
             match self.vm.step(&self.program) {
                 Ok(should_continue) => {
                     // Check if execution completed
-                    if !should_continue || self.vm.instruction_pointer() >= self.program.instructions().len() {
+                    if !should_continue
+                        || self.vm.instruction_pointer() >= self.program.instructions().len()
+                    {
                         self.state.last_event = Some(DebugEvent::Completed);
                         self.update_state_from_vm();
                         return DebugEvent::Completed;
                     }
                 }
                 Err(e) => {
-                    self.state.last_event = Some(DebugEvent::Error { message: e.to_string() });
+                    self.state.last_event = Some(DebugEvent::Error {
+                        message: e.to_string(),
+                    });
                     self.update_state_from_vm();
-                    return DebugEvent::Error { message: e.to_string() };
+                    return DebugEvent::Error {
+                        message: e.to_string(),
+                    };
                 }
             }
         }
@@ -296,12 +322,16 @@ impl<H: crate::HostContext> Debugger<H> {
 
     /// Get the instruction at the current IP.
     pub fn current_instruction(&self) -> Option<&crate::program::Instruction> {
-        self.program.instructions().get(self.state.current_instruction)
+        self.program
+            .instructions()
+            .get(self.state.current_instruction)
     }
 
     /// Get the source location for the current instruction.
     pub fn current_location(&self) -> Option<&InstructionLocation> {
-        self.state.instruction_locations.get(&self.state.current_instruction)
+        self.state
+            .instruction_locations
+            .get(&self.state.current_instruction)
     }
 
     /// Set instruction locations (from source map).
@@ -310,13 +340,12 @@ impl<H: crate::HostContext> Debugger<H> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::HostContext;
+
     use crate::value::Value;
-    use crate::program::Instruction;
+    use crate::HostContext;
 
     struct TestHost;
 
@@ -356,5 +385,3 @@ mod tests {
         assert_eq!(debugger.state().step_mode, StepMode::StepOver);
     }
 }
-
-

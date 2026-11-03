@@ -8,16 +8,14 @@ use kiln_player::loader;
 use kiln_player::spawn;
 use kiln_player::textures::TextureLibrary;
 use kiln_render::{camera::Camera, sprite_renderer::SpriteInstance, Renderer, SpriteRenderer};
-use kiln_runtime::{
-    GameLoop, GameWorld, InputState, SliceSession, Sprite, Tilemap,
-};
+use kiln_runtime::{GameLoop, GameWorld, InputState, SliceSession, Sprite, Tilemap};
 use kiln_ui::{
     layout::Rect,
-    text::TextRenderer,
-    ui_renderer::UiRenderer,
-    widget::{Button, Label, Panel, WidgetId, Widget},
     localization::LocalizationKey,
     render::NineSlice,
+    text::TextRenderer,
+    ui_renderer::UiRenderer,
+    widget::{Button, Label, Panel, Widget, WidgetId},
 };
 use log::info;
 use std::collections::HashMap;
@@ -116,13 +114,34 @@ fn main() -> Result<()> {
 /// Build a default action map with common keyboard/gamepad bindings.
 fn default_action_map() -> ActionMap {
     let mut map = ActionMap::new();
-    map.add_action(Action::new("jump", "Jump").with_binding(Binding::new(BindingType::Key("Space".to_string()))));
-    map.add_action(Action::new("fire", "Fire").with_binding(Binding::new(BindingType::Key("KeyZ".to_string()))));
-    map.add_action(Action::new("interact", "Interact").with_binding(Binding::new(BindingType::Key("KeyE".to_string()))));
-    map.add_action(Action::new("left", "Move Left").with_binding(Binding::new(BindingType::Key("KeyA".to_string()))));
-    map.add_action(Action::new("right", "Move Right").with_binding(Binding::new(BindingType::Key("KeyD".to_string()))));
-    map.add_action(Action::new("up", "Move Up").with_binding(Binding::new(BindingType::Key("KeyW".to_string()))));
-    map.add_action(Action::new("down", "Move Down").with_binding(Binding::new(BindingType::Key("KeyS".to_string()))));
+    map.add_action(
+        Action::new("jump", "Jump")
+            .with_binding(Binding::new(BindingType::Key("Space".to_string()))),
+    );
+    map.add_action(
+        Action::new("fire", "Fire")
+            .with_binding(Binding::new(BindingType::Key("KeyZ".to_string()))),
+    );
+    map.add_action(
+        Action::new("interact", "Interact")
+            .with_binding(Binding::new(BindingType::Key("KeyE".to_string()))),
+    );
+    map.add_action(
+        Action::new("left", "Move Left")
+            .with_binding(Binding::new(BindingType::Key("KeyA".to_string()))),
+    );
+    map.add_action(
+        Action::new("right", "Move Right")
+            .with_binding(Binding::new(BindingType::Key("KeyD".to_string()))),
+    );
+    map.add_action(
+        Action::new("up", "Move Up")
+            .with_binding(Binding::new(BindingType::Key("KeyW".to_string()))),
+    );
+    map.add_action(
+        Action::new("down", "Move Down")
+            .with_binding(Binding::new(BindingType::Key("KeyS".to_string()))),
+    );
     map
 }
 
@@ -288,7 +307,7 @@ impl PlayerApp {
             .expect("create surface");
 
         let renderer = Renderer::new(&instance, &surface, size.width, size.height).await;
-        let mut sprite_renderer =
+        let sprite_renderer =
             SpriteRenderer::new(renderer.device(), renderer.queue(), renderer.scene_format());
         sprite_renderer.upload_quad(renderer.queue());
 
@@ -353,13 +372,6 @@ impl PlayerApp {
         self.load_slice();
     }
 
-    /// Initialize GPU and spawn scene (legacy combined function, kept for reference).
-    /// Now split into `init_gpu_only` + `spawn_scene_and_load_slice`.
-    async fn init_gpu(&mut self, window: Arc<Window>) {
-        self.init_gpu_only(window).await;
-        self.spawn_scene_and_load_slice();
-    }
-
     /// Compile the scene's gameplay script, if it has one.
     fn load_slice(&mut self) {
         let Some(scene) = self.project.scenes.get(&self.scene_id) else {
@@ -417,13 +429,6 @@ impl PlayerApp {
         (x, y)
     }
 
-    /// Check if mouse is over a rect (screen space, top-left origin).
-    fn is_mouse_over(&self, bounds: Rect) -> bool {
-        self.mouse_x >= bounds.x as f64
-            && self.mouse_x < (bounds.x + bounds.width) as f64
-            && self.mouse_y >= bounds.y as f64
-            && self.mouse_y < (bounds.y + bounds.height) as f64
-    }
     fn save_game(&mut self) {
         let Some(slice) = self.slice.as_ref() else {
             return;
@@ -498,9 +503,17 @@ impl PlayerApp {
             Key::Named(NamedKey::Enter) => {
                 match self.menu_selected {
                     0 => self.start_game(), // Start Game
-                    1 => { self.menu_state = MenuState::LoadGame; self.menu_selected = 0; } // Load Game
-                    2 => { self.menu_state = MenuState::Settings; self.menu_selected = 0; } // Settings
-                    3 => { std::process::exit(0); } // Quit
+                    1 => {
+                        self.menu_state = MenuState::LoadGame;
+                        self.menu_selected = 0;
+                    } // Load Game
+                    2 => {
+                        self.menu_state = MenuState::Settings;
+                        self.menu_selected = 0;
+                    } // Settings
+                    3 => {
+                        std::process::exit(0);
+                    } // Quit
                     _ => {}
                 }
             }
@@ -546,12 +559,9 @@ impl PlayerApp {
 
     /// Handle key input when in the settings menu.
     fn handle_settings_menu(&mut self, key: Key) {
-        match key {
-            Key::Named(NamedKey::Escape) => {
-                self.menu_state = MenuState::Main;
-                self.menu_selected = 2; // Select "Settings" when returning
-            }
-            _ => {}
+        if let Key::Named(NamedKey::Escape) = key {
+            self.menu_state = MenuState::Main;
+            self.menu_selected = 2; // Select "Settings" when returning
         }
     }
 
@@ -595,7 +605,9 @@ impl PlayerApp {
         self.game_loop.tick(|dt| {
             if let Some(slice) = slice.as_mut() {
                 // Pass mouse state to the slice host for UI click detection.
-                slice.host_mut().set_mouse_state(mouse_x, mouse_y, mouse_pressed);
+                slice
+                    .host_mut()
+                    .set_mouse_state(mouse_x, mouse_y, mouse_pressed);
                 // Pass action map for get_action/get_action_axis builtins.
                 slice.host_mut().set_action_map(action_map.clone());
                 // Pass pressed keys for get_action/get_action_axis builtins.
@@ -840,7 +852,13 @@ impl PlayerApp {
 
             for widget in &self.ui_widgets {
                 match widget {
-                    UiWidget::Button { id, bounds, text_key, hovered, pressed } => {
+                    UiWidget::Button {
+                        id,
+                        bounds,
+                        text_key,
+                        hovered,
+                        pressed,
+                    } => {
                         let mut button = Button::new(*id, text_key.clone());
                         button.set_bounds(Rect::new(
                             bounds.x,
@@ -853,18 +871,23 @@ impl PlayerApp {
                         let hovered_ns = NineSlice::new(2, 4.0);
                         let pressed_ns = NineSlice::new(3, 4.0);
                         let button = if *pressed {
-                            button.with_normal(pressed_ns.clone())
+                            button.with_normal(pressed_ns)
                         } else if *hovered {
-                            button.with_normal(hovered_ns.clone())
+                            button.with_normal(hovered_ns)
                         } else {
-                            button.with_normal(normal.clone())
+                            button.with_normal(normal)
                         };
                         let quads = self.ui_renderer.render_button(&button, *hovered, *pressed);
                         for quad in quads {
-                            gpu.hud_sprite_renderer.push_textured(quad.texture, quad.instance);
+                            gpu.hud_sprite_renderer
+                                .push_textured(quad.texture, quad.instance);
                         }
                     }
-                    UiWidget::Label { id, bounds, text_key } => {
+                    UiWidget::Label {
+                        id,
+                        bounds,
+                        text_key,
+                    } => {
                         let mut label = Label::new(*id, text_key.clone());
                         label.set_bounds(Rect::new(
                             bounds.x,
@@ -874,7 +897,8 @@ impl PlayerApp {
                         ));
                         let quads = self.ui_renderer.render_label(&label);
                         for instance in quads {
-                            gpu.hud_sprite_renderer.push_textured(instance.texture, instance.instance);
+                            gpu.hud_sprite_renderer
+                                .push_textured(instance.texture, instance.instance);
                         }
                     }
                     UiWidget::Panel { id, bounds } => {
@@ -887,7 +911,8 @@ impl PlayerApp {
                         ));
                         let quads = self.ui_renderer.render_panel(&panel);
                         for instance in quads {
-                            gpu.hud_sprite_renderer.push_textured(instance.texture, instance.instance);
+                            gpu.hud_sprite_renderer
+                                .push_textured(instance.texture, instance.instance);
                         }
                     }
                 }
@@ -931,7 +956,6 @@ impl PlayerApp {
         frame.present();
         gpu.window.request_redraw();
     }
-
 
     /// Build the HUD text of the current frame.
     ///
@@ -996,7 +1020,13 @@ impl PlayerApp {
                 }
             }
             MenuState::LoadGame => {
-                let title_quads = text.render("Load Game - Select Slot", 16.0, 50.0, 32.0, [1.0, 1.0, 1.0, 1.0]);
+                let title_quads = text.render(
+                    "Load Game - Select Slot",
+                    16.0,
+                    50.0,
+                    32.0,
+                    [1.0, 1.0, 1.0, 1.0],
+                );
                 instances.extend(title_quads);
 
                 for i in 0..10 {
@@ -1010,11 +1040,27 @@ impl PlayerApp {
                     // Check if save exists
                     let save_path = self.save_dir.join(format!("slot_{}.json", i));
                     let exists = save_path.exists();
-                    let label = if exists { "Slot {} (saved)" } else { "Slot {} (empty)" };
-                    let quads = text.render(&format!("{}{}", prefix, label.replace("{}", &i.to_string())), 16.0, y, 20.0, color);
+                    let label = if exists {
+                        "Slot {} (saved)"
+                    } else {
+                        "Slot {} (empty)"
+                    };
+                    let quads = text.render(
+                        &format!("{}{}", prefix, label.replace("{}", &i.to_string())),
+                        16.0,
+                        y,
+                        20.0,
+                        color,
+                    );
                     instances.extend(quads);
                 }
-                let esc_text = text.render("ESC - Back", 16.0, 150.0 + 10.0 * 35.0 + 20.0, 18.0, [0.7, 0.7, 0.7, 1.0]);
+                let esc_text = text.render(
+                    "ESC - Back",
+                    16.0,
+                    150.0 + 10.0 * 35.0 + 20.0,
+                    18.0,
+                    [0.7, 0.7, 0.7, 1.0],
+                );
                 instances.extend(esc_text);
             }
             MenuState::Settings => {
@@ -1024,7 +1070,13 @@ impl PlayerApp {
                 let esc_text = text.render("ESC - Back", 16.0, 150.0, 20.0, [0.7, 0.7, 0.7, 1.0]);
                 instances.extend(esc_text);
 
-                let info_text = text.render("Settings UI not yet implemented.", 16.0, 200.0, 20.0, [0.7, 0.7, 0.7, 1.0]);
+                let info_text = text.render(
+                    "Settings UI not yet implemented.",
+                    16.0,
+                    200.0,
+                    20.0,
+                    [0.7, 0.7, 0.7, 1.0],
+                );
                 instances.extend(info_text);
             }
             MenuState::Playing => {}
@@ -1075,7 +1127,6 @@ impl PlayerApp {
         frame.present();
         gpu.window.request_redraw();
     }
-
 }
 
 impl winit::application::ApplicationHandler for PlayerApp {
@@ -1109,26 +1160,23 @@ impl winit::application::ApplicationHandler for PlayerApp {
                 self.camera = Camera::new(size.width as f32, size.height as f32);
             }
             winit::event::WindowEvent::CursorMoved { position, .. } => {
-                self.mouse_x = position.x as f64;
-                self.mouse_y = position.y as f64;
+                self.mouse_x = position.x;
+                self.mouse_y = position.y;
             }
-            winit::event::WindowEvent::Touch(touch) => {
-                match touch.phase {
-                    winit::event::TouchPhase::Started => {
-                        self.mouse_x = touch.location.x as f64;
-                        self.mouse_y = touch.location.y as f64;
-                        self.mouse_pressed = true;
-                    }
-                    winit::event::TouchPhase::Moved => {
-                        self.mouse_x = touch.location.x as f64;
-                        self.mouse_y = touch.location.y as f64;
-                    }
-                    winit::event::TouchPhase::Ended
-                    | winit::event::TouchPhase::Cancelled => {
-                        self.mouse_pressed = false;
-                    }
+            winit::event::WindowEvent::Touch(touch) => match touch.phase {
+                winit::event::TouchPhase::Started => {
+                    self.mouse_x = touch.location.x;
+                    self.mouse_y = touch.location.y;
+                    self.mouse_pressed = true;
                 }
-            }
+                winit::event::TouchPhase::Moved => {
+                    self.mouse_x = touch.location.x;
+                    self.mouse_y = touch.location.y;
+                }
+                winit::event::TouchPhase::Ended | winit::event::TouchPhase::Cancelled => {
+                    self.mouse_pressed = false;
+                }
+            },
             winit::event::WindowEvent::MouseInput {
                 state,
                 button: winit::event::MouseButton::Left,
