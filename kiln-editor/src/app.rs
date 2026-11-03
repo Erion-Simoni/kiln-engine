@@ -38,6 +38,7 @@ use crate::prefab_editor_panel::PrefabEditorPanel;
 use crate::preferences::PreferencesPanel;
 use crate::profiler_panel::ProfilerPanel;
 use crate::project_hub::ProjectHubState;
+use crate::project_lifecycle::{ProjectAction, ProjectLifecycle, SaveDecision};
 use crate::scene_view::{self, SceneTextures, ViewportRect};
 use crate::scene_workspace::SceneWorkspace;
 use crate::shader_editor::ShaderEditorState;
@@ -56,6 +57,8 @@ enum SceneAction {
 }
 
 enum ProjectRequest {
+    Leave(ProjectAction),
+    Resolve(SaveDecision),
     Scene(SceneAction),
     Open(PathBuf),
     SaveAs(PathBuf),
@@ -130,6 +133,7 @@ pub enum EditorError {
 
 #[derive(Debug, Clone)]
 enum MenuAction {
+    Exit,
     NewProject,
     OpenProject,
     SaveProject,
@@ -204,6 +208,8 @@ pub struct EditorApp {
     project_path: Option<PathBuf>,
     project_requests: Vec<ProjectRequest>,
     project_error: Option<String>,
+    lifecycle: ProjectLifecycle,
+    exit_requested: bool,
     show_save_as: bool,
     save_as_path: String,
     current_project: Option<Project>,
@@ -682,6 +688,8 @@ impl EditorApp {
             project_path: None,
             project_requests: Vec::new(),
             project_error: None,
+            lifecycle: ProjectLifecycle::default(),
+            exit_requested: false,
             show_save_as: false,
             save_as_path: String::new(),
             current_project: None,
@@ -770,6 +778,7 @@ impl EditorApp {
         let path = crate::project_files::save(&project, &path)?;
         self.project_path = Some(path);
         self.scenes.mark_saved(&project);
+        self.lifecycle.mark_saved(&project);
         self.current_project = Some(project);
         self.project_error = None;
         Ok(())
@@ -797,6 +806,7 @@ impl EditorApp {
         self.project_path = Some(path.clone());
         self.project_path_input = path.to_string_lossy().into_owned();
         self.scenes.mark_saved(&project);
+        self.lifecycle.mark_saved(&project);
         self.current_project = Some(project);
         self.project_error = None;
         Ok(())
@@ -812,6 +822,7 @@ impl EditorApp {
         let project = loaded.project;
         let path = loaded.path;
         self.scenes = SceneWorkspace::open(&project);
+        self.lifecycle.mark_saved(&project);
         self.selected_entity = None;
         self.project_path_input = path.to_string_lossy().into_owned();
         self.show_welcome = false;
@@ -846,6 +857,59 @@ impl EditorApp {
     ) -> Result<(), String> {
         let loaded = crate::project_files::create(name, path, template)?;
         self.load_project(loaded.path)
+    }
+
+    fn authoring_document(&self) -> Result<Option<Project>, String> {
+        if self.current_project.is_none() || self.play.is_some() {
+            return Ok(self.current_project.clone());
+        }
+        self.project_to_save().map(Some)
+    }
+
+    fn request_project_action(&mut self, action: ProjectAction) -> Result<(), String> {
+        if self.lifecycle.pending().is_some() {
+            return Ok(());
+        }
+        if self.play.is_some() {
+            self.stop_play();
+        }
+        self.gizmo.drag_start_screen_pos = None;
+        self.gizmo.drag_start_world_pos = None;
+        let document = self.authoring_document()?;
+        if let Some(action) = self.lifecycle.request(action, document.as_ref())? {
+            self.execute_project_action(action)?;
+        }
+        Ok(())
+    }
+
+    fn resolve_project_action(&mut self, decision: SaveDecision) -> Result<(), String> {
+        if self.lifecycle.pending().is_none() {
+            return Ok(());
+        }
+        let saved = if decision == SaveDecision::Save {
+            self.save_project()
+        } else {
+            Ok(())
+        };
+        if let Some(action) = self.lifecycle.resolve(decision, saved)? {
+            self.execute_project_action(action)?;
+        }
+        Ok(())
+    }
+
+    fn execute_project_action(&mut self, action: ProjectAction) -> Result<(), String> {
+        match action {
+            ProjectAction::Open(path) => self.load_project(path),
+            ProjectAction::Create {
+                name,
+                path,
+                template,
+            } => self.create_project(&name, &path, &template),
+            ProjectAction::Exit => {
+                self.exit_requested = true;
+                Ok(())
+            }
+        }
     }
 
     fn begin_new_project(&mut self) {
@@ -1302,7 +1366,7 @@ impl winit::application::ApplicationHandler for EditorApp {
 
     fn window_event(
         &mut self,
-        event_loop: &ActiveEventLoop,
+        _event_loop: &ActiveEventLoop,
         _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
@@ -1310,10 +1374,24 @@ impl winit::application::ApplicationHandler for EditorApp {
 
         let gpu = self.gpu.as_mut().unwrap();
         let response = self.egui_winit.on_window_event(&gpu.window, &event);
+        // egui still receives prompt input; raw gizmo input cannot mutate behind it.
+        if self.lifecycle.pending().is_some()
+            && matches!(
+                event,
+                WindowEvent::MouseInput { .. }
+                    | WindowEvent::CursorMoved { .. }
+                    | WindowEvent::KeyboardInput { .. }
+            )
+        {
+            return;
+        }
 
         #[allow(clippy::collapsible_match)]
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                self.project_requests
+                    .push(ProjectRequest::Leave(ProjectAction::Exit));
+            }
             WindowEvent::RedrawRequested => self.render_frame(),
             WindowEvent::Resized(size) => {
                 if size.width > 0 && size.height > 0 {
@@ -1433,7 +1511,11 @@ impl winit::application::ApplicationHandler for EditorApp {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if self.exit_requested {
+            event_loop.exit();
+            return;
+        }
         if let Some(gpu) = &self.gpu {
             gpu.window.request_redraw();
         }
@@ -1443,21 +1525,38 @@ impl winit::application::ApplicationHandler for EditorApp {
 impl EditorApp {
     fn render_frame(&mut self) {
         for request in std::mem::take(&mut self.project_requests) {
+            if self.lifecycle.pending().is_some() && !matches!(request, ProjectRequest::Resolve(_))
+            {
+                continue;
+            }
             let result = match request {
+                ProjectRequest::Leave(action) => self.request_project_action(action),
+                ProjectRequest::Resolve(decision) => self.resolve_project_action(decision),
                 ProjectRequest::Scene(action) => self.change_scene(action),
-                ProjectRequest::Open(path) => self.load_project(path),
+                ProjectRequest::Open(path) => {
+                    self.request_project_action(ProjectAction::Open(path))
+                }
                 ProjectRequest::SaveAs(path) => self.save_project_as(path),
                 ProjectRequest::CreateDialog => {
                     self.begin_new_project();
                     Ok(())
                 }
                 ProjectRequest::Create(name, path, template) => {
-                    self.create_project(&name, &path, &template)
+                    self.request_project_action(ProjectAction::Create {
+                        name,
+                        path,
+                        template,
+                    })
                 }
             };
             if let Err(error) = result {
                 self.console_log.push(format!("[ERROR] {error}"));
-                self.project_error = Some(error);
+                if self.lifecycle.pending().is_none() {
+                    self.project_error = Some(error);
+                }
+            }
+            if self.lifecycle.pending().is_some() || self.exit_requested {
+                break;
             }
         }
 
@@ -1467,6 +1566,12 @@ impl EditorApp {
                 self.scenes.refresh_dirty(project, current.as_ref());
             }
         }
+
+        let project_blocked = self.lifecycle.pending().is_some();
+        let project_dirty = self
+            .authoring_document()
+            .and_then(|document| self.lifecycle.is_dirty(document.as_ref()))
+            .unwrap_or(true);
 
         // Collect status bar data before any mutable borrows
         let fps = self.fps;
@@ -1566,6 +1671,9 @@ impl EditorApp {
 
         // Top menu bar
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
+            if project_blocked {
+                ui.disable();
+            }
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui.button("New Project").clicked() {
@@ -1599,7 +1707,8 @@ impl EditorApp {
                     }
                     ui.separator();
                     if ui.button("Exit").clicked() {
-                        std::process::exit(0);
+                        menu_actions.push(MenuAction::Exit);
+                        ui.close_menu();
                     }
                 });
 
@@ -1775,6 +1884,9 @@ impl EditorApp {
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(format!("v{}", env!("CARGO_PKG_VERSION")));
+                    if project_dirty {
+                        ui.label("Unsaved changes");
+                    }
                 });
             });
         });
@@ -1834,19 +1946,21 @@ impl EditorApp {
         }
 
         let requests = std::cell::RefCell::new(Vec::new());
-        crate::project_hub::render_project_dialogs(
-            ctx,
-            &mut self.project_hub,
-            &mut |path| requests.borrow_mut().push(ProjectRequest::Open(path)),
-            &mut |name, path, template| {
-                requests
-                    .borrow_mut()
-                    .push(ProjectRequest::Create(name, path, template));
-            },
-        );
+        if !project_blocked {
+            crate::project_hub::render_project_dialogs(
+                ctx,
+                &mut self.project_hub,
+                &mut |path| requests.borrow_mut().push(ProjectRequest::Open(path)),
+                &mut |name, path, template| {
+                    requests
+                        .borrow_mut()
+                        .push(ProjectRequest::Create(name, path, template));
+                },
+            );
+        }
         self.project_requests.extend(requests.into_inner());
 
-        if self.show_save_as {
+        if self.show_save_as && !project_blocked {
             egui::Window::new("Save Project As")
                 .collapsible(false)
                 .show(ctx, |ui| {
@@ -1866,7 +1980,7 @@ impl EditorApp {
                     });
                 });
         }
-        if let Some(error) = self.project_error.clone() {
+        if let Some(error) = self.project_error.clone().filter(|_| !project_blocked) {
             let mut open = true;
             egui::Window::new("Project operation failed")
                 .open(&mut open)
@@ -1929,6 +2043,7 @@ impl EditorApp {
                         hierarchy_panel: &mut self.hierarchy_panel,
                         current_project: &mut self.current_project,
                         project_requests: &mut self.project_requests,
+                        project_blocked,
                         play_toggle_requested: &mut self.play_toggle_requested,
                         scene_save_requested: &mut self.scene_save_requested,
                         scene_load_requested: &mut self.scene_load_requested,
@@ -1968,9 +2083,46 @@ impl EditorApp {
             show_status_bar(ctx, fps, entity_count, tier, is_playing);
         }
 
+        if let Some(action) = self.lifecycle.pending() {
+            let intent = match action {
+                ProjectAction::Open(_) => "opening another project",
+                ProjectAction::Create { .. } => "creating another project",
+                ProjectAction::Exit => "exiting the editor",
+            };
+            egui::Window::new("Unsaved project changes")
+                .id(egui::Id::new("unsaved_project_prompt"))
+                .order(egui::Order::Foreground)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    ui.label(format!("Save your project before {intent}?"));
+                    ui.label("Discard continues without saving your changes.");
+                    if let Some(error) = self.lifecycle.save_error() {
+                        ui.colored_label(egui::Color32::LIGHT_RED, format!("Save failed: {error}"));
+                    }
+                    ui.horizontal(|ui| {
+                        for (label, decision) in [
+                            ("Save", SaveDecision::Save),
+                            ("Discard", SaveDecision::Discard),
+                            ("Cancel", SaveDecision::Cancel),
+                        ] {
+                            if ui.button(label).clicked() {
+                                self.project_requests
+                                    .push(ProjectRequest::Resolve(decision));
+                            }
+                        }
+                    });
+                });
+            if ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+                self.project_requests
+                    .push(ProjectRequest::Resolve(SaveDecision::Cancel));
+            }
+        }
+
         // Text fields retain their own editing shortcuts. Scene shortcuts apply
         // after widgets have had a chance to consume keyboard input.
-        if !ctx.wants_keyboard_input() && self.play.is_none() {
+        if !project_blocked && !ctx.wants_keyboard_input() && self.play.is_none() {
             ctx.input_mut(|input| {
                 for (key, action) in [
                     (egui::Key::S, MenuAction::SaveProject),
@@ -2292,6 +2444,9 @@ impl EditorApp {
         // Execute menu actions after UI pass (borrows are released)
         for action in menu_actions {
             match action {
+                MenuAction::Exit => self
+                    .project_requests
+                    .push(ProjectRequest::Leave(ProjectAction::Exit)),
                 MenuAction::NewProject => self.begin_new_project(),
                 MenuAction::OpenProject => {
                     self.show_welcome = false;
@@ -2370,15 +2525,7 @@ impl EditorApp {
         // Handle the open-project request from the welcome screen.
         if std::mem::take(&mut self.open_project_requested) {
             let path = PathBuf::from(self.project_path_input.trim());
-            match self.load_project(path.to_path_buf()) {
-                Ok(()) => self.console_log.push("[INFO] Project loaded".to_string()),
-                Err(e) => {
-                    let message = format!("[ERROR] Could not load the project: {e}");
-                    log::error!("{message}");
-                    self.project_error = Some(message.clone());
-                    self.console_log.push(message);
-                }
-            }
+            self.project_requests.push(ProjectRequest::Open(path));
         }
 
         // Handle the play/pause request from the scene toolbar.
@@ -2467,6 +2614,7 @@ struct TabViewer<'a> {
     hierarchy_panel: &'a mut HierarchyPanel,
     current_project: &'a mut Option<Project>,
     project_requests: &'a mut Vec<ProjectRequest>,
+    project_blocked: bool,
     play_toggle_requested: &'a mut bool,
     scene_save_requested: &'a mut bool,
     scene_load_requested: &'a mut bool,
@@ -2784,6 +2932,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
     type Tab = Tab;
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
+        if self.project_blocked {
+            ui.disable();
+        }
         match tab {
             Tab::SceneView => {
                 ui.vertical(|ui| {

@@ -1093,3 +1093,27 @@ status/entity rows, derive the viewport from the current frame, and draw scene
 pixels before the UI with transparent scene-canvas background. This preserves
 menus and floating dialogs above the rendered world. Reserve all live SourceIds
 when adding entities; texture/resource maps are not identity registries.
+
+## ADR-0041 — Guard destructive project transitions with the saved document
+
+**Status:** accepted
+
+Use an editor-only lifecycle guard for Open, Create-and-open, File Exit, and the
+window-manager close event. Compare the complete authoring Project, including the
+live active-scene snapshot, with the last successfully loaded/saved document;
+scene-tab dirty flags alone miss project settings, resources, and closed scenes.
+Retain one pending action and require Save, Discard, or Cancel before executing
+it. Save failure retains both the document and pending action for retry/cancel.
+Cancel changes neither disk nor document. Discard authorizes the pending action,
+but a failed target load/create still leaves the current document open.
+
+Opening a picker or New Project dialog is reversible and does not yet replace
+the project; guard only the actual Open/Create request. Stop Play before checking
+an outgoing document so runtime mutations never enter a scene save. Prompting
+pauses editor interaction and clears transient gizmo drag state. Route exits
+through winit's event loop rather than process::exit, allowing normal cleanup.
+Keep low-level loading available for startup and already-resolved transitions.
+
+This checkpoint covers project transitions; individual dirty scene-tab prompts,
+autosave/recovery, unsaved external script buffers, and the complete authoring
+command model remain separate work. No new dependency is required.

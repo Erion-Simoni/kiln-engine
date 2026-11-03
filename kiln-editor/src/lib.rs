@@ -21,6 +21,7 @@ pub mod preferences;
 pub mod profiler_panel;
 pub mod project_files;
 pub mod project_hub;
+pub mod project_lifecycle;
 pub mod scene_document;
 pub mod scene_view;
 pub mod scene_workspace;
