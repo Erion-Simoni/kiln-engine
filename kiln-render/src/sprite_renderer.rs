@@ -561,7 +561,10 @@ mod tests {
 
     #[test]
     fn sprite_instance_size() {
-        assert_eq!(std::mem::size_of::<SpriteInstance>(), 48);
+        // Four float vectors occupy 48 bytes, followed by the material ID.
+        assert_eq!(std::mem::offset_of!(SpriteInstance, material_id), 48);
+        assert_eq!(std::mem::size_of::<SpriteInstance>(), 52);
+        assert_eq!(SpriteInstance::STRIDE, 52);
     }
 
     #[test]

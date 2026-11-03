@@ -69,19 +69,19 @@ impl PlaySession {
     /// Play an audio preview by name.
     #[cfg(feature = "audio")]
     pub fn play_audio_preview(&mut self, name: &str) {
-        self.slice.play_audio_preview(name);
+        self.slice.host_mut().play_audio_preview(name);
     }
 
     /// Stop audio playback preview.
     #[cfg(feature = "audio")]
     pub fn stop_audio_preview(&mut self) {
-        self.slice.stop_audio_preview();
+        self.slice.host_mut().stop_audio_preview();
     }
 
     /// Register an audio asset with the slice session.
     #[cfg(feature = "audio")]
     pub fn register_audio(&mut self, name: &str, path: &str) {
-        self.slice.register_audio(name, path);
+        self.slice.host_mut().register_audio(name, path);
     }
 }
 
@@ -4128,9 +4128,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         // Handle preview playback
                         if let Some(name) = self.audio_editor.preview_asset.clone() {
                             if self.audio_editor.preview_playing {
-                                slice.play_audio_preview(&name);
+                                slice.host_mut().play_audio_preview(&name);
                             } else {
-                                slice.stop_audio_preview();
+                                slice.host_mut().stop_audio_preview();
                             }
                         }
                         // Register all project audio assets with the slice host
@@ -4140,7 +4140,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             .map(|p| p.audio_assets.iter().map(|a| (a.name.clone(), a.path.clone())).collect::<Vec<_>>())
                             .unwrap_or_default()
                         {
-                            slice.register_audio(&name, &path);
+                            slice.host_mut().register_audio(&name, &path);
                         }
                     }
                 });

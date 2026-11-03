@@ -14,9 +14,9 @@ Each task needs implementation, meaningful regression tests, and an exercised ed
 
 ### 1. Build and test baseline — IN PROGRESS
 
-- [ ] Repair workspace syntax and API mismatches, including stale test fixtures.
-- [ ] Make default native workspace builds and existing tests pass.
-- [ ] Repair audio feature compilation and exercise the standalone audio sample build.
+- [x] Repair native workspace syntax/API/test-fixture blockers (web target errors remain below).
+- [x] Make default native workspace builds and existing tests pass.
+- [x] Repair audio feature compilation and exercise the standalone audio sample build (playback remains unverified).
 - [ ] Make the WASM target compile; add browser smoke coverage before claiming web support.
 - [ ] Restore formatting and strict lint checks without blanket lint suppressions or weakening CI.
 - [ ] Keep CI aligned with the actual supported toolchain, system dependencies, features, and test commands.
@@ -103,3 +103,14 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Created this plan after reviewing real source gaps, including simulated build success, unfinished physics queries/events, scene-tab loading, prefab controls, and animation preview.
 - Prior native editor startup fixes are already merged into master. Prior validation: 33 editor library tests passed; welcome/workspace rendering was visually verified with software GL. This does not establish workspace, audio, web, export, or device readiness.
 - Current baseline blockers: unmatched closing delimiter in kiln-web, malformed player integration test calls, stale core test Sprite fields, optional audio compile errors, and existing lint/format failures. All remain unchecked until retested and repaired.
+
+### 2026-11-03 — Task 1 native checkpoint
+
+- `cargo build --workspace`: passed on Linux.
+- `cargo nextest run --workspace --no-fail-fast`: 452 passed, zero failed/skipped. Includes a new multi-frame state/nonvisual-entity regression, existing editor/player sample execution, save/load, and packed-archive tests.
+- Fixed actual runtime defects: role lookup required a Sprite unnecessarily; after command application, stale host state overwrote score, pickup, and player-position changes. Host state is now adopted before commands apply.
+- Updated malformed player script-session calls and stale Sprite/instance-layout fixtures. Corrected integration inputs to follow the sample manifest's diagonal path to coin1; scoring assertions remain active. The worker readiness test now allows bounded wall-clock scheduling time instead of assuming 1,000 yields suffice.
+- `cargo check -p kiln-editor --features audio` and `cargo check --manifest-path samples/audio/Cargo.toml`: passed. Updated Rodio's Player API, audio category equality, ownership, host Debug formatting, and public host access. No audible playback or complete sound-file loading was validated; task 7 remains pending.
+- Browser APIs are explicitly confined to wasm32. A separate actual `cargo check -p kiln-web --target wasm32-unknown-unknown` was run and still fails with 35 API errors. Native tests are not proof of browser readiness.
+- `just check`: fails at existing workspace formatting differences; strict lint/build stages in that recipe did not execute. No lint suppression, test exclusion, or CI weakening was introduced. Task 1 is still IN PROGRESS; next is actual WASM API repair and full formatting/lint restoration, before task 2.
+- Native editor startup/workspace rendering was verified in the prior merged editor fix. This checkpoint changes runtime state, fixtures, and feature compilation, not the redraw loop; device, browser, and audio playback checks remain explicitly unrun here.

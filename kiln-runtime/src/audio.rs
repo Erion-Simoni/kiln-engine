@@ -5,7 +5,7 @@
 
 #[cfg(feature = "audio")]
 use rodio::{
-    Decoder, DeviceSinkBuilder, MixerDeviceSink, Sink, Source,
+    Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, Source,
     source::{Buffered, SeekError},
 };
 #[cfg(feature = "audio")]
@@ -19,6 +19,7 @@ use std::sync::{Arc, Mutex};
 
 /// Audio category for volume management
 /// Available even when audio feature is disabled for API compatibility.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AudioCategory {
     /// Sound effects - short, can overlap
     Sfx,
@@ -31,7 +32,7 @@ pub enum AudioCategory {
 struct SoundSource {
     name: String,
     category: AudioCategory,
-    sink: Sink,
+    sink: Player,
     loops: bool,
     paused: bool,
 }
@@ -65,7 +66,7 @@ impl AudioEngine {
     /// Register a sound by name, category, and file path
     pub fn register_sound(&mut self, name: &str, category: AudioCategory, _path: &str) {
         let mut sources = self.sources.lock().unwrap();
-        let sink = Sink::try_new(&self.master_sink.mixer()).expect("Failed to create sink");
+        let sink = Player::connect_new(self.master_sink.mixer());
         sink.set_volume(0.0);
         sink.pause();
         sources.insert(name.to_string(), SoundSource {
@@ -158,15 +159,15 @@ impl AudioEngine {
 
     /// Pause music
     pub fn pause_music(&mut self) {
-        if let Some(name) = &self.music_handle {
-            self.pause_sound(name);
+        if let Some(name) = self.music_handle.clone() {
+            self.pause_sound(&name);
         }
     }
 
     /// Resume music
     pub fn resume_music(&mut self) {
-        if let Some(name) = &self.music_handle {
-            self.resume_sound(name);
+        if let Some(name) = self.music_handle.clone() {
+            self.resume_sound(&name);
         }
     }
 

@@ -5,6 +5,9 @@
 //! KilnScript slice runtime, and renders 2D sprites through the engine's
 //! sprite batcher. Called from JavaScript via `KilnWeb.run(canvasId, projectPath)`.
 
+// This crate hosts browser APIs and is only executable on wasm32.
+#![cfg(target_arch = "wasm32")]
+
 mod threading;
 
 use kiln_core::Transform;
@@ -1156,5 +1159,4 @@ impl App {
         });
         self.sprite_renderer.flush(&mut pass, hud_camera, self.renderer.queue());
     }
-}
 }

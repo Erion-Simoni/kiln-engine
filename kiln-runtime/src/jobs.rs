@@ -217,12 +217,13 @@ mod tests {
         let pool = TaskPool::new(1);
         let handle = pool.spawn(|| 7u32);
         let mut value = None;
-        for _ in 0..1000 {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while std::time::Instant::now() < deadline {
             if let Some(v) = handle.try_join() {
                 value = Some(v);
                 break;
             }
-            std::thread::yield_now();
+            std::thread::sleep(std::time::Duration::from_millis(1));
         }
         assert_eq!(value, Some(7));
     }

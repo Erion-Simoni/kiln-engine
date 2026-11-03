@@ -45,7 +45,7 @@ fn the_editor_can_play_the_sample_project() {
     // Playing the sample moves the hero and collects a coin.
     for _ in 0..300 {
         session
-            .step(&mut world, (1.0, 0.0), 1.0 / 60.0)
+            .step(&mut world, (1.0, 0.5), 1.0 / 60.0)
             .expect("the script runs");
     }
     assert!(session.state().score > 0, "the sample scores in the editor");

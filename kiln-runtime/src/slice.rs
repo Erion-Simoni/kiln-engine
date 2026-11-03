@@ -342,7 +342,7 @@ pub fn load_state(dir: &Path, slot: u32) -> Result<SliceState, SaveSlotError> {
 }
 
 /// The script host: reads facts and records commands.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct SliceHost {
     facts: SliceFacts,
     commands: Vec<SliceCommand>,
@@ -381,6 +381,14 @@ pub struct SliceHost {
     /// Custom audio player callback for platforms without rodio (e.g., WASM).
     #[cfg(feature = "audio")]
     audio_player: Option<Box<dyn Fn(&str) + Send + Sync>>,
+}
+
+impl std::fmt::Debug for SliceHost {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SliceHost").field("facts", &self.facts)
+            .field("commands", &self.commands).field("state", &self.state)
+            .finish_non_exhaustive()
+    }
 }
 
 impl SliceHost {
@@ -460,7 +468,7 @@ impl SliceHost {
     pub fn register_audio(&mut self, name: &str, path: &str) {
         self.registered_audio.insert(name.to_string(), path.to_string());
         if let Some(audio) = &mut self.audio {
-            audio.register_sound(name, path);
+            audio.register_sound(name, crate::audio::AudioCategory::Sfx, path);
         }
     }
 
@@ -645,7 +653,7 @@ impl SliceHost {
                 {
                     let volume = args.first().and_then(|v| v.to_f64()).unwrap_or(1.0) as f32;
                     if let Some(audio) = &mut self.audio {
-                        audio.set_volume(volume);
+                        audio.set_master_volume(volume);
                     }
                 }
                 Ok(Value::I64(0))
@@ -1240,6 +1248,10 @@ impl SliceSession {
 
         self.vm.execute(&self.program)?;
 
+        // Loading can replace host state during script execution. Adopt it before
+        // applying this frame's commands so score, pickups and movement survive.
+        self.state = self.vm.host_mut().state.clone();
+
         let commands = self.vm.host_mut().take_commands();
         for command in commands {
             match &command {
@@ -1255,8 +1267,6 @@ impl SliceSession {
             }
         }
 
-        // Sync host state back to session (e.g., after LoadGame).
-        self.state = self.vm.host_mut().state.clone();
 
         // Detect UI button clicks: check if any button rect contains the mouse
         // and the left button was pressed this frame.
@@ -1835,14 +1845,14 @@ fn find_entities(world: &mut GameWorld, role: &str) -> Vec<WorldEntity> {
         &SourceId,
         &Role,
         &kiln_core::Transform,
-        &crate::sprite::Sprite,
+        Option<&crate::sprite::Sprite>,
     )>() {
         if entity_role.as_str() == role {
             found.push(WorldEntity {
                 source_id: source_id.0.clone(),
                 x: transform.position.x,
                 y: transform.position.y,
-                size: sprite.size,
+                size: sprite.map(|sprite| sprite.size).unwrap_or([0.0, 0.0]),
             });
         }
     }
@@ -1923,6 +1933,19 @@ mod tests {
         let position = find_player(&mut world).unwrap();
         assert!((position.x - 15.0).abs() < 0.001);
         assert!((position.y - 17.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn commands_persist_across_frames_for_a_nonvisual_player() {
+        let mut world = GameWorld::new();
+        spawn_player(&mut world, 10.0, 20.0);
+        let mut session = SliceSession::new("move_player(1.0, 0.0); add_score(3);").unwrap();
+        for frame in 1..=4 {
+            session.step(&mut world, (0.0, 0.0), 1.0 / 60.0).unwrap();
+            assert_eq!(session.state().score, frame * 3);
+            assert_eq!(session.state().player_x, 10.0 + frame as f64);
+            assert_eq!(find_player(&mut world).unwrap().x, 10.0 + frame as f32);
+        }
     }
 
     #[test]
