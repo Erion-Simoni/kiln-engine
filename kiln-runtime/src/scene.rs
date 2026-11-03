@@ -100,6 +100,15 @@ pub fn spawn_entities(
         let sprite = color.map(|rgba| {
             let mut s = make_sprite(entity, rgba, texture_path.as_deref());
             s.animation_clip = animation_clip.clone();
+            for component in &entity.components {
+                if let Component::Sprite {
+                    layer, material, ..
+                } = component
+                {
+                    s.layer = *layer;
+                    s.material = material.clone();
+                }
+            }
             s
         });
 

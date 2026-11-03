@@ -74,7 +74,22 @@ pub fn spawn_tilemaps(
         .with_rotation(transform.rotation)
         .with_scale(transform.scale);
 
-        world.spawn((world_transform, tilemap, SourceId::new(entity.id.clone())));
+        // The generic scene spawner already creates identity/role/components.
+        // Attach the map there instead of duplicating this SourceId in the ECS.
+        let existing = world
+            .world_ref()
+            .query::<(hecs::Entity, &SourceId)>()
+            .iter()
+            .find(|(_, source)| source.0 == entity.id)
+            .map(|(entity, _)| entity);
+        if let Some(existing) = existing {
+            world
+                .world_mut()
+                .insert(existing, (world_transform, tilemap))
+                .expect("entity was read from this world");
+        } else {
+            world.spawn((world_transform, tilemap, SourceId::new(entity.id.clone())));
+        }
         spawned.push(map_id);
     }
 

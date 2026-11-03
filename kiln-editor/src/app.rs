@@ -1,7 +1,6 @@
 //! Main editor application.
 
 use hecs;
-use kiln_core::project::Entity;
 use kiln_core::{
     project::{Project, Scene},
     Transform,
@@ -50,6 +49,8 @@ use crate::vfx_editor::VfxEditorState;
 
 enum ProjectRequest {
     Open(PathBuf),
+    SaveAs(PathBuf),
+    CreateDialog,
     Create(String, PathBuf, String),
 }
 
@@ -193,6 +194,9 @@ pub struct EditorApp {
     entity_id_to_hecs: HashMap<String, hecs::Entity>,
     project_path: Option<PathBuf>,
     project_requests: Vec<ProjectRequest>,
+    project_error: Option<String>,
+    show_save_as: bool,
+    save_as_path: String,
     current_project: Option<Project>,
     asset_browser: AssetBrowser,
     /// Filter text for the asset browser.
@@ -535,90 +539,7 @@ pub fn scene_from_world(
     entity_roles: &HashMap<String, String>,
     project: Option<&Project>,
 ) -> Scene {
-    let scene_id = project
-        .and_then(|p| p.default_scene_id())
-        .unwrap_or_else(|| "main_scene".to_string());
-    let script = project
-        .and_then(|p| p.scenes.get(&scene_id))
-        .and_then(|s| s.script.clone());
-
-    let mut entities = Vec::new();
-    let mut entity_id = 0;
-    let world = world.world_ref();
-
-    // Sprite entities: SourceId + Transform + Sprite.
-    let mut query = world.query::<(&SourceId, &Transform, &Sprite)>();
-    for (source_id, transform, sprite) in query.iter() {
-        entity_id += 1;
-        let id = source_id.0.clone();
-        let texture = entity_textures.get(&id).cloned();
-        let role = entity_roles.get(&id).cloned();
-        let mut components = vec![
-            kiln_core::project::Component::Transform {
-                x: transform.position.x,
-                y: transform.position.y,
-                rotation: transform.rotation,
-                scale: transform.scale.x,
-            },
-            kiln_core::project::Component::Sprite {
-                color: sprite.color,
-                texture,
-                layer: sprite.layer,
-                material: sprite.material.clone(),
-                animation_clip: sprite.animation_clip.clone(),
-            },
-        ];
-        if let Some(role) = role {
-            components.push(kiln_core::project::Component::Role { role });
-        }
-        entities.push(Entity {
-            id,
-            name: format!("Entity_{}", entity_id),
-            components,
-        });
-    }
-
-    // Tilemap entities: SourceId + Transform + Tilemap.
-    let mut query = world.query::<(&SourceId, &Transform, &Tilemap)>();
-    for (source_id, transform, tilemap) in query.iter() {
-        entity_id += 1;
-        let id = source_id.0.clone();
-        let role = entity_roles.get(&id).cloned();
-        let mut components = vec![
-            kiln_core::project::Component::Transform {
-                x: transform.position.x,
-                y: transform.position.y,
-                rotation: transform.rotation,
-                scale: transform.scale.x,
-            },
-            kiln_core::project::Component::Tilemap {
-                map: tilemap.map_id.clone(),
-            },
-        ];
-        if let Some(role) = role {
-            components.push(kiln_core::project::Component::Role { role });
-        }
-        entities.push(Entity {
-            id,
-            name: format!("Entity_{}", entity_id),
-            components,
-        });
-    }
-
-    // The nested scenes of the scene stay as they are: the world holds the
-    // entities of the nested scenes too, so they are not written again here.
-    let nested_scenes = project
-        .and_then(|p| p.scenes.get(&scene_id))
-        .map(|s| s.nested_scenes.clone())
-        .unwrap_or_default();
-
-    Scene {
-        id: scene_id,
-        name: "Main Scene".to_string(),
-        entities,
-        nested_scenes,
-        script,
-    }
+    crate::scene_document::snapshot(world, entity_textures, entity_roles, project)
 }
 
 /// Spawn a project scene into a fresh world for the editor.
@@ -766,6 +687,9 @@ impl EditorApp {
             entity_id_to_hecs: HashMap::new(),
             project_path: None,
             project_requests: Vec::new(),
+            project_error: None,
+            show_save_as: false,
+            save_as_path: String::new(),
             current_project: None,
             asset_browser: AssetBrowser::new(),
             asset_filter: String::new(),
@@ -848,42 +772,60 @@ impl EditorApp {
     pub fn save_project(&mut self) -> Result<(), String> {
         let path = self
             .project_path
-            .as_ref()
-            .ok_or("No project file open. Use Save As first.")?
-            .clone();
-
-        // The world is what the editor shows, so it is what is written.
-        if self.current_project.is_some() {
-            let scene = self.scene_from_world();
-            if let Some(project) = &mut self.current_project {
-                project.scenes.insert(scene.id.clone(), scene);
-            }
-        }
-
-        let Some(project) = &self.current_project else {
-            return Err("No project loaded".to_string());
-        };
-        let toml_str = project.to_toml().map_err(|e| e.to_string())?;
-        std::fs::write(&path, toml_str).map_err(|e| e.to_string())?;
+            .clone()
+            .ok_or("No project file open. Use Save As first.")?;
+        let project = self.project_to_save()?;
+        let path = crate::project_files::save(&project, &path)?;
+        self.project_path = Some(path);
+        self.current_project = Some(project);
+        self.project_error = None;
         Ok(())
     }
 
-    /// Save the current project to a new file path.
-    pub fn save_project_as(&mut self, path: PathBuf) -> Result<(), String> {
-        self.project_path = Some(path.clone());
-
-        if self.current_project.is_none() {
-            self.current_project = Some(Project::default());
+    fn project_to_save(&self) -> Result<Project, String> {
+        if self.play.is_some() {
+            return Err("Stop play mode before saving scene edits".into());
         }
+        let mut project = self.current_project.clone().ok_or("No project loaded")?;
+        if !project.scenes.is_empty() || !self.world.world_ref().is_empty() {
+            let scene = self.scene_from_world();
+            project.scenes.insert(scene.id.clone(), scene);
+        }
+        Ok(project)
+    }
 
-        self.save_project()
+    /// Save another manifest in the same asset directory, committing state only on success.
+    pub fn save_project_as(&mut self, path: PathBuf) -> Result<(), String> {
+        let source = self
+            .project_path
+            .as_ref()
+            .ok_or("Open or create a project before Save As")?;
+        let project = self.project_to_save()?;
+        let path = crate::project_files::save_as(&project, source, &path)?;
+        self.project_path = Some(path.clone());
+        self.project_path_input = path.to_string_lossy().into_owned();
+        self.current_project = Some(project);
+        self.project_error = None;
+        Ok(())
     }
 
     /// Load a project from a file path.
     pub fn load_project(&mut self, path: PathBuf) -> Result<(), String> {
-        let toml_str = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let project = Project::from_toml(&toml_str).map_err(|e| e.to_string())?;
-
+        let loaded = crate::project_files::load(&path)?;
+        if self.play.is_some() {
+            self.stop_play();
+        }
+        self.is_playing = false;
+        let project = loaded.project;
+        let path = loaded.path;
+        self.history = SceneHistory::new();
+        self.selected_entity = None;
+        self.active_scene_tab = None;
+        self.project_path_input = path.to_string_lossy().into_owned();
+        self.show_welcome = false;
+        self.project_error = None;
+        self.project_hub
+            .add_recent(path.clone(), project.name.clone());
         self.project_path = Some(path.clone());
         self.current_project = Some(project);
 
@@ -900,7 +842,9 @@ impl EditorApp {
         // Initialize scene tabs from project scenes
         self.scene_tabs.clear();
         if let Some(project) = &self.current_project {
-            for scene_id in project.scenes.keys() {
+            let mut scene_ids: Vec<_> = project.scenes.keys().cloned().collect();
+            scene_ids.sort();
+            for scene_id in scene_ids {
                 self.scene_tabs.push(SceneTab {
                     scene_id: scene_id.clone(),
                     is_active: false,
@@ -927,89 +871,17 @@ impl EditorApp {
         path: &Path,
         template: &str,
     ) -> Result<(), String> {
-        // Create project directory
-        std::fs::create_dir_all(path).map_err(|e| e.to_string())?;
-
-        // Create project file
-        let project = match template {
-            "empty_2d" => self.create_empty_2d_project(name.to_string(), path)?,
-            "platformer" => self.create_platformer_project(name.to_string(), path)?,
-            "topdown" => self.create_topdown_project(name.to_string(), path)?,
-            _ => return Err(format!("Unknown template: {}", template)),
-        };
-
-        // Write project file
-        let project_file = path.join("kiln.toml");
-        std::fs::write(&project_file, project.to_toml().map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
-
-        // Create asset directories
-        std::fs::create_dir_all(path.join("art")).map_err(|e| e.to_string())?;
-        std::fs::create_dir_all(path.join("scripts")).map_err(|e| e.to_string())?;
-
-        // Create a basic script file
-        let script_file = path.join("scripts/main.ks");
-        std::fs::write(&script_file, "// Game script\nlet speed = 100.0;\nlet dt = get_delta_time();\nlet dx = get_input_x() * speed * dt;\nlet dy = get_input_y() * speed * dt;\nmove_player(dx, dy);\n").map_err(|e| e.to_string())?;
-
-        // Load the new project
-        self.load_project(path.to_path_buf())
+        let loaded = crate::project_files::create(name, path, template)?;
+        self.load_project(loaded.path)
     }
 
-    /// Create an empty 2D project.
-    fn create_empty_2d_project(&self, name: String, path: &Path) -> Result<Project, String> {
-        let project_dir = path.file_name().unwrap().to_string_lossy().to_string();
-        Ok(Project {
-            id: project_dir,
-            name,
-            version: "0.1.0".to_string(),
-            publisher: "Kiln".to_string(),
-            icon: "".to_string(),
-            features: Vec::new(),
-            window: Default::default(),
-            mobile: Default::default(),
-            scenes: {
-                let mut scenes = HashMap::new();
-                scenes.insert(
-                    "main".to_string(),
-                    Scene {
-                        id: "main".to_string(),
-                        name: "Main".to_string(),
-                        script: Some("scripts/main.ks".to_string()),
-                        entities: Vec::new(),
-                        nested_scenes: Vec::new(),
-                    },
-                );
-                scenes
-            },
-            tilemaps: HashMap::new(),
-            tilesets: HashMap::new(),
-            animation_clips: HashMap::new(),
-            audio_assets: Vec::new(),
-            action_map: Default::default(),
-            shaders: HashMap::new(),
-            materials: HashMap::new(),
-            sdf_fonts: HashMap::new(),
-        })
-    }
-
-    /// Create a platformer project template.
-    fn create_platformer_project(&self, name: String, path: &Path) -> Result<Project, String> {
-        // For now, same as empty but with platformer script
-        let mut project = self.create_empty_2d_project(name, path)?;
-        if let Some(scene) = project.scenes.get_mut("main") {
-            scene.script = Some("scripts/main.ks".to_string());
-        }
-        Ok(project)
-    }
-
-    /// Create a top-down project template.
-    fn create_topdown_project(&self, name: String, path: &Path) -> Result<Project, String> {
-        // For now, same as empty but with top-down script
-        let mut project = self.create_empty_2d_project(name, path)?;
-        if let Some(scene) = project.scenes.get_mut("main") {
-            scene.script = Some("scripts/main.ks".to_string());
-        }
-        Ok(project)
+    fn begin_new_project(&mut self) {
+        self.show_welcome = false;
+        self.project_hub.show_new_project_dialog = true;
+        self.project_hub.new_project_name.clear();
+        self.project_hub.new_project_dir =
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        self.project_hub.new_project_template = "empty_2d".into();
     }
 
     /// Upload the open project's textures to the scene view renderer.
@@ -1557,12 +1429,18 @@ impl EditorApp {
         for request in std::mem::take(&mut self.project_requests) {
             let result = match request {
                 ProjectRequest::Open(path) => self.load_project(path),
+                ProjectRequest::SaveAs(path) => self.save_project_as(path),
+                ProjectRequest::CreateDialog => {
+                    self.begin_new_project();
+                    Ok(())
+                }
                 ProjectRequest::Create(name, path, template) => {
                     self.create_project(&name, &path, &template)
                 }
             };
             if let Err(error) = result {
                 self.console_log.push(format!("[ERROR] {error}"));
+                self.project_error = Some(error);
             }
         }
 
@@ -1753,7 +1631,11 @@ impl EditorApp {
                         ui.close_menu();
                     }
                     if ui.button("Project Hub").clicked() {
-                        self.dock_state.add_window(vec![Tab::ProjectHub]);
+                        if let Some(location) = self.dock_state.find_tab(&Tab::ProjectHub) {
+                            self.dock_state.set_active_tab(location);
+                        } else {
+                            self.dock_state.add_window(vec![Tab::ProjectHub]);
+                        }
                         ui.close_menu();
                     }
                     if ui.button("Profiler").clicked() {
@@ -1893,14 +1775,13 @@ impl EditorApp {
                                         .add_sized([200.0, 40.0], egui::Button::new("New Project"))
                                         .clicked()
                                     {
-                                        self.show_welcome = false;
+                                        self.project_requests.push(ProjectRequest::CreateDialog);
                                     }
                                     ui.add_space(16.0);
                                     if ui
                                         .add_sized([200.0, 40.0], egui::Button::new("Open Project"))
                                         .clicked()
                                     {
-                                        self.show_welcome = false;
                                         self.play_toggle_requested = false;
                                         self.open_project_requested = true;
                                     }
@@ -1926,6 +1807,52 @@ impl EditorApp {
                         });
                 });
             });
+        }
+
+        let requests = std::cell::RefCell::new(Vec::new());
+        crate::project_hub::render_project_dialogs(
+            ctx,
+            &mut self.project_hub,
+            &mut |path| requests.borrow_mut().push(ProjectRequest::Open(path)),
+            &mut |name, path, template| {
+                requests
+                    .borrow_mut()
+                    .push(ProjectRequest::Create(name, path, template));
+            },
+        );
+        self.project_requests.extend(requests.into_inner());
+
+        if self.show_save_as {
+            egui::Window::new("Save Project As")
+                .collapsible(false)
+                .show(ctx, |ui| {
+                    ui.label("Project file (in the current project directory):");
+                    ui.text_edit_singleline(&mut self.save_as_path);
+                    ui.horizontal(|ui| {
+                        if ui.button("Cancel").clicked() {
+                            self.show_save_as = false;
+                        }
+                        if ui.button("Save").clicked() {
+                            self.project_requests
+                                .push(ProjectRequest::SaveAs(PathBuf::from(
+                                    self.save_as_path.trim(),
+                                )));
+                            self.show_save_as = false;
+                        }
+                    });
+                });
+        }
+        if let Some(error) = self.project_error.clone() {
+            let mut open = true;
+            egui::Window::new("Project operation failed")
+                .open(&mut open)
+                .collapsible(false)
+                .show(ctx, |ui| {
+                    ui.label(error);
+                });
+            if !open {
+                self.project_error = None;
+            }
         }
 
         // The about window tells what the editor is and which version it is.
@@ -2322,38 +2249,35 @@ impl EditorApp {
         // Execute menu actions after UI pass (borrows are released)
         for action in menu_actions {
             match action {
-                MenuAction::NewProject => {
-                    self.show_welcome = true;
-                }
+                MenuAction::NewProject => self.begin_new_project(),
                 MenuAction::OpenProject => {
-                    let path = PathBuf::from(self.project_path_input.trim());
-                    match self.load_project(path.to_path_buf()) {
-                        Ok(()) => self.console_log.push("[INFO] Project loaded".to_string()),
-                        Err(e) => {
-                            let message = format!("[ERROR] Could not load the project: {e}");
-                            log::error!("{message}");
-                            self.console_log.push(message);
-                        }
-                    }
+                    self.show_welcome = false;
+                    self.project_hub.show_open_project_dialog = true;
+                    self.project_hub.open_project_path = self.project_path_input.clone();
                 }
                 MenuAction::SaveProject => {
                     if let Err(e) = self.save_project() {
-                        eprintln!("Failed to save project: {}", e);
+                        self.project_error = Some(e);
                     }
                 }
                 MenuAction::SaveProjectAs => {
-                    if let Err(e) = self.save_project_as(PathBuf::from("kiln.toml")) {
-                        eprintln!("Failed to save project as: {}", e);
-                    }
+                    self.save_as_path = self
+                        .project_path
+                        .as_ref()
+                        .map(|path| path.with_file_name("kiln-copy.toml"))
+                        .unwrap_or_else(|| PathBuf::from("kiln-copy.toml"))
+                        .to_string_lossy()
+                        .into_owned();
+                    self.show_save_as = true;
                 }
                 MenuAction::SaveScene => {
                     if let Err(e) = self.save_scene() {
-                        eprintln!("Failed to save scene: {}", e);
+                        self.project_error = Some(e);
                     }
                 }
                 MenuAction::LoadScene => {
                     if let Err(e) = self.load_scene() {
-                        eprintln!("Failed to load scene: {}", e);
+                        self.project_error = Some(e);
                     }
                 }
                 MenuAction::Undo => {
@@ -2408,6 +2332,7 @@ impl EditorApp {
                 Err(e) => {
                     let message = format!("[ERROR] Could not load the project: {e}");
                     log::error!("{message}");
+                    self.project_error = Some(message.clone());
                     self.console_log.push(message);
                 }
             }
@@ -2432,12 +2357,12 @@ impl EditorApp {
         // Handle scene save/load requests
         if std::mem::take(&mut self.scene_save_requested) {
             if let Err(e) = self.save_scene() {
-                eprintln!("Failed to save scene: {}", e);
+                self.project_error = Some(e);
             }
         }
         if std::mem::take(&mut self.scene_load_requested) {
             if let Err(e) = self.load_scene() {
-                eprintln!("Failed to load scene: {}", e);
+                self.project_error = Some(e);
             }
         }
 
@@ -4104,16 +4029,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             }
             Tab::ProjectHub => {
                 let requests = std::cell::RefCell::new(Vec::new());
-                crate::project_hub::render_project_hub(
-                    ui,
-                    self.project_hub,
-                    &mut |path| requests.borrow_mut().push(ProjectRequest::Open(path)),
-                    &mut |name, path, template| {
-                        requests
-                            .borrow_mut()
-                            .push(ProjectRequest::Create(name, path, template))
-                    },
-                );
+                crate::project_hub::render_project_hub(ui, self.project_hub, &mut |path| {
+                    requests.borrow_mut().push(ProjectRequest::Open(path))
+                });
                 self.project_requests.extend(requests.into_inner());
             }
             Tab::ProfilerPanel => {

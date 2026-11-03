@@ -1,41 +1,38 @@
 # Kiln Session Handoff
 
-**Active focus:** Task 1 of `docs/2D_COMPLETION_PLAN.md` completed locally; next is task 2.
+**Active focus:** Task 2 of `docs/2D_COMPLETION_PLAN.md`, IN PROGRESS.
 **Branch:** `feat/2d-production-workflow`.
-**Scope:** Continue the user's ordered 2D completion program. 3D remains paused. Historical milestone claims are not proof of complete authoring/export workflows.
+**Scope:** Continue the user's ordered 2D completion program. 3D remains paused.
 
 ## Done
 
-- Native and WASM baseline repairs from prior checkpoints remain validated.
-- Workspace formatted; strict native all-target Clippy now passes without added blanket suppressions. Removed unused duplicate state and legacy methods, corrected API/style diagnostics, and preserved the reachable graph-tab behavior.
-- Existing plugin enable configuration now controls its checkbox state. Regressions verify independent/saved enable state.
-- Replaced the invalid plugin C trait-object return with API v2 opaque handles and paired destruction; tested macro expansion, ABI function types, null handling, and exactly-once destruction. See ADR-0038. A plugin loader/method dispatch protocol remains future work.
-- CI retains strict native checks and now checks Linux audio configurations with the required ALSA headers. Browser smoke coverage remains configured.
+- Task 1 native/WASM baseline and strict quality gates remain passing locally. Remote CI is unverified.
+- Added testable project file operations: create/load directories or manifests, atomic manifest replacement, and same-root Save As. Existing destinations are protected during creation; failed parse/write operations retain prior state. Saving scene edits during Play is blocked.
+- Replaced dead Open/Save As behavior with visible path-entry dialogs; fixed New Project's directory/manifest confusion and discarded location edits. Project dialogs render once independently of hub tabs; repeated menu actions no longer spawn duplicate hubs/widget IDs. Errors are visible.
+- Reconciled runtime snapshots with original authored metadata to preserve names, Parent, component ordering, nonvisual entities, unresolved/relative resources, and nested references. Other scenes are preserved. See ADR-0039 for the transitional architecture and editor-only tempfile dependency.
+- Shared scene loading applies sprite layer/material and attaches tilemaps to existing SourceId entities, avoiding duplicate entities.
+- Added nine disk-backed project round-trip regressions, including transform undo/redo and entity add/delete.
 
 ## Validation
 
-- `just check`: passed (formatting, strict native all-target Clippy, workspace check, standalone audio sample check).
-- `just test`: 455 passed; zero failed/skipped.
-- `cargo build --workspace`: passed.
-- `CHROMIUM_PATH=/usr/bin/chromium just web-smoke`: passed after cleanup; real assets/rendering/input/startup rejection exercised.
-- Rebuilt native editor welcome and main workspace visually verified in Xvfb/software GL; no panic or GPU validation error. Virtual-display/framebuffer warnings remain.
-- `cargo check -p kiln-editor --features audio`: passed; audible playback not claimed.
+- `just check`: passed after final code changes (format, strict native all-target Clippy, workspace check, standalone audio sample check).
+- `just test`: 464 passed, zero failed/skipped.
+- `cargo build -p kiln-editor`: passed after final GUI changes.
+- `CHROMIUM_PATH=/usr/bin/chromium just web-smoke`: passed with shared scene-loading changes; actual pixels, assets, keyboard movement/release, and startup rejection verified.
+- Rebuilt native GUI in Xvfb/software GL: New Project created and opened a fresh Empty 2D project; Open reopened a saved manifest; Save As created an identical manifest in the same root. Final dialogs displayed without duplicate-widget diagnostics. No panic/GPU validation error; expected virtual-display/framebuffer warnings remain.
 - `git diff --check`: passed.
-- Remote CI/matrix execution remains pending. Optional audio and WASM builds have warnings outside the strict default-native Clippy invocation; no all-feature lint/physical-device guarantee is claimed.
 
 ## Next
 
-1. Begin task 2 in `docs/2D_COMPLETION_PLAN.md`: project create/open/save/save-as, authoritative scene edits, round-trip property preservation, scene tabs, undo/redo, and dirty/recovery behavior. Start by reproducing the existing editor workflow and adding focused acceptance tests; document architecture decisions before restructuring.
-2. Keep the restored gates green as changes land. Do not regress browser rendering/input or native script-state persistence.
-3. Tasks 2–9 remain pending; use real reference-game/export evidence rather than panel/type existence.
+1. Continue Task 2: implement an authoritative editable scene/command model, actual scene-tab switching, and per-scene edits with preservation tests.
+2. Complete selection/gizmos/parent transforms and shared undo/redo coverage; add dirty indicators, close prompts, autosave/recovery. Execute the full two-scene author/edit/restart acceptance before marking Task 2 complete.
+3. Keep native and browser gates passing. Tasks 3–9 remain pending; validate real games and exports instead of relying on panel/type existence.
 
-## Limits and environment
+## Known limits and environment
 
-Browser validation is Chromium software WebGL, not physical WebGPU, other browsers,
-touch devices, or complete CLI exports. Full music/mixer/save behavior, physical
-hardware frame budgets, release sizes, clean-machine packaging, and cross-platform
-runner validation remain separate gates. Plugin ABI v2 is a compatibility change;
-handles may only be released by their matching creator module.
+Save As currently stays within the same asset directory; relocation is explicitly rejected. Dialogs accept typed paths rather than native OS pickers. Platformer/Top-down templates still provide empty starters; only Empty 2D was exercised. Scene snapshots are a bridge, not complete edit-command architecture. Scene tabs and full authoring/undo/recovery acceptance are unfinished.
+
+Browser evidence covers Chromium software WebGL; physical WebGPU, other browsers, touch, complete CLI exports, audible audio, hardware budgets, clean-machine packaging, cross-platform execution, and remote CI remain separate gates. Optional audio/WASM warnings remain outside the strict default-native lint gate. Plugin ABI v2 requires creator-matched destruction; loader/dispatch remains future work.
 
 Source `/workspace/.kiln-tools/activate.sh` for cloud Cargo commands.
-`CHROMIUM_PATH=/usr/bin/chromium just web-smoke` uses the installed browser.
+Use `CHROMIUM_PATH=/usr/bin/chromium just web-smoke` for installed-browser validation.

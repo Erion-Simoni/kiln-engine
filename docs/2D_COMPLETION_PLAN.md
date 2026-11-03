@@ -23,7 +23,7 @@ Each task needs implementation, meaningful regression tests, and an exercised ed
 
 Acceptance: `just check`, `just test`, native editor build, audio sample check, and WASM build pass. Tests must execute nonzero cases. Graphical/browser/device checks have separate recorded evidence.
 
-### 2. Dependable scene authoring and project lifecycle — PENDING
+### 2. Dependable scene authoring and project lifecycle — IN PROGRESS
 
 - [ ] Make project create/open/save/save-as and asset-relative paths work from the UI.
 - [ ] Establish one authoritative editable scene model; route edits through commands shared by hierarchy, inspector, and viewport. Document the decision before restructuring.
@@ -137,3 +137,16 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Plugin ABI v2 now uses plugin-owned opaque handles and matching destruction instead of exposing Rust trait-object layout through C. ADR-0038 documents the compatibility change and limits; this does not implement a plugin loader.
 - CI preserves its strict native gates and adds Linux audio development headers plus editor/sample audio checks. The browser job remains enabled. Remote CI/matrix execution has not been observed here.
 - Task 1's specified local acceptance commands now pass. Next is task 2: dependable scene authoring/project lifecycle. Hardware, WebGPU/other browsers, export packaging, release-size/performance budgets, and full audio/UI/save functionality remain separate gates in tasks 2–9.
+
+### 2026-11-03 — Task 2 project lifecycle and preservation checkpoint
+
+- Implemented real New/Open/Save As path-entry dialogs. New Project now loads the created manifest instead of trying to read its directory as a file; location edits persist. Dialogs render once outside dock tabs, avoiding duplicate hub/widget IDs. File menu actions do not create unnecessary hub windows.
+- Project creation stages a starter scene/script and refuses existing destinations. Manifest writes use sibling temporary files and atomic replacement. Parse/write failures are reported visibly; project/path state commits after successful I/O. Saving during Play is rejected to avoid persisting simulation changes.
+- Save As supports a second manifest in the same asset directory. Relocation is explicitly rejected until asset copying/reference rewriting exists. Native OS file pickers and complete Platformer/Top-down templates remain pending; only the Empty 2D starter was exercised.
+- Scene snapshots reconcile runtime edits with authored root metadata, preserving names, Parent, component ordering, unresolved references, relative textures, sprite material/layer/animation, and nonvisual entities. Nested instances are not baked into the root; other scenes remain intact. This is the transitional bridge in ADR-0039, not the complete shared command model.
+- Shared runtime spawning now applies sprite layer/material and augments tilemap entities by SourceId instead of creating a duplicate identity.
+- Nine disk-backed regressions cover create/load, invalid creation, overwrite refusal, safe failure, same-root Save As, metadata/nested-scene preservation, transform undo/redo through save/reopen, entity add/delete, and tilemap identity.
+- `just check`: PASSED after the final GUI fix; strict native gates retained. `just test`: 464 passed, zero skipped. `cargo build -p kiln-editor`: PASSED.
+- `CHROMIUM_PATH=/usr/bin/chromium just web-smoke`: PASSED with the shared runtime changes (real rendering/assets/input/key release/startup rejection).
+- Rebuilt native editor exercised in Xvfb/software GL: created a new Empty 2D project, reopened an existing manifest, used Save As to write an identical manifest, and verified New/Open dialogs without duplicate-widget errors. No panic/GPU validation error; expected virtual-display/framebuffer warnings remain. Physical-device/cross-platform behavior and remote CI remain unverified.
+- Task 2 remains IN PROGRESS: authoritative scene commands, actual scene-tab switching, complete selection/gizmo/parent behavior, broader undo coverage, dirty prompts, autosave/recovery, and full two-scene authoring acceptance remain ahead. Tasks 3–9 have not started.

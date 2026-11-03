@@ -1031,3 +1031,33 @@ matching creator and must be released at most once.
 This repairs the allocation/lifetime boundary; it does not implement the future
 plugin loader or a cross-module method dispatch protocol. The in-process registry
 continues to accept ordinary Rust trait objects. No dependencies are added.
+
+## ADR-0039: Preserve authored scene metadata and isolate project file operations (accepted)
+
+**Date:** 2026-11-03
+**Status:** accepted
+
+The serialized Project/Scene remains the source of authoring metadata. Runtime
+worlds are projections, not a complete replacement document: they omit names,
+parent links, unresolved asset references, and include nested-scene instances.
+Editor snapshots reconcile editable runtime components by SourceId with the
+original root scene, preserving unprojected metadata and filtering nested
+instances. This is an incremental bridge; a shared edit-command model is still
+required before task 2 can be considered complete.
+
+Tilemaps augment an existing entity with the same SourceId instead of spawning
+a duplicate entity. Sprite layer/material metadata is applied by the shared
+scene spawner so opening and saving cannot silently reset it.
+
+File operations live in an editor-only module independent of the window/GPU,
+allowing real create/save/reopen regression tests. Use tempfile (MIT OR
+Apache-2.0, already present in the repository dependency graph) for same-directory
+staging and atomic manifest replacement, including Windows replacement support.
+It is not added to the engine runtime or browser target. Creation never reuses
+an existing destination directory. Project path/root state changes only after
+successful I/O. Save As initially supports another manifest in the same asset
+root; relocating a whole project requires asset-copy/reference handling in a
+later task and must fail explicitly rather than produce broken references.
+
+This checkpoint does not claim complete undo coverage, scene-tab switching,
+project relocation, native file pickers, or autosave/recovery.

@@ -21,6 +21,8 @@ pub struct ProjectHubState {
     pub recent_projects: Vec<RecentProject>,
     /// Whether to show the new project dialog.
     pub show_new_project_dialog: bool,
+    pub show_open_project_dialog: bool,
+    pub open_project_path: String,
     /// New project name.
     pub new_project_name: String,
     /// New project directory.
@@ -131,7 +133,6 @@ pub fn render_project_hub(
     ui: &mut Ui,
     state: &mut ProjectHubState,
     open_project_callback: &mut dyn FnMut(PathBuf),
-    create_project_callback: &mut dyn FnMut(String, PathBuf, String),
 ) {
     ui.vertical_centered(|ui| {
         ui.add_space(40.0);
@@ -178,19 +179,7 @@ pub fn render_project_hub(
                 )
                 .clicked()
             {
-                // TODO: Native file dialog
-                if let Some(path) = native_file_dialog::open_file_dialog() {
-                    if path.exists() {
-                        state.add_recent(
-                            path.clone(),
-                            path.file_name()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .to_string(),
-                        );
-                        open_project_callback(path);
-                    }
-                }
+                state.show_open_project_dialog = true;
             }
             ui.add_space(8.0);
             ui.label("Open an existing project");
@@ -233,8 +222,7 @@ pub fn render_project_hub(
                 });
                 ui.separator();
             }
-            for (path, name) in projects_to_open {
-                state.add_recent(path.clone(), name.clone());
+            for (path, _) in projects_to_open {
                 open_project_callback(path);
             }
             for path in projects_to_remove {
@@ -244,6 +232,38 @@ pub fn render_project_hub(
 
         ui.add_space(16.0);
     }
+}
+
+/// Render project dialogs once per frame, independently of docked hub tabs.
+pub fn render_project_dialogs(
+    ctx: &egui::Context,
+    state: &mut ProjectHubState,
+    open_project_callback: &mut dyn FnMut(PathBuf),
+    create_project_callback: &mut dyn FnMut(String, PathBuf, String),
+) {
+    if state.show_open_project_dialog {
+        egui::Window::new("Open Project")
+            .collapsible(false)
+            .show(ctx, |ui| {
+                ui.label("Project file or directory:");
+                ui.text_edit_singleline(&mut state.open_project_path);
+                ui.horizontal(|ui| {
+                    if ui.button("Cancel").clicked() {
+                        state.show_open_project_dialog = false;
+                    }
+                    if ui
+                        .add_enabled(
+                            !state.open_project_path.trim().is_empty(),
+                            egui::Button::new("Open"),
+                        )
+                        .clicked()
+                    {
+                        open_project_callback(PathBuf::from(state.open_project_path.trim()));
+                        state.show_open_project_dialog = false;
+                    }
+                });
+            });
+    }
 
     // New project dialog
     if state.show_new_project_dialog {
@@ -251,18 +271,16 @@ pub fn render_project_hub(
             .collapsible(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-            .show(ui.ctx(), |ui| {
+            .show(ctx, |ui| {
                 ui.label("Project name:");
                 ui.text_edit_singleline(&mut state.new_project_name);
 
                 ui.add_space(8.0);
                 ui.label("Location:");
                 ui.horizontal(|ui| {
-                    ui.text_edit_singleline(
-                        &mut state.new_project_dir.to_string_lossy().to_string(),
-                    );
-                    if ui.button("Browse...").clicked() {
-                        // TODO: Native folder dialog
+                    let mut directory = state.new_project_dir.to_string_lossy().into_owned();
+                    if ui.text_edit_singleline(&mut directory).changed() {
+                        state.new_project_dir = PathBuf::from(directory);
                     }
                 });
 
@@ -305,14 +323,5 @@ pub fn render_project_hub(
                     }
                 });
             });
-    }
-}
-
-/// Native file dialog stub (replace with actual implementation).
-mod native_file_dialog {
-    use std::path::PathBuf;
-    pub fn open_file_dialog() -> Option<PathBuf> {
-        // TODO: Use rfd or native dialogs
-        None
     }
 }
