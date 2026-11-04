@@ -157,6 +157,41 @@ impl AssetBrowser {
         }
     }
 
+    /// Move a project asset to another relative path without overwriting an
+    /// existing file or allowing the target to escape the project directory.
+    pub fn rename_asset(&mut self, source: &str, destination: &str) -> Result<(), String> {
+        let root = self.root.clone().ok_or("No project directory is open")?;
+        let source_path = safe_project_path(source)?;
+        let destination_path = safe_project_path(destination)?;
+        let from = root.join(source_path);
+        let to = root.join(destination_path);
+        let root = root.canonicalize().map_err(|error| error.to_string())?;
+        let canonical_source = from.canonicalize().map_err(|error| error.to_string())?;
+        let canonical_parent = to
+            .parent()
+            .ok_or("Destination path must be inside the project")?
+            .canonicalize()
+            .map_err(|error| format!("Destination folder does not exist: {error}"))?;
+        if !canonical_source.starts_with(&root) || !canonical_parent.starts_with(&root) {
+            return Err("Asset paths must stay inside the project directory".into());
+        }
+        if std::fs::symlink_metadata(&from)
+            .map(|metadata| metadata.file_type().is_symlink())
+            .unwrap_or(false)
+        {
+            return Err("Moving symbolic-link assets is not supported".into());
+        }
+        if !from.is_file() {
+            return Err("Selected asset does not exist or is not a file".into());
+        }
+        if to.exists() {
+            return Err("An asset already exists at the destination".into());
+        }
+        std::fs::rename(&from, &to).map_err(|error| format!("Could not move asset: {error}"))?;
+        self.scan(&root);
+        Ok(())
+    }
+
     /// Decode the asset at `path` and keep it as the preview.
     ///
     /// Returns an error message when the asset is missing or cannot be
@@ -220,6 +255,21 @@ impl AssetBrowser {
     }
 }
 
+fn safe_project_path(path: &str) -> Result<PathBuf, String> {
+    if path.trim().is_empty() {
+        return Err("Asset path cannot be empty".into());
+    }
+    let path = Path::new(path);
+    if path.is_absolute()
+        || path
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err("Asset path must stay inside the project directory".into());
+    }
+    Ok(path.to_path_buf())
+}
+
 /// Recursively collect files below `dir`.
 fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -248,4 +298,32 @@ fn relative_path(root: &Path, file: &Path) -> String {
 /// Check if a path is a project manifest file that should be skipped.
 fn is_manifest(path: &str) -> bool {
     path == "kiln.toml" || path.ends_with("/kiln.toml") || path.ends_with(r"\kiln.toml")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn asset_rename_moves_files_and_rejects_escape_or_overwrite() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("art")).unwrap();
+        std::fs::write(root.path().join("old.png"), b"png").unwrap();
+        std::fs::write(root.path().join("art/existing.png"), b"keep").unwrap();
+        let mut browser = AssetBrowser::new();
+        browser.scan(root.path());
+
+        assert!(browser.rename_asset("old.png", "../escape.png").is_err());
+        assert!(browser.rename_asset("old.png", "art/existing.png").is_err());
+        browser.rename_asset("old.png", "art/renamed.png").unwrap();
+        assert!(!root.path().join("old.png").exists());
+        assert_eq!(
+            std::fs::read(root.path().join("art/renamed.png")).unwrap(),
+            b"png"
+        );
+        assert!(browser
+            .entries()
+            .iter()
+            .any(|entry| entry.path == "art/renamed.png"));
+    }
 }

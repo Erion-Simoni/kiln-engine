@@ -2,7 +2,9 @@ use kiln_core::{
     Component, ComponentOverride, Entity, Prefab, PrefabInstance, PrefabOverride, Project, Scene,
 };
 use kiln_editor::{
-    editing::{attach_prefab_instances, propagate_prefab_in_scenes},
+    editing::{
+        apply_prefab_instance_to_definition, attach_prefab_instances, propagate_prefab_in_scenes,
+    },
     entity_command::{EntityCommand, EntityEdit},
     project_files,
     scene_document::snapshot_for_scene,
@@ -545,6 +547,91 @@ fn prefab_definition_changes_propagate_to_saved_instances_and_keep_overrides() {
         .iter()
         .any(|component| matches!(component, Component::Parent { parent } if parent == "root")));
     assert!(instance.components.iter().any(|component| matches!(component, Component::Transform { x, y, .. } if *x == 7.0 && *y == 12.0)));
+}
+
+#[test]
+fn applying_instance_overrides_updates_definition_and_other_saved_instances() {
+    let mut project = project();
+    let prefab = Prefab {
+        id: "crate".into(),
+        name: "Crate".into(),
+        root_entity: Entity {
+            id: "template".into(),
+            name: "Crate".into(),
+            components: vec![Component::Transform {
+                x: 0.0,
+                y: 0.0,
+                rotation: 0.0,
+                scale: 1.0,
+            }],
+        },
+    };
+    project.prefabs.insert(prefab.id.clone(), prefab);
+    let instance = |id: &str, x: f32, y: f32, override_y: bool| Entity {
+        id: id.into(),
+        name: format!("{id} name"),
+        components: vec![
+            Component::Transform {
+                x,
+                y,
+                rotation: 0.0,
+                scale: 1.0,
+            },
+            Component::PrefabInstance {
+                prefab_id: "crate".into(),
+                overrides: if override_y {
+                    PrefabOverride {
+                        entity_id: id.into(),
+                        overrides: std::collections::HashMap::from([(
+                            "transform".into(),
+                            ComponentOverride::Transform {
+                                x: None,
+                                y: Some(y),
+                                rotation: None,
+                                scale: None,
+                            },
+                        )]),
+                    }
+                } else {
+                    PrefabOverride::new(id.into())
+                },
+            },
+        ],
+    };
+    project
+        .scenes
+        .get_mut("main")
+        .unwrap()
+        .entities
+        .push(instance("crate-a", 8.0, 3.0, false));
+    project
+        .scenes
+        .get_mut("other")
+        .unwrap()
+        .entities
+        .push(instance("crate-b", 0.0, 20.0, true));
+
+    let updated = apply_prefab_instance_to_definition(&mut project, "main", "crate-a").unwrap();
+    assert!(
+        matches!(updated.root_entity.components.first(), Some(Component::Transform { x, y, .. }) if *x == 8.0 && *y == 3.0)
+    );
+    let source = project.scenes["main"]
+        .entities
+        .iter()
+        .find(|entity| entity.id == "crate-a")
+        .unwrap();
+    assert!(
+        matches!(source.components.last(), Some(Component::PrefabInstance { overrides, .. }) if overrides.overrides.is_empty())
+    );
+    let other = project.scenes["other"]
+        .entities
+        .iter()
+        .find(|entity| entity.id == "crate-b")
+        .unwrap();
+    assert_eq!(other.name, "crate-b name");
+    assert!(
+        matches!(other.components.first(), Some(Component::Transform { x, y, .. }) if *x == 8.0 && *y == 20.0)
+    );
 }
 
 fn spawn(project: &Project) -> GameWorld {
