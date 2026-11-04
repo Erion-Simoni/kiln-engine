@@ -339,6 +339,51 @@ fn tilemap_addition_rebuilds_one_entity_and_preserves_role_and_transform() {
 }
 
 #[test]
+fn role_value_edit_is_trimmed_undoable_and_persists_through_projection() {
+    let mut project = fixture();
+    let mut before = project.scenes["main"].clone();
+    before.entities[0].components.push(Component::Role {
+        role: "player".into(),
+    });
+    project.scenes.insert("main".into(), before.clone());
+    let mut scene = before.clone();
+    let mut history = SceneHistory::new();
+    assert!(command(ComponentEdit::SetRole {
+        role: "  enemy.guard  ".into(),
+    })
+    .execute(&mut scene, &project, &mut history)
+    .unwrap());
+    assert_eq!(history.undo_depth(), 1);
+    assert!(scene.entities[0]
+        .components
+        .iter()
+        .any(|component| matches!(component, Component::Role { role } if role == "enemy.guard")));
+
+    assert!(!command(ComponentEdit::SetRole {
+        role: "enemy.guard".into(),
+    })
+    .execute(&mut scene, &project, &mut history)
+    .unwrap());
+    assert_eq!(history.undo_depth(), 1);
+
+    project.scenes.insert("main".into(), scene.clone());
+    let world = spawn(&project);
+    assert_eq!(json(&snapshot(&project, &world)), json(&scene));
+    assert_eq!(
+        world
+            .world_ref()
+            .query::<&kiln_runtime::Role>()
+            .iter()
+            .count(),
+        1
+    );
+    assert_disk(&project);
+
+    let undone = history.undo(scene).unwrap();
+    assert_eq!(json(&undone), json(&before));
+}
+
+#[test]
 fn stale_scene_missing_entity_or_duplicate_components_fail_without_history_changes() {
     let mut project = fixture();
     let mut scene = project.scenes["main"].clone();

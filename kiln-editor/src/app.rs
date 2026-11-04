@@ -166,6 +166,7 @@ pub struct EditorApp {
     world: GameWorld,
     selected_entity: Option<hecs::Entity>,
     rename_input: Option<(String, String)>,
+    role_input: Option<(String, String)>,
     is_playing: bool,
     /// The running game session, present while playing.
     play: Option<PlaySession>,
@@ -642,6 +643,7 @@ impl EditorApp {
             world,
             selected_entity: None,
             rename_input: None,
+            role_input: None,
             is_playing: false,
             play: None,
             console_log: Vec::new(),
@@ -1440,6 +1442,7 @@ impl EditorApp {
     fn reset_scene_view(&mut self) {
         self.selected_entity = None;
         self.rename_input = None;
+        self.role_input = None;
         self.hierarchy_panel.clear_selection();
         self.gizmo = GizmoState::default();
         self.load_project_scene();
@@ -2201,6 +2204,7 @@ impl EditorApp {
                         world: &mut self.world,
                         selected_entity: &mut self.selected_entity,
                         rename_input: &mut self.rename_input,
+                        role_input: &mut self.role_input,
                         is_playing: &mut self.is_playing,
                         graph: &mut self.graph,
                         render_tier: &mut self.render_tier,
@@ -2826,6 +2830,7 @@ struct TabViewer<'a> {
     world: &'a mut GameWorld,
     selected_entity: &'a mut Option<hecs::Entity>,
     rename_input: &'a mut Option<(String, String)>,
+    role_input: &'a mut Option<(String, String)>,
     is_playing: &'a mut bool,
     graph: &'a mut Graph,
     render_tier: &'a mut RenderTier,
@@ -4148,9 +4153,60 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         }
 
                         ui.add_space(12.0);
+                        if self
+                            .role_input
+                            .as_ref()
+                            .is_some_and(|(id, _)| id != &authored.id)
+                        {
+                            *self.role_input = None;
+                        }
                         if let Some(role) = authored.components.iter().find_map(|c| match c { kiln_core::Component::Role { role } => Some(role), _ => None }) {
                             ui.group(|ui| {
-                                ui.label(format!("Role: {role}"));
+                                if self
+                                    .role_input
+                                    .as_ref()
+                                    .is_some_and(|(id, _)| id == &authored.id)
+                                {
+                                    let mut apply_role = false;
+                                    let mut cancel_role = false;
+                                    let can_edit = !self.editing_locked() && !self.project_blocked;
+                                    ui.horizontal(|ui| {
+                                        if let Some((_, value)) = self.role_input.as_mut() {
+                                            ui.add_enabled(
+                                                can_edit,
+                                                egui::TextEdit::singleline(value),
+                                            );
+                                            apply_role = ui
+                                                .add_enabled(can_edit, egui::Button::new("Apply"))
+                                                .clicked();
+                                            cancel_role = ui.button("Cancel").clicked();
+                                        }
+                                    });
+                                    if apply_role {
+                                        if let Some((_, role)) = self.role_input.take() {
+                                            self.queue_component(
+                                                entity,
+                                                ComponentEdit::SetRole { role },
+                                            );
+                                        }
+                                    } else if cancel_role {
+                                        *self.role_input = None;
+                                    }
+                                } else {
+                                    ui.horizontal(|ui| {
+                                        ui.label(format!("Role: {role}"));
+                                        if ui
+                                            .add_enabled(
+                                                !self.editing_locked() && !self.project_blocked,
+                                                egui::Button::new("Edit"),
+                                            )
+                                            .clicked()
+                                        {
+                                            *self.role_input =
+                                                Some((authored.id.clone(), role.clone()));
+                                        }
+                                    });
+                                }
                                 if ui.button("Remove Role").clicked() { self.remove_component(entity, ComponentKind::Role); }
                             });
                         }

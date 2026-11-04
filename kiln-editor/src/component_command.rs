@@ -55,6 +55,7 @@ impl ComponentKind {
 pub enum ComponentEdit {
     Add(Component),
     Remove(ComponentKind),
+    SetRole { role: String },
 }
 
 /// A command targeting one root entity in one scene document.
@@ -105,6 +106,7 @@ impl ComponentCommand {
                 ComponentKind::of(component).ok_or("Edit parent links through the hierarchy")?
             }
             ComponentEdit::Remove(kind) => *kind,
+            ComponentEdit::SetRole { .. } => ComponentKind::Role,
         };
         let components = &mut scene.entities[*index].components;
         let matches: Vec<_> = components
@@ -124,6 +126,18 @@ impl ComponentCommand {
             (ComponentEdit::Remove(_), Some(index)) => {
                 components.remove(*index);
                 Ok(true)
+            }
+            (ComponentEdit::SetRole { role }, Some(index)) => {
+                let role = role.trim();
+                let Component::Role { role: current } = &mut components[*index] else {
+                    unreachable!("role kind resolved to a non-role component")
+                };
+                if current == role {
+                    Ok(false)
+                } else {
+                    *current = role.to_owned();
+                    Ok(true)
+                }
             }
             _ => Ok(false),
         }

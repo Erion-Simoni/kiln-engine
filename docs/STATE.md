@@ -8,7 +8,7 @@
 
 - Earlier checkpoints cover native/WASM baseline repair, project lifecycle and atomic writes, authored metadata preservation, multi-scene tabs/history, project Save/Discard/Cancel, transform/property commands, component presence commands, and hierarchy entity commands. ADR-0039–0048 record the architecture.
 - Hierarchy create/delete/duplicate/reparent and inspector rename are document-first commands with ID validation, cycle prevention, metadata preservation, and undo. Native GUI previously verified hierarchy create/delete/duplicate/reparent and saved undo/redo of Parent.
-- Inspector edits for Transform position/rotation/uniform-scale and Sprite tint/layer/dimensions update authored and runtime state with one undo step per field gesture. Sprite dimensions default to 32×32 in old projects. Entity rename trims whitespace, rejects empty names, preserves stable identity, and records one history entry.
+- Inspector edits for Transform position/rotation/uniform-scale, Sprite tint/layer/dimensions, and Role now update authored state through validated history commands. Entity rename trims whitespace, rejects empty names, preserves stable identity, and records one history entry. Sprite dimensions default to 32×32 in old projects.
 - Sprite rendering supports entity rotation/scale and authored dimensions. Parent links compose local translation/rotation/scale into runtime `GlobalTransform`; editor/player/web/mobile/sample renderers consume refreshed global poses. Viewport drags convert to local space; reparent/delete preserve child world poses and nested scene offsets survive propagation.
 - Scene viewport has move, rotation, and scale gizmos. Drags preview local Transform edits, commit one undo step on release, and cancel through Escape. Rotation wrap, uniform scaling, hit targets, and translation snapping have coverage.
 - Hierarchy and scene-list selection support Ctrl/Cmd additive toggling while preserving a primary inspector target. **Frame Selection** and `F` fit selected sprite bounds after global rotation and scale, with position-only bounds for nonvisual entities.
@@ -20,8 +20,8 @@
 ## Validation
 
 - Earlier parent/local checkpoint: `just check` passed; `just test`: 514 passed. Editor build, WASM check, Chromium smoke, nested-offset, runtime propagation, editor descendant update, and reparent/delete pose-preservation checks passed.
-- Earlier gizmo checkpoint: `just check` passed; `just test`: 518 passed. Multi-selection/framing: 519 passed. Group translation: 520 passed. Group rotation/scale: 522 passed. Sprite-aware framing: 523 passed. Dirty tab close: 524 passed. Autosave/recovery: 527 passed. Combined two-scene acceptance: 528 passed. Parent-first group order: 529 passed.
-- Current inspector rename checkpoint: `just check` passed; `just test`: 530 passed, zero failed/skipped. Tests cover trimmed rename, stable IDs/components, undo, no-op, and validation.
+- Earlier gizmo checkpoint: `just check` passed; `just test`: 518 passed. Multi-selection/framing: 519 passed. Group translation: 520 passed. Group rotation/scale: 522 passed. Sprite-aware framing: 523 passed. Dirty tab close: 524 passed. Autosave/recovery: 527 passed. Combined two-scene acceptance: 528 passed. Parent-first group order: 529 passed. Entity rename: 530 passed.
+- Current Role inspector checkpoint: `just check` passed; `just test`: 531 passed, zero failed/skipped. Regression coverage includes trimming, no-op history, runtime projection, disk reopen, and undo.
 - Native GUI confirmation of the latest inspector, gizmo, scene-close, and recovery workflows remains outstanding. This environment has no display, Xvfb, or desktop automation tool. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
 
 ## Next
