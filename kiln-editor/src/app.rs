@@ -3299,39 +3299,26 @@ impl TabViewer<'_> {
         }
     }
 
-    /// Record the current scene, so the edit can be undone.
-    fn record_scene(&mut self) {
-        self.finish_transform_edit();
-        let scene = crate::scene_document::snapshot_for_scene(
-            &*self.world,
-            self.entity_textures,
-            self.entity_roles,
-            self.current_project.as_ref(),
-            self.scenes.active_id(),
-        );
-        self.scenes.history.record(scene);
-    }
-
-    /// Add an entity to the middle of the scene.
-    ///
-    /// The scene is recorded first, so the new entity can be undone.
+    /// Queue creation through the validated scene document command path.
     fn add_entity(&mut self) {
         if self.editing_locked() {
             return;
         }
-        self.record_scene();
-
-        let existing: Vec<String> = self.entity_textures.keys().cloned().collect();
+        self.finish_transform_edit();
+        let Some(scene_id) = self.scenes.active_id().map(str::to_owned) else {
+            return;
+        };
         let size = self.world_size();
         let position = [size.0 / 2.0, size.1 / 2.0];
-        let (id, entity) = crate::editing::add_entity(
-            self.world,
-            &existing,
-            position,
-            crate::editing::EntityDefaults::default(),
-        );
-        self.entity_id_to_hecs.insert(id, entity);
-        *self.selected_entity = Some(entity);
+        self.project_requests.push(ProjectRequest::Entity(
+            crate::entity_command::EntityCommand {
+                scene_id,
+                edit: crate::entity_command::EntityEdit::Create {
+                    name: "Entity".into(),
+                    position,
+                },
+            },
+        ));
     }
 
     /// The size of the world the scene view shows, in world units.
