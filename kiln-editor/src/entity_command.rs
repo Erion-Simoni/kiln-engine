@@ -17,6 +17,8 @@ pub enum EntityEdit {
         prefab_id: String,
         position: [f32; 2],
     },
+    /// Restore the linked prefab definition and clear instance overrides.
+    RevertPrefabOverrides { entity_id: String },
     /// Delete an entity and detach its direct children.
     Delete { entity_id: String },
     /// Duplicate an entity with its complete authored component list.
@@ -133,10 +135,24 @@ fn apply(
                 )
             });
             let mut has_transform = false;
+            let mut instance_overrides = kiln_core::PrefabOverride::new(id.clone());
             for component in &mut instance.components {
                 if let Component::Transform { x, y, .. } = component {
+                    let override_x = (*x != position[0]).then_some(position[0]);
+                    let override_y = (*y != position[1]).then_some(position[1]);
                     *x = position[0];
                     *y = position[1];
+                    if override_x.is_some() || override_y.is_some() {
+                        instance_overrides.add_override(
+                            "transform".into(),
+                            kiln_core::ComponentOverride::Transform {
+                                x: override_x,
+                                y: override_y,
+                                rotation: None,
+                                scale: None,
+                            },
+                        );
+                    }
                     has_transform = true;
                     break;
                 }
@@ -148,13 +164,63 @@ fn apply(
                     rotation: 0.0,
                     scale: 1.0,
                 });
+                instance_overrides.add_override(
+                    "transform".into(),
+                    kiln_core::ComponentOverride::Transform {
+                        x: Some(position[0]),
+                        y: Some(position[1]),
+                        rotation: None,
+                        scale: None,
+                    },
+                );
             }
             instance.components.push(Component::PrefabInstance {
                 prefab_id: prefab.id.clone(),
-                overrides: kiln_core::PrefabOverride::new(id.clone()),
+                overrides: instance_overrides,
             });
             scene.entities.push(instance);
             Ok(Some(id))
+        }
+        EntityEdit::RevertPrefabOverrides { entity_id } => {
+            let index = unique_entity_index(scene, entity_id)?;
+            let prefab_id = scene.entities[index]
+                .components
+                .iter()
+                .find_map(|component| match component {
+                    Component::PrefabInstance { prefab_id, .. } => Some(prefab_id.clone()),
+                    _ => None,
+                })
+                .ok_or("Selected entity is not a prefab instance")?;
+            let parent = scene.entities[index]
+                .components
+                .iter()
+                .find_map(|component| match component {
+                    Component::Parent { parent } => Some(parent.clone()),
+                    _ => None,
+                });
+            let prefab = project
+                .prefabs
+                .get(&prefab_id)
+                .filter(|prefab| prefab.id == prefab_id)
+                .ok_or("Prefab definition is missing")?;
+            let mut restored = prefab.root_entity.clone();
+            restored.id = entity_id.clone();
+            restored.name = scene.entities[index].name.clone();
+            restored.components.retain(|component| {
+                !matches!(
+                    component,
+                    Component::Parent { .. } | Component::PrefabInstance { .. }
+                )
+            });
+            if let Some(parent) = parent {
+                restored.components.push(Component::Parent { parent });
+            }
+            restored.components.push(Component::PrefabInstance {
+                prefab_id,
+                overrides: kiln_core::PrefabOverride::new(entity_id.clone()),
+            });
+            scene.entities[index] = restored;
+            Ok(None)
         }
         EntityEdit::Delete { entity_id } => {
             let index = unique_entity_index(scene, entity_id)?;

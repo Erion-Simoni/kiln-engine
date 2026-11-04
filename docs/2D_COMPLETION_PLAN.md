@@ -273,3 +273,10 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Editor scene rebuilds restore runtime prefab links from authored markers by SourceId. Scene snapshots preserve those markers; duplicate updates the override record's entity ID. Inspector identifies linked prefabs and warns on missing definitions. ADR-0051 documents the serialization decision.
 - Regression covers instantiate, duplicate, undo/redo, save/reopen, relative texture/animation retention, runtime link restoration, and scene snapshot parity. `just check`: PASSED; `just test`: 539 passed, zero failed/skipped.
 - Task 3 remains IN PROGRESS: functional per-instance override editing/revert, propagation when a definition changes (including saved instance data), drag/drop instantiation, nested scenes, and asset workflows remain ahead.
+
+### 2026-11-04 — Task 3 override reset and saved propagation
+
+- Added a Revert Overrides action for linked scene entities. The document-first command restores the prefab's authored component set, clears its overrides, keeps the placed entity's ID/name, and records the change in per-scene undo history.
+- Prefab definition edits now propagate into saved instances across project scenes, retaining instance IDs, names, parent links, and supported overrides. Runtime instances continue to update through the existing projection path.
+- Regression coverage verifies revert/undo and saved-instance definition propagation with an overridden transform and parent link. Focused command suite: 7 passed. `just check` passed; `just test`: 541 passed, zero failed/skipped.
+- Scene snapshots now capture transform and Sprite tint/texture differences from prefab definitions into each instance's serialized override map; placement offsets are recorded at instantiate time. Texture removal overrides and applying an instance back to its definition remain unfinished. Drag/drop, nested-scene lifecycle, and asset import/rename/move workflows also remain unfinished. Task 4 has not started.

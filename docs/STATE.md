@@ -2,30 +2,36 @@
 
 **Active focus:** Task 3 of `docs/2D_COMPLETION_PLAN.md`, IN PROGRESS.
 **Branch:** `feat/2d-production-workflow`.
-**Scope:** Prefabs, scenes, and asset workflow. 3D remains paused.
+**Scope:** Prefabs, scenes, and asset workflow. Task 4 has not started; 3D remains paused.
 
-## Task 2 checkpoint
+## Completed in Task 3
 
-Task 2 implementation and headless acceptance are complete. Final graphical acceptance remains pending: cross-directory Save As and rotate/scale gizmo interaction could not be rerun because this executor has no display, Xvfb, or desktop automation.
+- Prefab definitions persist in the serde-defaulted `Project.prefabs` map. Project load hydrates the Prefab Editor; selection-based creation and panel edits/deletes synchronize with the project. ADR-0050 records this ownership.
+- Scene instances serialize `Component::PrefabInstance` with prefab ID and override data. Instantiation is document-first, uses project-unique IDs, preserves authored components and resource references, and participates in per-scene history. Duplication retargets the marker. Editor rebuild restores runtime links by SourceId; snapshots preserve markers. ADR-0051 records this ownership.
+- Inspector now exposes Revert Overrides for linked entities. It restores prefab components, clears overrides, preserves the instance ID/name, and is undoable.
+- Prefab definition edits propagate into saved instances across project scenes while retaining instance ID/name, parent link, and supported overrides. Live ECS instances are also updated by the current editor path.
+- Scene snapshots capture Transform and Sprite tint/texture differences into serialized overrides; placement offsets are initialized as overrides. Removing an inherited texture is not representable with the current override schema.
+- Tests cover prefab manifest round-trip/legacy compatibility, instance creation/duplicate/undo/redo/save/reopen/runtime-link restoration, reversion/undo, and saved-scene propagation.
 
-## Task 3 progress
+## Remaining in Task 3
 
-- Prefab definitions persist in the serde-defaulted `Project.prefabs` map. Project load hydrates the Prefab Editor, selection-based creation writes the project, and panel edit/delete state syncs before save. Existing manifests load an empty library. ADR-0050 records this ownership.
-- Scene instances serialize `Component::PrefabInstance` with a prefab ID and keyed override record. Instantiation uses `EntityCommand`, assigns a project-unique ID, preserves authored components and resource references, and appears in scene history. Duplicates retarget the override record to their new entity ID. Editor scene rebuilds restore runtime prefab links by SourceId; scene snapshots preserve the serialized marker. ADR-0051 records this ownership.
-- Prefab library TOML round-trip, old manifest compatibility, and instance instantiate/duplicate/undo/redo/save/reopen/runtime-link coverage pass. Inspector shows linked prefab names and reports missing definitions.
-- Functional per-instance override editing/revert and propagation into saved instance data remain incomplete. Drag/drop instantiation, nested-scene workflow, and asset import/rename/move tracking remain pending.
+- Applying an edited instance back to its prefab definition is not implemented. The current override schema cannot represent clearing an inherited texture.
+- Prefab instantiation is toolbar-driven; drag/drop is pending.
+- Nested-scene editing/loading transitions and asset import settings, stable IDs, pickers, rename/move/reimport tracking, and comprehensive missing-asset diagnostics remain pending.
+- Full acceptance still requires reusing an enemy prefab in two levels, editing one instance, updating the definition, renaming its texture, and save/reopen/export verification.
 
 ## Validation
 
-- `just check`: passed. `just test`: 539 passed, zero failed/skipped. Focused entity command acceptance: 5 passed.
-- Native GUI remains unavailable in this executor (`DISPLAY` unset; Xvfb/xdotool absent). Physical devices, other render tiers, cross-platform runs, browser rerun, and remote CI are unverified for this checkpoint.
+- `just check`: passed after this checkpoint's changes.
+- Focused entity-command suite: 7 passed. `just test`: 541 passed, zero failed/skipped.
+- Native GUI verification is unavailable in this executor (`DISPLAY` unset; Xvfb/xdotool absent). Prior Task 2 graphical acceptance is still pending.
 
 ## Next
 
-1. Implement functional instance override editing and revert, with history and serialized save/reopen behavior.
-2. Propagate prefab definition changes into linked scene instances, then add drag/drop instantiation and acceptance coverage.
-3. Complete nested scenes and asset workflows.
-4. Return to Task 2's graphical acceptance when a GUI runner is available.
+1. Finish reliable instance override capture and apply-to-definition behavior, with edit/revert history and saved-scene coverage.
+2. Add drag/drop prefab placement and complete its acceptance path.
+3. Complete nested scenes and asset workflows; run full acceptance before marking Task 3 complete.
+4. Only after Task 3 passes its full acceptance, begin Task 4 scripting and Play workflow.
 
 Source `/workspace/.kiln-tools/activate.sh` for cloud Cargo commands.
 Use `CHROMIUM_PATH=/usr/bin/chromium just web-smoke` for installed-browser validation.

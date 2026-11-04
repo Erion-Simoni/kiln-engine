@@ -1,6 +1,8 @@
-use kiln_core::{Component, Entity, Prefab, PrefabInstance, Project, Scene};
+use kiln_core::{
+    Component, ComponentOverride, Entity, Prefab, PrefabInstance, PrefabOverride, Project, Scene,
+};
 use kiln_editor::{
-    editing::attach_prefab_instances,
+    editing::{attach_prefab_instances, propagate_prefab_in_scenes},
     entity_command::{EntityCommand, EntityEdit},
     project_files,
     scene_document::snapshot_for_scene,
@@ -393,6 +395,154 @@ fn prefab_instances_survive_duplicate_save_reopen_runtime_load_and_history() {
         .entities
         .iter()
         .any(|entity| entity.id == instance_id));
+}
+
+#[test]
+fn reverting_prefab_instance_restores_definition_and_records_history() {
+    let mut project = project();
+    let definition = Entity {
+        id: "enemy_template".into(),
+        name: "Enemy".into(),
+        components: vec![Component::Transform {
+            x: 4.0,
+            y: 8.0,
+            rotation: 0.25,
+            scale: 1.5,
+        }],
+    };
+    let prefab = Prefab {
+        id: "enemy".into(),
+        name: "Enemy".into(),
+        root_entity: definition,
+    };
+    project.prefabs.insert(prefab.id.clone(), prefab);
+    let mut overrides = PrefabOverride::new("placed_enemy".into());
+    overrides.add_override(
+        "transform".into(),
+        ComponentOverride::Transform {
+            x: Some(90.0),
+            y: None,
+            rotation: None,
+            scale: None,
+        },
+    );
+    project
+        .scenes
+        .get_mut("main")
+        .unwrap()
+        .entities
+        .push(Entity {
+            id: "placed_enemy".into(),
+            name: "Boss".into(),
+            components: vec![
+                Component::Transform {
+                    x: 90.0,
+                    y: 8.0,
+                    rotation: 0.25,
+                    scale: 1.5,
+                },
+                Component::PrefabInstance {
+                    prefab_id: "enemy".into(),
+                    overrides,
+                },
+            ],
+        });
+    let mut history = SceneHistory::new();
+    run(
+        &mut project,
+        EntityEdit::RevertPrefabOverrides {
+            entity_id: "placed_enemy".into(),
+        },
+        &mut history,
+    )
+    .unwrap();
+    let restored = project.scenes["main"]
+        .entities
+        .iter()
+        .find(|entity| entity.id == "placed_enemy")
+        .unwrap();
+    assert_eq!(restored.name, "Boss");
+    assert!(
+        matches!(restored.components.first(), Some(Component::Transform { x, y, .. }) if *x == 4.0 && *y == 8.0)
+    );
+    assert!(
+        matches!(restored.components.last(), Some(Component::PrefabInstance { overrides, .. }) if overrides.overrides.is_empty())
+    );
+    let previous = history
+        .undo(project.scenes.get_mut("main").unwrap().clone())
+        .unwrap();
+    assert!(previous.entities.iter().any(|entity| entity.id == "placed_enemy" && entity.components.iter().any(|component| matches!(component, Component::PrefabInstance { overrides, .. } if !overrides.overrides.is_empty()))));
+}
+
+#[test]
+fn prefab_definition_changes_propagate_to_saved_instances_and_keep_overrides() {
+    let mut project = project();
+    let prefab = Prefab {
+        id: "crate".into(),
+        name: "Crate".into(),
+        root_entity: Entity {
+            id: "crate-template".into(),
+            name: "Crate".into(),
+            components: vec![Component::Transform {
+                x: 1.0,
+                y: 2.0,
+                rotation: 0.0,
+                scale: 1.0,
+            }],
+        },
+    };
+    project.prefabs.insert(prefab.id.clone(), prefab.clone());
+    project
+        .scenes
+        .get_mut("main")
+        .unwrap()
+        .entities
+        .push(Entity {
+            id: "crate-placed".into(),
+            name: "My Crate".into(),
+            components: vec![
+                Component::Transform {
+                    x: 7.0,
+                    y: 2.0,
+                    rotation: 0.0,
+                    scale: 1.0,
+                },
+                Component::Parent {
+                    parent: "root".into(),
+                },
+                Component::PrefabInstance {
+                    prefab_id: "crate".into(),
+                    overrides: PrefabOverride {
+                        entity_id: "crate-placed".into(),
+                        overrides: std::collections::HashMap::from([(
+                            "transform".into(),
+                            ComponentOverride::Transform {
+                                x: Some(7.0),
+                                y: None,
+                                rotation: None,
+                                scale: None,
+                            },
+                        )]),
+                    },
+                },
+            ],
+        });
+    let mut changed = prefab;
+    if let Component::Transform { y, .. } = &mut changed.root_entity.components[0] {
+        *y = 12.0;
+    }
+    assert_eq!(propagate_prefab_in_scenes(&mut project, &changed), 1);
+    let instance = project.scenes["main"]
+        .entities
+        .iter()
+        .find(|entity| entity.id == "crate-placed")
+        .unwrap();
+    assert_eq!(instance.name, "My Crate");
+    assert!(instance
+        .components
+        .iter()
+        .any(|component| matches!(component, Component::Parent { parent } if parent == "root")));
+    assert!(instance.components.iter().any(|component| matches!(component, Component::Transform { x, y, .. } if *x == 7.0 && *y == 12.0)));
 }
 
 fn spawn(project: &Project) -> GameWorld {

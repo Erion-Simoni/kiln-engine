@@ -3903,6 +3903,24 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         let has_sprite = has(ComponentKind::Sprite);
                         let has_role = has(ComponentKind::Role);
                         let has_tilemap = has(ComponentKind::Tilemap);
+                        if authored.components.iter().any(|component| matches!(component, kiln_core::Component::PrefabInstance { .. })) {
+                            ui.horizontal(|ui| {
+                                ui.label("Prefab instance");
+                                let can_revert = !self.editing_locked() && !self.project_blocked;
+                                if ui.add_enabled(can_revert, egui::Button::new("Revert Overrides")).clicked() {
+                                    if let Some(scene_id) = self.scenes.active_id().map(str::to_owned) {
+                                        self.project_requests.push(ProjectRequest::Entity(
+                                            crate::entity_command::EntityCommand {
+                                                scene_id,
+                                                edit: crate::entity_command::EntityEdit::RevertPrefabOverrides {
+                                                    entity_id: authored.id.clone(),
+                                                },
+                                            },
+                                        ));
+                                    }
+                                }
+                            });
+                        }
                         if self
                             .rename_input
                             .as_ref()
@@ -5058,10 +5076,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         for prefab in prefabs {
                             let updated =
                                 crate::editing::update_prefab_instances(self.world, &prefab);
-                            if updated > 0 {
+                            let saved = self.current_project.as_mut().map_or(0, |project| {
+                                crate::editing::propagate_prefab_in_scenes(project, &prefab)
+                            });
+                            if updated > 0 || saved > 0 {
                                 self.log(&format!(
-                                    "[INFO] Updated {} instances of prefab '{}'",
-                                    updated, prefab.name
+                                    "[INFO] Updated {} live and {} saved instances of prefab '{}'",
+                                    updated, saved, prefab.name
                                 ));
                             }
                         }

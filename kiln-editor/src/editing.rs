@@ -424,6 +424,64 @@ pub fn update_prefab_instances(world: &mut GameWorld, prefab: &kiln_core::Prefab
     updated
 }
 
+/// Propagate a changed prefab into every saved scene while preserving each
+/// instance's identity, authored name, hierarchy parent, and overrides.
+pub fn propagate_prefab_in_scenes(
+    project: &mut kiln_core::Project,
+    prefab: &kiln_core::Prefab,
+) -> usize {
+    let mut updated = 0;
+    for scene in project.scenes.values_mut() {
+        for entity in &mut scene.entities {
+            let link = entity
+                .components
+                .iter()
+                .find_map(|component| match component {
+                    kiln_core::Component::PrefabInstance {
+                        prefab_id,
+                        overrides,
+                    } if prefab_id == &prefab.id => Some((prefab_id.clone(), overrides.clone())),
+                    _ => None,
+                });
+            let Some((prefab_id, overrides)) = link else {
+                continue;
+            };
+            let parent = entity
+                .components
+                .iter()
+                .find_map(|component| match component {
+                    kiln_core::Component::Parent { parent } => Some(parent.clone()),
+                    _ => None,
+                });
+            let mut propagated = prefab.root_entity.clone();
+            propagated.id = entity.id.clone();
+            propagated.name = entity.name.clone();
+            propagated.components.retain(|component| {
+                !matches!(
+                    component,
+                    kiln_core::Component::Parent { .. }
+                        | kiln_core::Component::PrefabInstance { .. }
+                )
+            });
+            prefab.apply_overrides(&mut propagated, &overrides);
+            if let Some(parent) = parent {
+                propagated
+                    .components
+                    .push(kiln_core::Component::Parent { parent });
+            }
+            propagated
+                .components
+                .push(kiln_core::Component::PrefabInstance {
+                    prefab_id,
+                    overrides,
+                });
+            *entity = propagated;
+            updated += 1;
+        }
+    }
+    updated
+}
+
 /// The default size of a sprite without a texture, in world units.
 const DEFAULT_SPRITE_SIZE: [f32; 2] = [32.0, 32.0];
 
