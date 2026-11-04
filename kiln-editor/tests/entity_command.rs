@@ -200,3 +200,60 @@ fn reparent_rejects_cycles_and_noops_do_not_change_history() {
     .is_err());
     assert_eq!(history.undo_depth(), 2);
 }
+
+#[test]
+fn reparent_and_parent_delete_preserve_child_world_transform() {
+    let mut project = project();
+    {
+        let scene = project.scenes.get_mut("main").unwrap();
+        scene.entities.push(Entity {
+            id: "other-parent".into(),
+            name: "Other Parent".into(),
+            components: vec![Component::Transform {
+                x: 100.0,
+                y: -30.0,
+                rotation: -0.4,
+                scale: 3.0,
+            }],
+        });
+    }
+    let before =
+        kiln_core::hierarchy_transform::world_transforms(&project.scenes["main"]).unwrap()["child"];
+    let mut history = SceneHistory::new();
+    run(
+        &mut project,
+        EntityEdit::Reparent {
+            entity_id: "child".into(),
+            parent_id: Some("other-parent".into()),
+        },
+        &mut history,
+    )
+    .unwrap();
+    let reparented =
+        kiln_core::hierarchy_transform::world_transforms(&project.scenes["main"]).unwrap()["child"];
+    assert!((reparented.position - before.position).length() < 0.0001);
+    assert!((reparented.rotation - before.rotation).abs() < 0.0001);
+    assert!((reparented.scale - before.scale).length() < 0.0001);
+
+    run(
+        &mut project,
+        EntityEdit::Delete {
+            entity_id: "other-parent".into(),
+        },
+        &mut history,
+    )
+    .unwrap();
+    let detached =
+        kiln_core::hierarchy_transform::world_transforms(&project.scenes["main"]).unwrap()["child"];
+    assert!((detached.position - before.position).length() < 0.0001);
+    assert!((detached.rotation - before.rotation).abs() < 0.0001);
+    assert!((detached.scale - before.scale).length() < 0.0001);
+    assert!(project.scenes["main"]
+        .entities
+        .iter()
+        .find(|entity| entity.id == "child")
+        .unwrap()
+        .components
+        .iter()
+        .any(|component| matches!(component, Component::Transform { .. })));
+}

@@ -1,4 +1,7 @@
-//! Transform component for 2D entities
+//! Local transform component for 2D entities.
+//!
+//! Parent relationships compose this value into runtime world space; the
+//! resolved value is exposed separately as `kiln_runtime::GlobalTransform`.
 
 use glam::Vec2;
 

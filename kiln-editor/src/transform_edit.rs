@@ -1,8 +1,9 @@
 //! Transform commands shared by inspector and viewport authoring.
 
 use crate::history::SceneHistory;
+use kiln_core::hierarchy_transform::world_transforms;
 use kiln_core::{Component, Scene, Transform};
-use kiln_runtime::{GameWorld, SourceId};
+use kiln_runtime::{GameWorld, GlobalTransform, SourceId};
 
 /// An explicit transform change to a root entity in a particular scene.
 pub struct SetTransform<'a> {
@@ -41,19 +42,16 @@ impl SetTransform<'_> {
         };
         let runtime: Vec<_> = world
             .world_ref()
-            .query::<(hecs::Entity, &SourceId)>()
+            .query::<(hecs::Entity, &SourceId, &Transform)>()
             .iter()
-            .filter(|(_, id)| id.0 == self.entity_id)
-            .map(|(e, _)| e)
+            .filter(|(_, id, _)| id.0 == self.entity_id)
+            .map(|(entity, _, _)| entity)
             .collect();
-        let [entity] = runtime.as_slice() else {
+        let [_entity] = runtime.as_slice() else {
             return Err("Transform entity identity is missing or ambiguous".into());
         };
-        let mut transform = world
-            .world_mut()
-            .get::<&mut Transform>(*entity)
-            .map_err(|_| "Entity has no runtime transform")?;
-        let components = &mut scene.entities[*index].components;
+        let mut updated_scene = scene.clone();
+        let components = &mut updated_scene.entities[*index].components;
         let updated = Component::Transform {
             x: value.position.x,
             y: value.position.y,
@@ -82,7 +80,48 @@ impl SetTransform<'_> {
         } else {
             components.push(updated);
         }
-        *transform = value;
+        let resolved = world_transforms(&updated_scene)?;
+        let runtime_entities: Vec<_> = world
+            .world_ref()
+            .query::<(hecs::Entity, &SourceId, &Transform)>()
+            .iter()
+            .map(|(entity, source, _)| (source.0.clone(), entity))
+            .collect();
+        for source_id in resolved.keys() {
+            let matches: Vec<_> = runtime_entities
+                .iter()
+                .filter(|(id, _)| id == source_id)
+                .map(|(_, entity)| *entity)
+                .collect();
+            if matches.len() > 1 {
+                return Err(format!(
+                    "Transform entity `{source_id}` is ambiguous in runtime"
+                ));
+            }
+        }
+        *scene = updated_scene;
+        for (source_id, transform) in resolved {
+            if let Some((_, entity)) = runtime_entities.iter().find(|(id, _)| *id == source_id) {
+                if source_id == self.entity_id {
+                    *world
+                        .world_mut()
+                        .get::<&mut Transform>(*entity)
+                        .map_err(|_| "Entity has no runtime transform")? = value;
+                }
+                if world.world_ref().get::<&GlobalTransform>(*entity).is_ok() {
+                    world
+                        .world_mut()
+                        .get::<&mut GlobalTransform>(*entity)
+                        .map_err(|_| "Could not update runtime global transform")?
+                        .0 = transform;
+                } else {
+                    world
+                        .world_mut()
+                        .insert_one(*entity, GlobalTransform(transform))
+                        .map_err(|_| "Could not update runtime global transform")?;
+                }
+            }
+        }
         Ok(!unchanged)
     }
 }

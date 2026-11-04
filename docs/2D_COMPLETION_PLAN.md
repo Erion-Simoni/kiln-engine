@@ -237,3 +237,10 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Sprite components now serialize width/height with a backward-compatible 32×32 default; runtime loading, editor snapshots, component addition, and Inspector property edits preserve them.
 - Width/height use the same validated, undoable Sprite edit transaction as tint and sorting layer. Dimensions outside 0.001–8192 world units or nonfinite values are rejected atomically.
 - Validation: `just check`, `just test` (507 passed), legacy deserialization, project round-trip, Sprite transaction/save-reopen, invalid-value tests, editor build, WASM check, and Chromium browser smoke passed.
+
+### 2026-11-04 checkpoint — parent/local transforms
+
+- Added core hierarchy transform resolution for local translation, rotation, and uniform scale, with rejection of cycles, missing parents, duplicate IDs, and duplicate Parent components.
+- Runtime scene spawning now keeps `Transform` local, attaches runtime parent links, and carries `GlobalTransform` for resolved world poses. Render loops in editor/player/web/mobile/samples recompute global poses before drawing; separate nested-scene root offsets survive propagation.
+- Editor transform commands update local authored values and affected runtime globals. Inspector shows local values; viewport drags convert world-space changes back to local. Reparenting preserves world pose; deleting a parent detaches children without moving them.
+- Validation: `just check` passed; `just test`: 514 passed. Editor build, WASM check, Chromium smoke, nested-offset, runtime propagation, editor descendant update, and reparent/delete pose-preservation checks passed. Physics synchronization for parented entities is still pending.

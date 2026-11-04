@@ -1,6 +1,7 @@
 //! Validated, document-first commands for hierarchy edits.
 
-use kiln_core::{Component, Entity, Project, Scene};
+use kiln_core::hierarchy_transform::{local_from_world, world_transforms};
+use kiln_core::{Component, Entity, Project, Scene, Transform};
 
 use crate::{editing::next_entity_id, history::SceneHistory};
 
@@ -92,9 +93,21 @@ fn apply(
         }
         EntityEdit::Delete { entity_id } => {
             let index = unique_entity_index(scene, entity_id)?;
+            let world = world_transforms(scene)?;
+            let children: Vec<_> = scene
+                .entities
+                .iter()
+                .filter(|entity| entity.components.iter().any(|component| matches!(component, Component::Parent { parent } if parent == entity_id)))
+                .map(|entity| (entity.id.clone(), world[&entity.id]))
+                .collect();
             scene.entities.remove(index);
             for entity in &mut scene.entities {
                 entity.components.retain(|component| !matches!(component, Component::Parent { parent } if parent == entity_id));
+            }
+            for (child_id, child_world) in children {
+                let child_index = unique_entity_index(scene, &child_id)?;
+                let child = &mut scene.entities[child_index];
+                set_local_transform(child, child_world)?;
             }
             Ok(None)
         }
@@ -112,6 +125,10 @@ fn apply(
             parent_id,
         } => {
             let child_index = unique_entity_index(scene, entity_id)?;
+            let world_before = world_transforms(scene)?
+                .get(entity_id)
+                .copied()
+                .ok_or_else(|| format!("Entity `{entity_id}` has no resolved transform"))?;
             if let Some(parent) = parent_id {
                 unique_entity_index(scene, parent)?;
                 if parent == entity_id || is_descendant(scene, parent, entity_id)? {
@@ -146,9 +163,40 @@ fn apply(
                     parent: parent.clone(),
                 });
             }
+            let local = local_from_world(scene, entity_id, world_before)?;
+            set_local_transform(&mut scene.entities[child_index], local)?;
             Ok(None)
         }
     }
+}
+
+fn set_local_transform(entity: &mut Entity, transform: Transform) -> Result<(), String> {
+    let indices: Vec<_> = entity
+        .components
+        .iter()
+        .enumerate()
+        .filter_map(|(index, component)| {
+            matches!(component, Component::Transform { .. }).then_some(index)
+        })
+        .collect();
+    if indices.len() > 1 {
+        return Err(format!(
+            "Entity `{}` has duplicate Transform components",
+            entity.id
+        ));
+    }
+    let component = Component::Transform {
+        x: transform.position.x,
+        y: transform.position.y,
+        rotation: transform.rotation,
+        scale: transform.scale.x,
+    };
+    if let Some(index) = indices.first() {
+        entity.components[*index] = component;
+    } else {
+        entity.components.push(component);
+    }
+    Ok(())
 }
 
 fn unique_entity_index(scene: &Scene, id: &str) -> Result<usize, String> {

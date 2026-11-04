@@ -1180,3 +1180,7 @@ The shared sprite instance includes a per-instance rotation consumed by the defa
 ## ADR-0047: Authored sprites carry dimensions
 
 Scene Sprite components store width and height as world-unit dimensions. Projects written before these fields existed deserialize with a 32×32 size. Inspector width/height edits share the validated Sprite property command and per-widget undo transaction with tint and layer, keeping the serialized scene and runtime Sprite synchronized.
+
+## ADR-0048: Transform stores local values; renderers read GlobalTransform
+
+Authored/runtime `Transform` remains local so gameplay and Inspector edits share one value. Runtime `ParentLink` components connect spawned entities, and `GlobalTransform` is recomputed from local values before scene rendering. Editor transform commands update affected global projections immediately; viewport drags convert their world-space pose back to local space. Reparenting and parent deletion preserve child world poses. Nested-scene root offsets are represented separately so propagation does not bake them into saved local values.

@@ -1025,7 +1025,11 @@ impl EditorApp {
         let mut camera = scene_view::world_camera(world.0, world.1);
         if let Some(target_id) = &self.camera.target {
             if let Some(&hecs_entity) = self.entity_id_to_hecs.get(target_id) {
-                if let Ok(transform) = self.world.world_ref().get::<&Transform>(hecs_entity) {
+                if let Ok(transform) = self
+                    .world
+                    .world_ref()
+                    .get::<&kiln_runtime::GlobalTransform>(hecs_entity)
+                {
                     camera.position = transform.position.into();
                 }
             }
@@ -2275,14 +2279,18 @@ impl EditorApp {
                 }
                 let camera = &scene_camera;
                 let view_bounds = camera.view_bounds();
+                let _ = kiln_runtime::update_global_transforms(&mut self.world);
                 for (_, tilemap) in self.world.world().query::<(&Transform, &Tilemap)>().iter() {
                     for (texture, instance) in tilemap.collect_visible(view_bounds) {
                         gpu.scene_view_sprite_renderer
                             .push_textured(texture, instance);
                     }
                 }
-                for (transform, sprite) in
-                    self.world.world().query::<(&Transform, &Sprite)>().iter()
+                for (transform, sprite) in self
+                    .world
+                    .world()
+                    .query::<(&kiln_runtime::GlobalTransform, &Sprite)>()
+                    .iter()
                 {
                     gpu.scene_view_sprite_renderer.push_textured(
                         sprite.texture,
@@ -2884,9 +2892,9 @@ impl TabViewer<'_> {
                 let initial = self
                     .world
                     .world_ref()
-                    .get::<&Transform>(entity)
+                    .get::<&kiln_runtime::GlobalTransform>(entity)
                     .ok()
-                    .map(|t| *t);
+                    .map(|t| t.0);
                 let origin = ui.input(|input| input.pointer.press_origin());
                 if let (Some(source), Some(initial), Some(origin)) = (source, initial, origin) {
                     self.gizmo.drag = Some((source, TranslationDrag { origin, initial }, units));
@@ -2906,7 +2914,23 @@ impl TabViewer<'_> {
                 ui.input(|input| input.pointer.interact_pos()),
             ) {
                 let grid = (*self.grid_snap_enabled).then_some(*self.grid_snap_size);
-                self.preview_transform(&source, drag.at(pointer, units, grid));
+                let world_value = drag.at(pointer, units, grid);
+                let local_value = crate::scene_document::snapshot_for_scene(
+                    self.world,
+                    self.entity_textures,
+                    self.entity_roles,
+                    self.current_project.as_ref(),
+                    self.scenes.active_id(),
+                );
+                if let Ok(local) = kiln_core::hierarchy_transform::local_from_world(
+                    &local_value,
+                    &source,
+                    world_value,
+                ) {
+                    self.preview_transform(&source, local);
+                } else {
+                    self.log("[ERROR] Could not convert dragged world transform to local space");
+                }
             }
         }
         if response.drag_stopped() {
@@ -3428,12 +3452,14 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.add_space(8.0);
 
                         // Read current values once
-                        let transform = self
-                            .world
-                            .world()
-                            .get::<&Transform>(entity)
-                            .ok()
-                            .map(|t| *t).filter(|_| has_transform);
+                        let transform = authored.components.iter().find_map(|component| match component {
+                            kiln_core::Component::Transform { x, y, rotation, scale } => Some(
+                                Transform::new(*x, *y)
+                                    .with_rotation(*rotation)
+                                    .with_scale(kiln_core::Vec2::splat(*scale)),
+                            ),
+                            _ => None,
+                        }).filter(|_| has_transform);
                         let sprite = self
                             .world
                             .world()

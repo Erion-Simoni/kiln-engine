@@ -4,6 +4,7 @@
 pub mod access;
 pub mod clip;
 pub mod device_tier;
+pub mod hierarchy_transform;
 pub mod id;
 pub mod input;
 pub mod math;

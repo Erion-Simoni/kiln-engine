@@ -5,11 +5,12 @@
 //! the caller through [`SpriteFactory`], because only the player has a GPU to
 //! upload them to.
 
+use kiln_core::hierarchy_transform::world_transforms;
 use kiln_core::project::{Component, Entity, Project, Scene, SceneOffset};
 use kiln_core::Transform;
 
 use crate::sprite::AnimationPlayer;
-use crate::world::{GameWorld, Role, SourceId};
+use crate::world::{GameWorld, GlobalTransform, ParentLink, Role, SourceId, WorldOffset};
 
 /// Default sprite size in pixels, used when an entity has no texture.
 pub const DEFAULT_SPRITE_SIZE: [f32; 2] = [32.0, 32.0];
@@ -63,6 +64,92 @@ pub fn spawn_scene(
     )
 }
 
+/// Recompute world transforms from the live local Transform components and
+/// runtime Parent links. Call after gameplay updates and before rendering.
+pub fn update_global_transforms(world: &mut GameWorld) -> Result<(), String> {
+    let locals: std::collections::HashMap<_, _> = world
+        .world_ref()
+        .query::<(hecs::Entity, &Transform)>()
+        .iter()
+        .map(|(entity, local)| (entity, *local))
+        .collect();
+    let parents: std::collections::HashMap<_, _> = world
+        .world_ref()
+        .query::<(hecs::Entity, &ParentLink)>()
+        .iter()
+        .map(|(entity, parent)| (entity, parent.0))
+        .collect();
+    let offsets: std::collections::HashMap<_, _> = world
+        .world_ref()
+        .query::<(hecs::Entity, &WorldOffset)>()
+        .iter()
+        .map(|(entity, offset)| (entity, offset.0))
+        .collect();
+    let mut resolved = std::collections::HashMap::new();
+    let mut visiting = Vec::new();
+    for entity in locals.keys().copied() {
+        resolve_runtime_transform(
+            entity,
+            &locals,
+            &parents,
+            &offsets,
+            &mut resolved,
+            &mut visiting,
+        )?;
+    }
+    for (entity, transform) in resolved {
+        if world.world_ref().get::<&GlobalTransform>(entity).is_ok() {
+            world
+                .world_mut()
+                .get::<&mut GlobalTransform>(entity)
+                .map_err(|_| "Could not update runtime global transform")?
+                .0 = transform;
+        } else {
+            world
+                .world_mut()
+                .insert_one(entity, GlobalTransform(transform))
+                .map_err(|_| "Could not add global transform to runtime entity")?;
+        }
+    }
+    Ok(())
+}
+
+fn resolve_runtime_transform(
+    entity: hecs::Entity,
+    locals: &std::collections::HashMap<hecs::Entity, Transform>,
+    parents: &std::collections::HashMap<hecs::Entity, hecs::Entity>,
+    offsets: &std::collections::HashMap<hecs::Entity, [f32; 2]>,
+    resolved: &mut std::collections::HashMap<hecs::Entity, Transform>,
+    visiting: &mut Vec<hecs::Entity>,
+) -> Result<Transform, String> {
+    if let Some(transform) = resolved.get(&entity) {
+        return Ok(*transform);
+    }
+    if visiting.contains(&entity) {
+        return Err("Runtime transform hierarchy contains a cycle".into());
+    }
+    let local = *locals
+        .get(&entity)
+        .ok_or_else(|| "Runtime parent has no local transform".to_owned())?;
+    visiting.push(entity);
+    let world = if let Some(parent) = parents.get(&entity) {
+        let parent_world =
+            resolve_runtime_transform(*parent, locals, parents, offsets, resolved, visiting)?;
+        kiln_core::hierarchy_transform::compose(parent_world, local)
+    } else {
+        let offset = offsets.get(&entity).copied().unwrap_or_default();
+        let mut world = local;
+        world.position += kiln_core::Vec2::new(offset[0], offset[1]);
+        world
+    };
+    visiting.pop();
+    if !world.position.is_finite() || !world.rotation.is_finite() || !world.scale.is_finite() {
+        return Err("Runtime hierarchy produced a non-finite transform".into());
+    }
+    resolved.insert(entity, world);
+    Ok(world)
+}
+
 /// Spawn a list of scene entities into the world.
 ///
 /// This is the same work [`spawn_scene`] does for one scene's entities, but
@@ -76,9 +163,21 @@ pub fn spawn_entities(
     project: &kiln_core::Project,
 ) -> Vec<SpawnedEntity> {
     let mut spawned = Vec::new();
+    let hierarchy_scene = Scene {
+        id: String::new(),
+        name: String::new(),
+        entities: entities.to_vec(),
+        nested_scenes: Vec::new(),
+        script: None,
+    };
+    let resolved_transforms = world_transforms(&hierarchy_scene).ok();
 
     for entity in entities {
-        let transform = entity_transform(entity);
+        let local_transform = entity_transform(entity);
+        let transform = resolved_transforms
+            .as_ref()
+            .and_then(|transforms| transforms.get(&entity.id).copied())
+            .unwrap_or(local_transform);
         eprintln!(
             "DEBUG spawn_entities: entity id={} transform.position.x={} transform.position.y={}",
             entity.id, transform.position.x, transform.position.y
@@ -135,7 +234,8 @@ pub fn spawn_entities(
                 if let Some(sprite) = sprite {
                     let animation_clip = sprite.animation_clip.clone();
                     let entity = world.world_mut().spawn((
-                        runtime_transform,
+                        local_transform,
+                        GlobalTransform(runtime_transform),
                         sprite,
                         Role::new(role_name_str.clone()),
                         source_id,
@@ -151,7 +251,8 @@ pub fn spawn_entities(
                     }
                 } else {
                     world.spawn((
-                        runtime_transform,
+                        local_transform,
+                        GlobalTransform(runtime_transform),
                         Role::new(role_name_str.clone()),
                         source_id,
                     ));
@@ -160,9 +261,12 @@ pub fn spawn_entities(
             None => {
                 if let Some(sprite) = sprite {
                     let animation_clip = sprite.animation_clip.clone();
-                    let entity = world
-                        .world_mut()
-                        .spawn((runtime_transform, sprite, source_id));
+                    let entity = world.world_mut().spawn((
+                        local_transform,
+                        GlobalTransform(runtime_transform),
+                        sprite,
+                        source_id,
+                    ));
                     // If the sprite references an animation clip, load it
                     if let Some(clip_name) = &animation_clip {
                         if let Some(clip) = project.animation_clips.get(clip_name) {
@@ -173,7 +277,11 @@ pub fn spawn_entities(
                         }
                     }
                 } else {
-                    world.spawn((runtime_transform, source_id));
+                    world.spawn((
+                        local_transform,
+                        GlobalTransform(runtime_transform),
+                        source_id,
+                    ));
                 }
             }
         }
@@ -187,6 +295,33 @@ pub fn spawn_entities(
             texture: texture_path,
             role: role_name,
         });
+    }
+
+    let spawned_handles: std::collections::HashMap<_, _> = world
+        .world_ref()
+        .query::<(hecs::Entity, &SourceId)>()
+        .iter()
+        .filter(|(_, source)| entities.iter().any(|entity| entity.id == source.0))
+        .map(|(handle, source)| (source.0.clone(), handle))
+        .collect();
+    for entity in entities {
+        let Some(child) = spawned_handles.get(&entity.id) else {
+            continue;
+        };
+        let parent_id = entity
+            .components
+            .iter()
+            .find_map(|component| match component {
+                Component::Parent { parent } => Some(parent),
+                _ => None,
+            });
+        if let Some(parent) = parent_id.and_then(|parent_id| spawned_handles.get(parent_id)) {
+            let _ = world.world_mut().insert_one(*child, ParentLink(*parent));
+        } else if parent_id.is_none() {
+            let _ = world
+                .world_mut()
+                .insert_one(*child, WorldOffset([offset.x, offset.y]));
+        }
     }
 
     spawned
@@ -306,4 +441,149 @@ pub fn count_scene_entities(project: &Project, scene_id: &str) -> usize {
     }
     let mut visited = Vec::new();
     count(project, scene_id, &mut visited)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Sprite;
+
+    #[test]
+    fn scene_spawn_projects_parent_composed_transforms() {
+        let mut project = Project::default();
+        project.scenes.insert(
+            "main".into(),
+            Scene {
+                id: "main".into(),
+                name: "Main".into(),
+                script: None,
+                nested_scenes: vec![],
+                entities: vec![
+                    Entity {
+                        id: "root".into(),
+                        name: "Root".into(),
+                        components: vec![Component::Transform {
+                            x: 10.0,
+                            y: 20.0,
+                            rotation: std::f32::consts::FRAC_PI_2,
+                            scale: 2.0,
+                        }],
+                    },
+                    Entity {
+                        id: "child".into(),
+                        name: "Child".into(),
+                        components: vec![
+                            Component::Parent {
+                                parent: "root".into(),
+                            },
+                            Component::Transform {
+                                x: 3.0,
+                                y: 0.0,
+                                rotation: 0.25,
+                                scale: 0.5,
+                            },
+                            Component::Sprite {
+                                color: [1.0; 4],
+                                width: 40.0,
+                                height: 20.0,
+                                texture: None,
+                                layer: 0.0,
+                                material: None,
+                                animation_clip: None,
+                            },
+                        ],
+                    },
+                ],
+            },
+        );
+        let mut world = GameWorld::new();
+        spawn_scene(&mut world, &project, "main", &mut |_, color, _| {
+            Sprite::new(color[0], color[1], color[2], color[3])
+        });
+        let child = world
+            .world_ref()
+            .query::<(hecs::Entity, &SourceId)>()
+            .iter()
+            .find(|(_, id)| id.0 == "child")
+            .unwrap()
+            .0;
+        {
+            let transform = world.world_ref().get::<&GlobalTransform>(child).unwrap();
+            assert!((transform.position.x - 10.0).abs() < 0.0001);
+            assert!((transform.position.y - 26.0).abs() < 0.0001);
+            assert!((transform.rotation - (std::f32::consts::FRAC_PI_2 + 0.25)).abs() < 0.0001);
+            assert_eq!(transform.scale.x, 1.0);
+        }
+        let local_position = world.world_ref().get::<&Transform>(child).unwrap().position;
+        assert_eq!(local_position, kiln_core::Vec2::new(3.0, 0.0));
+        assert_eq!(
+            world.world_ref().get::<&Sprite>(child).unwrap().size,
+            [40.0, 20.0]
+        );
+        let root = world
+            .world_ref()
+            .query::<(hecs::Entity, &SourceId)>()
+            .iter()
+            .find(|(_, id)| id.0 == "root")
+            .unwrap()
+            .0;
+        *world.world_mut().get::<&mut Transform>(root).unwrap() = Transform::new(50.0, 60.0);
+        update_global_transforms(&mut world).unwrap();
+        let moved = *world.world_ref().get::<&GlobalTransform>(child).unwrap();
+        assert!((moved.position.x - 53.0).abs() < 0.0001);
+        assert!((moved.position.y - 60.0).abs() < 0.0001);
+        assert!((moved.rotation - 0.25).abs() < 0.0001);
+        assert_eq!(moved.scale.x, 0.5);
+    }
+
+    #[test]
+    fn propagated_nested_scene_roots_keep_their_instance_offset() {
+        let mut project = Project::default();
+        project.scenes.insert(
+            "main".into(),
+            Scene {
+                id: "main".into(),
+                name: "Main".into(),
+                script: None,
+                nested_scenes: vec![kiln_core::NestedScene {
+                    scene_id: "child-scene".into(),
+                    additive: true,
+                    offset: SceneOffset { x: 100.0, y: 200.0 },
+                }],
+                entities: vec![],
+            },
+        );
+        project.scenes.insert(
+            "child-scene".into(),
+            Scene {
+                id: "child-scene".into(),
+                name: "Child".into(),
+                script: None,
+                nested_scenes: vec![],
+                entities: vec![Entity {
+                    id: "nested-root".into(),
+                    name: "Nested root".into(),
+                    components: vec![Component::Transform {
+                        x: 1.0,
+                        y: 2.0,
+                        rotation: 0.0,
+                        scale: 1.0,
+                    }],
+                }],
+            },
+        );
+        let mut world = GameWorld::new();
+        spawn_scene(&mut world, &project, "main", &mut |_, color, _| {
+            Sprite::new(color[0], color[1], color[2], color[3])
+        });
+        update_global_transforms(&mut world).unwrap();
+        let nested = world
+            .world_ref()
+            .query::<(hecs::Entity, &SourceId, &GlobalTransform)>()
+            .iter()
+            .find(|(_, id, _)| id.0 == "nested-root")
+            .map(|(_, _, transform)| transform.0)
+            .unwrap();
+        assert_eq!(nested.position, kiln_core::Vec2::new(101.0, 202.0));
+    }
 }

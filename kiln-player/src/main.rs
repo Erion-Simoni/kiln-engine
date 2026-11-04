@@ -768,6 +768,7 @@ impl PlayerApp {
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         // Collect sprite instances from the ECS world (CPU gather pass).
+        let _ = kiln_runtime::update_global_transforms(&mut self.world);
         gpu.sprite_renderer.begin_frame();
 
         // Tilemaps are drawn first so entities appear on top of them.
@@ -779,7 +780,11 @@ impl PlayerApp {
             }
         }
 
-        for (transform, sprite) in self.world.world_mut().query_mut::<(&Transform, &Sprite)>() {
+        for (transform, sprite) in self
+            .world
+            .world_mut()
+            .query_mut::<(&kiln_runtime::GlobalTransform, &Sprite)>()
+        {
             gpu.sprite_renderer.push_textured(
                 sprite.texture,
                 SpriteInstance {

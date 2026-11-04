@@ -80,6 +80,13 @@ fn runtime(world: &GameWorld, id: &str) -> Transform {
         .get::<&Transform>(entity(world, id))
         .unwrap()
 }
+fn global(world: &GameWorld, id: &str) -> Transform {
+    world
+        .world_ref()
+        .get::<&kiln_runtime::GlobalTransform>(entity(world, id))
+        .unwrap()
+        .0
+}
 fn apply(scene: &mut Scene, world: &mut GameWorld, value: Transform) -> bool {
     SetTransform {
         scene_id: "main",
@@ -112,6 +119,52 @@ fn command_updates_document_and_projection_preserving_unrelated_metadata() {
     assert_eq!(scene.entities[0].name, original.entities[0].name);
     assert_eq!(json(&scene.entities[1]), json(&original.entities[1]));
     assert!(!apply(&mut scene, &mut world, value));
+}
+
+#[test]
+fn moving_a_parent_recomputes_descendants_while_children_keep_local_values() {
+    let mut scene = sample();
+    let mut world = spawn(&scene);
+    let parent_value = Transform::new(100.0, 200.0)
+        .with_rotation(std::f32::consts::FRAC_PI_2)
+        .with_scale(kiln_core::Vec2::splat(2.0));
+    assert!(SetTransform {
+        scene_id: "main",
+        entity_id: "marker",
+        value: parent_value,
+    }
+    .apply(&mut scene, &mut world)
+    .unwrap());
+
+    let child = global(&world, "hero");
+    assert!((child.position.x - 60.0).abs() < 0.0001);
+    assert!((child.position.y - 220.0).abs() < 0.0001);
+    assert!((child.rotation - (std::f32::consts::FRAC_PI_2 + 0.3)).abs() < 0.0001);
+    assert_eq!(child.scale.x, 3.0);
+
+    let local = scene.entities[0]
+        .components
+        .iter()
+        .find_map(|component| match component {
+            Component::Transform { x, y, .. } => Some((*x, *y)),
+            _ => None,
+        });
+    assert_eq!(local, Some((10.0, 20.0)));
+    let project = Project {
+        scenes: std::collections::HashMap::from([("main".into(), scene.clone())]),
+        ..Project::default()
+    };
+    let snapshot = kiln_editor::scene_document::snapshot_for_scene(
+        &world,
+        &Default::default(),
+        &Default::default(),
+        Some(&project),
+        Some("main"),
+    );
+    assert_eq!(
+        json(&snapshot.entities[0].components[0]),
+        json(&scene.entities[0].components[0])
+    );
 }
 
 #[test]

@@ -650,6 +650,7 @@ impl App {
         let target_view = self.renderer.scene_target().unwrap_or(&view);
 
         // Collect sprite instances from the ECS world (CPU gather pass).
+        let _ = kiln_runtime::update_global_transforms(&mut self.world);
         self.sprite_renderer.begin_frame();
 
         // Tilemaps are drawn first so entities appear on top of them.
@@ -662,7 +663,10 @@ impl App {
             }
         }
 
-        for (transform, sprite) in world.query::<(&Transform, &kiln_runtime::Sprite)>().iter() {
+        for (transform, sprite) in world
+            .query::<(&kiln_runtime::GlobalTransform, &kiln_runtime::Sprite)>()
+            .iter()
+        {
             let instance = SpriteInstance {
                 position: [transform.position.x, transform.position.y],
                 size: sprite.size,
