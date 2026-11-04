@@ -40,12 +40,13 @@ use crate::preferences::PreferencesPanel;
 use crate::profiler_panel::ProfilerPanel;
 use crate::project_hub::ProjectHubState;
 use crate::project_lifecycle::{ProjectAction, ProjectLifecycle, SaveDecision};
+use crate::property_edit::SetSpriteVisual;
 use crate::scene_view::{self, SceneTextures, ViewportRect};
 use crate::scene_workspace::SceneWorkspace;
 use crate::shader_editor::ShaderEditorState;
 use crate::sprite_editor::SpriteEditorState;
 use crate::tilemap_editor::TilemapEditorState;
-use crate::transform_edit::{SetTransform, TransformTransaction, TranslationDrag};
+use crate::transform_edit::{SceneTransaction, SetTransform, TranslationDrag};
 use crate::ui_layout_editor::UiLayoutEditorState;
 use crate::version_control_panel::VersionControlPanel;
 use crate::vfx_editor::VfxEditorState;
@@ -214,7 +215,7 @@ pub struct EditorApp {
     asset_filter: String,
     /// Transform gizmo state for visual entity manipulation.
     gizmo: GizmoState,
-    transform_edit: Option<TransformTransaction>,
+    transform_edit: Option<SceneTransaction>,
     /// Set by the welcome screen, handled after the UI pass.
     open_project_requested: bool,
     /// Set by the scene toolbar, handled after the UI pass.
@@ -2634,7 +2635,7 @@ struct TabViewer<'a> {
     scene_view_rect: &'a mut Option<egui::Rect>,
     /// Transform gizmo state for visual entity manipulation.
     gizmo: &'a mut GizmoState,
-    transform_edit: &'a mut Option<TransformTransaction>,
+    transform_edit: &'a mut Option<SceneTransaction>,
     scene_camera: &'a kiln_render::camera::Camera,
     scene_world_size: (f32, f32),
     /// Mapping from project entity ID (source_id) to hecs Entity for selection sync.
@@ -2718,7 +2719,49 @@ impl TabViewer<'_> {
             Ok(true) => {
                 let edit = self
                     .transform_edit
-                    .get_or_insert_with(|| TransformTransaction::new(before, source_id.into()));
+                    .get_or_insert_with(|| SceneTransaction::new(before, source_id.into()));
+                edit.update(after.clone());
+                if let Some(project) = self.current_project.as_mut() {
+                    project.scenes.insert(scene_id, after);
+                }
+            }
+            Ok(false) => {}
+            Err(error) => self.log(&format!("[ERROR] {error}")),
+        }
+    }
+
+    fn preview_sprite_visual(&mut self, source_id: &str, sprite: &Sprite) {
+        if self.editing_locked() || self.project_blocked {
+            return;
+        }
+        let before = crate::scene_document::snapshot_for_scene(
+            self.world,
+            self.entity_textures,
+            self.entity_roles,
+            self.current_project.as_ref(),
+            self.scenes.active_id(),
+        );
+        if self
+            .transform_edit
+            .as_ref()
+            .is_some_and(|edit| !edit.targets(&before.id, source_id))
+        {
+            self.finish_transform_edit();
+        }
+        let mut after = before.clone();
+        let scene_id = after.id.clone();
+        match (SetSpriteVisual {
+            scene_id: &scene_id,
+            entity_id: source_id,
+            color: sprite.color,
+            layer: sprite.layer,
+        })
+        .apply(&mut after, self.world)
+        {
+            Ok(true) => {
+                let edit = self
+                    .transform_edit
+                    .get_or_insert_with(|| SceneTransaction::new(before, source_id.into()));
                 edit.update(after.clone());
                 if let Some(project) = self.current_project.as_mut() {
                     project.scenes.insert(scene_id, after);
@@ -2751,6 +2794,45 @@ impl TabViewer<'_> {
                 .map(|id| id.0.clone());
             if let Some(source) = source {
                 self.preview_transform(&source, value);
+            }
+            if let Some(edit) = self.transform_edit.as_mut() {
+                edit.set_widget(response.id);
+            }
+        }
+        if self
+            .transform_edit
+            .as_ref()
+            .is_some_and(|edit| edit.owns_widget(response.id))
+            && (response.drag_stopped()
+                || response.lost_focus()
+                || (response.changed() && !response.dragged() && !response.has_focus()))
+        {
+            self.finish_transform_edit();
+        }
+    }
+
+    fn sprite_visual_response(
+        &mut self,
+        entity: hecs::Entity,
+        sprite: &Sprite,
+        response: &egui::Response,
+    ) {
+        if response.changed() {
+            if self
+                .transform_edit
+                .as_ref()
+                .is_some_and(|edit| !edit.owns_widget(response.id))
+            {
+                self.finish_transform_edit();
+            }
+            let source = self
+                .world
+                .world_ref()
+                .get::<&SourceId>(entity)
+                .ok()
+                .map(|id| id.0.clone());
+            if let Some(source) = source {
+                self.preview_sprite_visual(&source, sprite);
             }
             if let Some(edit) = self.transform_edit.as_mut() {
                 edit.set_widget(response.id);
@@ -3402,6 +3484,32 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         );
                                         self.transform_response(entity, transform, &response);
                                     });
+                                    ui.horizontal(|ui| {
+                                        ui.label("Rotation");
+                                        ui.add_space(7.0);
+                                        let mut degrees = transform.rotation.to_degrees();
+                                        let response = ui.add_enabled(
+                                            !self.editing_locked(),
+                                            egui::DragValue::new(&mut degrees)
+                                                .speed(1.0)
+                                                .suffix("°"),
+                                        );
+                                        if response.changed() {
+                                            transform.rotation = degrees.to_radians();
+                                        }
+                                        self.transform_response(entity, transform, &response);
+                                        ui.add_space(8.0);
+                                        ui.label("Scale");
+                                        let mut scale = transform.scale.x;
+                                        let response = ui.add_enabled(
+                                            !self.editing_locked(),
+                                            egui::DragValue::new(&mut scale).speed(0.01),
+                                        );
+                                        if response.changed() {
+                                            transform.scale = kiln_core::Vec2::splat(scale);
+                                        }
+                                        self.transform_response(entity, transform, &response);
+                                    });
                                 });
                         }
 
@@ -3442,14 +3550,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                                 .speed(0.01)
                                                 .range(0.0..=1.0),
                                         );
-                                        if response.drag_started() {
-                                            self.record_scene();
-                                        }
                                         if response.changed() {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut s) = world.get::<&mut Sprite>(entity) {
-                                                s.color[0] = sprite.color[0];
-                                            }
+                                            self.sprite_visual_response(entity, &sprite, &response);
                                         }
                                         ui.add_space(8.0);
                                         ui.label("G:");
@@ -3459,14 +3561,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                                 .speed(0.01)
                                                 .range(0.0..=1.0),
                                         );
-                                        if response.drag_started() {
-                                            self.record_scene();
-                                        }
                                         if response.changed() {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut s) = world.get::<&mut Sprite>(entity) {
-                                                s.color[1] = sprite.color[1];
-                                            }
+                                            self.sprite_visual_response(entity, &sprite, &response);
                                         }
                                         ui.add_space(8.0);
                                         ui.label("B:");
@@ -3476,14 +3572,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                                 .speed(0.01)
                                                 .range(0.0..=1.0),
                                         );
-                                        if response.drag_started() {
-                                            self.record_scene();
-                                        }
                                         if response.changed() {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut s) = world.get::<&mut Sprite>(entity) {
-                                                s.color[2] = sprite.color[2];
-                                            }
+                                            self.sprite_visual_response(entity, &sprite, &response);
                                         }
                                         ui.add_space(8.0);
                                         ui.label("A:");
@@ -3493,14 +3583,19 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                                 .speed(0.01)
                                                 .range(0.0..=1.0),
                                         );
-                                        if response.drag_started() {
-                                            self.record_scene();
-                                        }
                                         if response.changed() {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut s) = world.get::<&mut Sprite>(entity) {
-                                                s.color[3] = sprite.color[3];
-                                            }
+                                            self.sprite_visual_response(entity, &sprite, &response);
+                                        }
+                                    });
+
+                                    ui.horizontal(|ui| {
+                                        ui.label("Layer");
+                                        let response = ui.add_enabled(
+                                            !self.editing_locked(),
+                                            egui::DragValue::new(&mut sprite.layer).speed(0.1),
+                                        );
+                                        if response.changed() {
+                                            self.sprite_visual_response(entity, &sprite, &response);
                                         }
                                     });
 

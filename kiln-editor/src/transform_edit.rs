@@ -87,15 +87,15 @@ impl SetTransform<'_> {
     }
 }
 
-/// One inspector edit or viewport gesture, including all of its preview frames.
-pub struct TransformTransaction {
+/// One Inspector edit or viewport gesture, including all preview frames.
+pub struct SceneTransaction {
     before: Scene,
     after: Scene,
     entity_id: String,
     widget: Option<egui::Id>,
 }
 
-impl TransformTransaction {
+impl SceneTransaction {
     /// Capture the document before the first preview mutation.
     pub fn new(before: Scene, entity_id: String) -> Self {
         Self {
@@ -121,7 +121,7 @@ impl TransformTransaction {
     pub fn update(&mut self, after: Scene) {
         self.after = after;
     }
-    /// Record once; returning to the original transform preserves redo history.
+    /// Record once; returning to the original scene preserves redo history.
     pub fn commit(self, history: &mut SceneHistory) {
         if serde_json::to_value(&self.before).ok() != serde_json::to_value(&self.after).ok() {
             history.record(self.before);
@@ -132,6 +132,9 @@ impl TransformTransaction {
         self.before
     }
 }
+
+/// Backwards-compatible name for transform gesture callers.
+pub type TransformTransaction = SceneTransaction;
 
 /// Translation evaluated from the press position, independent of frame count.
 #[derive(Debug, Clone)]

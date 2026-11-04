@@ -216,3 +216,12 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Exercised create and selection, duplicate and selection, delete followed by Ctrl+Z, then reparent by dropping `Created` onto `Hero`. Saved the Parent link, undid and saved to verify it disappeared from disk, then redid and saved to verify it returned. The GUI was software GL/Low tier; no panic or GPU validation errors.
 - Added a positive reparent test that verifies an actual root-to-child link and history entry, while retaining cycle and no-op checks.
 - The hierarchy path is now manually verified. Continue Task 2 with property-edit commands and one-step history, then parent/local transform parity, gizmo and multi-selection work, dirty-tab decisions, and recovery/autosave. Two-scene full acceptance is still pending.
+
+### 2026-11-04 — Task 2 Inspector property transactions
+
+- Added a validated Sprite visual-property edit for tint and sorting layer. Authored scene and runtime Sprite update together; unrelated texture, material, animation, transform, and role data remain intact. Invalid color/layer values and missing/ambiguous entities fail without partial mutation.
+- Reused a general scene transaction for position, rotation, uniform scale, Sprite tint, and layer. Inspector typing and dragging update authored data and runtime state; per-widget gestures commit as one undo snapshot. Rotation is shown in degrees and stored in radians.
+- Added three property regressions covering runtime/document parity and preserved metadata, multi-preview transaction history plus save/reopen, and invalid-value atomicity.
+- `just check`: PASSED. `just test`: 504 passed, zero failed/skipped. Focused property suite: 3 passed; transform edit suite: 9 passed. Native editor build passed.
+- Native GUI showed typed tint/rotation/scale fields and verified Ctrl+Z restored the tint. Rotation and scale are authored, but scene rendering still ignores them because SpriteInstance/shader do not carry transform rotation/scale. Adding renderer support and pixel tests is the next step; visual parity is not claimed here.
+- Previous native hierarchy acceptance remains verified. This editor-only checkpoint did not rerun browser smoke; remote CI remains unverified.

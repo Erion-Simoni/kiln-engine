@@ -1168,3 +1168,7 @@ or serialized format change is required.
 ## ADR-0044: Scene entity commands are document-first
 
 Hierarchy create, delete, duplicate, and reparent operations mutate the authored scene through validated commands and record one scene snapshot for undo. Runtime entities are rebuilt from that document after a successful command, keeping all authored components and metadata intact. Entity IDs remain unique across the project; duplication creates a sibling copy with a fresh ID while retaining the source's authored component values and parent link. Deleting an entity detaches its direct children to avoid dangling parent IDs. Reparenting rejects missing targets, self-parenting, and cycles.
+
+## ADR-0045: Inspector property gestures share scene transactions
+
+Inspector edits for Transform and Sprite update the authored scene and runtime projection together, then commit one undo snapshot per widget gesture. This extends the existing position transaction to rotation, uniform scale, Sprite tint, and layer. Typed edits and drags use the same path; separate widgets produce separate history entries, and edits preserve unrelated authored component fields.
