@@ -8,7 +8,7 @@
 
 - Earlier checkpoints cover native/WASM baseline repair, project lifecycle and atomic writes, authored metadata preservation, multi-scene tabs/history, project Save/Discard/Cancel, transform/property commands, component presence commands, and hierarchy entity commands. ADR-0039–0048 record the architecture.
 - Hierarchy create/delete/duplicate/reparent and inspector rename are document-first commands with ID validation, cycle prevention, metadata preservation, and undo. Native GUI previously verified hierarchy create/delete/duplicate/reparent and saved undo/redo of Parent.
-- Inspector edits for Transform position/rotation/uniform-scale, Sprite tint/layer/dimensions, Role, and Sprite texture/material/animation references update authored state through history commands. Text entry is retained and project resource choices are available for textures, materials, and animation clips; unresolved material/animation references are flagged. Texture edits refresh loaded scene textures. No-op edits do not create history. Sprite dimensions default to 32×32 in old projects.
+- Inspector edits for Transform position/rotation/uniform-scale, Sprite tint/layer/dimensions, Role, and Sprite texture/material/animation references update authored state through history commands. Project texture/material/animation choices are available; missing texture, material, or animation references are flagged. Texture edits refresh loaded scene textures. No-op edits do not create history. Sprite dimensions default to 32×32 in old projects.
 - Sprite rendering supports entity rotation/scale and authored dimensions. Parent links compose local translation/rotation/scale into runtime `GlobalTransform`; editor/player/web/mobile/sample renderers consume refreshed global poses. Viewport drags convert to local space; reparent/delete preserve child world poses and nested scene offsets survive propagation.
 - Scene viewport has move, rotation, and scale gizmos. Drags preview local Transform edits, commit one undo step on release, and cancel through Escape. Rotation wrap, uniform scaling, hit targets, and translation snapping have coverage.
 - Hierarchy and scene-list selection support Ctrl/Cmd additive toggling while preserving a primary inspector target. **Frame Selection** and `F` fit selected sprite bounds after global rotation and scale, with position-only bounds for nonvisual entities.
@@ -19,13 +19,13 @@
 
 ## Validation
 
-- Previous checkpoints progressed from 514 tests to 531, all passing. Current inspector resource-choice checkpoint passes `just check` and `just test`: 532 passed, zero failed/skipped.
+- Previous checkpoints progressed from 514 tests to 531, all passing. Current inspector resource validation checkpoint passes `just check` and `just test`: 532 passed, zero failed/skipped.
 - Strict workspace lint passes. The separate audio sample check emits existing unused/dead-code warnings in `kiln-runtime` audio and slice code.
 - Native GUI confirmation of recent inspector, gizmo, scene-close, and recovery workflows remains outstanding. This environment has no display, Xvfb, or desktop automation tool. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
 
 ## Next
 
-1. Continue Task 2's remaining authoring acceptance gaps, including robust resource validation and native GUI verification.
+1. Continue Task 2's remaining authoring acceptance gaps, including stronger resource validation and native GUI verification.
 2. Complete Task 2 before starting Tasks 3–9.
 
 ## Known limits and environment

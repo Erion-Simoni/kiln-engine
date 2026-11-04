@@ -4208,7 +4208,15 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                             ui.add_enabled(enabled, egui::TextEdit::singleline(&mut draft.texture));
                                             if let Some(project) = self.current_project.as_ref() {
                                                 let mut paths = crate::scene_view::texture_paths(project);
+                                                paths.extend(
+                                                    self.asset_browser
+                                                        .entries()
+                                                        .iter()
+                                                        .filter(|entry| entry.kind == crate::assets::AssetKind::Image)
+                                                        .map(|entry| entry.path.clone()),
+                                                );
                                                 paths.sort();
+                                                paths.dedup();
                                                 egui::ComboBox::from_id_salt(("sprite_texture", &authored.id))
                                                     .selected_text("Choose project texture…")
                                                     .show_ui(ui, |ui| {
@@ -4265,6 +4273,16 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     ui.label(format!("Texture: {}", texture.as_deref().unwrap_or("(none)")));
                                     ui.label(format!("Material: {}", material.as_deref().unwrap_or("(none)")));
                                     ui.label(format!("Animation: {}", animation_clip.as_deref().unwrap_or("(none)")));
+                                    if let Some(path) = texture {
+                                        let image_exists = self.asset_browser.entries().iter().any(|entry| {
+                                            entry.kind == crate::assets::AssetKind::Image && entry.path == *path
+                                        });
+                                        if !image_exists {
+                                            ui.colored_label(egui::Color32::YELLOW, "Texture asset is missing or is not a PNG image");
+                                        } else if self.asset_browser.errors().iter().any(|(failed_path, _)| failed_path == path) {
+                                            ui.colored_label(egui::Color32::YELLOW, "Texture asset could not be decoded");
+                                        }
+                                    }
                                     if let Some(project) = self.current_project.as_ref() {
                                         if material.as_ref().is_some_and(|id| !project.materials.contains_key(id)) {
                                             ui.colored_label(egui::Color32::YELLOW, "Sprite material reference is missing");
