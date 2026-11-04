@@ -804,23 +804,30 @@ impl EditorApp {
         Ok(project)
     }
 
-    /// Save another manifest in the same asset directory, committing state only on success.
+    /// Save a project copy while preserving relative assets, committing state only on success.
     pub fn save_project_as(&mut self, path: PathBuf) -> Result<(), String> {
         self.finish_transform_edit();
         let source = self
             .project_path
             .as_ref()
             .ok_or("Open or create a project before Save As")?;
-        let previous_path = source.clone();
         let project = self.project_to_save()?;
         let path = crate::project_files::save_as(&project, source, &path)?;
-        let _ = crate::recovery::clear(&previous_path);
         let _ = crate::recovery::clear(&path);
         self.project_path = Some(path.clone());
         self.project_path_input = path.to_string_lossy().into_owned();
         self.scenes.mark_saved(&project);
         self.lifecycle.mark_saved(&project);
         self.current_project = Some(project);
+        if let Some(root) = path.parent() {
+            self.project_root = Some(root.to_path_buf());
+            self.asset_browser.scan(root);
+        }
+        if let Some(project) = self.current_project.as_ref() {
+            self.project_hub
+                .add_recent(path.clone(), project.name.clone());
+        }
+        self.upload_scene_textures();
         self.project_error = None;
         Ok(())
     }

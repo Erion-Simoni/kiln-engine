@@ -163,24 +163,83 @@ fn invalid_creation_input_does_not_leave_a_partial_project() {
 }
 
 #[test]
-fn save_as_keeps_assets_and_rejects_unimplemented_project_relocation() {
+fn save_as_copies_relative_assets_and_refuses_to_overwrite_destination_files() {
     let parent = tempfile::tempdir().unwrap();
     let created = project_files::create("Game", &parent.path().join("game"), "empty_2d").unwrap();
     let root = created.path.parent().unwrap();
-    let copy =
-        project_files::save_as(&created.project, &created.path, &root.join("copy.toml")).unwrap();
+    std::fs::write(root.join("art/hero.png"), b"asset-bytes").unwrap();
+    let mut project = created.project.clone();
+    project
+        .scenes
+        .get_mut("main")
+        .unwrap()
+        .entities
+        .push(kiln_core::Entity {
+            id: "hero".into(),
+            name: "Hero".into(),
+            components: vec![kiln_core::Component::Sprite {
+                color: [1.0; 4],
+                width: 32.0,
+                height: 32.0,
+                texture: Some("art/hero.png".into()),
+                layer: 0.0,
+                material: Some("paper".into()),
+                animation_clip: Some("idle".into()),
+            }],
+        });
+    project_files::save(&project, &created.path).unwrap();
+    kiln_editor::recovery::save(&created.path, &project).unwrap();
+    let copy = project_files::save_as(&project, &created.path, &root.join("copy.toml")).unwrap();
     assert_eq!(
         json(&project_files::load(&copy).unwrap().project),
-        json(&created.project)
+        json(&project)
     );
     assert!(root.join("scripts/main.ks").exists());
-    assert!(project_files::save_as(
-        &created.project,
+    let relocated = project_files::save_as(
+        &project,
         &created.path,
-        &parent.path().join("bad-copy.toml")
+        &parent.path().join("relocated/kiln.toml"),
     )
-    .is_err());
-    assert!(!parent.path().join("bad-copy.toml").exists());
+    .unwrap();
+    assert_eq!(
+        json(&project_files::load(&relocated).unwrap().project),
+        json(&project)
+    );
+    assert_eq!(
+        std::fs::read(relocated.parent().unwrap().join("art/hero.png")).unwrap(),
+        b"asset-bytes"
+    );
+    assert_eq!(
+        std::fs::read(relocated.parent().unwrap().join("scripts/main.ks")).unwrap(),
+        std::fs::read(root.join("scripts/main.ks")).unwrap()
+    );
+    assert!(!kiln_editor::recovery::path_for(&relocated).exists());
+    assert!(
+        project_files::save_as(&project, &created.path, &root.join("nested/kiln.toml")).is_err()
+    );
+    assert!(!root.join("nested").exists());
+
+    let occupied = parent.path().join("occupied");
+    std::fs::create_dir(&occupied).unwrap();
+    std::fs::write(occupied.join("keep.txt"), b"keep").unwrap();
+    assert!(project_files::save_as(&project, &created.path, &occupied.join("kiln.toml")).is_err());
+    assert_eq!(std::fs::read(occupied.join("keep.txt")).unwrap(), b"keep");
+    assert!(!occupied.join("kiln.toml").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn save_as_rejects_symlinks_without_creating_a_partial_copy() {
+    let parent = tempfile::tempdir().unwrap();
+    let created = project_files::create("Game", &parent.path().join("game"), "empty_2d").unwrap();
+    let outside = parent.path().join("outside.txt");
+    std::fs::write(&outside, b"outside project").unwrap();
+    std::os::unix::fs::symlink(&outside, created.path.parent().unwrap().join("linked.txt"))
+        .unwrap();
+    let destination = parent.path().join("copy/kiln.toml");
+    assert!(project_files::save_as(&created.project, &created.path, &destination).is_err());
+    assert!(!destination.parent().unwrap().exists());
+    assert_eq!(std::fs::read(&outside).unwrap(), b"outside project");
 }
 
 #[test]

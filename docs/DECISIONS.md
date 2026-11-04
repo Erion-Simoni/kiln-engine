@@ -1055,9 +1055,10 @@ Apache-2.0, already present in the repository dependency graph) for same-directo
 staging and atomic manifest replacement, including Windows replacement support.
 It is not added to the engine runtime or browser target. Creation never reuses
 an existing destination directory. Project path/root state changes only after
-successful I/O. Save As initially supports another manifest in the same asset
-root; relocating a whole project requires asset-copy/reference handling in a
-later task and must fail explicitly rather than produce broken references.
+successful I/O. Save As copies the project tree into a new or empty destination
+directory, preserving relative references; it rejects occupied directories and
+symlinks instead of overwriting unrelated files or copying data from outside the
+project root. Same-root Save As writes an additional manifest in place.
 
 This checkpoint does not claim complete undo coverage, scene-tab switching,
 project relocation, native file pickers, or autosave/recovery.
@@ -1184,3 +1185,25 @@ Scene Sprite components store width and height as world-unit dimensions. Project
 ## ADR-0048: Transform stores local values; renderers read GlobalTransform
 
 Authored/runtime `Transform` remains local so gameplay and Inspector edits share one value. Runtime `ParentLink` components connect spawned entities, and `GlobalTransform` is recomputed from local values before scene rendering. Editor transform commands update affected global projections immediately; viewport drags convert their world-space pose back to local space. Reparenting and parent deletion preserve child world poses. Nested-scene root offsets are represented separately so propagation does not bake them into saved local values.
+
+## ADR-0049: Scene documents are authoritative; runtime worlds are projections
+
+**Date:** 2026-11-04
+**Status:** accepted
+
+`Project.scenes[active_scene_id]` is the single authoritative editable scene
+document. The editor ECS world is a runtime projection and must not become an
+independent source of authored state. Hierarchy commands, inspector commands,
+and viewport `SetTransform` previews all target the same scene identity and
+stable entity ID. Continuous widget/gesture previews use a `SceneTransaction`;
+the transaction records one undo snapshot on completion and restores its
+document snapshot on cancellation. Discrete edits use document-first commands,
+then rebuild the runtime projection and remap selection by SourceId. Project
+save reconciles only the active projection into that document before writing.
+
+Keep authoring commands independent of egui and GPU state so validation,
+history, save/reopen, and runtime projection can be tested headlessly. Any new
+scene-editing UI must queue a command or use the shared transaction path; direct
+runtime/project mutation is reserved for non-scene resources and transitional
+panels outside Task 2 scope. This clarifies and supersedes ADR-0039's temporary
+snapshot bridge. No serialized format or runtime API change is required.

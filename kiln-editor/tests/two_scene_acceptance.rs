@@ -198,20 +198,69 @@ fn two_scene_transform_hierarchy_and_restart_preserve_authored_documents() {
             entity_id: duplicate.clone(),
         },
     );
-    let restored = workspace
+    assert_eq!(workspace.history.undo_depth(), 4);
+    let mut alpha = project.scenes["alpha"].clone();
+    alpha = workspace.history.undo(alpha).unwrap(); // restore deletion
+    assert!(alpha.entities.iter().any(|entity| entity.id == duplicate));
+    alpha = workspace.history.undo(alpha).unwrap(); // undo duplication
+    assert!(!alpha.entities.iter().any(|entity| entity.id == duplicate));
+    alpha = workspace.history.undo(alpha).unwrap(); // undo reparent
+    assert!(matches!(
+        alpha.entities.iter().find(|entity| entity.id == "child").unwrap().components.iter()
+            .find(|component| matches!(component, Component::Parent { .. })),
+        Some(Component::Parent { parent }) if parent == "actor"
+    ));
+    alpha = workspace.history.undo(alpha).unwrap(); // undo transform transaction
+    assert_eq!(
+        world_transforms(&alpha).unwrap()["actor"].position,
+        Vec2::new(10.0, 20.0)
+    );
+    assert_eq!(
+        alpha
+            .entities
+            .iter()
+            .find(|entity| entity.id == "actor")
+            .unwrap()
+            .name,
+        "Actor"
+    );
+    assert!(!workspace.history.can_undo());
+
+    alpha = workspace.history.redo(alpha).unwrap(); // redo transform
+    assert_eq!(
+        world_transforms(&alpha).unwrap()["actor"].position,
+        Vec2::new(24.0, 36.0)
+    );
+    alpha = workspace.history.redo(alpha).unwrap(); // redo reparent
+    assert!(matches!(
+        alpha.entities.iter().find(|entity| entity.id == "child").unwrap().components.iter()
+            .find(|component| matches!(component, Component::Parent { .. })),
+        Some(Component::Parent { parent }) if parent == "anchor"
+    ));
+    alpha = workspace.history.redo(alpha).unwrap(); // redo duplicate
+    assert!(alpha.entities.iter().any(|entity| entity.id == duplicate));
+    alpha = workspace.history.redo(alpha).unwrap(); // redo delete
+    assert!(!alpha.entities.iter().any(|entity| entity.id == duplicate));
+    project.scenes.insert("alpha".into(), alpha);
+
+    // The other scene's edit remains isolated and independently undoable.
+    let alpha_current = project.scenes["alpha"].clone();
+    workspace.switch(&mut project, alpha_current, 1).unwrap();
+    assert_eq!(workspace.history.undo_depth(), 1);
+    let beta_undone = workspace
         .history
-        .undo(project.scenes["alpha"].clone())
+        .undo(project.scenes["beta"].clone())
         .unwrap();
-    assert!(restored
-        .entities
-        .iter()
-        .any(|entity| entity.id == duplicate));
-    let redone = workspace.history.redo(restored).unwrap();
-    project.scenes.insert("alpha".into(), redone);
-    assert!(!project.scenes["alpha"]
-        .entities
-        .iter()
-        .any(|entity| entity.id == duplicate));
+    assert_eq!(
+        world_transforms(&beta_undone).unwrap()["actor"].position,
+        Vec2::new(80.0, 20.0)
+    );
+    let beta_redone = workspace.history.redo(beta_undone).unwrap();
+    assert_eq!(
+        world_transforms(&beta_redone).unwrap()["actor"].position,
+        Vec2::new(120.0, 90.0)
+    );
+    project.scenes.insert("beta".into(), beta_redone);
 
     let directory = tempfile::tempdir().unwrap();
     project_files::save(&project, &directory.path().join("kiln.toml")).unwrap();

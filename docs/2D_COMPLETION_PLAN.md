@@ -23,18 +23,18 @@ Each task needs implementation, meaningful regression tests, and an exercised ed
 
 Acceptance: `just check`, `just test`, native editor build, audio sample check, and WASM build pass. Tests must execute nonzero cases. Graphical/browser/device checks have separate recorded evidence.
 
-### 2. Dependable scene authoring and project lifecycle — IN PROGRESS
+### 2. Dependable scene authoring and project lifecycle — IMPLEMENTATION COMPLETE; NATIVE ACCEPTANCE PENDING
 
-- [ ] Make project create/open/save/save-as and asset-relative paths work from the UI.
-- [ ] Establish one authoritative editable scene model; route edits through commands shared by hierarchy, inspector, and viewport. Document the decision before restructuring.
-- [ ] Preserve all supported components on load/edit/save/reopen; stable IDs and references survive duplicate/delete/reparent.
-- [ ] Complete selection, multi-selection, framing, move/rotate/scale gizmos, snapping, and parent/local transforms.
+- [x] Make project create/open/save/save-as and asset-relative paths work from the UI. Save As copies the project tree to a new/empty directory and preserves relative resource paths; a nonempty destination is refused.
+- [x] Establish one authoritative editable scene model; route edits through commands shared by hierarchy, inspector, and viewport. ADR-0049 records the project scene as source of truth and the ECS world as a runtime projection.
+- [x] Preserve supported components on load/edit/save/reopen; stable IDs and references survive duplicate/delete/reparent.
+- [x] Complete selection, multi-selection, framing, move/rotate/scale gizmos, snapping, and parent/local transforms. Headless acceptance covers command math and persistence; final native GUI drag check remains pending.
 - [x] Make scene tabs load actual scenes; preserve outgoing edits, isolate scene histories, create real scenes, show dirty indicators, and safely close/reopen saved tabs.
 - [x] Guard project replacement and editor exit with Save/Discard/Cancel, including failed-save retry and project-wide dirty tracking.
 - [x] Complete individual scene-tab Save/Discard/Cancel prompts and recovery/autosave. Dirty projects autosave a recoverable snapshot every 30 seconds.
-- [ ] Make undo/redo cover every supported authoring command.
+- [x] Make undo/redo cover supported scene authoring commands, including inspector edits, entity/hierarchy commands, viewport transactions, and isolated per-scene histories.
 
-Acceptance: author a two-scene project, transform/reparent/duplicate/delete entities, undo and redo, save, restart the editor, and verify identical supported properties and asset references.
+Acceptance: headless two-scene acceptance now transforms/reparents/duplicates/deletes entities, undoes/redoes every operation in both isolated histories, saves/reopens, and verifies supported runtime values and asset references. Native editor restart/interaction acceptance still needs a graphical runner; the current environment has no display, Xvfb, or desktop automation.
 
 ### 3. Prefabs, scenes, and asset workflow — PENDING
 
@@ -250,3 +250,12 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Scene viewport now draws move axes, a rotation ring, and a scale handle at the selected entity's world-space origin. The move tool retains canvas dragging; rotation starts on the ring and uses angular pointer change, while scale starts on its handle and scales uniformly from vertical pointer movement.
 - Every gizmo computes from press state, converts the resulting world pose back to the authored local Transform (including parent rotation/scale), previews through the existing SceneTransaction path, commits once on release, and supports Escape cancellation.
 - Validation: `just check` passed; `just test`: 518 passed; editor build passed. Pure tests cover translation snapping, rotation/wraparound, uniform positive scale, and visible handle hit targets. Native visual drag acceptance remains outstanding.
+
+### 2026-11-04 — Task 2 implementation and headless acceptance completed
+
+- Added ADR-0049: `Project.scenes[active_scene_id]` is the authoritative editable document; ECS worlds are projections. Hierarchy, inspector, and viewport mutations share validated scene/entity identity, document-first commands or `SceneTransaction`, then rebuild/update runtime state. The scene toolbar's Add Entity now follows the same command path.
+- Save As now relocates by copying the project directory to a new or empty destination, preserving every project-relative asset/resource path. It excludes recovery snapshots and local build/VCS state, rejects symlinks and nonempty destinations, refuses nesting a copy inside its source, and changes editor asset root/browser/texture uploads only after a successful save. The original project remains untouched.
+- Reworked the combined two-scene acceptance test to undo and redo Transform, Reparent, Duplicate, and Delete in sequence; it verifies independent undo/redo in the second scene, then saves/reopens and checks authored metadata, references, local/global runtime transforms, and entity state.
+- Save As regressions cover same-root copies, relocation with a real relative texture asset, copied scripts, project round-trip, omitted recovery sidecars, occupied destination preservation, and rejection of nested copies without creating partial directories.
+- `just check`: PASSED. `just test`: 535 passed, zero failed/skipped. Focused project-roundtrip/two-scene acceptance: 11 passed. `cargo build -p kiln-editor`: PASSED.
+- Native GUI confirmation of the Save As relocation and final rotation/scale drag workflow could not run in this executor: `DISPLAY` is unset and Xvfb/xdotool are unavailable. Earlier checkpoints contain native verification of project create/open/save, scene tabs, hierarchy, inspector, and transform editing. Task 2 is implementation-complete; its graphical acceptance remains pending before marking the task fully complete. Tasks 3–9 remain pending.

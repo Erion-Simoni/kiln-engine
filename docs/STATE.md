@@ -1,38 +1,34 @@
 # Kiln Session Handoff
 
-**Active focus:** Task 2 of `docs/2D_COMPLETION_PLAN.md`, IN PROGRESS.
+**Active focus:** Task 2 implementation in `docs/2D_COMPLETION_PLAN.md` is complete; graphical acceptance remains pending.
 **Branch:** `feat/2d-production-workflow`.
-**Scope:** Continue the user's ordered 2D completion program. 3D remains paused.
+**Scope:** Complete native GUI verification before beginning Task 3. 3D remains paused.
 
-## Completed
+## Done
 
-- Earlier checkpoints cover native/WASM baseline repair, project lifecycle and atomic writes, authored metadata preservation, multi-scene tabs/history, project Save/Discard/Cancel, transform/property commands, component presence commands, and hierarchy entity commands. ADR-0039–0048 record the architecture.
-- Hierarchy create/delete/duplicate/reparent and inspector rename are document-first commands with ID validation, cycle prevention, metadata preservation, and undo. Scene-toolbar Add Entity now uses the same validated Create command and selection flow. Native GUI previously verified hierarchy create/delete/duplicate/reparent and saved undo/redo of Parent.
-- Inspector edits for Transform position/rotation/uniform-scale, Sprite tint/layer/dimensions and resource references, Role, and Tilemap resource references update authored state through commands and history. Project resource choices are available; missing resources are flagged and invalid Tilemap choices rejected atomically. Unresolved Tilemap references can be repaired through the inspector. Texture edits refresh loaded scene textures. No-op edits do not create history. Sprite dimensions default to 32×32 in old projects.
-- Sprite rendering supports entity rotation/scale and authored dimensions. Parent links compose local translation/rotation/scale into runtime `GlobalTransform`; editor/player/web/mobile/sample renderers consume refreshed global poses. Viewport drags convert to local space; reparent/delete preserve child world poses and nested scene offsets survive propagation.
-- Scene viewport has move, rotation, and scale gizmos. Drags preview local Transform edits, commit one undo step on release, and cancel through Escape. Rotation wrap, uniform scaling, hit targets, and translation snapping have coverage.
-- Hierarchy and scene-list selection support Ctrl/Cmd additive toggling while preserving a primary inspector target. **Frame Selection** and `F` fit selected sprite bounds after global rotation and scale, with position-only bounds for nonvisual entities.
-- All gizmo modes apply to multi-selection around the primary entity. Selected ancestors are transformed before descendants so child-first selection order preserves world targets. Each gesture is one undo transaction.
-- Closing a dirty scene tab offers Save, Discard, or Cancel. Save writes the project before closing; Discard restores the saved scene or removes a never-saved scene while preserving other open-scene edits.
-- Dirty projects write atomic recovery sidecars every 30 seconds. Opening a project with a newer sidecar offers Restore or Discard Recovery; restored tabs compare against the disk baseline, and successful project saves clear the sidecar.
-- Combined two-scene acceptance coverage includes per-scene transforms/history, reparent world-pose preservation, duplicate/delete undo-redo, save/reopen, and reconstructed runtime transforms while preserving authored metadata.
+- Project create/open/save/save-as use the UI lifecycle. Save As can copy a project into a new or empty destination and keeps asset-relative paths valid; it excludes recovery/build/VCS state and refuses symlinks, nested destinations, and nonempty destination directories. Editor root, asset browser, and GPU texture cache update after success.
+- ADR-0049 records the scene architecture: `Project.scenes[active_scene_id]` is the authoritative authored document, while the editor ECS world is a runtime projection. Hierarchy, Inspector, and viewport edits target stable scene/entity IDs through validated commands or shared scene transactions.
+- Supported Transform, Sprite, Role, Tilemap, and Parent data survive load/edit/save/reopen. Resource references are project-backed/editable and missing references are visible or repairable. Duplicate/delete/reparent preserve authored properties, stable identity rules, and references.
+- Scene tabs load actual scene documents, retain per-scene history, show dirty state, and support safe create/close/reopen. Project replacement and exit use Save/Discard/Cancel. Dirty scene close and periodic recovery are implemented.
+- Selection supports additive multi-select, framing uses transformed sprite bounds, move/rotate/scale gizmos and world snapping are implemented, and local/world transforms respect hierarchy composition. Gestures are transactional and undoable.
+- Scene toolbar entity creation, hierarchy operations, Inspector edits, and viewport transactions participate in scene undo/redo. The combined two-scene acceptance test now undoes and redoes transform, reparent, duplicate, and delete, checks history isolation for the other scene, and verifies save/reopen plus runtime projection.
+- Earlier native Xvfb checkpoints verified create/open/save, tab switching, dirty prompts, hierarchy operations, inspector edits, and translation. Final GUI confirmation of rotated/scaled gizmo drags and cross-directory Save As remains pending because this executor has no display or GUI automation.
 
 ## Validation
 
-- Previous checkpoints progressed from 514 tests to 533, all passing. Current toolbar-create command integration passes `just check` and `just test`: 534 passed, zero failed/skipped.
-- Strict workspace lint passes. The separate audio sample check emits existing unused/dead-code warnings in `kiln-runtime` audio and slice code.
-- Native GUI confirmation of recent inspector, gizmo, scene-close, and recovery workflows remains outstanding. This environment has no display, Xvfb, or desktop automation tool. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
+- Current `just check`: passed (format, strict Clippy, workspace check, standalone audio sample check). The standalone audio sample still reports existing unused/dead-code warnings in runtime audio/slice code.
+- Current `just test`: 535 passed, zero failed/skipped. Focused project-roundtrip and two-scene acceptance suite: 11 passed.
+- `cargo build -p kiln-editor`: passed.
+- `DISPLAY` is unset; Xvfb and xdotool are absent. This environment cannot complete the plan's final native GUI acceptance. Physical devices, other render tiers, cross-platform runners, browser rerun, and remote CI remain unverified for this checkpoint.
 
 ## Next
 
-1. Continue Task 2's remaining authoring acceptance gaps and native GUI verification.
-2. Complete Task 2 before starting Tasks 3–9.
+1. Run the final Task 2 native GUI acceptance on a graphical runner: cross-directory Save As with a relative texture, relaunch/reopen, and rotate/scale gizmo drag plus undo/redo.
+2. After that evidence is recorded, start Task 3 of `docs/2D_COMPLETION_PLAN.md`.
 
-## Known limits and environment
+## Known limits
 
-`Transform` is local; call `kiln_runtime::update_global_transforms` after direct gameplay changes when a world-space read is needed. Built-in sprite render loops refresh `GlobalTransform` before drawing. Physics systems still consume local Transform and do not yet account for parent relationships; tilemap cell instances retain identity transforms. Other panels retain transitional direct-mutation paths. Undo is session-only; recovery snapshots are periodic (30 seconds), not continuous. Native visuals cover software GL/Low tier only.
-
-Save As stays within the asset directory; relocation is rejected. Dialogs accept typed paths. Platformer/Top-down templates remain empty starters; only Empty 2D has been exercised. Other render tiers, audible audio, complete exports, budgets, clean-machine packaging, cross-platform runs, physical devices, and remote CI remain separate gates. Optional audio/WASM warnings remain outside strict default-native lint. Plugin ABI v2 requires creator-matched destruction; loader/dispatch remains future work.
+Save As rejects symlinks and nonempty destinations to protect unrelated files. Physics still consumes local Transform and is not parent-aware; tilemap cells keep identity transforms. Other editor resource panels remain transitional direct-mutation paths and belong to later tasks. Undo remains session-only; recovery snapshots are periodic (30 seconds). Only Empty 2D has been exercised as a starter template. Other render tiers, audible audio, complete exports, budgets, clean-machine packaging, cross-platform runs, physical devices, and remote CI remain separate gates. Plugin ABI v2 requires creator-matched destruction; loader/dispatch remains future work.
 
 Source `/workspace/.kiln-tools/activate.sh` for cloud Cargo commands.
 Use `CHROMIUM_PATH=/usr/bin/chromium just web-smoke` for installed-browser validation.
