@@ -8,7 +8,7 @@
 
 - Earlier checkpoints cover native/WASM baseline repair, project lifecycle and atomic writes, authored metadata preservation, multi-scene tabs/history, project Save/Discard/Cancel, transform/property commands, component presence commands, and hierarchy entity commands. ADR-0039–0048 record the architecture.
 - Hierarchy create/delete/duplicate/reparent and inspector rename are document-first commands with ID validation, cycle prevention, metadata preservation, and undo. Native GUI previously verified hierarchy create/delete/duplicate/reparent and saved undo/redo of Parent.
-- Inspector edits for Transform position/rotation/uniform-scale, Sprite tint/layer/dimensions and resource references, Role, and Tilemap resource references update authored state through commands and history. Resource options are project-backed, missing references are flagged, and invalid Tilemap choices are rejected atomically. Texture edits refresh loaded scene textures. No-op edits do not create history. Sprite dimensions default to 32×32 in old projects.
+- Inspector edits for Transform position/rotation/uniform-scale, Sprite tint/layer/dimensions and resource references, Role, and Tilemap resource references update authored state through commands and history. Project resource choices are available; missing resources are flagged and invalid Tilemap choices rejected atomically. Unresolved Tilemap references can be repaired through the inspector. Texture edits refresh loaded scene textures. No-op edits do not create history. Sprite dimensions default to 32×32 in old projects.
 - Sprite rendering supports entity rotation/scale and authored dimensions. Parent links compose local translation/rotation/scale into runtime `GlobalTransform`; editor/player/web/mobile/sample renderers consume refreshed global poses. Viewport drags convert to local space; reparent/delete preserve child world poses and nested scene offsets survive propagation.
 - Scene viewport has move, rotation, and scale gizmos. Drags preview local Transform edits, commit one undo step on release, and cancel through Escape. Rotation wrap, uniform scaling, hit targets, and translation snapping have coverage.
 - Hierarchy and scene-list selection support Ctrl/Cmd additive toggling while preserving a primary inspector target. **Frame Selection** and `F` fit selected sprite bounds after global rotation and scale, with position-only bounds for nonvisual entities.
@@ -19,7 +19,7 @@
 
 ## Validation
 
-- Previous checkpoints progressed from 514 tests to 532, all passing. Current Tilemap inspector checkpoint passes `just check` and `just test`: 533 passed, zero failed/skipped.
+- Previous checkpoints progressed from 514 tests to 533, all passing. Current Tilemap inspector repair checkpoint passes `just check` and `just test`: 534 passed, zero failed/skipped.
 - Strict workspace lint passes. The separate audio sample check emits existing unused/dead-code warnings in `kiln-runtime` audio and slice code.
 - Native GUI confirmation of recent inspector, gizmo, scene-close, and recovery workflows remains outstanding. This environment has no display, Xvfb, or desktop automation tool. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
 

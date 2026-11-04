@@ -258,6 +258,29 @@ fn tilemap_reference_can_be_changed_and_invalid_choices_are_atomic() {
 }
 
 #[test]
+fn unresolved_tilemap_reference_can_be_repaired_to_an_existing_resource() {
+    let mut project = fixture();
+    project.scenes.get_mut("main").unwrap().entities[0]
+        .components
+        .push(Component::Tilemap {
+            map: "deleted_map".into(),
+        });
+    let mut scene = project.scenes["main"].clone();
+    let mut history = SceneHistory::new();
+    assert!(command(ComponentEdit::SetTilemapReference {
+        map: "level_map".into()
+    })
+    .execute(&mut scene, &project, &mut history)
+    .unwrap());
+    project.scenes.insert("main".into(), scene.clone());
+    assert_disk(&project);
+    let restored = history.undo(scene).unwrap();
+    assert!(
+        matches!(restored.entities[0].components.last(), Some(Component::Tilemap { map }) if map == "deleted_map")
+    );
+}
+
+#[test]
 fn authored_transform_can_be_added_even_when_loading_supplies_a_default() {
     let mut project = fixture();
     let mut scene = project.scenes["main"].clone();

@@ -4369,7 +4369,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 ui.label(format!("Tilemap: {map}"));
                                 if !map_exists {
                                     ui.colored_label(egui::Color32::YELLOW, "Tilemap resource is missing");
-                                } else {
+                                }
+                                if !map_options.is_empty() {
                                     egui::ComboBox::from_id_salt(("entity_tilemap", &authored.id))
                                         .selected_text("Change Tilemap…")
                                         .show_ui(ui, |ui| {
@@ -4379,6 +4380,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                                 }
                                             }
                                         });
+                                } else {
+                                    ui.label("Create a tilemap resource in the Tilemap Editor first.");
                                 }
                                 if ui.button("Remove Tilemap").clicked() { self.remove_component(entity, ComponentKind::Tilemap); }
                             });
