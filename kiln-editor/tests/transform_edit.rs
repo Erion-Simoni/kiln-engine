@@ -3,7 +3,7 @@ use kiln_core::{Component, Entity, Project, Scene, Transform};
 use kiln_editor::{
     project_files, scene_view,
     transform_edit::{SetTransform, TransformTransaction, TranslationDrag},
-    transform_gizmo::{apply_group_transform, GizmoMode},
+    transform_gizmo::{apply_group_transform, order_group_targets, GizmoMode},
     SceneHistory,
 };
 use kiln_runtime::{GameWorld, SourceId, Sprite};
@@ -212,12 +212,14 @@ fn group_rotation_and_scale_preserve_parented_world_targets() {
     let mut scene = sample();
     let mut world = spawn(&scene);
     let initial = selection(&world);
+    let child_selected_first = vec![initial[1].clone(), initial[0].clone()];
     let primary = initial[0].1;
     let result = Transform {
         rotation: std::f32::consts::FRAC_PI_2,
         ..primary
     };
-    let targets = apply_group_transform(GizmoMode::Rotate, "marker", result, &initial);
+    let targets = apply_group_transform(GizmoMode::Rotate, "marker", result, &child_selected_first);
+    let targets = order_group_targets(&scene, &targets);
     for (id, target) in &targets {
         let local = kiln_core::hierarchy_transform::local_from_world(&scene, id, *target).unwrap();
         SetTransform {
@@ -237,7 +239,8 @@ fn group_rotation_and_scale_preserve_parented_world_targets() {
     let initial = selection(&world);
     let mut result = initial[0].1;
     result.scale = kiln_core::Vec2::splat(2.0);
-    let targets = apply_group_transform(GizmoMode::Scale, "marker", result, &initial);
+    let targets = apply_group_transform(GizmoMode::Scale, "marker", result, &child_selected_first);
+    let targets = order_group_targets(&scene, &targets);
     for (id, target) in &targets {
         let local = kiln_core::hierarchy_transform::local_from_world(&scene, id, *target).unwrap();
         SetTransform {

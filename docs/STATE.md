@@ -12,16 +12,16 @@
 - Sprite rendering supports entity rotation/scale and authored dimensions. Parent links compose local translation/rotation/scale into runtime `GlobalTransform`; editor/player/web/mobile/sample renderers consume refreshed global poses. Viewport drags convert to local space; reparent/delete preserve child world poses and nested scene offsets survive propagation.
 - Scene viewport has move, rotation, and scale gizmos. Drags preview local Transform edits, commit one undo step on release, and cancel through Escape. Rotation wrap, uniform scaling, hit targets, and translation snapping have coverage.
 - Hierarchy and scene-list selection support Ctrl/Cmd additive toggling while preserving a primary inspector target. **Frame Selection** and `F` fit selected sprite bounds after global rotation and scale, with position-only bounds for nonvisual entities.
-- All gizmo modes apply to multi-selection around the primary entity: translation shares a world-space offset, rotation turns positions and orientations around the pivot, and scale changes offsets and sizes. Each result converts back to local space, and the gesture is one undo transaction.
+- All gizmo modes apply to multi-selection around the primary entity. Selected ancestors are transformed before descendants so child-first selection order preserves world targets. Each gesture is one undo transaction.
 - Closing a dirty scene tab offers Save, Discard, or Cancel. Save writes the project before closing; Discard restores the saved scene or removes a never-saved scene while preserving other open-scene edits.
 - Dirty projects write atomic recovery sidecars every 30 seconds. Opening a project with a newer sidecar offers Restore or Discard Recovery; restored tabs compare against the disk baseline, and successful project saves clear the sidecar.
-- A combined two-scene acceptance test now covers per-scene transforms/history, reparent world-pose preservation, duplicate/delete undo-redo, save/reopen, and reconstructed runtime transforms while preserving authored metadata.
+- A combined two-scene acceptance test covers per-scene transforms/history, reparent world-pose preservation, duplicate/delete undo-redo, save/reopen, and reconstructed runtime transforms while preserving authored metadata.
 
 ## Validation
 
 - Earlier parent/local checkpoint: `just check` passed; `just test`: 514 passed. Editor build, WASM check, Chromium smoke, nested-offset, runtime propagation, editor descendant update, and reparent/delete pose-preservation checks passed.
-- Earlier gizmo checkpoint: `just check` passed; `just test`: 518 passed. Multi-selection/framing: 519 passed. Group translation: 520 passed. Group rotation/scale: 522 passed. Sprite-aware framing: 523 passed. Dirty tab close: 524 passed. Autosave/recovery: 527 passed.
-- Current combined acceptance checkpoint: `just check` passed; `just test`: 528 passed, zero failed/skipped. The new `two_scene_acceptance` integration test passed.
+- Earlier gizmo checkpoint: `just check` passed; `just test`: 518 passed. Multi-selection/framing: 519 passed. Group translation: 520 passed. Group rotation/scale: 522 passed. Sprite-aware framing: 523 passed. Dirty tab close: 524 passed. Autosave/recovery: 527 passed. Combined two-scene acceptance: 528 passed.
+- Current group-order checkpoint: `just check` passed; `just test`: 529 passed, zero failed/skipped. Parent-first target ordering is tested with child-first selection for rotation and scale.
 - Native GUI confirmation of the latest gizmo, scene-close, and recovery workflows remains outstanding. This environment has no display, Xvfb, or desktop automation tool. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
 
 ## Next

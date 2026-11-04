@@ -1,7 +1,7 @@
 //! Viewport transform-gizmo drag math.
 
 use egui::{Pos2, Vec2 as EguiVec2};
-use kiln_core::{Transform, Vec2};
+use kiln_core::{Component, Scene, Transform, Vec2};
 
 /// Transform operation selected for viewport interaction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -55,6 +55,45 @@ pub fn apply_group_transform(
             (id.clone(), target)
         })
         .collect()
+}
+
+/// Order group targets so selected ancestors update before their descendants.
+pub fn order_group_targets(
+    scene: &Scene,
+    targets: &[(String, Transform)],
+) -> Vec<(String, Transform)> {
+    fn depth(scene: &Scene, entity_id: &str) -> usize {
+        let mut current = entity_id;
+        let mut depth = 0;
+        while depth < scene.entities.len() {
+            let parent = scene
+                .entities
+                .iter()
+                .find(|entity| entity.id == current)
+                .and_then(|entity| {
+                    entity
+                        .components
+                        .iter()
+                        .find_map(|component| match component {
+                            Component::Parent { parent } => Some(parent.as_str()),
+                            _ => None,
+                        })
+                });
+            let Some(parent) = parent else { break };
+            current = scene
+                .entities
+                .iter()
+                .find(|entity| entity.id == parent)
+                .map(|entity| entity.id.as_str())
+                .unwrap_or(parent);
+            depth += 1;
+        }
+        depth
+    }
+
+    let mut ordered = targets.to_vec();
+    ordered.sort_by_key(|(entity_id, _)| depth(scene, entity_id));
+    ordered
 }
 
 /// One pointer gesture evaluated from its press state, independent of frame rate.
@@ -194,6 +233,37 @@ mod tests {
         assert_eq!(scaled[0].1.position, Vec2::new(10.0, 20.0));
         assert_eq!(scaled[1].1.position, Vec2::new(30.0, 20.0));
         assert_eq!(scaled[1].1.scale, Vec2::splat(4.0));
+    }
+
+    #[test]
+    fn group_targets_apply_selected_parents_before_children() {
+        let scene = Scene {
+            id: "main".into(),
+            name: "Main".into(),
+            script: None,
+            nested_scenes: vec![],
+            entities: vec![
+                kiln_core::Entity {
+                    id: "parent".into(),
+                    name: "Parent".into(),
+                    components: vec![],
+                },
+                kiln_core::Entity {
+                    id: "child".into(),
+                    name: "Child".into(),
+                    components: vec![Component::Parent {
+                        parent: "parent".into(),
+                    }],
+                },
+            ],
+        };
+        let targets = vec![
+            ("child".into(), Transform::new(1.0, 0.0)),
+            ("parent".into(), Transform::new(2.0, 0.0)),
+        ];
+        let ordered = order_group_targets(&scene, &targets);
+        assert_eq!(ordered[0].0, "parent");
+        assert_eq!(ordered[1].0, "child");
     }
 
     #[test]

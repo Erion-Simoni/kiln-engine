@@ -2972,7 +2972,8 @@ impl TabViewer<'_> {
         let mut after = before.clone();
         let scene_id = after.id.clone();
         let mut updated = false;
-        for (entity_id, target) in targets {
+        let ordered_targets = crate::transform_gizmo::order_group_targets(&after, targets);
+        for (entity_id, target) in &ordered_targets {
             let Ok(local) =
                 kiln_core::hierarchy_transform::local_from_world(&after, entity_id, *target)
             else {
