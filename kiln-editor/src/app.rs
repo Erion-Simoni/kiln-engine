@@ -4206,10 +4206,43 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         if let Some((_, draft)) = self.sprite_reference_input.as_mut() {
                                             ui.label("Texture path");
                                             ui.add_enabled(enabled, egui::TextEdit::singleline(&mut draft.texture));
+                                            if let Some(project) = self.current_project.as_ref() {
+                                                let mut paths = crate::scene_view::texture_paths(project);
+                                                paths.sort();
+                                                egui::ComboBox::from_id_salt(("sprite_texture", &authored.id))
+                                                    .selected_text("Choose project texture…")
+                                                    .show_ui(ui, |ui| {
+                                                        for path in paths {
+                                                            ui.selectable_value(&mut draft.texture, path.clone(), path);
+                                                        }
+                                                    });
+                                            }
                                             ui.label("Material");
                                             ui.add_enabled(enabled, egui::TextEdit::singleline(&mut draft.material));
+                                            if let Some(project) = self.current_project.as_ref() {
+                                                let mut ids: Vec<_> = project.materials.keys().cloned().collect();
+                                                ids.sort();
+                                                egui::ComboBox::from_id_salt(("sprite_material", &authored.id))
+                                                    .selected_text("Choose project material…")
+                                                    .show_ui(ui, |ui| {
+                                                        for id in ids {
+                                                            ui.selectable_value(&mut draft.material, id.clone(), id);
+                                                        }
+                                                    });
+                                            }
                                             ui.label("Animation clip");
                                             ui.add_enabled(enabled, egui::TextEdit::singleline(&mut draft.animation_clip));
+                                            if let Some(project) = self.current_project.as_ref() {
+                                                let mut ids: Vec<_> = project.animation_clips.keys().cloned().collect();
+                                                ids.sort();
+                                                egui::ComboBox::from_id_salt(("sprite_animation", &authored.id))
+                                                    .selected_text("Choose project animation…")
+                                                    .show_ui(ui, |ui| {
+                                                        for id in ids {
+                                                            ui.selectable_value(&mut draft.animation_clip, id.clone(), id);
+                                                        }
+                                                    });
+                                            }
                                         }
                                         ui.horizontal(|ui| {
                                             apply = ui.add_enabled(enabled, egui::Button::new("Apply")).clicked();
@@ -4232,6 +4265,14 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     ui.label(format!("Texture: {}", texture.as_deref().unwrap_or("(none)")));
                                     ui.label(format!("Material: {}", material.as_deref().unwrap_or("(none)")));
                                     ui.label(format!("Animation: {}", animation_clip.as_deref().unwrap_or("(none)")));
+                                    if let Some(project) = self.current_project.as_ref() {
+                                        if material.as_ref().is_some_and(|id| !project.materials.contains_key(id)) {
+                                            ui.colored_label(egui::Color32::YELLOW, "Sprite material reference is missing");
+                                        }
+                                        if animation_clip.as_ref().is_some_and(|id| !project.animation_clips.contains_key(id)) {
+                                            ui.colored_label(egui::Color32::YELLOW, "Animation clip reference is missing");
+                                        }
+                                    }
                                     if ui.add_enabled(!self.editing_locked() && !self.project_blocked, egui::Button::new("Edit References")).clicked() {
                                         *self.sprite_reference_input = Some((authored.id.clone(), SpriteReferenceDraft {
                                             texture: texture.clone().unwrap_or_default(),
