@@ -27,6 +27,11 @@ pub struct SceneWorkspace {
 }
 
 impl SceneWorkspace {
+    /// Use a disk-loaded project as the clean baseline for recovered documents.
+    pub fn set_saved_baselines(&mut self, project: &Project) {
+        self.saved = project.scenes.clone();
+    }
+
     /// Open all documents, selecting the game's startup scene initially.
     pub fn open(project: &Project) -> Self {
         let mut ids: Vec<_> = project.scenes.keys().cloned().collect();

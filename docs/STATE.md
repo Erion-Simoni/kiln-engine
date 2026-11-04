@@ -7,33 +7,30 @@
 ## Done
 
 - Earlier checkpoints cover native/WASM baseline repair, project lifecycle and atomic writes, authored metadata preservation, multi-scene tabs/history, project Save/Discard/Cancel, transform/property commands, component presence commands, and hierarchy entity commands. ADR-0039–0048 record the architecture.
-- Hierarchy create/delete/duplicate/reparent are document-first commands with ID validation, cycle prevention, metadata preservation, and undo. Native GUI verified create/selection, duplicate/selection, delete/undo, reparent/save, and saved undo/redo of Parent.
+- Hierarchy create/delete/duplicate/reparent are document-first commands with ID validation, cycle prevention, metadata preservation, and undo. Native GUI previously verified those operations and saved undo/redo of Parent.
 - Inspector edits for Transform position/rotation/uniform-scale and Sprite tint/layer/dimensions update authored and runtime state with one undo step per field gesture. Sprite dimensions default to 32×32 in old projects.
 - Sprite rendering supports entity rotation/scale and authored dimensions. Parent links compose local translation/rotation/scale into runtime `GlobalTransform`; editor/player/web/mobile/sample renderers consume refreshed global poses. Viewport drags convert to local space; reparent/delete preserve child world poses and nested scene offsets survive propagation.
-- Scene viewport now has visible move axes, a rotation ring, and a scale handle. Drag gestures preview local Transform edits, commit one undo step on release, and cancel through the existing Escape path. Rotation angle wrap, uniform scaling, hit targets, and translation snap math have unit coverage.
-- Hierarchy and scene-list selection now support Ctrl/Cmd additive toggling while preserving a primary inspector target. The scene view's Frame Selection button and `F` shortcut fit selected sprite bounds after rotation and scale, with position-only bounds for nonvisual entities.
-- All gizmo modes now apply to multi-selection around the primary entity: translation shares a world-space offset, rotation turns positions and orientations around the pivot, and scale changes offsets and sizes. Each resulting world transform converts back to local space, and the gesture is one undo transaction.
-- Closing a dirty scene tab now offers Save, Discard, or Cancel. Save writes the project before closing; Discard restores the saved scene or removes a never-saved scene, while preserving other open-scene edits.
+- Scene viewport has move, rotation, and scale gizmos. Drags preview local Transform edits, commit one undo step on release, and cancel through Escape. Rotation wrap, uniform scaling, hit targets, and translation snapping have coverage.
+- Hierarchy and scene-list selection support Ctrl/Cmd additive toggling while preserving a primary inspector target. **Frame Selection** and `F` fit selected sprite bounds after global rotation and scale, with position-only bounds for nonvisual entities.
+- All gizmo modes apply to multi-selection around the primary entity: translation shares a world-space offset, rotation turns positions and orientations around the pivot, and scale changes offsets and sizes. Each result converts back to local space, and the gesture is one undo transaction.
+- Closing a dirty scene tab offers Save, Discard, or Cancel. Save writes the project before closing; Discard restores the saved scene or removes a never-saved scene while preserving other open-scene edits.
+- Dirty projects write atomic recovery sidecars every 30 seconds. Opening a project with a newer sidecar offers Restore or Discard Recovery; restored tabs compare against the disk baseline, and successful project saves clear the sidecar.
 
 ## Validation
 
-- Parent/local checkpoint: `just check` passed; `just test`: 514 passed. Editor build, WASM check, Chromium smoke, nested-offset, runtime propagation, editor descendant update, and reparent/delete pose-preservation checks passed.
-- Current gizmo checkpoint: `just check` passed; `just test`: 518 passed, zero failed/skipped. `cargo build -p kiln-editor` passed.
-- Multi-selection/framing checkpoint: `just check` passed; `just test`: 519 passed, zero failed/skipped. Additive selection state has a unit test.
-- Group-translation checkpoint: `just check` passed; `just test`: 520 passed, zero failed/skipped. A regression test moves a selected parent and child together while preserving world spacing. Runtime GUI drag behavior remains to be exercised in the native editor.
-- Group rotation/scale checkpoint: `just check` passed; `just test`: 522 passed, zero failed/skipped. Unit and integration tests cover pivot behavior and parented world targets.
-- Sprite-aware framing checkpoint: `just check` passed; `just test`: 523 passed, zero failed/skipped. Bounds math covers rotated, nonuniformly scaled sprites.
-- Dirty scene-tab close checkpoint: `just check` passed; `just test`: 524 passed, zero failed/skipped. Workspace coverage includes discarding saved edits and removing an unsaved new scene. Autosave/recovery is still pending.
-- Native app GUI confirmation of parented transforms and gizmo dragging remains outstanding. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
+- Earlier parent/local checkpoint: `just check` passed; `just test`: 514 passed. Editor build, WASM check, Chromium smoke, nested-offset, runtime propagation, editor descendant update, and reparent/delete pose-preservation checks passed.
+- Earlier gizmo checkpoint: `just check` passed; `just test`: 518 passed. Multi-selection/framing: 519 passed. Group translation: 520 passed. Group rotation/scale: 522 passed. Sprite-aware framing: 523 passed. Dirty tab close: 524 passed.
+- Current recovery checkpoint: `just check` passed; `just test`: 527 passed, zero failed/skipped. Coverage includes sidecar serialization, newer-than-disk detection, clearing, recovered-scene dirty baselines, group transforms, and transformed sprite bounds.
+- Native GUI confirmation of the latest gizmo, scene-close, and recovery workflows remains outstanding. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
 
 ## Next
 
-1. Add autosave/recovery and exercise the scene-close dialog in the native GUI.
+1. Exercise the scene-close and recovery dialogs in the native GUI.
 2. Run full two-scene transform/reparent/duplicate/delete/save/restart acceptance before completing Task 2. Tasks 3–9 remain pending.
 
 ## Known limits and environment
 
-`Transform` is local; call `kiln_runtime::update_global_transforms` after direct gameplay changes when a world-space read is needed. Built-in sprite render loops refresh `GlobalTransform` before drawing. Physics systems still consume local Transform and do not yet account for parent relationships; tilemap cell instances retain identity transforms. The command model covers transform properties, Sprite visuals/size, component presence, and hierarchy entities; other panels retain transitional direct-mutation paths. Undo is session-only; crash recovery is absent. Native visuals cover software GL/Low tier only.
+`Transform` is local; call `kiln_runtime::update_global_transforms` after direct gameplay changes when a world-space read is needed. Built-in sprite render loops refresh `GlobalTransform` before drawing. Physics systems still consume local Transform and do not yet account for parent relationships; tilemap cell instances retain identity transforms. The command model covers transform properties, Sprite visuals/size, component presence, and hierarchy entities; other panels retain transitional direct-mutation paths. Undo is session-only; recovery snapshots are periodic (30 seconds), not continuous. Native visuals cover software GL/Low tier only.
 
 Save As stays within the asset directory; relocation is rejected. Dialogs accept typed paths. Platformer/Top-down templates remain empty starters; only Empty 2D has been exercised. Other render tiers, audible audio, complete exports, budgets, clean-machine packaging, cross-platform runs, physical devices, and remote CI remain separate gates. Optional audio/WASM warnings remain outside strict default-native lint. Plugin ABI v2 requires creator-matched destruction; loader/dispatch remains future work.
 

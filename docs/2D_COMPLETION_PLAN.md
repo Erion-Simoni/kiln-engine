@@ -31,7 +31,7 @@ Acceptance: `just check`, `just test`, native editor build, audio sample check, 
 - [ ] Complete selection, multi-selection, framing, move/rotate/scale gizmos, snapping, and parent/local transforms.
 - [x] Make scene tabs load actual scenes; preserve outgoing edits, isolate scene histories, create real scenes, show dirty indicators, and safely close/reopen saved tabs.
 - [x] Guard project replacement and editor exit with Save/Discard/Cancel, including failed-save retry and project-wide dirty tracking.
-- [ ] Complete individual scene-tab Save/Discard/Cancel prompts and recovery/autosave. Dirty tab closure currently requires saving first.
+- [x] Complete individual scene-tab Save/Discard/Cancel prompts and recovery/autosave. Dirty projects autosave a recoverable snapshot every 30 seconds.
 - [ ] Make undo/redo cover every supported authoring command.
 
 Acceptance: author a two-scene project, transform/reparent/duplicate/delete entities, undo and redo, save, restart the editor, and verify identical supported properties and asset references.

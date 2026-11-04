@@ -229,6 +229,31 @@ fn discard_close_restores_saved_scene_and_removes_unsaved_new_scene() {
 }
 
 #[test]
+fn recovered_workspace_uses_disk_project_as_dirty_baseline() {
+    let saved = project();
+    let mut recovered = saved.clone();
+    recovered.scenes.get_mut("a").unwrap().name = "Recovered name".into();
+    let mut tabs = SceneWorkspace::open(&recovered);
+    tabs.set_saved_baselines(&saved);
+    tabs.refresh_dirty(&recovered, None);
+    assert!(
+        tabs.tabs
+            .iter()
+            .find(|tab| tab.scene_id == "a")
+            .unwrap()
+            .dirty
+    );
+    assert!(
+        !tabs
+            .tabs
+            .iter()
+            .find(|tab| tab.scene_id == "b")
+            .unwrap()
+            .dirty
+    );
+}
+
+#[test]
 fn creating_scene_preserves_edits_and_avoids_closed_scene_id_collisions() {
     let mut project = project();
     project

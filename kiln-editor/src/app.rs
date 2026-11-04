@@ -66,6 +66,11 @@ struct SceneClosePrompt {
     save_error: Option<String>,
 }
 
+struct RecoveryPrompt {
+    project_path: PathBuf,
+    project: Project,
+}
+
 enum ProjectRequest {
     Component(ComponentCommand),
     Entity(crate::entity_command::EntityCommand),
@@ -73,6 +78,7 @@ enum ProjectRequest {
     Leave(ProjectAction),
     Resolve(SaveDecision),
     ResolveSceneClose(SaveDecision),
+    ResolveRecovery(bool),
     Scene(SceneAction),
     Open(PathBuf),
     SaveAs(PathBuf),
@@ -233,6 +239,8 @@ pub struct EditorApp {
     /// Set by the scene toolbar, handled after the UI pass.
     scene_load_requested: bool,
     scene_close_prompt: Option<SceneClosePrompt>,
+    pending_recovery: Option<RecoveryPrompt>,
+    last_autosave: Instant,
     /// Camera state for the scene view.
     camera: CameraState,
     /// Grid snap settings for the scene editor.
@@ -687,6 +695,8 @@ impl EditorApp {
             scene_save_requested: false,
             scene_load_requested: false,
             scene_close_prompt: None,
+            pending_recovery: None,
+            last_autosave: Instant::now(),
             gizmo: GizmoState::default(),
             transform_edit: None,
         })
@@ -761,6 +771,7 @@ impl EditorApp {
             .ok_or("No project file open. Use Save As first.")?;
         let project = self.project_to_save()?;
         let path = crate::project_files::save(&project, &path)?;
+        let _ = crate::recovery::clear(&path);
         self.project_path = Some(path);
         self.scenes.mark_saved(&project);
         self.lifecycle.mark_saved(&project);
@@ -787,8 +798,11 @@ impl EditorApp {
             .project_path
             .as_ref()
             .ok_or("Open or create a project before Save As")?;
+        let previous_path = source.clone();
         let project = self.project_to_save()?;
         let path = crate::project_files::save_as(&project, source, &path)?;
+        let _ = crate::recovery::clear(&previous_path);
+        let _ = crate::recovery::clear(&path);
         self.project_path = Some(path.clone());
         self.project_path_input = path.to_string_lossy().into_owned();
         self.scenes.mark_saved(&project);
@@ -808,6 +822,15 @@ impl EditorApp {
         self.is_playing = false;
         let project = loaded.project;
         let path = loaded.path;
+        let recovery = match crate::recovery::load_if_newer(&path) {
+            Ok(recovery) => recovery.map(|(_, project)| project),
+            Err(error) => {
+                self.console_log.push(format!(
+                    "[WARN] Ignoring unreadable recovery snapshot: {error}"
+                ));
+                None
+            }
+        };
         self.scenes = SceneWorkspace::open(&project);
         self.lifecycle.mark_saved(&project);
         self.selected_entity = None;
@@ -818,6 +841,11 @@ impl EditorApp {
             .add_recent(path.clone(), project.name.clone());
         self.project_path = Some(path.clone());
         self.current_project = Some(project);
+        self.pending_recovery = recovery.map(|project| RecoveryPrompt {
+            project_path: path.clone(),
+            project,
+        });
+        self.last_autosave = Instant::now();
 
         // Scan the project directory so the asset browser lists its files.
         if let Some(dir) = path.parent() {
@@ -1488,6 +1516,32 @@ impl EditorApp {
             }
         }
     }
+
+    fn resolve_recovery(&mut self, restore: bool) -> Result<(), String> {
+        let Some(prompt) = self.pending_recovery.as_ref() else {
+            return Ok(());
+        };
+        if !restore {
+            crate::recovery::clear(&prompt.project_path)?;
+            self.pending_recovery = None;
+            self.last_autosave = Instant::now();
+            return Ok(());
+        }
+        let Some(prompt) = self.pending_recovery.take() else {
+            return Ok(());
+        };
+        {
+            let saved_project = self.current_project.clone().ok_or("No project loaded")?;
+            self.current_project = Some(prompt.project.clone());
+            self.scenes = SceneWorkspace::open(&prompt.project);
+            self.scenes.set_saved_baselines(&saved_project);
+            self.lifecycle.mark_saved(&saved_project);
+            self.reset_scene_view();
+            self.console_log
+                .push("[INFO] Recovered unsaved project changes".into());
+        }
+        Ok(())
+    }
 }
 
 impl winit::application::ApplicationHandler for EditorApp {
@@ -1639,6 +1693,11 @@ impl EditorApp {
             {
                 continue;
             }
+            if self.pending_recovery.is_some()
+                && !matches!(request, ProjectRequest::ResolveRecovery(_))
+            {
+                continue;
+            }
             let result = match request {
                 ProjectRequest::Component(command) => self.apply_component_command(command),
                 ProjectRequest::Entity(command) => self.apply_entity_command(command),
@@ -1649,6 +1708,7 @@ impl EditorApp {
                 ProjectRequest::Leave(action) => self.request_project_action(action),
                 ProjectRequest::Resolve(decision) => self.resolve_project_action(decision),
                 ProjectRequest::ResolveSceneClose(decision) => self.resolve_scene_close(decision),
+                ProjectRequest::ResolveRecovery(restore) => self.resolve_recovery(restore),
                 ProjectRequest::Scene(action) => self.change_scene(action),
                 ProjectRequest::Open(path) => {
                     self.request_project_action(ProjectAction::Open(path))
@@ -1689,6 +1749,24 @@ impl EditorApp {
             .authoring_document()
             .and_then(|document| self.lifecycle.is_dirty(document.as_ref()))
             .unwrap_or(true);
+        if self.pending_recovery.is_none() {
+            if let Some(path) = self.project_path.clone() {
+                if self.play.is_none() && project_dirty {
+                    if self.last_autosave.elapsed() >= std::time::Duration::from_secs(30) {
+                        if let Ok(Some(project)) = self.authoring_document() {
+                            if let Err(error) = crate::recovery::save(&path, &project) {
+                                self.console_log.push(format!(
+                                    "[WARN] Could not write recovery snapshot: {error}"
+                                ));
+                            }
+                        }
+                        self.last_autosave = Instant::now();
+                    }
+                } else if !project_dirty {
+                    let _ = crate::recovery::clear(&path);
+                }
+            }
+        }
 
         // Collect status bar data before any mutable borrows
         let fps = self.fps;
@@ -2250,6 +2328,33 @@ impl EditorApp {
             if ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
                 self.project_requests
                     .push(ProjectRequest::ResolveSceneClose(SaveDecision::Cancel));
+            }
+        }
+
+        if self.pending_recovery.is_some() {
+            egui::Window::new("Recover unsaved project changes?")
+                .id(egui::Id::new("project_recovery_prompt"))
+                .order(egui::Order::Foreground)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    ui.label("A newer recovery snapshot was found for this project.");
+                    ui.label("Restore it to continue from your last autosave.");
+                    ui.horizontal(|ui| {
+                        if ui.button("Restore").clicked() {
+                            self.project_requests
+                                .push(ProjectRequest::ResolveRecovery(true));
+                        }
+                        if ui.button("Discard Recovery").clicked() {
+                            self.project_requests
+                                .push(ProjectRequest::ResolveRecovery(false));
+                        }
+                    });
+                });
+            if ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+                self.project_requests
+                    .push(ProjectRequest::ResolveRecovery(false));
             }
         }
 
