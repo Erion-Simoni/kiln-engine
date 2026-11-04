@@ -15,18 +15,19 @@
 - All gizmo modes apply to multi-selection around the primary entity: translation shares a world-space offset, rotation turns positions and orientations around the pivot, and scale changes offsets and sizes. Each result converts back to local space, and the gesture is one undo transaction.
 - Closing a dirty scene tab offers Save, Discard, or Cancel. Save writes the project before closing; Discard restores the saved scene or removes a never-saved scene while preserving other open-scene edits.
 - Dirty projects write atomic recovery sidecars every 30 seconds. Opening a project with a newer sidecar offers Restore or Discard Recovery; restored tabs compare against the disk baseline, and successful project saves clear the sidecar.
+- A combined two-scene acceptance test now covers per-scene transforms/history, reparent world-pose preservation, duplicate/delete undo-redo, save/reopen, and reconstructed runtime transforms while preserving authored metadata.
 
 ## Validation
 
 - Earlier parent/local checkpoint: `just check` passed; `just test`: 514 passed. Editor build, WASM check, Chromium smoke, nested-offset, runtime propagation, editor descendant update, and reparent/delete pose-preservation checks passed.
-- Earlier gizmo checkpoint: `just check` passed; `just test`: 518 passed. Multi-selection/framing: 519 passed. Group translation: 520 passed. Group rotation/scale: 522 passed. Sprite-aware framing: 523 passed. Dirty tab close: 524 passed.
-- Current recovery checkpoint: `just check` passed; `just test`: 527 passed, zero failed/skipped. Coverage includes sidecar serialization, newer-than-disk detection, clearing, recovered-scene dirty baselines, group transforms, and transformed sprite bounds.
-- Native GUI confirmation of the latest gizmo, scene-close, and recovery workflows remains outstanding. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
+- Earlier gizmo checkpoint: `just check` passed; `just test`: 518 passed. Multi-selection/framing: 519 passed. Group translation: 520 passed. Group rotation/scale: 522 passed. Sprite-aware framing: 523 passed. Dirty tab close: 524 passed. Autosave/recovery: 527 passed.
+- Current combined acceptance checkpoint: `just check` passed; `just test`: 528 passed, zero failed/skipped. The new `two_scene_acceptance` integration test passed.
+- Native GUI confirmation of the latest gizmo, scene-close, and recovery workflows remains outstanding. This environment has no display, Xvfb, or desktop automation tool. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
 
 ## Next
 
-1. Exercise the scene-close and recovery dialogs in the native GUI.
-2. Run full two-scene transform/reparent/duplicate/delete/save/restart acceptance before completing Task 2. Tasks 3–9 remain pending.
+1. Run the scene-close, recovery, gizmo, and full two-scene acceptance in a native GUI environment with a virtual display.
+2. Complete any acceptance failures, then continue Task 2 review. Tasks 3–9 remain pending.
 
 ## Known limits and environment
 
