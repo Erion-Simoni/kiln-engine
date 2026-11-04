@@ -89,14 +89,33 @@ editor startup was attempted and failed at window creation because DISPLAY and
 Wayland variables are absent. No native visual or browser physics gameplay
 acceptance is claimed.
 
-### 6. Sprites, animation, tilemaps, and VFX — PENDING
+### 6. Sprites, animation, tilemaps, and VFX — IMPLEMENTATION COMPLETE; NATIVE WORKFLOW ACCEPTANCE PENDING
 
-- [ ] Complete sprite drag/drop, pivots, sorting, import filtering, and pixel scale.
-- [ ] Replace animation preview placeholders with actual texture playback; support frame editing, events, transitions, and runtime parity.
-- [ ] Complete tile palette/brush/erase/fill, multiple layers, terrain painting, collision previews, and map persistence.
-- [ ] Verify particle authoring, preview, serialization, and runtime execution agree.
+- [x] Complete sprite drag/drop, pivots, sorting, import filtering, and pixel scale.
+- [x] Replace animation preview placeholders with actual texture playback; support frame editing, events, transitions, and runtime parity.
+- [x] Complete tile palette/brush/erase/fill, multiple layers, terrain painting, collision previews, and map persistence.
+- [x] Verify particle authoring, preview, serialization, and runtime execution agree.
 
 Acceptance: create an animated character and a multilayer playable tilemap through the editor, save/reopen, play, and export without hand-editing scene files.
+
+2026-11-04: authoring-command acceptance generates
+`samples/visual2d_editor`, saves/reopens it, packs a real KAR archive and executes
+the native player loader/shared gameplay from source and archive at 30/144 FPS.
+Assertions cover wall collision, clip transitions and frame events, particles,
+sorting and authoring isolation. Painted solids also generate merged static
+Rapier geometry; grounding, contacts, rays, edits and removal are regression
+tested. Headless egui acceptance checks the actual
+decoded preview texture and frame UVs. `just check` passes; `just test` runs
+**592 tests, all passed, zero skipped**; editor/player builds, no-physics Clippy
+and WASM build pass. Chromium WebGL smoke tests pass for both this sample and
+the original vertical slice, including input and zero runtime/asset errors;
+linear filtering plus generated mipmaps is also exercised.
+
+Native editor/player startup was attempted; this runner has no X11/Wayland
+display. Native drag/drop/panel interaction and graphical packed-player
+acceptance remain unverified. Real archive export is exercised; automating the
+editor's Build/Export panel remains Task 8. See `docs/VISUAL_AUTHORING_2D.md` for
+the exact supported contract and graphical acceptance procedure.
 
 ### 7. Audio, UI, saving, and settings — PENDING
 

@@ -30,3 +30,9 @@ gilrs = { workspace = true, optional = true }
 default = []
 gamepad = ["gilrs", "kiln-input/gamepad"]
 
+[dev-dependencies]
+kiln-editor = { workspace = true }
+tempfile = "3.14"
+serde = { workspace = true }
+serde_json = { workspace = true }
+kiln-ir = { workspace = true }

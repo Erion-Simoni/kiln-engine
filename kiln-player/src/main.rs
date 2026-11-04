@@ -3,12 +3,12 @@
 
 use anyhow::Result;
 use clap::Parser;
-use kiln_core::{cache_dir, save_dir, settings_dir, Project, Transform};
+use kiln_core::{cache_dir, save_dir, settings_dir, Project};
 use kiln_player::loader;
 use kiln_player::spawn;
 use kiln_player::textures::TextureLibrary;
 use kiln_render::{camera::Camera, sprite_renderer::SpriteInstance, Renderer, SpriteRenderer};
-use kiln_runtime::{GameLoop, GameWorld, InputState, SliceSession, Sprite, Tilemap};
+use kiln_runtime::{GameLoop, GameWorld, InputState, SliceSession};
 use kiln_ui::{
     layout::Rect,
     localization::LocalizationKey,
@@ -845,29 +845,10 @@ impl PlayerApp {
         // Tilemaps are drawn first so entities appear on top of them.
         // Only the chunks inside the camera view are submitted.
         let view_bounds = self.camera.view_bounds();
-        for (_, tilemap) in self.world.world_mut().query_mut::<(&Transform, &Tilemap)>() {
-            for (texture, instance) in tilemap.collect_visible(view_bounds) {
-                gpu.sprite_renderer.push_textured(texture, instance);
-            }
-        }
-
-        for (transform, sprite) in self
-            .world
-            .world_mut()
-            .query_mut::<(&kiln_runtime::GlobalTransform, &Sprite)>()
+        for (texture, instance) in
+            kiln_runtime::visual::collect_scene_draws(&self.world, view_bounds)
         {
-            gpu.sprite_renderer.push_textured(
-                sprite.texture,
-                SpriteInstance {
-                    position: [transform.position.x, transform.position.y],
-                    size: sprite.size,
-                    color: sprite.color,
-                    uv_rect: sprite.uv_rect,
-                    material_id: 0,
-                    rotation: 0.0,
-                }
-                .with_transform(transform.rotation, [transform.scale.x, transform.scale.y]),
-            );
+            gpu.sprite_renderer.push_textured(texture, instance);
         }
 
         // The HUD is drawn in screen space (top-left origin) on top of the

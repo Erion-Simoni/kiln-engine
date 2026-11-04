@@ -7,6 +7,8 @@ use rapier2d::prelude::*;
 /// Physics world wrapper
 #[cfg(feature = "physics")]
 pub struct PhysicsWorld {
+    pub(crate) tilemaps:
+        std::collections::HashMap<hecs::Entity, crate::physics_tilemap::TrackedTilemap>,
     pub(crate) tracked: std::collections::HashMap<hecs::Entity, crate::physics_sync::TrackedBody>,
     pub(crate) source_ids: std::collections::HashMap<RigidBodyHandle, String>,
     pub(crate) active_pairs: std::collections::BTreeSet<(String, String)>,
@@ -59,6 +61,7 @@ impl PhysicsWorld {
     /// Create a new physics world with default gravity.
     pub fn new() -> Self {
         PhysicsWorld {
+            tilemaps: Default::default(),
             tracked: Default::default(),
             source_ids: Default::default(),
             active_pairs: Default::default(),

@@ -73,47 +73,90 @@ pub fn create_rgba8_texture(
     height: u32,
     rgba: &[u8],
 ) -> (wgpu::Texture, wgpu::TextureView) {
-    assert_eq!(
-        rgba.len(),
-        (width * height * 4) as usize,
-        "RGBA buffer size must be width*height*4"
-    );
+    create_rgba8_texture_with_options(device, queue, label, [width, height], rgba, false)
+}
 
+/// Box-filtered RGBA levels, including the base, with complete odd-size coverage.
+pub fn rgba_mip_chain(size: [u32; 2], rgba: &[u8], enabled: bool) -> Vec<([u32; 2], Vec<u8>)> {
+    let [mut width, mut height] = size;
+    assert!(width > 0 && height > 0);
+    assert_eq!(rgba.len(), width as usize * height as usize * 4);
+    let mut levels = vec![(size, rgba.to_vec())];
+    while enabled && (width > 1 || height > 1) {
+        let w = (width / 2).max(1);
+        let h = (height / 2).max(1);
+        let source = &levels.last().unwrap().1;
+        let mut pixels = vec![0; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let mut sums = [0u32; 4];
+                let mut count = 0;
+                for sy in y * height / h..(y + 1) * height / h {
+                    for sx in x * width / w..(x + 1) * width / w {
+                        for channel in 0..4 {
+                            sums[channel] +=
+                                source[((sy * width + sx) * 4) as usize + channel] as u32;
+                        }
+                        count += 1;
+                    }
+                }
+                for channel in 0..4 {
+                    pixels[((y * w + x) * 4) as usize + channel] = (sums[channel] / count) as u8;
+                }
+            }
+        }
+        levels.push(([w, h], pixels));
+        width = w;
+        height = h;
+    }
+    levels
+}
+
+/// Upload all generated mip levels; sampling choice belongs to the bind group.
+pub fn create_rgba8_texture_with_options(
+    device: &Device,
+    queue: &Queue,
+    label: &str,
+    size: [u32; 2],
+    rgba: &[u8],
+    mipmaps: bool,
+) -> (wgpu::Texture, wgpu::TextureView) {
+    let levels = rgba_mip_chain(size, rgba, mipmaps);
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
         size: wgpu::Extent3d {
-            width,
-            height,
+            width: size[0],
+            height: size[1],
             depth_or_array_layers: 1,
         },
-        mip_level_count: 1,
+        mip_level_count: levels.len() as u32,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Rgba8Unorm,
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
-
-    queue.write_texture(
-        wgpu::ImageCopyTexture {
-            texture: &texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        rgba,
-        wgpu::ImageDataLayout {
-            offset: 0,
-            bytes_per_row: Some(width * 4),
-            rows_per_image: Some(height),
-        },
-        wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-    );
-
+    for (level, ([width, height], pixels)) in levels.iter().enumerate() {
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &texture,
+                mip_level: level as u32,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            pixels,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(width * 4),
+                rows_per_image: Some(*height),
+            },
+            wgpu::Extent3d {
+                width: *width,
+                height: *height,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
     (texture, view)
 }
@@ -121,6 +164,15 @@ pub fn create_rgba8_texture(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn generated_mips_include_odd_edge_texels_and_preserve_constant_alpha() {
+        let pixels: Vec<_> = (0..9u8).flat_map(|value| [value, 20, 80, 255]).collect();
+        let levels = rgba_mip_chain([3, 3], &pixels, true);
+        assert_eq!(levels.len(), 2);
+        assert_eq!(levels[1], ([1, 1], vec![4, 20, 80, 255]));
+        assert_eq!(rgba_mip_chain([3, 3], &pixels, false).len(), 1);
+    }
 
     #[test]
     fn uv_rect_full_texture() {

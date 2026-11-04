@@ -103,6 +103,8 @@ pub fn render_inspector_panel(
 
 fn component_header_name(component: &Component) -> String {
     match component {
+        Component::SpriteLayout { .. } => "Sprite Layout".into(),
+        Component::Particles { .. } => "Particles".into(),
         Component::Physics { .. } => "Physics Body / Collider".into(),
         Component::Joint { .. } => "Physics Joint".into(),
         Component::Script { .. } => "Script".into(),
@@ -123,6 +125,15 @@ fn render_component(ui: &mut egui::Ui, component: &mut Component, project: &Proj
     let mut changed = false;
 
     match component {
+        Component::SpriteLayout { settings } => {
+            ui.label(format!(
+                "Pivot {:?}, {} px/unit",
+                settings.pivot, settings.pixels_per_unit
+            ));
+        }
+        Component::Particles { effect } => {
+            ui.label(format!("{} emitters", effect.emitters.len()));
+        }
         Component::Physics { body, collider } => {
             ui.label(format!(
                 "Body: {:?}, collider: {:?}",

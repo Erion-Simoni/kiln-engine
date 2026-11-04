@@ -30,6 +30,9 @@ pub struct Project {
     /// Tilemaps of the project, keyed by their id.
     #[serde(default)]
     pub tilemaps: HashMap<String, TileMap>,
+    /// Saved terrain palettes indexed by cardinal-neighbor occupancy.
+    #[serde(default)]
+    pub terrains: HashMap<String, crate::tilemap::TerrainSet>,
     /// Tilesets of the project, keyed by their id.
     #[serde(default)]
     pub tilesets: HashMap<String, TileSet>,
@@ -80,6 +83,18 @@ impl Default for AssetImportSettings {
             generate_mipmaps: true,
             is_sprite: false,
         }
+    }
+}
+
+impl Project {
+    /// Effective nearest-sampling/mipmap settings; legacy projects retain their
+    /// original nearest/no-mip appearance until import options are assigned.
+    pub fn texture_options(&self, path: &str) -> [bool; 2] {
+        self.asset_ids
+            .get(path)
+            .and_then(|id| self.asset_import_settings.get(id))
+            .map(|settings| [settings.nearest_filter, settings.generate_mipmaps])
+            .unwrap_or([true, false])
     }
 }
 
@@ -246,6 +261,15 @@ pub struct Entity {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Component {
+    /// Sprite drawing geometry, independent of the referenced texture.
+    SpriteLayout {
+        settings: crate::visual::SpriteLayout,
+    },
+    /// Saved CPU particle effect, simulated by the shared runtime.
+    Particles {
+        effect: crate::visual::ParticleEffect,
+    },
+
     /// Authored physics body and its collision shape.
     Physics {
         body: crate::physics_data::RigidBody2D,
@@ -358,6 +382,7 @@ impl Default for Project {
             scenes: HashMap::new(),
             cameras: HashMap::new(),
             tilemaps: HashMap::new(),
+            terrains: HashMap::new(),
             tilesets: HashMap::new(),
             animation_clips: HashMap::new(),
             shaders: HashMap::new(),

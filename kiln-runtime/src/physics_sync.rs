@@ -190,6 +190,7 @@ pub(crate) fn synchronize(physics: &mut PhysicsWorld, game: &mut GameWorld) -> V
             tracked.body = body;
         }
     }
+    crate::physics_tilemap::synchronize(physics, game);
     synchronize_joints(physics, game);
     physics.step();
     let mut pairs = BTreeSet::new();

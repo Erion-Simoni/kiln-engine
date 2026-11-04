@@ -11,7 +11,7 @@ use bytemuck::{Pod, Zeroable};
 use wgpu::{Device, Queue};
 
 use crate::camera::Camera;
-use crate::texture::{create_rgba8_texture, TextureId, FULL_UV};
+use crate::texture::{create_rgba8_texture_with_options, TextureId, FULL_UV};
 
 /// Placeholder for Material - should be imported from kiln-core once dependency is resolved
 /// TODO: Import from kiln-core::project::Material
@@ -108,7 +108,6 @@ pub struct SpriteRenderer {
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     texture_bgl: wgpu::BindGroupLayout,
-    sampler: wgpu::Sampler,
     textures: Vec<TextureSlot>,
     /// Custom materials keyed by material ID (0 = default shader).
     materials: Vec<Material>,
@@ -141,6 +140,10 @@ const QUAD_VERTS: &[QuadVertex] = &[
 const QUAD_INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 
 impl SpriteRenderer {
+    /// Drop project bindings when a host rebuilds all affected sprites.
+    pub fn clear_project_textures(&mut self) {
+        self.textures.truncate(1);
+    }
     /// Create a new renderer (includes [`TextureId::WHITE`]).
     pub fn new(device: &Device, queue: &Queue, format: wgpu::TextureFormat) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -198,17 +201,6 @@ impl SpriteRenderer {
                     count: None,
                 },
             ],
-        });
-
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("sprite_sampler"),
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
         });
 
         let quad_vertices = device.create_buffer(&wgpu::BufferDescriptor {
@@ -288,7 +280,6 @@ impl SpriteRenderer {
             uniform_buffer,
             uniform_bind_group,
             texture_bgl,
-            sampler,
             textures: Vec::new(),
             materials: Vec::new(),
             material_pipelines: std::collections::HashMap::new(),
@@ -321,7 +312,41 @@ impl SpriteRenderer {
         height: u32,
         rgba: &[u8],
     ) -> TextureId {
-        let (texture, view) = create_rgba8_texture(device, queue, label, width, height, rgba);
+        self.create_texture_rgba_with_options(
+            device,
+            queue,
+            label,
+            [width, height],
+            rgba,
+            [true, false],
+        )
+    }
+
+    /// Per-asset nearest/linear sampling and generated mipmaps.
+    pub fn create_texture_rgba_with_options(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        label: &str,
+        size: [u32; 2],
+        rgba: &[u8],
+        options: [bool; 2],
+    ) -> TextureId {
+        let [width, height] = size;
+        let (texture, view) =
+            create_rgba8_texture_with_options(device, queue, label, size, rgba, options[1]);
+        let filter = if options[0] {
+            wgpu::FilterMode::Nearest
+        } else {
+            wgpu::FilterMode::Linear
+        };
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("asset_sampler"),
+            mag_filter: filter,
+            min_filter: filter,
+            mipmap_filter: filter,
+            ..Default::default()
+        });
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("sprite_tex_bg"),
             layout: &self.texture_bgl,
@@ -332,7 +357,7 @@ impl SpriteRenderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    resource: wgpu::BindingResource::Sampler(&sampler),
                 },
             ],
         });
@@ -494,19 +519,9 @@ impl SpriteRenderer {
             return;
         }
 
-        let proj: [f32; 16] = camera.projection_matrix().to_cols_array();
-        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&proj));
-
-        // Sort by (layer, material_id, texture) so sprites on lower layers are drawn first
-        // (painter order for transparency), while same-layer same-material same-texture
-        // sprites are batched into one draw call. The sort is stable, so
-        // submission order is preserved within each (layer, material, texture) group.
-        self.pending.sort_by(|a, b| {
-            a.2.partial_cmp(&b.2)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| a.1.cmp(&b.1))
-                .then_with(|| a.0 .0.cmp(&b.0 .0))
-        });
+        // Keep transparent painter order; only adjacent texture/material runs
+        // can batch without changing which sprite appears on top.
+        sort_painter_order(&mut self.pending);
 
         let proj: [f32; 16] = camera.projection_matrix().to_cols_array();
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&proj));
@@ -567,9 +582,33 @@ impl SpriteRenderer {
     }
 }
 
+/// Stable sorting preserves transparent submission order within each layer.
+fn sort_painter_order(pending: &mut [(TextureId, u32, f32, SpriteInstance)]) {
+    pending.sort_by(|a, b| a.2.total_cmp(&b.2));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn transparent_submission_order_survives_texture_and_material_changes() {
+        let instance = SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]);
+        let mut pending = vec![
+            (TextureId(8), 4, 1.0, instance),
+            (TextureId(2), 0, -1.0, instance),
+            (TextureId(1), 2, 1.0, instance),
+            (TextureId(8), 1, 1.0, instance),
+        ];
+        sort_painter_order(&mut pending);
+        assert_eq!(
+            pending
+                .iter()
+                .map(|entry| (entry.0 .0, entry.1))
+                .collect::<Vec<_>>(),
+            [(2, 0), (8, 4), (1, 2), (8, 1)]
+        );
+    }
 
     fn rendered_bounds(instances: &[SpriteInstance]) -> Option<Vec<[u32; 4]>> {
         const WIDTH: u32 = 96;

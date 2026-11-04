@@ -9,7 +9,7 @@ use kiln_gameplay::{DataTable, Dialogue, Quest};
 use kiln_graph::{ArithmeticOp, ConstantValue, Graph, Node, NodeType};
 use kiln_render::{
     clear_view, execute_passes, Frame2dGraph, PassTiming, PostConfig, PostFramebuffer,
-    PostPipeline, RenderTier, SpriteInstance, SpriteRenderer,
+    PostPipeline, RenderTier, SpriteRenderer,
 };
 use kiln_runtime::{GameWorld, SourceId, Sprite, Tilemap};
 use kiln_ui::{Button, Label, List, Panel, Widget, WidgetId};
@@ -72,6 +72,7 @@ struct RecoveryPrompt {
 }
 
 enum ProjectRequest {
+    RefreshVisuals,
     PausePlay,
     StepPlay,
     RestartPlay,
@@ -1045,6 +1046,7 @@ impl EditorApp {
     fn start_play_scene(&mut self, scene_id: &str) -> Result<(), String> {
         self.finish_transform_edit();
         self.capture_active_scene()?;
+        self.upload_scene_textures();
         let project = self
             .current_project
             .as_ref()
@@ -1542,7 +1544,14 @@ impl EditorApp {
             _ => None,
         };
         let selected = command.execute(&mut scene, project, &mut self.scenes.history)?;
-        self.apply_scene(scene)?;
+        if matches!(
+            command.edit,
+            crate::entity_command::EntityEdit::CreateSprite { .. }
+        ) {
+            self.apply_scene_with_texture_refresh(scene)?;
+        } else {
+            self.apply_scene(scene)?;
+        }
         if deleted.is_some_and(|id| self.hierarchy_panel.selected_entity_id() == Some(id)) {
             self.hierarchy_panel.clear_selection();
         }
@@ -2099,6 +2108,29 @@ impl EditorApp {
                 continue;
             }
             let result = match request {
+                ProjectRequest::RefreshVisuals => self.require_edit_mode().and_then(|_| {
+                    let scene = self
+                        .scenes
+                        .active_id()
+                        .and_then(|id| self.current_project.as_ref()?.scenes.get(id))
+                        .cloned();
+                    if let Some(scene) = scene {
+                        let refresh = self
+                            .gpu
+                            .as_ref()
+                            .zip(self.current_project.as_ref())
+                            .is_some_and(|(gpu, project)| {
+                                gpu.scene_textures.needs_refresh(project)
+                            });
+                        if refresh {
+                            self.apply_scene_with_texture_refresh(scene)
+                        } else {
+                            self.apply_scene(scene)
+                        }
+                    } else {
+                        Ok(())
+                    }
+                }),
                 ProjectRequest::ApplyPlayTransforms => self.apply_play_transforms(),
                 ProjectRequest::TransitionPlay(id) => {
                     if self
@@ -2950,30 +2982,11 @@ impl EditorApp {
                 let camera = &scene_camera;
                 let view_bounds = camera.view_bounds();
                 let _ = kiln_runtime::update_global_transforms(&mut self.world);
-                for (_, tilemap) in self.world.world().query::<(&Transform, &Tilemap)>().iter() {
-                    for (texture, instance) in tilemap.collect_visible(view_bounds) {
-                        gpu.scene_view_sprite_renderer
-                            .push_textured(texture, instance);
-                    }
-                }
-                for (transform, sprite) in self
-                    .world
-                    .world()
-                    .query::<(&kiln_runtime::GlobalTransform, &Sprite)>()
-                    .iter()
+                for (texture, instance) in
+                    kiln_runtime::visual::collect_scene_draws(&self.world, view_bounds)
                 {
-                    gpu.scene_view_sprite_renderer.push_textured(
-                        sprite.texture,
-                        SpriteInstance {
-                            position: [transform.position.x, transform.position.y],
-                            size: sprite.size,
-                            color: sprite.color,
-                            uv_rect: sprite.uv_rect,
-                            material_id: 0,
-                            rotation: 0.0,
-                        }
-                        .with_transform(transform.rotation, [transform.scale.x, transform.scale.y]),
-                    );
+                    gpu.scene_view_sprite_renderer
+                        .push_textured(texture, instance);
                 }
 
                 // Determine render target: post framebuffer if available, else main view.
@@ -3605,6 +3618,41 @@ impl TabViewer<'_> {
             ui.id().with("transform_gizmo_canvas"),
             egui::Sense::drag(),
         );
+        if let Some(asset) = response.dnd_release_payload::<crate::assets::SpriteAssetPayload>() {
+            let point = ui.input(|input| input.pointer.interact_pos());
+            let image = self
+                .asset_browser
+                .root()
+                .ok_or("Open a project")
+                .and_then(|root| {
+                    std::fs::read(root.join(&asset.path)).map_err(|_| "Cannot read dropped image")
+                })
+                .and_then(|bytes| {
+                    kiln_assets::decode_png(&bytes).map_err(|_| "Cannot decode dropped image")
+                });
+            match (point, self.scenes.active_id(), image) {
+                (Some(point), Some(scene_id), Ok(image)) => {
+                    let position = scene_view::pointer_to_world(
+                        [point.x, point.y],
+                        [canvas.left(), canvas.top(), canvas.right(), canvas.bottom()],
+                        self.scene_camera.position,
+                        units,
+                    );
+                    self.project_requests.push(ProjectRequest::Entity(
+                        crate::entity_command::EntityCommand {
+                            scene_id: scene_id.into(),
+                            edit: crate::entity_command::EntityEdit::CreateSprite {
+                                texture: asset.path.clone(),
+                                position,
+                                size: [image.width, image.height],
+                            },
+                        },
+                    ));
+                }
+                (_, _, Err(error)) => self.console_log.push(format!("[ERROR] {error}")),
+                _ => {}
+            }
+        }
         if let Some(prefab_id) = response.dnd_release_payload::<String>() {
             let pointer = ui.input(|input| input.pointer.interact_pos());
             if let (Some(pointer), Some(scene_id)) = (pointer, self.scenes.active_id()) {
@@ -4449,6 +4497,16 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         let has_sprite = has(ComponentKind::Sprite);
                         let has_role = has(ComponentKind::Role);
                         let has_tilemap = has(ComponentKind::Tilemap);
+                        if has_sprite {
+                            let mut settings=authored.components.iter().find_map(|component|match component{kiln_core::Component::SpriteLayout {settings}=>Some(*settings),_=>None}).unwrap_or_default();
+                            ui.collapsing("Sprite Pivot / Pixel Scale",|ui|{
+                                if crate::sprite_editor::layout_ui(ui,&mut settings) {self.queue_component(entity,ComponentEdit::SetVisual(kiln_core::Component::SpriteLayout {settings}));}
+                            });
+                        }
+                        if authored.components.iter().any(|component|matches!(component,kiln_core::Component::Particles {..})) {
+                            ui.label("Saved particle effect: edit in VFX Editor.");
+                            if ui.button("Remove Particles").clicked() {self.remove_component(entity,ComponentKind::Particles);}
+                        } else if ui.button("+ Particles").clicked() {self.add_component(entity,ComponentKind::Particles);}
                         if let Some((mut body, mut collider)) = authored.components.iter().find_map(|component| match component {
                             kiln_core::Component::Physics { body, collider } => Some((*body,*collider)), _=>None,
                         }) {
@@ -5292,7 +5350,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                             == Some(&entry.path);
 
                                         let selectable = ui
-                                            .selectable_label(selected, &name)
+                                            .add(egui::Label::new(if selected {egui::RichText::new(&name).strong()} else {egui::RichText::new(&name)}).sense(egui::Sense::click_and_drag()))
                                             .on_hover_text(&entry.path);
 
                                         // Drag-and-drop support: start drag on the asset entry.
@@ -5305,6 +5363,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         // Drag-and-drop: start drag on mouse press.
                                         if selectable.drag_started() {
                                             self.asset_browser.set_drag_source(Some(&entry.path));
+                                            if entry.kind==AssetKind::Image {selectable.dnd_set_drag_payload(crate::assets::SpriteAssetPayload {path:entry.path.clone()});}
                                         }
 
                                         // Handle drop onto this entity (if it's a sprite/texture target).
@@ -5369,6 +5428,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 });
                                 if changed {
                                     project.asset_import_settings.insert(asset_id, settings);
+                                    self.project_requests.push(ProjectRequest::RefreshVisuals);
                                 }
                             } else {
                                 ui.label("Import assets to assign a stable ID and configure import settings.");
@@ -5996,8 +6056,32 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             }
             Tab::TilemapEditor => {
                 ui.vertical(|ui| {
+                    if self.editing_locked() {
+                        ui.disable();
+                    }
                     if let Some(project) = self.current_project.as_mut() {
-                        crate::tilemap_editor::show(ui, self.tilemap_editor, project);
+                        let before = serde_json::to_value((
+                            &project.tilemaps,
+                            &project.tilesets,
+                            &project.terrains,
+                        ))
+                        .ok();
+                        crate::tilemap_editor::show_with_root(
+                            ui,
+                            self.tilemap_editor,
+                            project,
+                            self.asset_browser.root(),
+                        );
+                        if before
+                            != serde_json::to_value((
+                                &project.tilemaps,
+                                &project.tilesets,
+                                &project.terrains,
+                            ))
+                            .ok()
+                        {
+                            self.project_requests.push(ProjectRequest::RefreshVisuals);
+                        }
                     } else {
                         ui.heading("Tilemap Editor");
                         ui.add_space(8.0);
@@ -6008,13 +6092,21 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
             Tab::AnimationEditor => {
                 ui.vertical(|ui| {
+                    if self.editing_locked() {
+                        ui.disable();
+                    }
                     if let Some(project) = self.current_project.as_mut() {
-                        AnimationEditorState::render_animation_editor(
+                        let before = serde_json::to_value(&project.animation_clips).ok();
+                        AnimationEditorState::render_with_root(
                             ui,
                             self.anim_editor,
                             &mut project.animation_clips,
-                            1.0 / 60.0, // dt
+                            ui.input(|input| input.stable_dt),
+                            self.asset_browser.root(),
                         );
+                        if before != serde_json::to_value(&project.animation_clips).ok() {
+                            self.project_requests.push(ProjectRequest::RefreshVisuals);
+                        }
                     } else {
                         ui.heading("Animation Editor");
                         ui.add_space(8.0);
@@ -6098,7 +6190,40 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             }
             Tab::VfxEditor => {
                 ui.vertical(|ui| {
-                    self.vfx_editor.render(ui);
+                    if self.editing_locked() {
+                        ui.disable();
+                    }
+                    if let Some(entity) = *self.selected_entity {
+                        if let Some(authored) = self.authored_entity(entity) {
+                            let mut effect = authored
+                                .components
+                                .iter()
+                                .find_map(|component| match component {
+                                    kiln_core::Component::Particles { effect } => {
+                                        Some(effect.clone())
+                                    }
+                                    _ => None,
+                                })
+                                .unwrap_or_default();
+                            let attached = authored.components.iter().any(|component| {
+                                matches!(component, kiln_core::Component::Particles { .. })
+                            });
+                            let changed =
+                                self.vfx_editor.render_effect(ui, &authored.id, &mut effect);
+                            if changed
+                                || (!attached && ui.button("Attach Effect to Entity").clicked())
+                            {
+                                self.queue_component(
+                                    entity,
+                                    ComponentEdit::SetVisual(kiln_core::Component::Particles {
+                                        effect,
+                                    }),
+                                );
+                            }
+                        }
+                    } else {
+                        ui.label("Select a scene entity to author a saved particle effect.");
+                    }
                 });
             }
             Tab::AudioEditor => {
@@ -6193,8 +6318,33 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             }
             Tab::SpriteEditor => {
                 ui.vertical(|ui| {
+                    if self.editing_locked() {
+                        ui.disable();
+                    }
                     if let Some(project) = self.current_project.as_mut() {
-                        self.sprite_editor.render(ui, project);
+                        let before = project.scenes.clone();
+                        let resources = serde_json::to_value(&project.animation_clips).ok();
+                        self.sprite_editor
+                            .render_with_root(ui, project, self.asset_browser.root());
+                        let changed = serde_json::to_value(&before).ok()
+                            != serde_json::to_value(&project.scenes).ok();
+                        if changed {
+                            for (id, scene) in before {
+                                if serde_json::to_value(&scene).ok()
+                                    != project
+                                        .scenes
+                                        .get(&id)
+                                        .and_then(|scene| serde_json::to_value(scene).ok())
+                                {
+                                    self.scenes.record_external_edit(scene);
+                                }
+                            }
+                        }
+                        if changed
+                            || resources != serde_json::to_value(&project.animation_clips).ok()
+                        {
+                            self.project_requests.push(ProjectRequest::RefreshVisuals);
+                        }
                     } else {
                         ui.heading("Sprite Editor");
                         ui.add_space(8.0);
@@ -6338,7 +6488,7 @@ impl<'a> TabViewer<'a> {
                 continue;
             };
             let entity_bounds = if let Ok(sprite) = self.world.world_ref().get::<&Sprite>(entity) {
-                scene_view::transformed_sprite_bounds(transform.0, sprite.size)
+                sprite.world_bounds(transform.0)
             } else {
                 [
                     transform.0.position.x,

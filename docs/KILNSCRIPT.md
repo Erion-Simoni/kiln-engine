@@ -120,7 +120,27 @@ Builtins are host functions registered by the runtime. The standard slice builti
 | `play_animation(source_id, clip_name)` | 2 (str, str) | — | Play an animation clip |
 | `stop_animation(source_id)` | 1 (str) | — | Stop animation |
 | `set_animation_speed(source_id, speed)` | 2 (str, f64) | — | Set playback speed |
+| `animation_event_name()` | 0 | str | Frame event name during the attachment's `animation_event` phase |
+| `animation_event_value()` | 0 | str | Frame event text payload, or empty string |
 | `get_collision_events()` | 0 | [[a, b, started]...] | Collision events this frame |
+
+Authored clips use decoded sheet dimensions, per-frame duration/pivot, optional
+frame events, looping and a non-looping next-clip transition. Attached scripts
+receive each crossed event once, including skipped frames and loop boundaries:
+
+```kilnscript
+if script_phase() == "animation_event" {
+    if animation_event_name() == "footstep" {
+        state_set("surface", animation_event_value());
+    }
+}
+```
+
+Repeated `play_animation` requests for the currently playing clip preserve time.
+All project clips are available to a scene sprite, including clips using another
+sheet. See [Visual authoring](VISUAL_AUTHORING_2D.md) for the shared preview and
+runtime contract. Particle start/stop APIs toggle emission and preserve emitter
+configuration while live particles finish their lifetimes.
 
 ### UI builtins
 

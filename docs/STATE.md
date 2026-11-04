@@ -1,34 +1,38 @@
 # Kiln Session Handoff
 
-**Active focus:** Task 5 implementation complete; native graphical acceptance pending.
-**Branch:** `feat/2d-production-workflow`. 3D remains paused. Task 6 has not started.
+**Active focus:** Task 6 implementation complete; native workflow acceptance pending.
+**Branch:** `feat/2d-production-workflow`. 3D is paused. Task 7 has not started.
 
 ## Delivered
 
-- Saved `Component::Physics` and `Component::Joint` data and per-scene project camera settings. Optional simulation builds retain their serialized authoring data.
-- Rapier/ECS fixed 60 Hz synchronization tracks generational handles, body/collider/component removal, collider/material/scale rebuilds, teleports, velocities, hierarchy/local/world-offset conversion, and non-physical intermediate parents. Kinematic platforms integrate velocity; physics writes simulated poses/velocities back to the ECS.
-- Actual solid contact and sensor enter/exit transitions, mutual membership/mask bitsets, normalized geometry rays with stable IDs/distance/normals, circle shape overlaps, and distance/hinge/slider joints with scaled anchors, supported limits/motors, removal and rebuild reconnection. Attached script callbacks share the parent's live query world without stepping it again.
-- Inspector body/collider/joint authoring uses validated scene commands, undo/redo, projection and disk persistence. Scene View draws transformed collider outlines during editing and Play. Joint duplication redirects the owner's endpoint. The existing standalone Physics panel is explicitly a sandbox preview.
-- Editor/player share gameplay camera follow, exponential smoothing, zoom, bounds, pixel snapping and aspect-fit physical viewports. Pixel-perfect upscales use integer viewport scaling; smaller panels downscale. Both hosts map pointer positions through that viewport and expose mouse world coordinates to attached scripts. Camera project settings participate in dirty/save tracking, separate from scene undo history.
-- `samples/physics2d_editor` is an editable project with a jumping hero, slope, moving platform, trigger, excluded collision layer and bounded follow camera. `docs/PHYSICS_2D.md` describes authoring, contracts and native acceptance. KILNSCRIPT.md documents the updated stable-ID ray result layout and velocity/input APIs.
+- Image drag/drop creates a validated, undoable scene sprite using decoded image dimensions and camera-aware pointer placement. Saved `SpriteLayout` holds pivot, flips and pixel density; Inspector and Sprite Editor edit it. Runtime drawing/framing honors those properties and transform rotation/scale.
+- Shared scene draw collection interleaves sprites, tile layers and particles. Equal sorting layers preserve authored hierarchy order across ECS archetypes. Renderer sorting preserves transparent submission order across texture/material changes, batching adjacent runs only.
+- Per-asset nearest/linear filtering and mip generation reach native/WebGL uploads. Box-filtered mips include odd edge texels. Resource edits refresh the scene; texture rebinding removes obsolete project bindings. Legacy unconfigured assets retain nearest/no-mip sampling.
+- Sprite grid slicing creates validated clips and attaches them. Animation Editor supports decoded texture preview, frame add/delete/reorder, rect/duration/pivot editing, named events/text payloads, clip undo/redo, scrubbing and non-looping next-clip transitions. Shared runtime binds real sheet dimensions/all project clips, switches textures, preserves time for repeated current-state requests and delivers crossed events to attached scripts.
+- Tilemap Editor uses the selected layer's textured palette, bounded drag/erase/fill, multilayer Z/offsets, per-tile solids/collision previews, paged palettes, paint undo/redo and saved four-neighbor terrain rules. Map attachment preserves local parents/nested offsets; culling, bounds and collision queries account for layer offsets and owner translation. Solid maps automatically create merged static Rapier geometry when their owner has no explicit rigid body; grounding, contacts, ray identity, translation, cell edits and removal are tested.
+- Saved `Particles` components use shared core emitter data. VFX Editor edits validated scene data through undoable commands and previews the same fixed simulation/quad geometry. Emitters have reproducible random streams. Particles retain their own gravity/fade/original alpha even after emitter removal. Start/stop toggles emission without destroying configuration.
+- `samples/visual2d_editor` is generated through authoring APIs and saved normally. It supplies a blue animated character, idle transition/events, two tile layers, a solid wall and a particle trail. Authoring contracts and native acceptance steps are in `docs/VISUAL_AUTHORING_2D.md`; ADR-0054 records architecture choices.
 
 ## Validation
 
-- `just check`: passed (formatting, strict workspace all-target Clippy, workspace and standalone audio sample checks).
-- `just test`: **577 passed, zero failed/skipped**. Includes 11 physics workflow tests and new camera/editor acceptance coverage.
+- `just check`: passed (formatting, strict all-target workspace Clippy, workspace and standalone audio sample checks).
+- `just test`: **592 passed, zero failed/skipped**. Task 5 physics regressions remain passing.
 - `cargo build -p kiln-editor -p kiln-player`: passed.
 - `cargo clippy -p kiln-runtime --no-default-features --all-targets -- -D warnings`: passed.
-- `cargo build --target wasm32-unknown-unknown -p kiln-web`: passed; this verifies compilation, not browser physics gameplay.
-- The checked-in sample executes source resources at 30 render FPS and deserialized player project/byte assets at 144 FPS, with identical fixed-tick poses, trigger state and camera limits. Jumping, filtering and input propagation are asserted; authoring documents remain unchanged.
-- Tests cover grounding, slope normals, moving-platform carrying, shape-vs-AABB queries, ray filtering, single contact transitions, despawn/handle reuse, all three constraints, rebuilds, scaled anchors, intermediate-parent conversion, smoothing/pixel-grid/bounds/viewport mapping, undo/redo and save/reopen.
-- Built editor startup was attempted. Window creation failed because neither WAYLAND_DISPLAY, WAYLAND_SOCKET nor DISPLAY is set. Native visual acceptance is **unrun**, with a concrete procedure in PHYSICS_2D.md. Headless tests are not visual evidence.
+- `cargo build --target wasm32-unknown-unknown -p kiln-web` and matching wasm-bindgen generation: passed.
+- Native player acceptance authors/saves/reopens, packs a real KAR archive, loads source/archive with the actual player loader, and compares movement, animation events/transitions, particle geometry and sorting at 30 vs 144 render FPS. Authored data is unchanged by gameplay.
+- Headless egui acceptance inspects the decoded preview texture mesh and actual frame UVs/events. Additional tests cover clip history, terrain adjacency/erase/fill limits, component history/disk projection, pivots, transparent painter order, nested map offsets, particle preview/runtime parity and mip texels.
+- Chromium WebGL: new visual sample passed visible-pixel/input/release/zero-error checks. Original vertical slice passed. A temporary copy with linear filtering and generated mips also passed. The 120-frame debug-WASM cadence observation was 16.67 ms mean / 16.80 ms p95 with SwiftShader at 640×480; see BUDGETS.md for scope and debug artifact sizes.
+- Actual CLI packing passed: `cargo run -p kiln-cli -- pack --source samples/visual2d_editor --output target/visual2d_editor.kar` packed six files successfully.
+- Built editor and native player startup were attempted. Both stop at window creation because DISPLAY/Wayland variables are absent. Native drag/drop/panel interaction and graphical packed-player acceptance remain unverified. Browser rendering is separate evidence.
 
 ## Supported limits / next
 
-- Task 5 implementation checkboxes are checked; its native graphical acceptance remains pending. Task 6 requires the user's next instruction.
-- Native editor/player enable physics. Browser/mobile gameplay host integration and device acceptance require separate work/evidence; optional runtime builds compile without simulation.
-- Collider shapes are circles and rectangles. Circle nonuniform scaling uses the largest absolute axis. Joint endpoints must identify existing physics bodies to activate. Bounds override pixel snapping at non-grid-aligned edges; small viewports downscale to fit.
-- Physics ray results now use `[source_id, distance, normal_x, normal_y]`; migrate provisional scripts that expected internal arena indices. World physics queries and local authored position getters use different coordinate spaces for parented entities.
-- Prior Task 4 entity scripting/Play implementation remains in place; live debugging is frame-granular and arbitrary game-save script-state serialization is later work.
+- Task 6 implementation boxes are checked; native workflow acceptance remains pending. Follow the graphical procedure in VISUAL_AUTHORING_2D.md. Do not start Task 7 without the user's next instruction.
+- Real archive/runtime export is exercised; the editor's automated Build/Export panel and distribution bundling remain Task 8.
+- Clip grids are tight/spaced uniform rectangles, capped at 4096 frames. Per-frame pivots override sprite layout pivots while animated. Transitions run after non-looping clips finish. Clip and paint histories are resource-specific; component/sprite edits use scene history.
+- Tile fill uses explicit finite bounds (the UI fills the visible 16×16 area). Terrain variants use cardinal neighbor masks on one selected layer. Tile collision is axis-aligned; author grid scale through map world tile size and offsets.
+- Particle capacity and the existing 16384-quad renderer frame budget are distinct. Native visual/device/release-size gates remain pending; debug build observations do not certify release budgets.
+- Task 5 physics/camera implementation remains in place; its native visual acceptance is also pending. Browser/mobile physics host integration is separate from this visual workflow.
 
-Source `/workspace/.kiln-tools/activate.sh` for Cargo. Git pushes use the supported `require_escalated` network permission. The prior remote tip was `7115d8f`; this session's commit records Task 5.
+Source `/workspace/.kiln-tools/activate.sh` for Cargo. Git push/local HTTP browser tests use the supported `require_escalated` permission in this runner. Prior remote tip was `985cbd1`; this session's commit records Task 6.

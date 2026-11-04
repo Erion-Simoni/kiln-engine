@@ -27,6 +27,17 @@ pub struct SceneWorkspace {
 }
 
 impl SceneWorkspace {
+    /// Record resource-panel edits in the same scene-scoped command history.
+    pub fn record_external_edit(&mut self, before: Scene) {
+        if self.active_id() == Some(before.id.as_str()) {
+            self.history.record(before);
+        } else {
+            self.histories
+                .entry(before.id.clone())
+                .or_default()
+                .record(before);
+        }
+    }
     /// Use a disk-loaded project as the clean baseline for recovered documents.
     pub fn set_saved_baselines(&mut self, project: &Project) {
         self.saved = project.scenes.clone();

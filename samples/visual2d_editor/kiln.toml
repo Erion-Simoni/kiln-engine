@@ -1,0 +1,804 @@
+id = "visual-authoring-sample"
+name = "Visual Authoring 2D"
+version = "0.1.0"
+publisher = ""
+icon = ""
+features = []
+audio_assets = []
+
+[window]
+width = 320
+height = 180
+fullscreen = false
+borderless = false
+vsync = true
+high_dpi = true
+resizable = true
+monitor = 0
+
+[mobile]
+orientation = "landscape"
+
+[mobile.ios]
+bundle_identifier = "com.example.game"
+permissions = []
+supports_notch = true
+
+[mobile.ios.privacy_descriptions]
+camera = ""
+microphone = ""
+photo_library = ""
+location = ""
+
+[mobile.ios.launch_screen]
+image = ""
+background_color = "#000000"
+
+[mobile.android]
+package_name = "com.example.game"
+permissions = []
+target_sdk = 33
+
+[scenes.main]
+id = "main"
+name = "Visual Playground"
+nested_scenes = []
+script = "scripts/main.ks"
+
+[[scenes.main.entities]]
+id = "entity_1"
+name = "hero"
+
+[[scenes.main.entities.components]]
+type = "Transform"
+x = 24.0
+y = 40.0
+rotation = 0.0
+scale = 1.0
+
+[[scenes.main.entities.components]]
+type = "Sprite"
+color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+width = 16.0
+height = 16.0
+texture = "art/hero.png"
+layer = 0.0
+animation_clip = "walk"
+
+[[scenes.main.entities.components]]
+type = "SpriteLayout"
+
+[scenes.main.entities.components.settings]
+pivot = [
+    0.5,
+    0.5,
+]
+flip_x = true
+flip_y = false
+pixels_per_unit = 2.0
+
+[[scenes.main.entities.components]]
+type = "Role"
+role = "player"
+
+[[scenes.main.entities.components]]
+type = "Script"
+path = "scripts/hero.ks"
+
+[scenes.main.entities.components.properties]
+
+[[scenes.main.entities.components]]
+type = "Particles"
+
+[scenes.main.entities.components.effect]
+max_particles = 120
+playing = true
+layer = 3.0
+
+[[scenes.main.entities.components.effect.emitters]]
+shape = "Point"
+rate = 60.0
+speed_range = [
+    1.0,
+    2.0,
+]
+angle_range = [
+    0.0,
+    6.2831854820251465,
+]
+lifetime_range = [
+    1.5,
+    2.0,
+]
+size_range = [
+    2.0,
+    3.0,
+]
+color = [
+    1.0,
+    0.5,
+    0.20000000298023224,
+    0.4000000059604645,
+]
+gravity = [
+    0.0,
+    0.0,
+]
+fade_out = true
+
+[[scenes.main.entities]]
+id = "map"
+name = "Level"
+
+[[scenes.main.entities.components]]
+type = "Transform"
+x = 0.0
+y = 0.0
+rotation = 0.0
+scale = 1.0
+
+[[scenes.main.entities.components]]
+type = "Tilemap"
+map = "level"
+
+[cameras]
+
+[tilemaps.level]
+id = "level"
+name = "Tilemap"
+tile_size = [
+    16.0,
+    16.0,
+]
+
+[[tilemaps.level.layers]]
+name = "Ground"
+tileset = "terrain"
+z = -1
+offset = [
+    0.0,
+    0.0,
+]
+
+[tilemaps.level.layers.chunks."0,0"]
+x = 0
+y = 0
+tiles = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    0,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    0,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    0,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    0,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    0,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+]
+
+[[tilemaps.level.layers]]
+name = "Foreground"
+tileset = "terrain"
+z = 5
+offset = [
+    0.0,
+    0.0,
+]
+
+[tilemaps.level.layers.chunks."0,0"]
+x = 0
+y = 0
+tiles = [
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    1,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+    65535,
+]
+
+[terrains]
+
+[tilesets.terrain]
+texture = "tiles/terrain.png"
+tile_size = [
+    16,
+    16,
+]
+columns = 4
+rows = 4
+solid = [
+    true,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+]
+
+[animation_clips.idle]
+name = "idle"
+texture = "art/hero.png"
+loops = true
+
+[[animation_clips.idle.frames]]
+rect = [
+    0,
+    0,
+    16,
+    16,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+duration = 0.10000000149011612
+events = []
+
+[animation_clips.walk]
+name = "walk"
+texture = "art/hero.png"
+loops = false
+next = "idle"
+
+[[animation_clips.walk.frames]]
+rect = [
+    0,
+    0,
+    16,
+    16,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+duration = 0.10000000149011612
+
+[[animation_clips.walk.frames.events]]
+name = "start"
+
+[[animation_clips.walk.frames]]
+rect = [
+    16,
+    0,
+    16,
+    16,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+duration = 0.10000000149011612
+
+[[animation_clips.walk.frames.events]]
+name = "footstep"
+payload = "stone"
+
+[shaders]
+
+[materials]
+
+[sdf_fonts]
+
+[prefabs]
+
+[asset_ids]
+"art/hero.png" = "hero-image"
+
+[asset_import_settings.hero-image]
+nearest_filter = true
+generate_mipmaps = false
+is_sprite = true
+
+[action_map.actions]

@@ -161,7 +161,10 @@ fn reconcile(
                 Component::Parent { .. } => Some(component.clone()),
                 Component::PrefabInstance { .. } => Some(component.clone()),
                 Component::Script { .. } => Some(component.clone()),
-                Component::Physics { .. } | Component::Joint { .. } => Some(component.clone()),
+                Component::Physics { .. }
+                | Component::Joint { .. }
+                | Component::SpriteLayout { .. }
+                | Component::Particles { .. } => Some(component.clone()),
             };
             if let Some(updated) = updated {
                 components.push(updated);

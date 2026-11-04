@@ -63,3 +63,5 @@ pub use sprite_editor::SpriteEditorState;
 pub use tilemap_editor::TilemapEditorState;
 pub use version_control_panel::VersionControlPanel;
 pub use vfx_editor::VfxEditorState;
+
+pub mod image_preview;

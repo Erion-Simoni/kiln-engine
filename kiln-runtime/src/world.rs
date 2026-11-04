@@ -78,6 +78,10 @@ pub struct PhysicsBody {
 #[derive(Debug, Clone, Copy, PartialEq, Default, hecs::Bundle)]
 pub struct Velocity(pub [f32; 2]);
 
+/// Stable authored hierarchy order for sprites sharing a sorting layer.
+#[derive(Debug, Clone, Copy)]
+pub struct SceneDrawOrder(pub u64);
+
 pub struct GameWorld {
     world: World,
 }

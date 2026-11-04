@@ -1,76 +1,14 @@
 //! Particle emitter configuration and emission shapes.
 
-use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-static RNG_STATE: AtomicU64 = AtomicU64::new(0x1234567890abcdef);
-
-fn random_f32() -> f32 {
-    let state = RNG_STATE.fetch_add(1, Ordering::Relaxed);
-    let x = state
-        .wrapping_mul(6364136223846793005)
-        .wrapping_add(1442695040888963407);
-    let x = x ^ (x >> 29);
-    let x = x.wrapping_mul(0x6D2B79F5CE6A6B5B);
-    let x = x ^ (x >> 32);
-    x as f32 / u64::MAX as f32
-}
-
-/// Emission shape for particle spawning.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
-pub enum EmissionShape {
-    /// Single point.
-    #[default]
-    Point,
-    /// Circle with radius.
-    Circle { radius: f32 },
-    /// Rectangle with width and height.
-    Rectangle { width: f32, height: f32 },
-}
-
-/// Particle emitter configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EmitterConfig {
-    /// Emission shape.
-    pub shape: EmissionShape,
-    /// Particles per second.
-    pub rate: f32,
-    /// Initial speed range (min, max).
-    pub speed_range: [f32; 2],
-    /// Initial angle range in radians (min, max).
-    pub angle_range: [f32; 2],
-    /// Initial lifetime range in seconds (min, max).
-    pub lifetime_range: [f32; 2],
-    /// Initial size range (min, max).
-    pub size_range: [f32; 2],
-    /// Initial color (R, G, B, A).
-    pub color: [f32; 4],
-    /// Gravity acceleration (x, y).
-    pub gravity: [f32; 2],
-    /// Whether particles should fade out over lifetime.
-    pub fade_out: bool,
-}
-
-impl Default for EmitterConfig {
-    fn default() -> Self {
-        Self {
-            shape: EmissionShape::Point,
-            rate: 10.0,
-            speed_range: [10.0, 20.0],
-            angle_range: [0.0, 2.0 * PI],
-            lifetime_range: [1.0, 2.0],
-            size_range: [0.5, 1.0],
-            color: [1.0, 1.0, 1.0, 1.0],
-            gravity: [0.0, -9.8],
-            fade_out: true,
-        }
-    }
-}
+pub use kiln_core::vfx::{EmissionShape, EmitterConfig};
 
 /// Active particle emitter.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Emitter {
+    rng: AtomicU64,
     config: EmitterConfig,
     /// Time accumulator for emission timing.
     time_since_last_emit: f32,
@@ -79,9 +17,28 @@ pub struct Emitter {
 }
 
 impl Emitter {
+    fn random_f32(&self) -> f32 {
+        let state = self.rng.fetch_add(1, Ordering::Relaxed);
+        let x = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let x = x ^ (x >> 29);
+        let x = x.wrapping_mul(0x6D2B79F5CE6A6B5B);
+        let x = x ^ (x >> 32);
+        x as f32 / u64::MAX as f32
+    }
+    fn rand_range(&self, min: f32, max: f32) -> f32 {
+        if min >= max {
+            min
+        } else {
+            min + self.random_f32() * (max - min)
+        }
+    }
+
     /// Create a new emitter with the given configuration.
     pub fn new(config: EmitterConfig) -> Self {
         Self {
+            rng: AtomicU64::new(0x1234567890abcdef),
             config,
             time_since_last_emit: 0.0,
             position: [0.0; 2],
@@ -110,6 +67,9 @@ impl Emitter {
 
     /// Update the emitter and return the number of particles to emit this frame.
     pub fn update(&mut self, dt: f32) -> u32 {
+        if !dt.is_finite() || dt <= 0.0 || self.config.validate().is_err() {
+            return 0;
+        }
         self.time_since_last_emit += dt;
 
         if self.config.rate <= 0.0 {
@@ -117,13 +77,10 @@ impl Emitter {
         }
 
         let emit_interval = 1.0 / self.config.rate;
-        let mut count = 0;
-
-        while self.time_since_last_emit >= emit_interval {
-            self.time_since_last_emit -= emit_interval;
-            count += 1;
-        }
-
+        let count = (self.time_since_last_emit / emit_interval)
+            .floor()
+            .min(100_000.0) as u32;
+        self.time_since_last_emit %= emit_interval;
         count
     }
 
@@ -132,35 +89,35 @@ impl Emitter {
         match self.config.shape {
             EmissionShape::Point => self.position,
             EmissionShape::Circle { radius } => {
-                let angle = random_f32() * 2.0 * PI;
-                let r = radius * random_f32().sqrt();
+                let angle = self.random_f32() * 2.0 * PI;
+                let r = radius * self.random_f32().sqrt();
                 [
                     self.position[0] + r * angle.cos(),
                     self.position[1] + r * angle.sin(),
                 ]
             }
             EmissionShape::Rectangle { width, height } => [
-                self.position[0] + (random_f32() - 0.5) * width,
-                self.position[1] + (random_f32() - 0.5) * height,
+                self.position[0] + (self.random_f32() - 0.5) * width,
+                self.position[1] + (self.random_f32() - 0.5) * height,
             ],
         }
     }
 
     /// Generate initial velocity based on speed and angle ranges.
     pub fn spawn_velocity(&self) -> [f32; 2] {
-        let speed = rand_range(self.config.speed_range[0], self.config.speed_range[1]);
-        let angle = rand_range(self.config.angle_range[0], self.config.angle_range[1]);
+        let speed = self.rand_range(self.config.speed_range[0], self.config.speed_range[1]);
+        let angle = self.rand_range(self.config.angle_range[0], self.config.angle_range[1]);
         [speed * angle.cos(), speed * angle.sin()]
     }
 
     /// Generate initial lifetime.
     pub fn spawn_lifetime(&self) -> f32 {
-        rand_range(self.config.lifetime_range[0], self.config.lifetime_range[1])
+        self.rand_range(self.config.lifetime_range[0], self.config.lifetime_range[1])
     }
 
     /// Generate initial size.
     pub fn spawn_size(&self) -> f32 {
-        rand_range(self.config.size_range[0], self.config.size_range[1])
+        self.rand_range(self.config.size_range[0], self.config.size_range[1])
     }
 
     /// Get initial color.
@@ -179,12 +136,15 @@ impl Emitter {
     }
 }
 
-/// Helper: random value in range [min, max].
-fn rand_range(min: f32, max: f32) -> f32 {
-    if min >= max {
-        return min;
+impl Clone for Emitter {
+    fn clone(&self) -> Self {
+        Self {
+            config: self.config.clone(),
+            time_since_last_emit: self.time_since_last_emit,
+            position: self.position,
+            rng: AtomicU64::new(self.rng.load(Ordering::Relaxed)),
+        }
     }
-    min + random_f32() * (max - min)
 }
 
 #[cfg(test)]

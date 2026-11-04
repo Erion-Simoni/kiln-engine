@@ -25,6 +25,8 @@ pub mod audio;
 pub mod physics;
 #[cfg(feature = "physics")]
 mod physics_sync;
+#[cfg(feature = "physics")]
+mod physics_tilemap;
 
 pub use input::*;
 pub use jobs::{load_file_async, JobHandle, TaskPool};
@@ -46,3 +48,6 @@ pub use audio::{AudioCategory, AudioEngine};
 
 #[cfg(feature = "physics")]
 pub use physics::*;
+
+mod animation_player;
+pub mod visual;

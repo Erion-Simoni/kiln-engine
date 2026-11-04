@@ -197,9 +197,16 @@ pub struct SceneTexture {
 #[derive(Debug, Clone, Default)]
 pub struct SceneTextures {
     textures: HashMap<String, SceneTexture>,
+    options: HashMap<String, [bool; 2]>,
 }
 
 impl SceneTextures {
+    pub fn needs_refresh(&self, project: &Project) -> bool {
+        texture_paths(project).iter().any(|path| {
+            !self.textures.contains_key(path)
+                || self.options.get(path) != Some(&project.texture_options(path))
+        })
+    }
     /// Look up a texture by its asset path.
     pub fn get(&self, path: &str) -> Option<&SceneTexture> {
         self.textures.get(path)
@@ -227,6 +234,7 @@ impl SceneTextures {
         project: &Project,
         root: &Path,
     ) -> (Self, Vec<String>) {
+        renderer.clear_project_textures();
         let mut library = SceneTextures::default();
         let mut errors = Vec::new();
 
@@ -246,14 +254,17 @@ impl SceneTextures {
                     continue;
                 }
             };
-            let id = renderer.create_texture_rgba(
+            let id = renderer.create_texture_rgba_with_options(
                 device,
                 queue,
                 &path,
-                image.width,
-                image.height,
+                [image.width, image.height],
                 &image.pixels,
+                project.texture_options(&path),
             );
+            library
+                .options
+                .insert(path.clone(), project.texture_options(&path));
             library.textures.insert(
                 path,
                 SceneTexture {
@@ -272,6 +283,9 @@ impl SceneTextures {
 pub fn texture_paths(project: &Project) -> Vec<String> {
     let mut paths: Vec<String> = Vec::new();
     let mut push = |path: &str| {
+        if path.is_empty() {
+            return;
+        }
         if !paths.iter().any(|existing| existing == path) {
             paths.push(path.to_string());
         }
@@ -293,7 +307,10 @@ pub fn texture_paths(project: &Project) -> Vec<String> {
     for tileset in project.tilesets.values() {
         push(&tileset.texture);
     }
-
+    for clip in project.animation_clips.values() {
+        push(&clip.texture);
+    }
+    paths.sort();
     paths
 }
 

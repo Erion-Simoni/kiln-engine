@@ -11,6 +11,7 @@ use kiln_core::Transform;
 
 use crate::sprite::AnimationPlayer;
 use crate::world::{GameWorld, GlobalTransform, ParentLink, Role, SourceId, WorldOffset};
+use crate::Sprite;
 
 /// Default sprite size in pixels, used when an entity has no texture.
 pub const DEFAULT_SPRITE_SIZE: [f32; 2] = [32.0, 32.0];
@@ -111,6 +112,12 @@ pub fn update_global_transforms(world: &mut GameWorld) -> Result<(), String> {
                 .map_err(|_| "Could not add global transform to runtime entity")?;
         }
     }
+    for (pose, map) in world
+        .world_mut()
+        .query_mut::<(&GlobalTransform, &mut crate::Tilemap)>()
+    {
+        map.offset = pose.position.to_array();
+    }
     Ok(())
 }
 
@@ -163,6 +170,7 @@ pub fn spawn_entities(
     project: &kiln_core::Project,
 ) -> Vec<SpawnedEntity> {
     let mut spawned = Vec::new();
+    let draw_order_base = world.world_ref().len() as u64;
     let hierarchy_scene = Scene {
         id: String::new(),
         name: String::new(),
@@ -304,12 +312,32 @@ pub fn spawn_entities(
         .filter(|(_, source)| entities.iter().any(|entity| entity.id == source.0))
         .map(|(handle, source)| (source.0.clone(), handle))
         .collect();
-    for entity in entities {
+    for (index, entity) in entities.iter().enumerate() {
         let Some(child) = spawned_handles.get(&entity.id) else {
             continue;
         };
+        let _ = world.world_mut().insert_one(
+            *child,
+            crate::SceneDrawOrder(draw_order_base + index as u64),
+        );
         for component in &entity.components {
             match component {
+                Component::SpriteLayout { settings } => {
+                    if settings.validate().is_ok() {
+                        if let Ok(mut sprite) = world.world_mut().get::<&mut Sprite>(*child) {
+                            sprite.pivot = settings.pivot;
+                            sprite.flip_x = settings.flip_x;
+                            sprite.flip_y = settings.flip_y;
+                            sprite.pixels_per_unit = settings.pixels_per_unit;
+                        }
+                    }
+                }
+                Component::Particles { effect } => {
+                    if let Ok(effect) = crate::sprite::ParticleSystemComponent::from_effect(effect)
+                    {
+                        let _ = world.world_mut().insert_one(*child, effect);
+                    }
+                }
                 Component::Physics { body, collider } => {
                     let _ = world.world_mut().insert(*child, (*body, *collider));
                 }
@@ -318,6 +346,29 @@ pub fn spawn_entities(
                 }
                 _ => {}
             }
+        }
+        let initial_clip = world
+            .world_ref()
+            .get::<&Sprite>(*child)
+            .ok()
+            .and_then(|sprite| sprite.animation_clip.clone());
+        if world.world_ref().get::<&Sprite>(*child).is_ok() && !project.animation_clips.is_empty() {
+            let mut animation = AnimationPlayer::new();
+            for clip in project.animation_clips.values() {
+                let binding = make_sprite(entity, [1.0; 4], Some(&clip.texture));
+                animation.add_bound_clip(
+                    clip.clone(),
+                    binding.texture,
+                    [binding.size[0] as u32, binding.size[1] as u32],
+                );
+            }
+            if let Some(initial) = initial_clip {
+                animation.play(&initial);
+            }
+            if let Ok(mut sprite) = world.world_mut().get::<&mut Sprite>(*child) {
+                animation.apply_to_sprite(&mut sprite);
+            }
+            let _ = world.world_mut().insert_one(*child, animation);
         }
         let parent_id = entity
             .components

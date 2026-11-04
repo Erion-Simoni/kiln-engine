@@ -2,6 +2,25 @@
 
 All budgets are enforced via `just size`. Exceeding a budget requires an ADR entry with justification.
 
+## Task 6 local observations — 2026-11-04
+
+The visual authoring sample runs in Chromium WebGL with SwiftShader at 640×480.
+A 120-frame `requestAnimationFrame` observation on the cloud runner measured
+16.67 ms mean / 16.80 ms p95 cadence. This is debug-WASM browser scheduling
+evidence, not GPU pass timing or a hardware performance guarantee. The real
+native editor has no display server in this runner.
+
+Debug artifacts measured locally: editor 389524776 bytes, player 325188200 bytes,
+WASM 197188114 bytes. These include debug build overhead and are not release
+size-budget results. Release distribution budgets below remain separate gates.
+The fixture's PNG sheets are 163 and 191 bytes. Mips require additional texture
+storage; per-asset generation is optional. The existing 16384-quad renderer
+budget is unchanged. Native visual/device/release-size acceptance is pending.
+
+Reproduce with `WEB_SMOKE_PROJECT=samples/visual2d_editor WEB_SMOKE_PROFILE=1`
+and `node tests/web/smoke.cjs target/web-smoke` after building WASM and running
+wasm-bindgen; this runner also uses `CHROMIUM_PATH=/usr/bin/chromium`.
+
 ---
 
 ## Native GPU backend support (R0)

@@ -819,3 +819,100 @@ fn editor_sample_runs_from_source_and_player_assets_with_identical_fixed_tick_re
     assert_eq!(source, player);
     assert_eq!(project.to_toml().unwrap(), before);
 }
+
+#[test]
+fn painted_solid_tiles_ground_real_bodies_and_queries_follow_map_edits() {
+    use kiln_core::{TileMap, TileMapLayer, TileSet};
+    let mut world = GameWorld::new();
+    let mut physics = PhysicsWorld::new();
+    let mut data = TileMap {
+        tile_size: [1.0; 2],
+        ..Default::default()
+    };
+    let mut layer = TileMapLayer {
+        tileset: "ground".into(),
+        ..Default::default()
+    };
+    for x in 0..8 {
+        layer.set_tile_at(x, 0, 0);
+    }
+    data.layers.push(layer);
+    let map = kiln_runtime::Tilemap::new(
+        "level".into(),
+        data,
+        std::collections::HashMap::from([(
+            "ground".into(),
+            TileSet {
+                solid: vec![true],
+                ..Default::default()
+            },
+        )]),
+        Default::default(),
+    );
+    let floor =
+        world
+            .world_mut()
+            .spawn((SourceId::new("tile-ground"), Transform::new(10.0, 0.0), map));
+    let player = body(
+        &mut world,
+        "hero",
+        [10.5, 4.0],
+        RigidBodyType::Dynamic,
+        Collider2D {
+            shape: ColliderShape::Circle { radius: 0.5 },
+            ..Default::default()
+        },
+    );
+    let mut entered = false;
+    for _ in 0..180 {
+        entered |= sync_physics_with_ecs(&mut physics, &mut world)
+            .iter()
+            .any(|event| {
+                event.started
+                    && (event.entity_a == "tile-ground" || event.entity_b == "tile-ground")
+            });
+    }
+    assert!(entered);
+    assert!(
+        (world
+            .world_ref()
+            .get::<&Transform>(player)
+            .unwrap()
+            .position
+            .y
+            - 1.5)
+            .abs()
+            < 0.03
+    );
+    let hit = physics
+        .raycast_hit([10.5, 3.0], [0.0, -1.0], 5.0, 1, Some("hero"), false)
+        .unwrap();
+    assert_eq!(hit.source_id, "tile-ground");
+    assert!((hit.distance - 2.0).abs() < 0.01);
+    world
+        .world_mut()
+        .get::<&mut Transform>(floor)
+        .unwrap()
+        .position
+        .x = 20.0;
+    assert!(sync_physics_with_ecs(&mut physics, &mut world)
+        .iter()
+        .any(|event| !event.started));
+    assert!(physics
+        .raycast_hit([20.5, 3.0], [0.0, -1.0], 5.0, 1, Some("hero"), false)
+        .is_some());
+    world
+        .world_mut()
+        .get::<&mut kiln_runtime::Tilemap>(floor)
+        .unwrap()
+        .map
+        .layers[0]
+        .set_tile_at(0, 0, kiln_core::EMPTY_TILE);
+    sync_physics_with_ecs(&mut physics, &mut world);
+    assert!(physics
+        .raycast_hit([20.5, 3.0], [0.0, -1.0], 5.0, 1, Some("hero"), false)
+        .is_none());
+    world.world_mut().despawn(floor).unwrap();
+    sync_physics_with_ecs(&mut physics, &mut world);
+    assert_eq!(physics.rigid_body_set.len(), 1);
+}

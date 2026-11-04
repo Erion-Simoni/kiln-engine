@@ -42,3 +42,8 @@ other browsers, mobile touch, long sessions, all UI widgets, or music/mixer/save
 support. These remain separate items in the 2D completion plan. The GitHub Actions
 job runs the same build/bindgen/browser operations; its remote result must be
 checked separately from a local pass.
+
+To run the same visible-pixel/input check against the Task 6 fixture, set
+`WEB_SMOKE_PROJECT=samples/visual2d_editor`. Optional `WEB_SMOKE_PROFILE=1`
+records 120 animation-frame intervals (cadence, not GPU timing). Set
+`WEB_SMOKE_SCREENSHOT=/tmp/visual2d.png` to retain the rendered frame.

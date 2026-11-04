@@ -1,0 +1,1 @@
+move_player(get_input_x() * 60.0 * get_delta_time(), 0.0);

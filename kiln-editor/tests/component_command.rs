@@ -702,3 +702,37 @@ fn stale_scene_missing_entity_or_duplicate_components_fail_without_history_chang
     assert_eq!(json(&scene), before);
     assert_eq!(history.undo_depth(), 0);
 }
+
+#[test]
+fn sprite_layout_and_effect_commands_preserve_history_projection_and_disk() {
+    for component in [
+        Component::SpriteLayout {
+            settings: kiln_core::visual::SpriteLayout {
+                pivot: [0.0, 1.0],
+                flip_x: true,
+                pixels_per_unit: 16.0,
+                ..Default::default()
+            },
+        },
+        Component::Particles {
+            effect: Default::default(),
+        },
+    ] {
+        let mut project = fixture();
+        let mut scene = project.scenes["main"].clone();
+        let mut history = SceneHistory::new();
+        command(ComponentEdit::SetVisual(component.clone()))
+            .execute(&mut scene, &project, &mut history)
+            .unwrap();
+        let edited = scene.clone();
+        let before = history.undo(scene).unwrap();
+        assert!(!before.entities[0]
+            .components
+            .iter()
+            .any(|c| ComponentKind::of(c) == ComponentKind::of(&component)));
+        scene = history.redo(before).unwrap();
+        assert_eq!(json(&scene), json(&edited));
+        project.scenes.insert("main".into(), scene);
+        assert_disk(&project);
+    }
+}

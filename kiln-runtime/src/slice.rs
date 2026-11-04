@@ -126,6 +126,8 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("raycast_query", 71, 6),
     ("get_mouse_world_x", 72, 0),
     ("get_mouse_world_y", 73, 0),
+    ("animation_event_name", 74, 0),
+    ("animation_event_value", 75, 0),
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -352,6 +354,7 @@ pub type AudioPlayer = Box<dyn Fn(&str) + Send + Sync>;
 /// The script host: reads facts and records commands.
 #[derive(Default)]
 pub struct SliceHost {
+    animation_event: (String, String),
     mouse_world: [f64; 2],
     self_entity: String,
     script_state: HashMap<String, Value>,
@@ -421,6 +424,7 @@ impl SliceHost {
     /// A host with the given facts.
     pub fn new(facts: SliceFacts) -> Self {
         Self {
+            animation_event: Default::default(),
             mouse_world: [0.0; 2],
             self_entity: String::new(),
             script_state: HashMap::new(),
@@ -1374,6 +1378,8 @@ impl SliceHost {
             }
             72 => Ok(Value::F64(self.mouse_world[0])),
             73 => Ok(Value::F64(self.mouse_world[1])),
+            74 => Ok(Value::Str(self.animation_event.0.clone())),
+            75 => Ok(Value::Str(self.animation_event.1.clone())),
             _ => Err(VmError::HostCallError(format!(
                 "unknown slice builtin id {func_id}"
             ))),
@@ -1722,6 +1728,18 @@ impl SliceSession {
     ) -> Result<(), VmError> {
         self.step_program(world, input, dt, true, Vec::new())?;
         let collisions = self.vm.host_mut().facts.collision_events.clone();
+        let animation_events: Vec<_> = world
+            .world_mut()
+            .query_mut::<(&SourceId, &mut crate::AnimationPlayer)>()
+            .into_iter()
+            .flat_map(|(source, animation)| {
+                animation
+                    .take_events()
+                    .into_iter()
+                    .map(|event| (source.0.clone(), event))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
         let signals = std::mem::take(&mut self.signals);
         let keys = self.vm.host_mut().pressed_keys.clone();
         let mouse_world = self.vm.host().mouse_world;
@@ -1750,6 +1768,23 @@ impl SliceSession {
             if !attached.started {
                 attached.started = true;
                 attached.run(self.vm.host_mut(), "start", world, input, 0.0, &collisions)?;
+            }
+            for (id, event) in &animation_events {
+                if id != &attached.entity_id {
+                    continue;
+                }
+                attached.session.vm.host_mut().animation_event = (
+                    event.name.clone(),
+                    event.payload.clone().unwrap_or_default(),
+                );
+                attached.run(
+                    self.vm.host_mut(),
+                    "animation_event",
+                    world,
+                    input,
+                    0.0,
+                    &collisions,
+                )?;
             }
             for (name, value) in &signals {
                 attached.session.vm.host_mut().signal_name = name.clone();
@@ -1835,7 +1870,7 @@ impl SliceSession {
 
         // Update animations (reads AnimationPlayer, writes Sprite uv_rect)
         if advance_systems {
-            crate::sprite::update_animations(world.world_mut());
+            crate::sprite::update_animations_dt(world.world_mut(), dt as f32);
             // Update particle systems
             crate::sprite::update_particle_systems(world.world_mut(), dt as f32);
         }
@@ -2009,12 +2044,15 @@ impl SliceSession {
                 if let Some(player) = find_player(world) {
                     let target = crate::tilemap_collision::move_with_collision(
                         world,
-                        [player.x, player.y],
+                        [
+                            player.x + player.collision_offset[0],
+                            player.y + player.collision_offset[1],
+                        ],
                         player.size,
                         [dx as f32, dy as f32],
                     );
-                    let x = target[0] as f64;
-                    let y = target[1] as f64;
+                    let x = (target[0] - player.collision_offset[0]) as f64;
+                    let y = (target[1] - player.collision_offset[1]) as f64;
                     set_player_position(world, &player.source_id, x, y);
                     self.state.player_x = x;
                     self.state.player_y = y;
@@ -2524,20 +2562,25 @@ impl SliceSession {
                 }
             }
             SliceCommand::StartParticleSystem { source_id } => {
-                // Particle systems emit continuously; no explicit start needed
-                let _ = source_id;
+                for (id, effect) in world
+                    .world_mut()
+                    .query_mut::<(&SourceId, &mut crate::ParticleSystemComponent)>()
+                {
+                    if id.0 == source_id {
+                        effect.system_mut().emitting = true;
+                    }
+                }
             }
             SliceCommand::StopParticleSystem { source_id } => {
                 use crate::sprite::ParticleSystemComponent;
                 use crate::SourceId;
                 for (eid, sid) in world.world_mut().query_mut::<(hecs::Entity, &SourceId)>() {
                     if sid.0 == source_id {
-                        if let Ok(_ps) = world
+                        if let Ok(ps) = world
                             .world_mut()
-                            .query_one_mut::<&ParticleSystemComponent>(eid)
+                            .query_one_mut::<&mut ParticleSystemComponent>(eid)
                         {
-                            // Stop all emitters by setting rate to 0
-                            // (No direct stop method; emitters with rate 0 don't emit)
+                            ps.system_mut().emitting = false;
                         }
                         break;
                     }
@@ -2560,6 +2603,7 @@ impl SliceSession {
 
 /// A world entity with a role and a stable source id.
 struct WorldEntity {
+    collision_offset: [f32; 2],
     source_id: String,
     x: f32,
     y: f32,
@@ -2582,11 +2626,22 @@ fn find_entities(world: &mut GameWorld, role: &str) -> Vec<WorldEntity> {
         Option<&crate::sprite::Sprite>,
     )>() {
         if entity_role.as_str() == role {
+            let bounds = sprite.map(|sprite| sprite.world_bounds(*transform));
             found.push(WorldEntity {
+                collision_offset: bounds
+                    .map(|b| {
+                        [
+                            (b[0] + b[2]) * 0.5 - transform.position.x,
+                            (b[1] + b[3]) * 0.5 - transform.position.y,
+                        ]
+                    })
+                    .unwrap_or([0.0; 2]),
                 source_id: source_id.0.clone(),
                 x: transform.position.x,
                 y: transform.position.y,
-                size: sprite.map(|sprite| sprite.size).unwrap_or([0.0, 0.0]),
+                size: bounds
+                    .map(|b| [b[2] - b[0], b[3] - b[1]])
+                    .unwrap_or([0.0; 2]),
             });
         }
     }

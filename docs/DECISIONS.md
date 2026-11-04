@@ -1321,3 +1321,35 @@ including integer physical upscaling in pixel-perfect mode (small panels
 downscale to fit). Joint anchors use authored local units, including entity
 scale. The prior standalone Physics panel is explicitly a sandbox preview;
 saved scene physics is authored through the Inspector.
+
+## ADR-0054: Shared Task 6 visual authoring and playback
+
+**Date:** 2026-11-04
+**Status:** accepted
+
+Keep scene/project data authoritative. Add a defaulted SpriteLayout component for
+pivot/flips/pixel scale and a Particles component containing shared emitter data;
+retain existing Sprite serialization. Move emitter configuration into kiln-core
+and re-export it from kiln-vfx, avoiding a dependency cycle or new dependencies.
+Use the same clip playback, texture bindings, sorted scene draws and particle
+simulation in native editor/player. Clips use actual sheet dimensions, crossed
+frame events and optional non-looping next-clip transitions. Tile authoring
+operates on selected map/layer data, with bounded flood fill and persisted
+four-neighbor terrain rules. Resource panels invalidate the runtime projection
+when authoring changes. Native graphical acceptance remains separate from
+headless authoring/save/reopen/runtime acceptance.
+
+The player test target depends on the existing editor crate and tempfile only
+for acceptance: it authors through the editor commands, saves and packs a real
+archive, then uses the player's loader and shared runtime. This adds no shipped
+runtime dependency. Painter sorting is stable within a layer; only adjacent
+texture/material runs batch, since grouping transparent sprites by texture
+changes the image. Import filtering and mip generation reach GPU uploads.
+
+Solid tilemaps without an explicit rigid body register a static Rapier compound
+shape using the same tile/layer offsets and solid flags as grid queries. Adjacent
+solid cells merge into horizontal row runs. Geometry edits rebuild the compound;
+translation and removal synchronize with the existing fixed tick, stable source
+IDs, contact transitions and ray queries. Automatic map colliders use membership
+bit 1 and accept all body memberships. Axis-aligned map rendering and physics
+share the same translation/world-tile-size convention.
