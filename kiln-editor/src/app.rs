@@ -29,6 +29,7 @@ use crate::anim_editor::AnimationEditorState;
 use crate::assets::{AssetBrowser, AssetKind};
 use crate::audio_editor::AudioEditorState;
 use crate::build_panel::BuildPanel;
+use crate::component_command::{ComponentCommand, ComponentEdit, ComponentKind};
 use crate::debugger_panel::DebuggerPanel;
 use crate::hierarchy::HierarchyPanel;
 use crate::input_rebind_panel::InputRebindPanel;
@@ -58,6 +59,7 @@ enum SceneAction {
 }
 
 enum ProjectRequest {
+    Component(ComponentCommand),
     CancelTransform,
     Leave(ProjectAction),
     Resolve(SaveDecision),
@@ -112,15 +114,6 @@ const GRID_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.06];
 
 /// The colour behind the scene view.
 const BACKGROUND_COLOR: [f32; 4] = [0.07, 0.07, 0.08, 1.0];
-
-/// The components an entity can have.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ComponentKind {
-    Transform,
-    Sprite,
-    Role,
-    Tilemap,
-}
 
 /// The default size of a sprite without a texture, in world units.
 const DEFAULT_SPRITE_SIZE: [f32; 2] = [32.0, 32.0];
@@ -1266,6 +1259,30 @@ impl EditorApp {
         self.apply_scene(next)
     }
 
+    fn apply_component_command(&mut self, command: ComponentCommand) -> Result<(), String> {
+        self.require_edit_mode()?;
+        self.finish_transform_edit();
+        if self.scenes.active_id() != Some(command.scene_id.as_str()) {
+            return Err("Component command targets an inactive scene".into());
+        }
+        let count = self
+            .world
+            .world_ref()
+            .query::<(hecs::Entity, &SourceId)>()
+            .iter()
+            .filter(|(_, source)| source.0 == command.entity_id)
+            .count();
+        if count != 1 {
+            return Err("Entity identity is missing or ambiguous".into());
+        }
+        let mut scene = self.scene_from_world();
+        let project = self.current_project.as_ref().ok_or("No project loaded")?;
+        if command.execute(&mut scene, project, &mut self.scenes.history)? {
+            self.apply_scene(scene)?;
+        }
+        Ok(())
+    }
+
     /// Apply a scene to the project and the editor world.
     fn apply_scene(&mut self, scene: Scene) -> Result<(), String> {
         let selected_source = self.selected_entity.and_then(|entity| {
@@ -1527,6 +1544,7 @@ impl EditorApp {
                 continue;
             }
             let result = match request {
+                ProjectRequest::Component(command) => self.apply_component_command(command),
                 ProjectRequest::CancelTransform => {
                     self.cancel_transform_edit();
                     Ok(())
@@ -2822,61 +2840,59 @@ impl TabViewer<'_> {
         self.scene_world_size
     }
 
-    /// Remove a component from an entity.
-    fn remove_component(&mut self, entity: hecs::Entity, kind: ComponentKind) {
-        self.finish_transform_edit();
-        if self.editing_locked() {
-            return;
-        }
-        // The scene is recorded before the change, so the change can be
-        // undone. It is only kept when the component was really there.
-        let before = crate::scene_document::snapshot_for_scene(
-            &*self.world,
+    fn authored_entity(&self, entity: hecs::Entity) -> Option<kiln_core::Entity> {
+        let source = self
+            .world
+            .world_ref()
+            .get::<&SourceId>(entity)
+            .ok()?
+            .0
+            .clone();
+        crate::scene_document::snapshot_for_scene(
+            self.world,
             self.entity_textures,
             self.entity_roles,
             self.current_project.as_ref(),
             self.scenes.active_id(),
-        );
-        let removed = match kind {
-            ComponentKind::Transform => crate::editing::remove_transform(self.world, entity),
-            ComponentKind::Sprite => crate::editing::remove_sprite(self.world, entity),
-            ComponentKind::Role => crate::editing::remove_role(self.world, entity),
-            ComponentKind::Tilemap => crate::editing::remove_tilemap(self.world, entity),
-        };
-        if !removed {
-            return;
-        }
-        self.scenes.history.record(before);
-        *self.selected_entity = None;
+        )
+        .entities
+        .into_iter()
+        .find(|entity| entity.id == source)
     }
 
-    /// Add a component to an entity.
-    fn add_component(&mut self, entity: hecs::Entity, kind: ComponentKind) {
-        self.finish_transform_edit();
-        if self.editing_locked() {
+    fn queue_component(&mut self, entity: hecs::Entity, edit: ComponentEdit) {
+        if self.editing_locked() || self.project_blocked {
             return;
         }
-        let before = crate::scene_document::snapshot_for_scene(
-            &*self.world,
-            self.entity_textures,
-            self.entity_roles,
-            self.current_project.as_ref(),
-            self.scenes.active_id(),
-        );
-        let added = match kind {
-            ComponentKind::Transform => crate::editing::add_transform(self.world, entity),
-            ComponentKind::Sprite => crate::editing::add_sprite(
-                self.world,
-                entity,
-                crate::editing::EntityDefaults::default(),
-            ),
-            ComponentKind::Role => crate::editing::add_role(self.world, entity),
-            ComponentKind::Tilemap => crate::editing::add_tilemap(self.world, entity),
+        let Some(scene_id) = self.scenes.active_id().map(str::to_owned) else {
+            return;
         };
-        if !added {
-            return;
+        let source = self
+            .world
+            .world_ref()
+            .get::<&SourceId>(entity)
+            .ok()
+            .map(|id| id.0.clone());
+        if let Some(entity_id) = source {
+            self.project_requests
+                .push(ProjectRequest::Component(ComponentCommand {
+                    scene_id,
+                    entity_id,
+                    edit,
+                }));
         }
-        self.scenes.history.record(before);
+    }
+
+    /// Remove an authored component, including unresolved resource references.
+    fn remove_component(&mut self, entity: hecs::Entity, kind: ComponentKind) {
+        self.queue_component(entity, ComponentEdit::Remove(kind));
+    }
+
+    /// Add an explicit authored component, independent of projection defaults.
+    fn add_component(&mut self, entity: hecs::Entity, kind: ComponentKind) {
+        if let Some(component) = kind.default_component() {
+            self.queue_component(entity, ComponentEdit::Add(component));
+        }
     }
 
     /// Whether the scene may not be edited right now.
@@ -3184,20 +3200,48 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 egui::ScrollArea::vertical()
                     .max_height(120.0)
                     .show(ui, |ui| {
-                        let entities: Vec<(hecs::Entity, Transform)> = self
+                        let scene = crate::scene_document::snapshot_for_scene(
+                            self.world,
+                            self.entity_textures,
+                            self.entity_roles,
+                            self.current_project.as_ref(),
+                            self.scenes.active_id(),
+                        );
+                        let handles: HashMap<_, _> = self
                             .world
-                            .world()
-                            .query::<(hecs::Entity, &Transform, &Sprite)>()
+                            .world_ref()
+                            .query::<(hecs::Entity, &SourceId)>()
                             .iter()
-                            .map(|(e, t, _s)| (e, *t))
+                            .map(|(entity, source)| (source.0.clone(), entity))
                             .collect();
-                        for (entity, transform) in entities {
-                            let label = format!(
-                                "Entity ({:.0}, {:.0})",
-                                transform.position.x, transform.position.y
-                            );
+                        let entities: Vec<_> = scene
+                            .entities
+                            .iter()
+                            .filter_map(|authored| {
+                                let entity = *handles.get(&authored.id)?;
+                                let label = format!(
+                                    "{}{}",
+                                    authored.name,
+                                    if authored
+                                        .components
+                                        .iter()
+                                        .any(|c| matches!(c, kiln_core::Component::Sprite { .. }))
+                                    {
+                                        ""
+                                    } else {
+                                        " (nonvisual)"
+                                    }
+                                );
+                                Some((entity, authored.id.clone(), label))
+                            })
+                            .collect();
+                        for (entity, source, label) in entities {
                             let selected = *self.selected_entity == Some(entity);
-                            if ui.selectable_label(selected, label).clicked() {
+                            if ui
+                                .selectable_label(selected, label)
+                                .on_hover_text(source)
+                                .clicked()
+                            {
                                 self.finish_transform_edit();
                                 *self.selected_entity = Some(entity);
                             }
@@ -3251,12 +3295,22 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::Inspector => {
                 ui.vertical(|ui| {
                     ui.heading("Inspector");
+                    if self.editing_locked() { ui.disable(); }
 
                     // The selected entity is copied out, so the world can be
                     // borrowed while the inspector edits it.
                     let selected = *self.selected_entity;
                     if let Some(entity) = selected {
-                        ui.label(format!("Entity ID: {:?}", entity.id()));
+                        let Some(authored) = self.authored_entity(entity) else {
+                            ui.label("Select a root-scene entity to edit components.");
+                            return;
+                        };
+                        let has = |kind| authored.components.iter().any(|c| ComponentKind::of(c) == Some(kind));
+                        let has_transform = has(ComponentKind::Transform);
+                        let has_sprite = has(ComponentKind::Sprite);
+                        let has_role = has(ComponentKind::Role);
+                        let has_tilemap = has(ComponentKind::Tilemap);
+                        ui.label(format!("{} ({})", authored.name, authored.id));
                         ui.add_space(8.0);
 
                         // Read current values once
@@ -3265,13 +3319,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             .world()
                             .get::<&Transform>(entity)
                             .ok()
-                            .map(|t| *t);
+                            .map(|t| *t).filter(|_| has_transform);
                         let sprite = self
                             .world
                             .world()
                             .get::<&Sprite>(entity)
                             .ok()
-                            .map(|s| (*s).clone());
+                            .map(|s| (*s).clone()).filter(|_| has_sprite);
 
                         // Transform component
                         if let Some(mut transform) = transform {
@@ -3447,35 +3501,42 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 });
                         }
 
-                        ui.add_space(16.0);
-                        // The components that are missing can be added, so
-                        // an entity can be built up piece by piece.
-                        let has_transform = transform.is_some();
-                        let has_sprite = sprite.is_some();
-                        let has_role = self
-                            .world
-                            .world_ref()
-                            .get::<&kiln_runtime::Role>(entity)
-                            .is_ok();
-                        let has_tilemap = self.world.world_ref().get::<&Tilemap>(entity).is_ok();
-                        if !has_transform || !has_sprite || !has_role || !has_tilemap {
-                            ui.horizontal(|ui| {
-                                if !has_transform && ui.button("+ Transform").clicked() {
-                                    self.add_component(entity, ComponentKind::Transform);
-                                }
-                                if !has_sprite && ui.button("+ Sprite").clicked() {
-                                    self.add_component(entity, ComponentKind::Sprite);
-                                }
-                                if !has_role && ui.button("+ Role").clicked() {
-                                    self.add_component(entity, ComponentKind::Role);
-                                }
-                                if !has_tilemap && ui.button("+ Tilemap").clicked() {
-                                    self.add_component(entity, ComponentKind::Tilemap);
-                                }
+                        ui.add_space(12.0);
+                        if let Some(role) = authored.components.iter().find_map(|c| match c { kiln_core::Component::Role { role } => Some(role), _ => None }) {
+                            ui.group(|ui| {
+                                ui.label(format!("Role: {role}"));
+                                if ui.button("Remove Role").clicked() { self.remove_component(entity, ComponentKind::Role); }
                             });
-                        } else {
-                            ui.label("The entity has every component.");
                         }
+                        if let Some(map) = authored.components.iter().find_map(|c| match c { kiln_core::Component::Tilemap { map } => Some(map), _ => None }) {
+                            ui.group(|ui| {
+                                ui.label(format!("Tilemap: {map}"));
+                                if !self.current_project.as_ref().is_some_and(|p| p.tilemaps.contains_key(map)) {
+                                    ui.colored_label(egui::Color32::YELLOW, "Tilemap resource is missing");
+                                }
+                                if ui.button("Remove Tilemap").clicked() { self.remove_component(entity, ComponentKind::Tilemap); }
+                            });
+                        }
+                        ui.add_space(12.0);
+                        ui.horizontal_wrapped(|ui| {
+                            if !has_transform && ui.button("+ Transform").clicked() { self.add_component(entity, ComponentKind::Transform); }
+                            if !has_sprite && ui.button("+ Sprite").clicked() { self.add_component(entity, ComponentKind::Sprite); }
+                            if !has_role && ui.button("+ Role").clicked() { self.add_component(entity, ComponentKind::Role); }
+                            if !has_tilemap {
+                                ui.menu_button("+ Tilemap", |ui| {
+                                    let mut maps: Vec<_> = self.current_project.as_ref().map(|p| p.tilemaps.keys().cloned().collect()).unwrap_or_default();
+                                    maps.sort();
+                                    if maps.is_empty() { ui.label("Create a tilemap resource in the Tilemap Editor first."); }
+                                    for map in maps {
+                                        if ui.button(&map).clicked() {
+                                            self.queue_component(entity, ComponentEdit::Add(kiln_core::Component::Tilemap { map }));
+                                            ui.close_menu();
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                        if has_transform && has_sprite && has_role && has_tilemap { ui.label("The entity has every inspector component."); }
                     } else {
                         ui.add_space(32.0);
                         ui.centered_and_justified(|ui| {

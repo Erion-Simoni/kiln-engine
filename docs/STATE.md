@@ -6,36 +6,37 @@
 
 ## Done
 
-- Retained prior baseline repairs, native/browser gates, real project dialogs/atomic writes, metadata preservation, scene switching and independent histories, unique IDs, and project Save/Discard/Cancel protection. See ADR-0039/0040/0041 and the plan's execution log.
-- Added shared validated SetTransform commands for the position inspector and viewport translation. The authored root document and runtime projection update together by scene/entity IDs; unrelated data remains intact. Invalid targets/values and ambiguous identities fail before mutation. Editing a metadata-only entity's default projection authors its Transform. See ADR-0042.
-- Added gesture transactions for typed/mouse inspector edits and canvas translation, recording one undo step on completion. Inspector fields have separate gesture ownership. No-op gestures preserve redo; Escape cancels viewport translation without a history entry.
-- Pending position edits finish before scene/history/project transitions, save, Play, focus loss, and explicit authoring operations. Undo/redo/cancel reloads preserve selection by remapping SourceId to the rebuilt runtime handle.
-- Replaced raw window-coordinate dragging with egui canvas interaction. Use the letterboxed viewport, DPI, zoom, initial transform, and total displacement; held pointers no longer drift. World grid snapping works; outside releases finish; letterbox margins cannot start a move. Rendering and input share the effective camera.
-- Added nine transform/viewport regressions, retaining prior project, lifecycle, and scene-workspace coverage.
+- Prior checkpoints retain native/WASM baseline repairs, strict local gates, real project workflows/atomic writes, authored metadata preservation, scene switching and independent histories, unique IDs, project transition Save/Discard/Cancel, and shared position commands with gesture undo. See ADR-0039–0042 and the execution log.
+- Added validated authored component commands for Transform, Sprite, Role, and Tilemap (ADR-0043). Inspector actions queue outside dock rendering, record one actual change, rebuild the runtime projection, and remap selection by SourceId. Invalid/inactive/ambiguous targets fail before mutation; no-op add/remove preserves redo and existing properties.
+- Component presence in Inspector comes from the authored document, distinguishing implicit runtime transforms and unresolved map references. Add Transform works on metadata-only entities; removing authored Transform survives save/reopen. Missing tilemaps have a visible warning and explicit removal. Adding Tilemap requires selecting an actual project map; empty/unknown resources are rejected.
+- Role and Tilemap have remove controls. Root entity list includes nonvisual objects, authored names, and stable document order. A Sprite-less entity remains reachable after restarting the editor.
+- Added eight integration regressions exercising component commands, actual scene projection, history, disk persistence, defaults, unresolved references, no-ops/validation, and metadata/identity preservation.
 
 ## Validation
 
-- `just test`: 491 passed, zero failed/skipped after final functional changes.
-- `just check`: passed after final functional changes and again after public-item documentation comments (format, strict native all-target Clippy, workspace check, standalone audio sample check).
-- `cargo build -p kiln-editor`: passed after final functional changes.
-- Native GUI in Xvfb/software GL/Low tier: typed X edit/undo/redo, multi-frame canvas drag with no stationary drift and one history step, Escape cancellation, snapped save at (576, 288), release outside the canvas without a stuck gesture, margin-started drag ignored, inspector mouse-drag undo, scene switching/history retention, disk property/name/count verification, real restart, independent Y-then-X typed undo, clean shutdown. No panic/GPU validation error; expected virtual-display/framebuffer warnings remain.
+- `just check`: passed after final code changes (format, strict native all-target Clippy, workspace check, standalone audio sample check).
+- `just test`: 499 passed, zero failed/skipped.
+- `cargo build -p kiln-editor`: passed after the final entity-ordering change.
+- Native GUI in Xvfb/software GL/Low tier: nonvisual selection; authored Transform add/save/undo/redo; Role remove/add and undo restoring its original value; unresolved Tilemap warning/remove/save/undo/redo; selecting an existing Tilemap; Sprite remove retaining selection, undo restoring original red/layer 7 metadata, redo/save and restart; nonvisual reselection/re-add with fresh defaults; authored Transform remove/save/undo/redo and restart with Add Transform still available. Disk contents/names checked, process exits normal. No panic/GPU validation error; expected virtual-display/framebuffer warnings remain.
 - `git diff --check`: passed.
-- Browser was not rerun for editor-only changes. Previous Chromium smoke passed real pixels/assets/input/release/startup rejection. Remote CI remains unverified.
+- Browser was not rerun for editor-only changes; prior Chromium smoke passed pixels/assets/input/release/startup rejection. Remote CI remains unverified.
 
 ## Next
 
-1. Continue Task 2's authoritative edit-command model for component add/remove, entity create/delete/duplicate, and hierarchy reparenting; preserve existing properties and references with real undo/redo/save/reopen regressions.
-2. Finish parent/local transforms, rotation/scale authoring and rendering parity, multi-selection/framing, and full gizmo behavior. Only selected-entity translation and inspector position edits were completed here.
+1. Continue Task 2's shared edit-command model for entity create/delete/duplicate and hierarchy reparenting, preserving IDs, names, components, parent/nested references, and real undo/redo/save/reopen behavior.
+2. Complete property-edit command/undo coverage beyond position/component presence (including current Sprite color typing), parent/local transforms, rotation/scale rendering/authoring parity, multi-selection/framing, and full gizmo behavior.
 3. Add individual dirty scene-tab Save/Discard/Cancel semantics and autosave/recovery. Project replacement/exit already has choice prompts; dirty tabs still require a project save before closing.
-4. Execute the full two-scene transform/reparent/duplicate/delete/save/restart acceptance before completing Task 2. Tasks 3–9 remain pending.
+4. Execute full two-scene transform/reparent/duplicate/delete/save/restart acceptance before completing Task 2. Tasks 3–9 remain pending.
 
 ## Known limits and environment
 
-Transform commands begin the shared model; remaining panels still use transitional scene snapshots/direct mutations. Undo histories last only for the session. Scene reload rebuilds authoring state rather than rereading disk. Startup scene uses sorted IDs; selecting a tab does not change it. Selected-entity translation uses the canvas; direct sprite picking, complete gizmo handles, rotation/scale gizmos, parent/local transforms, complete nested-scene identity/ownership, and recovery remain unfinished. The project guard covers serialized Project state, not external unsaved script buffers or forced process termination.
+The command model now covers position and inspector component presence; other panels still contain transitional snapshots/direct mutations. Runtime-only component helpers remain available for their existing callers/tests. Loader projections still supply implicit default transforms, which are now distinguished from authored components. Role value editing, map-resource creation/import, complete property editing, entity/hierarchy commands, and recovery are not completed by this checkpoint.
+
+Undo histories last only for the session. Scene reload rebuilds authoring state rather than rereading disk. Startup scene uses sorted IDs; choosing a tab does not change it. Direct sprite picking, complete gizmo handles, rotation/scale gizmos, parent/local transforms, and complete nested-scene identity/ownership remain unfinished. Project guards cover serialized Project state, not unsaved external script buffers or forced termination.
 
 Save As stays within the asset directory; relocation is rejected. Dialogs accept typed paths. Platformer/Top-down templates remain empty starters; only Empty 2D has been exercised.
 
-Native visuals cover software GL/Low tier. Headless tests cover DPI/zoom/letterbox calculations; physical high-DPI devices and nondefault camera controls were not exercised natively. Other tiers/GPUs, browser/device breadth, audible audio, complete exports, budgets, clean-machine packaging, cross-platform runs, and remote CI remain separate gates. Optional audio/WASM warnings remain outside strict default-native lint. Plugin ABI v2 requires creator-matched destruction; loader/dispatch remains future work.
+Native visuals cover software GL/Low tier; headless tests cover DPI/zoom/letterbox formulas. Other devices/tiers, audible audio, complete exports, budgets, clean-machine packaging, cross-platform runs, and remote CI remain separate gates. Optional audio/WASM warnings remain outside strict default-native lint. Plugin ABI v2 requires creator-matched destruction; loader/dispatch remains future work.
 
 Source `/workspace/.kiln-tools/activate.sh` for cloud Cargo commands.
 Use `CHROMIUM_PATH=/usr/bin/chromium just web-smoke` for installed-browser validation.

@@ -1140,3 +1140,27 @@ Inspector typing must be undoable as well as dragging. Translation snapping
 uses world grid units. This does not implement parent/local transforms,
 multi-selection, rotation/scale gizmos, or complete component command coverage.
 No dependency or serialized format change is required.
+
+## ADR-0043 — Component presence belongs to the authored scene
+
+**Status:** accepted
+
+Add/remove Transform, Sprite, Role, and Tilemap through root-scene component
+commands. Validate scene/entity identity and new values/resources before changing
+the document. Record one history snapshot only for an actual change, then rebuild
+the existing runtime projection and remap selection by SourceId. A no-op or failed
+command must preserve redo. Parent remains a hierarchy operation.
+
+Inspector component presence and add/remove controls use authored data rather
+than ECS membership: loading supplies default transforms, and unresolved map
+references may have no runtime Tilemap. Adding Tilemap requires an existing
+project map; never author an empty placeholder reference. Removal of an unresolved
+authored map is intentional and must survive snapshots/reopen. Expose root
+entities without sprites in the selection list so removing a visual component
+does not make the entity unreachable after reopening.
+
+Keep low-level runtime component helpers for their existing callers/tests, but
+editor inspector operations use commands and projection rebuilds. This completes
+component presence edits, not all property edits, entity/hierarchy commands,
+map-resource creation/import, or parent/local transform semantics. No dependency
+or serialized format change is required.

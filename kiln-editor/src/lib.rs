@@ -5,6 +5,7 @@ pub mod app;
 pub mod assets;
 pub mod audio_editor;
 pub mod build_panel;
+pub mod component_command;
 pub mod debugger_panel;
 pub mod editing;
 pub mod graph_editor;
