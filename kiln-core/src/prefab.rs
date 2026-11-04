@@ -34,7 +34,7 @@ pub enum ComponentOverride {
         color: Option<[f32; 4]>,
         /// Asset path of the sprite texture to override.
         #[serde(default)]
-        texture: Option<String>,
+        texture: Option<Option<String>>,
     },
 }
 
@@ -98,7 +98,7 @@ impl Prefab {
                             *color = *val;
                         }
                         if let Some(val) = texture_override {
-                            *texture = Some(val.clone());
+                            *texture = val.clone();
                         }
                     }
                     _ => {}
@@ -257,6 +257,46 @@ mod tests {
         } else {
             panic!("Expected Sprite component");
         }
+    }
+
+    #[test]
+    fn sprite_override_can_clear_an_inherited_texture() {
+        let entity = Entity {
+            id: "template".into(),
+            name: "Textured".into(),
+            components: vec![Component::Sprite {
+                color: [1.0; 4],
+                width: 32.0,
+                height: 32.0,
+                texture: Some("art/texture.png".into()),
+                layer: 0.0,
+                material: None,
+                animation_clip: None,
+            }],
+        };
+        let prefab = Prefab::new("Textured".into(), entity);
+        let mut overrides = PrefabOverride::new("instance".into());
+        overrides.add_override(
+            "sprite".into(),
+            ComponentOverride::Sprite {
+                color: None,
+                texture: Some(None),
+            },
+        );
+        let instance = prefab.instantiate(Some(overrides));
+        assert!(matches!(
+            instance.components.first(),
+            Some(Component::Sprite { texture: None, .. })
+        ));
+    }
+
+    #[test]
+    fn legacy_texture_override_string_still_deserializes() {
+        let legacy = r#"{"type":"Sprite","color":null,"texture":"art/old.png"}"#;
+        let override_value: ComponentOverride = serde_json::from_str(legacy).unwrap();
+        assert!(
+            matches!(override_value, ComponentOverride::Sprite { texture: Some(Some(path)), .. } if path == "art/old.png")
+        );
     }
 
     #[test]

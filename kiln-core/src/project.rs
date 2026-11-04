@@ -48,9 +48,36 @@ pub struct Project {
     /// Reusable entity templates keyed by stable prefab id.
     #[serde(default)]
     pub prefabs: HashMap<String, Prefab>,
+    /// Stable asset IDs keyed by project-relative asset path.
+    #[serde(default)]
+    pub asset_ids: HashMap<String, String>,
+    /// Import options keyed by stable asset ID.
+    #[serde(default)]
+    pub asset_import_settings: HashMap<String, AssetImportSettings>,
     /// Input action map for rebindable controls.
     #[serde(default)]
     pub action_map: ActionMap,
+}
+
+/// Per-asset texture import options stored in the project manifest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssetImportSettings {
+    /// Use nearest-neighbor sampling for pixel art.
+    pub nearest_filter: bool,
+    /// Generate mipmaps when supported by the renderer.
+    pub generate_mipmaps: bool,
+    /// Treat the image as a pixel-art sprite.
+    pub is_sprite: bool,
+}
+
+impl Default for AssetImportSettings {
+    fn default() -> Self {
+        Self {
+            nearest_filter: false,
+            generate_mipmaps: true,
+            is_sprite: false,
+        }
+    }
 }
 
 /// An audio asset reference in the project.
@@ -319,6 +346,8 @@ impl Default for Project {
             audio_assets: vec![],
             sdf_fonts: HashMap::new(),
             prefabs: HashMap::new(),
+            asset_ids: HashMap::new(),
+            asset_import_settings: HashMap::new(),
             action_map: ActionMap::new(),
         }
     }
@@ -466,6 +495,25 @@ mod tests {
     }
 
     #[test]
+    fn stable_asset_ids_and_import_settings_round_trip() {
+        let mut project = Project::default();
+        project
+            .asset_ids
+            .insert("art/enemy.png".into(), "asset_stable_42".into());
+        project.asset_import_settings.insert(
+            "asset_stable_42".into(),
+            AssetImportSettings {
+                nearest_filter: true,
+                generate_mipmaps: false,
+                is_sprite: true,
+            },
+        );
+        let loaded = Project::from_toml(&project.to_toml().unwrap()).unwrap();
+        assert_eq!(loaded.asset_ids["art/enemy.png"], "asset_stable_42");
+        assert!(loaded.asset_import_settings["asset_stable_42"].nearest_filter);
+    }
+
+    #[test]
     fn older_project_manifests_default_to_an_empty_prefab_library() {
         let legacy = r#"
 id = "legacy"
@@ -475,6 +523,8 @@ features = []
 "#;
         let loaded = Project::from_toml(legacy).unwrap();
         assert!(loaded.prefabs.is_empty());
+        assert!(loaded.asset_ids.is_empty());
+        assert!(loaded.asset_import_settings.is_empty());
     }
 
     #[test]

@@ -1,31 +1,29 @@
 # Kiln Session Handoff
 
-**Active focus:** Task 3 of `docs/2D_COMPLETION_PLAN.md`, IN PROGRESS.
+**Active focus:** Task 3 implementation is complete; native graphical acceptance is pending.
 **Branch:** `feat/2d-production-workflow`.
-**Scope:** Prefabs, scenes, and asset workflow. 3D remains paused.
+**Scope:** Do not start Task 4 until the Task 3 GUI acceptance has been recorded. 3D remains paused.
 
-## Task 2 checkpoint
+## Task 3 delivered
 
-Task 2 implementation and headless acceptance are complete. Final graphical acceptance remains pending: cross-directory Save As and rotate/scale gizmo interaction could not be rerun because this executor has no display, Xvfb, or desktop automation.
-
-## Task 3 progress
-
-- Prefab definitions persist in the serde-defaulted `Project.prefabs` map. Project load hydrates the Prefab Editor, selection-based creation writes the project, and panel edit/delete state syncs before save. Existing manifests load an empty library. ADR-0050 records this ownership.
-- Scene instances serialize `Component::PrefabInstance` with a prefab ID and keyed override record. Instantiation uses `EntityCommand`, assigns a project-unique ID, preserves authored components and resource references, and appears in scene history. Duplicates retarget the override record to their new entity ID. Editor scene rebuilds restore runtime prefab links by SourceId; scene snapshots preserve the serialized marker. ADR-0051 records this ownership.
-- Prefab library TOML round-trip, old manifest compatibility, and instance instantiate/duplicate/undo/redo/save/reopen/runtime-link coverage pass. Inspector shows linked prefab names and reports missing definitions.
-- Functional per-instance override editing/revert and propagation into saved instance data remain incomplete. Drag/drop instantiation, nested-scene workflow, and asset import/rename/move tracking remain pending.
+- Prefab definitions persist in the project. The editor creates from selection, places by toolbar or scene drag/drop, serializes instance links, captures supported overrides, reverts overrides, applies an instance to its definition with guarded undo/redo, and propagates definition changes across saved/live instances.
+- Nested scenes reject direct and indirect cycles, compose through the runtime loader, retain independent scene documents, and expose per-link offset/additive controls and removal.
+- Projects persist stable asset IDs and import settings. Asset import writes settings to a reloadable hash cache; moves retain IDs/settings and rewrite prefab and scene references. Asset scans avoid symlinks and generated cache/build/VCS folders. Inspector pickers and missing-resource diagnostics are available.
+- Texture overrides can explicitly clear inherited textures, and legacy serialized path overrides still load.
+- Headless acceptance creates two linked enemy instances across scenes, applies one instance to the definition while preserving the second instance's override, renames the texture, saves/reopens, and verifies the renamed texture in the exported archive.
 
 ## Validation
 
-- `just check`: passed. `just test`: 539 passed, zero failed/skipped. Focused entity command acceptance: 5 passed.
-- Native GUI remains unavailable in this executor (`DISPLAY` unset; Xvfb/xdotool absent). Physical devices, other render tiers, cross-platform runs, browser rerun, and remote CI are unverified for this checkpoint.
+- `just check`: passed.
+- `just test`: 552 passed, zero failed/skipped.
+- `cargo build -p kiln-editor`: passed.
+- Focused checks passed for stable asset metadata round-trip, cache settings persistence/rename, texture-clear and legacy override deserialization, nested-scene cycles/configuration/removal, and two-scene export acceptance.
+- Native visual acceptance remains pending: this executor has no `DISPLAY` and no Xvfb, so actual GUI drag/drop cannot be exercised here.
 
 ## Next
 
-1. Implement functional instance override editing and revert, with history and serialized save/reopen behavior.
-2. Propagate prefab definition changes into linked scene instances, then add drag/drop instantiation and acceptance coverage.
-3. Complete nested scenes and asset workflows.
-4. Return to Task 2's graphical acceptance when a GUI runner is available.
+1. Record native GUI acceptance for prefab and asset drag/drop in a GUI-capable runner.
+2. Only after that gate is recorded, begin Task 4 scripting and Play workflow.
 
 Source `/workspace/.kiln-tools/activate.sh` for cloud Cargo commands.
 Use `CHROMIUM_PATH=/usr/bin/chromium just web-smoke` for installed-browser validation.

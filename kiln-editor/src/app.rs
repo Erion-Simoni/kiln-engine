@@ -74,6 +74,10 @@ struct RecoveryPrompt {
 enum ProjectRequest {
     Component(ComponentCommand),
     Entity(crate::entity_command::EntityCommand),
+    ApplyPrefabInstance(String),
+    UndoPrefabApply,
+    RedoPrefabApply,
+    RenameAsset { old_path: String, new_path: String },
     CancelTransform,
     Leave(ProjectAction),
     Resolve(SaveDecision),
@@ -84,6 +88,25 @@ enum ProjectRequest {
     SaveAs(PathBuf),
     CreateDialog,
     Create(String, PathBuf, String),
+}
+
+#[derive(Clone)]
+struct PrefabApplySnapshot {
+    project_path: PathBuf,
+    prefabs: HashMap<String, kiln_core::Prefab>,
+    scenes: HashMap<String, Scene>,
+}
+
+#[derive(Clone)]
+struct PrefabApplyHistoryEntry {
+    before: PrefabApplySnapshot,
+    after: PrefabApplySnapshot,
+}
+
+fn prefab_snapshots_match(left: &PrefabApplySnapshot, right: &PrefabApplySnapshot) -> bool {
+    left.project_path == right.project_path
+        && serde_json::to_value((&left.prefabs, &left.scenes)).ok()
+            == serde_json::to_value((&right.prefabs, &right.scenes)).ok()
 }
 
 /// A running game session in the editor.
@@ -214,6 +237,8 @@ pub struct EditorApp {
     ui_layout_editor: UiLayoutEditorState,
     preferences: PreferencesPanel,
     prefab_editor: PrefabEditorPanel,
+    prefab_apply_undo: Vec<PrefabApplyHistoryEntry>,
+    prefab_apply_redo: Vec<PrefabApplyHistoryEntry>,
     version_control: VersionControlPanel,
     plugin_manager: PluginManagerPanel,
     input_rebind: InputRebindPanel,
@@ -230,6 +255,7 @@ pub struct EditorApp {
     asset_browser: AssetBrowser,
     /// Filter text for the asset browser.
     asset_filter: String,
+    asset_rename: Option<(String, String)>,
     /// Transform gizmo state for visual entity manipulation.
     gizmo: GizmoState,
     transform_edit: Option<SceneTransaction>,
@@ -687,6 +713,8 @@ impl EditorApp {
             ui_layout_editor: UiLayoutEditorState::new(),
             preferences: PreferencesPanel::new(),
             prefab_editor: PrefabEditorPanel::new(),
+            prefab_apply_undo: Vec::new(),
+            prefab_apply_redo: Vec::new(),
             version_control: VersionControlPanel::new(),
             plugin_manager: PluginManagerPanel::new(),
             input_rebind: InputRebindPanel::new(),
@@ -701,6 +729,7 @@ impl EditorApp {
             current_project: None,
             asset_browser: AssetBrowser::new(),
             asset_filter: String::new(),
+            asset_rename: None,
             camera: CameraState::default(),
             grid_snap_size: 32.0,
             grid_snap_enabled: false,
@@ -814,6 +843,8 @@ impl EditorApp {
             .ok_or("Open or create a project before Save As")?;
         let project = self.project_to_save()?;
         let path = crate::project_files::save_as(&project, source, &path)?;
+        self.prefab_apply_undo.clear();
+        self.prefab_apply_redo.clear();
         let _ = crate::recovery::clear(&path);
         self.project_path = Some(path.clone());
         self.project_path_input = path.to_string_lossy().into_owned();
@@ -836,6 +867,8 @@ impl EditorApp {
     /// Load a project from a file path.
     pub fn load_project(&mut self, path: PathBuf) -> Result<(), String> {
         let loaded = crate::project_files::load(&path)?;
+        self.prefab_apply_undo.clear();
+        self.prefab_apply_redo.clear();
         self.finish_transform_edit();
         if self.play.is_some() {
             self.stop_play();
@@ -1380,6 +1413,177 @@ impl EditorApp {
         Ok(())
     }
 
+    fn prefab_apply_snapshot(&self) -> Result<PrefabApplySnapshot, String> {
+        let project = self.current_project.as_ref().ok_or("No project loaded")?;
+        let project_path = self
+            .project_path
+            .clone()
+            .ok_or("Save or open a project before applying a prefab instance")?;
+        Ok(PrefabApplySnapshot {
+            project_path,
+            prefabs: project.prefabs.clone(),
+            scenes: project.scenes.clone(),
+        })
+    }
+
+    fn apply_prefab_instance(&mut self, entity_id: &str) -> Result<(), String> {
+        self.require_edit_mode()?;
+        self.finish_transform_edit();
+        let Some(scene_id) = self.scenes.active_id().map(str::to_owned) else {
+            return Err("Open a scene before applying a prefab instance".into());
+        };
+        let scene = self.scene_from_world();
+        let index = scene
+            .entities
+            .iter()
+            .position(|entity| entity.id == entity_id)
+            .ok_or("Prefab instance is missing from the active scene")?;
+        if !scene.entities[index]
+            .components
+            .iter()
+            .any(|component| matches!(component, kiln_core::Component::PrefabInstance { .. }))
+        {
+            return Err("Selected entity is not a prefab instance".into());
+        }
+        let mut before = self.prefab_apply_snapshot()?;
+        before.scenes.insert(scene_id.clone(), scene);
+        let project = self.current_project.as_mut().ok_or("No project loaded")?;
+        let updated_prefab =
+            crate::editing::apply_prefab_instance_to_definition(project, &scene_id, entity_id)?;
+        self.prefab_apply_redo.clear();
+        self.prefab_editor
+            .state
+            .replace_prefabs(project.prefabs.clone());
+        crate::editing::update_prefab_instances(&mut self.world, &updated_prefab);
+        let updated_scene = project
+            .scenes
+            .get(&scene_id)
+            .cloned()
+            .ok_or("Active scene is missing")?;
+        self.apply_scene(updated_scene)?;
+        let after = self.prefab_apply_snapshot()?;
+        self.prefab_apply_undo
+            .push(PrefabApplyHistoryEntry { before, after });
+        Ok(())
+    }
+
+    fn restore_prefab_snapshot(&mut self, snapshot: PrefabApplySnapshot) -> Result<(), String> {
+        if self.project_path.as_ref() != Some(&snapshot.project_path) {
+            return Err("Prefab apply history belongs to a different project".into());
+        }
+        let Some(project) = self.current_project.as_mut() else {
+            return Err("No project loaded".into());
+        };
+        project.prefabs = snapshot.prefabs;
+        project.scenes = snapshot.scenes;
+        self.prefab_editor
+            .state
+            .replace_prefabs(project.prefabs.clone());
+        let scene_id = self.scenes.active_id().ok_or("No active scene")?;
+        let scene = project
+            .scenes
+            .get(scene_id)
+            .cloned()
+            .ok_or("Active scene is missing")?;
+        self.apply_scene(scene)
+    }
+
+    fn undo_prefab_apply(&mut self) -> Result<(), String> {
+        let entry = self
+            .prefab_apply_undo
+            .last()
+            .cloned()
+            .ok_or("No prefab apply to undo")?;
+        let current = self.prefab_apply_snapshot()?;
+        if !prefab_snapshots_match(&current, &entry.after) {
+            return Err(
+                "Project content changed after Apply Overrides; undo was not applied".into(),
+            );
+        }
+        self.restore_prefab_snapshot(entry.before.clone())?;
+        self.prefab_apply_undo.pop();
+        self.prefab_apply_redo.push(entry);
+        Ok(())
+    }
+
+    fn redo_prefab_apply(&mut self) -> Result<(), String> {
+        let entry = self
+            .prefab_apply_redo
+            .last()
+            .cloned()
+            .ok_or("No prefab apply to redo")?;
+        let current = self.prefab_apply_snapshot()?;
+        if !prefab_snapshots_match(&current, &entry.before) {
+            return Err(
+                "Project content changed after undoing Apply Overrides; redo was not applied"
+                    .into(),
+            );
+        }
+        self.restore_prefab_snapshot(entry.after.clone())?;
+        self.prefab_apply_redo.pop();
+        self.prefab_apply_undo.push(entry);
+        Ok(())
+    }
+
+    fn rename_project_asset(&mut self, old_path: &str, new_path: &str) -> Result<(), String> {
+        self.finish_transform_edit();
+        if self.current_project.is_none() {
+            return Err("Open a project before moving an asset".into());
+        }
+        let active = self.scenes.active_id().map(str::to_owned);
+        let current_scene = active.as_deref().map(|_| self.scene_from_world());
+        let root = self
+            .asset_browser
+            .root()
+            .ok_or("No project asset root")?
+            .to_path_buf();
+        let old_cached_path = root.join(old_path).canonicalize().ok();
+        let new_full_path = root.join(new_path);
+        self.asset_browser.rename_asset(old_path, new_path)?;
+        let mut cache = kiln_assets::AssetCache::new(root.join(".kiln-cache"));
+        if let Err(error) = cache.load() {
+            self.console_log.push(format!(
+                "[WARN] Asset moved, but import cache could not be loaded: {error}"
+            ));
+        } else {
+            if let Some(old) = old_cached_path {
+                if let Err(error) = cache.rename_cached_path(&old, &new_full_path) {
+                    self.console_log.push(format!(
+                        "[WARN] Asset moved, but cache tracking could not be updated: {error}"
+                    ));
+                }
+            }
+            let _ = cache.import(&new_full_path);
+            if let Err(error) = cache.save() {
+                self.console_log.push(format!(
+                    "[WARN] Asset moved, but import cache could not be saved: {error}"
+                ));
+            }
+        }
+        let project = self.current_project.as_mut().ok_or("No project loaded")?;
+        if let (Some(scene_id), Some(scene)) = (active.as_ref(), current_scene) {
+            project.scenes.insert(scene_id.clone(), scene);
+        }
+        let updated = crate::editing::rewrite_asset_references(project, old_path, new_path);
+        if let Some(id) = project.asset_ids.remove(old_path) {
+            project.asset_ids.insert(new_path.to_owned(), id);
+        }
+        self.prefab_editor
+            .state
+            .replace_prefabs(project.prefabs.clone());
+        if let Some(scene_id) = active {
+            if let Some(scene) = project.scenes.get(&scene_id).cloned() {
+                self.apply_scene_with_texture_refresh(scene)?;
+            }
+        } else {
+            self.upload_scene_textures();
+        }
+        self.console_log.push(format!(
+            "[INFO] Moved asset {old_path} to {new_path} and updated {updated} references"
+        ));
+        Ok(())
+    }
+
     /// Apply a scene to the project and the editor world.
     fn apply_scene(&mut self, scene: Scene) -> Result<(), String> {
         let selected_source = self.selected_entity.and_then(|entity| {
@@ -1752,6 +1956,14 @@ impl EditorApp {
             let result = match request {
                 ProjectRequest::Component(command) => self.apply_component_command(command),
                 ProjectRequest::Entity(command) => self.apply_entity_command(command),
+                ProjectRequest::ApplyPrefabInstance(entity_id) => {
+                    self.apply_prefab_instance(&entity_id)
+                }
+                ProjectRequest::UndoPrefabApply => self.undo_prefab_apply(),
+                ProjectRequest::RedoPrefabApply => self.redo_prefab_apply(),
+                ProjectRequest::RenameAsset { old_path, new_path } => {
+                    self.rename_project_asset(&old_path, &new_path)
+                }
                 ProjectRequest::CancelTransform => {
                     self.cancel_transform_edit();
                     Ok(())
@@ -2284,6 +2496,7 @@ impl EditorApp {
                         grid_snap_enabled: &mut self.grid_snap_enabled,
                         audio_editor: &mut self.audio_editor,
                         asset_filter: &mut self.asset_filter,
+                        asset_rename: &mut self.asset_rename,
                         project_hub: &mut self.project_hub,
                         profiler_panel: &mut self.profiler_panel,
                         vfx_editor: &mut self.vfx_editor,
@@ -2924,6 +3137,8 @@ struct TabViewer<'a> {
     audio_editor: &'a mut AudioEditorState,
     /// Filter text for the asset browser.
     asset_filter: &'a mut String,
+    /// Pending source and destination paths in the asset move dialog.
+    asset_rename: &'a mut Option<(String, String)>,
     /// Project hub state.
     project_hub: &'a mut ProjectHubState,
     /// Profiler panel state.
@@ -3180,7 +3395,7 @@ impl TabViewer<'_> {
     }
 
     fn translation_canvas(&mut self, ui: &mut egui::Ui, panel: egui::Rect) {
-        if self.editing_locked() || self.project_blocked || self.gizmo.mode == GizmoMode::None {
+        if self.editing_locked() || self.project_blocked {
             return;
         }
         let ppp = ui.ctx().pixels_per_point();
@@ -3197,6 +3412,29 @@ impl TabViewer<'_> {
             ui.id().with("transform_gizmo_canvas"),
             egui::Sense::drag(),
         );
+        if let Some(prefab_id) = response.dnd_release_payload::<String>() {
+            let pointer = ui.input(|input| input.pointer.interact_pos());
+            if let (Some(pointer), Some(scene_id)) = (pointer, self.scenes.active_id()) {
+                let position = scene_view::pointer_to_world(
+                    [pointer.x, pointer.y],
+                    [canvas.left(), canvas.top(), canvas.right(), canvas.bottom()],
+                    self.scene_camera.position,
+                    units,
+                );
+                self.project_requests.push(ProjectRequest::Entity(
+                    crate::entity_command::EntityCommand {
+                        scene_id: scene_id.to_owned(),
+                        edit: crate::entity_command::EntityEdit::InstantiatePrefab {
+                            prefab_id: prefab_id.as_str().to_owned(),
+                            position,
+                        },
+                    },
+                ));
+            }
+        }
+        if self.gizmo.mode == GizmoMode::None {
+            return;
+        }
         if response.drag_started() {
             self.finish_transform_edit();
             if let Some(entity) = *self.selected_entity {
@@ -3497,8 +3735,17 @@ impl TabViewer<'_> {
             self.log("[INFO] The project has no scene to nest in");
             return;
         };
-        // The nested scene is the first scene that is not the parent.
-        let Some(child_id) = project.scenes.keys().find(|id| **id != parent_id).cloned() else {
+        let mut candidates: Vec<_> = project.scenes.keys().cloned().collect();
+        candidates.sort();
+        let already_nested: std::collections::HashSet<_> = project.scenes[&parent_id]
+            .nested_scenes
+            .iter()
+            .map(|nested| nested.scene_id.as_str())
+            .collect();
+        let Some(child_id) = candidates
+            .into_iter()
+            .find(|id| id != &parent_id && !already_nested.contains(id.as_str()))
+        else {
             self.log("[INFO] The project has no other scene to nest");
             return;
         };
@@ -3526,13 +3773,46 @@ impl TabViewer<'_> {
             self.log(&format!("[ERROR] The asset cache could not be read: {e}"));
             return;
         }
-        let results = match cache.import_dir(&dir) {
-            Ok(results) => results,
-            Err(e) => {
-                self.log(&format!("[ERROR] The assets could not be imported: {e}"));
+        let entries = self.asset_browser.entries().to_vec();
+        let mut results = Vec::new();
+        for entry in entries {
+            let Some(project) = self.current_project.as_mut() else {
                 return;
+            };
+            let asset_id = project
+                .asset_ids
+                .entry(entry.path.clone())
+                .or_insert_with(|| kiln_core::next_id().to_string())
+                .clone();
+            let path = dir.join(&entry.path);
+            let settings = project
+                .asset_import_settings
+                .get(&asset_id)
+                .copied()
+                .unwrap_or_default();
+            let settings = kiln_assets::ImportSettings {
+                filtering: if settings.nearest_filter {
+                    kiln_assets::TextureFilter::Nearest
+                } else {
+                    kiln_assets::TextureFilter::Linear
+                },
+                generate_mipmaps: settings.generate_mipmaps,
+                compress: !settings.is_sprite,
+                max_size: 0,
+                is_sprite: settings.is_sprite,
+            };
+            cache.set_import_settings(&path, settings);
+            match cache.import(&path) {
+                Ok(result) => results.push(result),
+                Err(error) => {
+                    self.log(&format!(
+                        "[ERROR] Asset '{}' could not be imported: {error}",
+                        entry.path
+                    ));
+                    return;
+                }
             }
-        };
+        }
         if let Err(e) = cache.save() {
             self.log(&format!("[ERROR] The asset cache could not be saved: {e}"));
             return;
@@ -3903,6 +4183,27 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         let has_sprite = has(ComponentKind::Sprite);
                         let has_role = has(ComponentKind::Role);
                         let has_tilemap = has(ComponentKind::Tilemap);
+                        if authored.components.iter().any(|component| matches!(component, kiln_core::Component::PrefabInstance { .. })) {
+                            ui.horizontal(|ui| {
+                                ui.label("Prefab instance");
+                                let can_revert = !self.editing_locked() && !self.project_blocked;
+                                if ui.add_enabled(can_revert, egui::Button::new("Apply Overrides to Prefab")).clicked() {
+                                    self.project_requests.push(ProjectRequest::ApplyPrefabInstance(authored.id.clone()));
+                                }
+                                if ui.add_enabled(can_revert, egui::Button::new("Revert Overrides")).clicked() {
+                                    if let Some(scene_id) = self.scenes.active_id().map(str::to_owned) {
+                                        self.project_requests.push(ProjectRequest::Entity(
+                                            crate::entity_command::EntityCommand {
+                                                scene_id,
+                                                edit: crate::entity_command::EntityEdit::RevertPrefabOverrides {
+                                                    entity_id: authored.id.clone(),
+                                                },
+                                            },
+                                        ));
+                                    }
+                                }
+                            });
+                        }
                         if self
                             .rename_input
                             .as_ref()
@@ -4582,11 +4883,23 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             }
             Tab::Assets => {
                 ui.vertical(|ui| {
+                    let rename_source = self.asset_browser.preview_source().map(str::to_owned);
                     ui.horizontal(|ui| {
                         ui.heading("Assets");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button("Import").clicked() {
                                 self.import_assets();
+                            }
+                            if ui
+                                .add_enabled(
+                                    rename_source.is_some(),
+                                    egui::Button::new("Move / Rename"),
+                                )
+                                .clicked()
+                            {
+                                if let Some(source) = rename_source.as_ref() {
+                                    *self.asset_rename = Some((source.clone(), source.clone()));
+                                }
                             }
                             if ui.button("Refresh").clicked() {
                                 if let Some(dir) =
@@ -4683,10 +4996,52 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             }
                         });
 
+                    if let Some((old_path, new_path)) = self.asset_rename.as_mut() {
+                        let mut commit = false;
+                        let mut cancel = false;
+                        egui::Window::new("Move or Rename Asset")
+                            .collapsible(false)
+                            .resizable(false)
+                            .show(ui.ctx(), |ui| {
+                                ui.label(format!("Current path: {old_path}"));
+                                ui.label("New project-relative path:");
+                                ui.text_edit_singleline(new_path);
+                                ui.horizontal(|ui| {
+                                    commit = ui.button("Move").clicked();
+                                    cancel = ui.button("Cancel").clicked();
+                                });
+                            });
+                        if commit {
+                            let (old_path, new_path) = self.asset_rename.take().unwrap();
+                            self.project_requests
+                                .push(ProjectRequest::RenameAsset { old_path, new_path });
+                        } else if cancel {
+                            *self.asset_rename = None;
+                        }
+                    }
+
                     // PNG preview of the selected asset.
                     if let Some(source) = self.asset_browser.preview_source() {
                         ui.add_space(8.0);
                         ui.label(format!("Preview: {source}"));
+                        if let Some(project) = self.current_project.as_mut() {
+                            if let Some(asset_id) = project.asset_ids.get(source).cloned() {
+                                ui.small(format!("Asset ID: {asset_id}"));
+                                let mut settings = project.asset_import_settings
+                                    .get(&asset_id).copied().unwrap_or_default();
+                                let mut changed = false;
+                                ui.horizontal(|ui| {
+                                    changed |= ui.checkbox(&mut settings.is_sprite, "Sprite").changed();
+                                    changed |= ui.checkbox(&mut settings.nearest_filter, "Nearest filtering").changed();
+                                    changed |= ui.checkbox(&mut settings.generate_mipmaps, "Mipmaps").changed();
+                                });
+                                if changed {
+                                    project.asset_import_settings.insert(asset_id, settings);
+                                }
+                            } else {
+                                ui.label("Import assets to assign a stable ID and configure import settings.");
+                            }
+                        }
                         if let Some(image) = self.asset_browser.preview_color_image() {
                             let texture_id = ui.ctx().load_texture(
                                 "preview",
@@ -5028,6 +5383,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             self.instantiate_selected_prefab();
                         }
 
+                        if ui.button("Undo Prefab Apply").clicked() {
+                            self.project_requests.push(ProjectRequest::UndoPrefabApply);
+                        }
+                        if ui.button("Redo Prefab Apply").clicked() {
+                            self.project_requests.push(ProjectRequest::RedoPrefabApply);
+                        }
+
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.label(format!(
                                 "Prefabs: {}",
@@ -5058,10 +5420,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         for prefab in prefabs {
                             let updated =
                                 crate::editing::update_prefab_instances(self.world, &prefab);
-                            if updated > 0 {
+                            let saved = self.current_project.as_mut().map_or(0, |project| {
+                                crate::editing::propagate_prefab_in_scenes(project, &prefab)
+                            });
+                            if updated > 0 || saved > 0 {
                                 self.log(&format!(
-                                    "[INFO] Updated {} instances of prefab '{}'",
-                                    updated, prefab.name
+                                    "[INFO] Updated {} live and {} saved instances of prefab '{}'",
+                                    updated, saved, prefab.name
                                 ));
                             }
                         }
@@ -5103,19 +5468,61 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             ui.strong("Nested Scenes");
                             ui.add_space(8.0);
 
-                            ui.label("Scenes can be nested with optional additive loading.");
-                            ui.label("Each nested scene can have an offset for positioning.");
-                            ui.add_space(8.0);
-
-                            ui.label("Features:");
-                            ui.label("  • Load multiple scenes into one view");
-                            ui.label("  • Additive loading (merge entities)");
-                            ui.label("  • Scene offset for world positioning");
-                            ui.label("  • Scene hierarchy support");
-                            ui.add_space(8.0);
-
-                            ui.label("Current scene has no nested scenes.");
-                            ui.label("Use 'Add Nested Scene' to compose scenes.");
+                            let active_id = self.scenes.active_id().map(str::to_owned);
+                            if let (Some(project), Some(parent_id)) =
+                                (self.current_project.as_mut(), active_id)
+                            {
+                                let nested = project
+                                    .scenes
+                                    .get(&parent_id)
+                                    .map(|scene| scene.nested_scenes.clone())
+                                    .unwrap_or_default();
+                                if nested.is_empty() {
+                                    ui.label(
+                                        "No nested scenes. Use Add Nested Scene to compose scenes.",
+                                    );
+                                }
+                                for link in nested {
+                                    let name = project
+                                        .scenes
+                                        .get(&link.scene_id)
+                                        .map(|scene| scene.name.as_str())
+                                        .unwrap_or("Missing scene");
+                                    let mut offset = [link.offset.x, link.offset.y];
+                                    let mut additive = link.additive;
+                                    let mut remove = false;
+                                    let mut changed = false;
+                                    ui.horizontal(|ui| {
+                                        ui.label(format!("{} ({})", name, link.scene_id));
+                                        changed |= ui
+                                            .add(egui::DragValue::new(&mut offset[0]).prefix("X "))
+                                            .changed();
+                                        changed |= ui
+                                            .add(egui::DragValue::new(&mut offset[1]).prefix("Y "))
+                                            .changed();
+                                        changed |= ui.checkbox(&mut additive, "Additive").changed();
+                                        remove = ui.small_button("Remove").clicked();
+                                    });
+                                    if changed {
+                                        let _ = crate::editing::configure_nested_scene(
+                                            project,
+                                            &parent_id,
+                                            &link.scene_id,
+                                            offset,
+                                            additive,
+                                        );
+                                    }
+                                    if remove {
+                                        let _ = crate::editing::unnest_scene(
+                                            project,
+                                            &parent_id,
+                                            &link.scene_id,
+                                        );
+                                    }
+                                }
+                            } else {
+                                ui.label("Open a project scene to edit its composition.");
+                            }
                         });
                 });
             }

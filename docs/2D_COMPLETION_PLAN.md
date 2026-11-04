@@ -36,13 +36,13 @@ Acceptance: `just check`, `just test`, native editor build, audio sample check, 
 
 Acceptance: headless two-scene acceptance now transforms/reparents/duplicates/deletes entities, undoes/redoes every operation in both isolated histories, saves/reopens, and verifies supported runtime values and asset references. Native editor restart/interaction acceptance still needs a graphical runner; the current environment has no display, Xvfb, or desktop automation.
 
-### 3. Prefabs, scenes, and asset workflow — IN PROGRESS
+### 3. Prefabs, scenes, and asset workflow — IMPLEMENTATION COMPLETE; GRAPHICAL ACCEPTANCE PENDING
 
-- [ ] Create prefabs from selection, instantiate by drag/drop, persist instances, apply/revert overrides, and propagate definition changes.
-- [ ] Complete nested-scene loading and transitions without cyclic ownership or accidental cross-scene edits.
-- [ ] Add import settings, stable asset IDs, resource pickers, rename/move/reimport tracking, and missing-asset diagnostics.
+- [x] Create prefabs from selection, instantiate by drag/drop, persist instances, apply/revert overrides, and propagate definition changes.
+- [x] Complete nested-scene loading and transitions without cyclic ownership or accidental cross-scene edits.
+- [x] Add import settings, stable asset IDs, resource pickers, rename/move/reimport tracking, and missing-asset diagnostics.
 
-Acceptance: reuse an enemy prefab in two levels, override one instance, update its definition, rename its texture, then save/reopen and export with expected results.
+Headless acceptance passes: reuse an enemy prefab across two scenes, apply an instance's edits to the definition while preserving the other instance's override, rename its texture, save/reopen, and verify the exported archive contains the renamed texture. Native visual acceptance of prefab and asset drag/drop is pending because this executor has no display server or Xvfb.
 
 ### 4. General gameplay scripting and Play workflow — PENDING
 
@@ -273,3 +273,38 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Editor scene rebuilds restore runtime prefab links from authored markers by SourceId. Scene snapshots preserve those markers; duplicate updates the override record's entity ID. Inspector identifies linked prefabs and warns on missing definitions. ADR-0051 documents the serialization decision.
 - Regression covers instantiate, duplicate, undo/redo, save/reopen, relative texture/animation retention, runtime link restoration, and scene snapshot parity. `just check`: PASSED; `just test`: 539 passed, zero failed/skipped.
 - Task 3 remains IN PROGRESS: functional per-instance override editing/revert, propagation when a definition changes (including saved instance data), drag/drop instantiation, nested scenes, and asset workflows remain ahead.
+
+### 2026-11-04 — Task 3 override reset and saved propagation
+
+- Added a Revert Overrides action for linked scene entities. The document-first command restores the prefab's authored component set, clears its overrides, keeps the placed entity's ID/name, and records the change in per-scene undo history.
+- Prefab definition edits now propagate into saved instances across project scenes, retaining instance IDs, names, parent links, and supported overrides. Runtime instances continue to update through the existing projection path.
+- Regression coverage verifies revert/undo and saved-instance definition propagation with an overridden transform and parent link. Focused command suite: 7 passed. `just check` passed; `just test`: 541 passed, zero failed/skipped.
+- Scene snapshots now capture transform and Sprite tint/texture differences from prefab definitions into each instance's serialized override map; placement offsets are recorded at instantiate time. Texture removal overrides and applying an instance back to its definition remain unfinished. Drag/drop, nested-scene lifecycle, and asset import/rename/move workflows also remain unfinished. Task 4 has not started.
+
+### 2026-11-04 — Task 3 prefab drag-and-drop placement
+
+- Prefab list entries are now egui drag sources. Dropping a prefab into the scene canvas computes the world-space position through a tested pointer mapping helper and queues the same validated `InstantiatePrefab` scene command as toolbar placement.
+- Canvas drops work with the gizmo mode set to None and are blocked while editing is locked. Existing command behavior supplies stable IDs, undo history, authored prefab links, and persisted placement overrides.
+- Validation: pointer mapping unit test, focused prefab/entity suite (7 passed), `just check` passed, `just test`: 542 passed/zero failed, and `cargo build -p kiln-editor` passed. Native GUI drag acceptance remains unverified in this headless environment.
+- Task 3 remains IN PROGRESS: instance-to-definition Apply, texture-clear override representation, nested scenes, and asset import/rename/move workflow remain unfinished. Task 4 has not started.
+
+### 2026-11-04 — Task 3 apply-to-definition and nested-scene safeguards
+
+- Inspector now offers Apply Overrides to Prefab. It replaces the definition with the selected instance's supported authored components, clears that instance's overrides, and propagates the new base to other saved instances while retaining their overrides. Dedicated Undo Prefab Apply / Redo Prefab Apply controls restore project prefab/scene snapshots; histories reset on project load and Save As.
+- Nested-scene composition now rejects direct/indirect cycles, supports safe offset/additive edits, and can remove a link without deleting either scene. Scene Editor lists actual nested links and exposes these controls.
+- Regression tests cover applying one instance into a definition with a second instance's independent override, indirect cycle rejection, finite offset validation, link configuration, and removal. `just check` passed; `just test`: 544 passed, zero failed/skipped; `cargo build -p kiln-editor` passed.
+- Task 3 remains IN PROGRESS: asset rename/move/reference tracking, import settings/stable asset IDs/pickers, and broader lifecycle acceptance remain outstanding. Task 4 has not started.
+
+### 2026-11-04 — Task 3 asset move and reference tracking
+
+- Asset Browser can move/rename a selected image to an existing project-relative folder. Path traversal, symlink escapes, symlink source assets, missing destinations, and overwriting are rejected. The active scene reloads after the operation.
+- Scene and prefab Sprite texture references are rewritten together. Scene Editor picks the next sorted, not-yet-nested scene, and lists actual nested links with offset/additive controls and safe removal.
+- Regression tests cover file moves and invalid paths, reference rewrites in scenes/prefabs, project-wide Apply to Prefab, and nested-scene graph safeguards. `just check` passed; `just test`: 546 passed; `cargo build -p kiln-editor` passed.
+- Task 3 remains IN PROGRESS: stable asset IDs/import settings/resource pickers/cache reimport tracking, texture-clear overrides, and full two-level GUI/save/reopen/export acceptance remain outstanding. Task 4 has not started.
+
+### 2026-11-04 — Task 3 implementation complete
+
+- Added serde-defaulted stable path-to-ID and ID-to-import-settings project metadata. Asset import assigns IDs and persists filtering/mipmap/sprite settings into both the project and hash cache. Cache settings survive reload and migrate with a rename; asset scans exclude caches/build/VCS trees and do not follow symlinks.
+- Added explicit texture-clear prefab overrides while retaining deserialization of legacy string overrides. Inspector already provides asset/material/animation pickers and missing-reference diagnostics; Asset Browser now moves images and updates project references and import cache records.
+- Added full two-scene prefab/rename/save/reopen/export acceptance. `just check` passed; `just test`: 552 passed, zero failed/skipped; editor build passed. Native visual drag/drop remains unverified without a display server or Xvfb.
+- Task 3 implementation is complete. Keep Task 4 pending until graphical acceptance is recorded in a GUI-capable environment.

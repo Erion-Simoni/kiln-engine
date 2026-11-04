@@ -3,7 +3,7 @@
 //! The inspector edits the world directly, so the editor needs ways to add
 //! and remove entities and to give them the components a scene entity has.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use kiln_core::project::Project;
@@ -424,6 +424,188 @@ pub fn update_prefab_instances(world: &mut GameWorld, prefab: &kiln_core::Prefab
     updated
 }
 
+/// Propagate a changed prefab into every saved scene while preserving each
+/// instance's identity, authored name, hierarchy parent, and overrides.
+pub fn propagate_prefab_in_scenes(
+    project: &mut kiln_core::Project,
+    prefab: &kiln_core::Prefab,
+) -> usize {
+    let mut updated = 0;
+    for scene in project.scenes.values_mut() {
+        for entity in &mut scene.entities {
+            let link = entity
+                .components
+                .iter()
+                .find_map(|component| match component {
+                    kiln_core::Component::PrefabInstance {
+                        prefab_id,
+                        overrides,
+                    } if prefab_id == &prefab.id => Some((prefab_id.clone(), overrides.clone())),
+                    _ => None,
+                });
+            let Some((prefab_id, overrides)) = link else {
+                continue;
+            };
+            let parent = entity
+                .components
+                .iter()
+                .find_map(|component| match component {
+                    kiln_core::Component::Parent { parent } => Some(parent.clone()),
+                    _ => None,
+                });
+            let mut propagated = prefab.root_entity.clone();
+            propagated.id = entity.id.clone();
+            propagated.name = entity.name.clone();
+            propagated.components.retain(|component| {
+                !matches!(
+                    component,
+                    kiln_core::Component::Parent { .. }
+                        | kiln_core::Component::PrefabInstance { .. }
+                )
+            });
+            prefab.apply_overrides(&mut propagated, &overrides);
+            if let Some(parent) = parent {
+                propagated
+                    .components
+                    .push(kiln_core::Component::Parent { parent });
+            }
+            propagated
+                .components
+                .push(kiln_core::Component::PrefabInstance {
+                    prefab_id,
+                    overrides,
+                });
+            *entity = propagated;
+            updated += 1;
+        }
+    }
+    updated
+}
+
+/// Apply one linked scene instance's supported authored components to its
+/// prefab definition, clear that instance's overrides, and propagate the new
+/// definition into every saved instance in the project.
+pub fn apply_prefab_instance_to_definition(
+    project: &mut kiln_core::Project,
+    scene_id: &str,
+    entity_id: &str,
+) -> Result<kiln_core::Prefab, String> {
+    let scene = project.scenes.get_mut(scene_id).ok_or("Scene is missing")?;
+    let entities: Vec<_> = scene
+        .entities
+        .iter()
+        .enumerate()
+        .filter(|(_, entity)| entity.id == entity_id)
+        .map(|(index, _)| index)
+        .collect();
+    let [index] = entities.as_slice() else {
+        return Err("Prefab instance identity is missing or ambiguous".into());
+    };
+    let prefab_id = scene.entities[*index]
+        .components
+        .iter()
+        .find_map(|component| match component {
+            kiln_core::Component::PrefabInstance { prefab_id, .. } => Some(prefab_id.clone()),
+            _ => None,
+        })
+        .ok_or("Selected entity is not a prefab instance")?;
+    let definition = project
+        .prefabs
+        .get_mut(&prefab_id)
+        .ok_or("Prefab definition is missing")?;
+    let mut root = scene.entities[*index].clone();
+    root.id = definition.root_entity.id.clone();
+    root.name = definition.root_entity.name.clone();
+    root.components.retain(|component| {
+        !matches!(
+            component,
+            kiln_core::Component::Parent { .. } | kiln_core::Component::PrefabInstance { .. }
+        )
+    });
+    definition.root_entity = root;
+    let updated = definition.clone();
+    if let Some(kiln_core::Component::PrefabInstance { overrides, .. }) = scene.entities[*index]
+        .components
+        .iter_mut()
+        .find(|component| matches!(component, kiln_core::Component::PrefabInstance { .. }))
+    {
+        *overrides = kiln_core::PrefabOverride::new(entity_id.to_owned());
+    }
+    let scenes = &mut project.scenes;
+    for saved_scene in scenes.values_mut() {
+        for instance in &mut saved_scene.entities {
+            let linked = instance.components.iter().any(|component| {
+                matches!(component, kiln_core::Component::PrefabInstance { prefab_id: id, .. } if id == &updated.id)
+            });
+            if !linked || (saved_scene.id == scene_id && instance.id == entity_id) {
+                continue;
+            }
+            let mut propagated = updated.root_entity.clone();
+            propagated.id = instance.id.clone();
+            propagated.name = instance.name.clone();
+            let parent = instance
+                .components
+                .iter()
+                .find_map(|component| match component {
+                    kiln_core::Component::Parent { parent } => Some(parent.clone()),
+                    _ => None,
+                });
+            let overrides = instance
+                .components
+                .iter()
+                .find_map(|component| match component {
+                    kiln_core::Component::PrefabInstance { overrides, .. } => {
+                        Some(overrides.clone())
+                    }
+                    _ => None,
+                })
+                .unwrap_or_else(|| kiln_core::PrefabOverride::new(instance.id.clone()));
+            updated.apply_overrides(&mut propagated, &overrides);
+            if let Some(parent) = parent {
+                propagated
+                    .components
+                    .push(kiln_core::Component::Parent { parent });
+            }
+            propagated
+                .components
+                .push(kiln_core::Component::PrefabInstance {
+                    prefab_id: updated.id.clone(),
+                    overrides,
+                });
+            *instance = propagated;
+        }
+    }
+    Ok(updated)
+}
+
+/// Update authored Sprite texture paths after a project-relative asset move.
+pub fn rewrite_asset_references(project: &mut Project, old: &str, new: &str) -> usize {
+    fn rewrite(entity: &mut kiln_core::Entity, old: &str, new: &str) -> usize {
+        entity
+            .components
+            .iter_mut()
+            .filter_map(|component| match component {
+                kiln_core::Component::Sprite { texture, .. } => texture.as_mut(),
+                _ => None,
+            })
+            .filter(|path| path.as_str() == old)
+            .map(|path| {
+                *path = new.to_owned();
+            })
+            .count()
+    }
+    let mut changed = 0;
+    for scene in project.scenes.values_mut() {
+        for entity in &mut scene.entities {
+            changed += rewrite(entity, old, new);
+        }
+    }
+    for prefab in project.prefabs.values_mut() {
+        changed += rewrite(&mut prefab.root_entity, old, new);
+    }
+    changed
+}
+
 /// The default size of a sprite without a texture, in world units.
 const DEFAULT_SPRITE_SIZE: [f32; 2] = [32.0, 32.0];
 
@@ -474,6 +656,9 @@ pub fn nest_scene(project: &mut Project, parent_id: &str, child_id: &str) -> Res
     if !child_exists {
         return Err(format!("The scene '{child_id}' does not exist"));
     }
+    if scene_reaches(project, child_id, parent_id, &mut HashSet::new()) {
+        return Err("Nesting this scene would create a scene cycle".into());
+    }
     let Some(parent) = project.scenes.get_mut(parent_id) else {
         return Err(format!("The scene '{parent_id}' does not exist"));
     };
@@ -490,6 +675,71 @@ pub fn nest_scene(project: &mut Project, parent_id: &str, child_id: &str) -> Res
         additive: false,
     });
     Ok(())
+}
+
+/// Remove a nested-scene link without deleting either scene document.
+pub fn unnest_scene(
+    project: &mut Project,
+    parent_id: &str,
+    child_id: &str,
+) -> Result<bool, String> {
+    let parent = project
+        .scenes
+        .get_mut(parent_id)
+        .ok_or("Parent scene is missing")?;
+    let before = parent.nested_scenes.len();
+    parent
+        .nested_scenes
+        .retain(|nested| nested.scene_id != child_id);
+    Ok(parent.nested_scenes.len() != before)
+}
+
+/// Update a nested scene's offset and additive loading mode.
+pub fn configure_nested_scene(
+    project: &mut Project,
+    parent_id: &str,
+    child_id: &str,
+    offset: [f32; 2],
+    additive: bool,
+) -> Result<(), String> {
+    if !offset.iter().all(|value| value.is_finite()) {
+        return Err("Nested scene offset must be finite".into());
+    }
+    let parent = project
+        .scenes
+        .get_mut(parent_id)
+        .ok_or("Parent scene is missing")?;
+    let nested = parent
+        .nested_scenes
+        .iter_mut()
+        .find(|nested| nested.scene_id == child_id)
+        .ok_or("Nested scene link is missing")?;
+    nested.offset = kiln_core::project::SceneOffset {
+        x: offset[0],
+        y: offset[1],
+    };
+    nested.additive = additive;
+    Ok(())
+}
+
+fn scene_reaches(
+    project: &Project,
+    from: &str,
+    target: &str,
+    visited: &mut HashSet<String>,
+) -> bool {
+    if from == target {
+        return true;
+    }
+    if !visited.insert(from.to_owned()) {
+        return false;
+    }
+    project.scenes.get(from).is_some_and(|scene| {
+        scene
+            .nested_scenes
+            .iter()
+            .any(|nested| scene_reaches(project, &nested.scene_id, target, visited))
+    })
 }
 
 /// The files of a project directory, ready to be packed.
@@ -534,6 +784,73 @@ pub fn pack_project(root: &Path, output: &Path) -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn empty_scene(id: &str) -> kiln_core::Scene {
+        kiln_core::Scene {
+            id: id.into(),
+            name: id.into(),
+            entities: Vec::new(),
+            script: None,
+            nested_scenes: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn nested_scenes_reject_cycles_and_support_configuration_and_removal() {
+        let mut project = Project::default();
+        for id in ["a", "b", "c"] {
+            project.scenes.insert(id.into(), empty_scene(id));
+        }
+        nest_scene(&mut project, "a", "b").unwrap();
+        nest_scene(&mut project, "b", "c").unwrap();
+        assert!(nest_scene(&mut project, "c", "a").is_err());
+        configure_nested_scene(&mut project, "a", "b", [15.0, -3.0], true).unwrap();
+        let link = &project.scenes["a"].nested_scenes[0];
+        assert_eq!([link.offset.x, link.offset.y], [15.0, -3.0]);
+        assert!(link.additive);
+        assert!(configure_nested_scene(&mut project, "a", "b", [f32::NAN, 0.0], false).is_err());
+        assert!(unnest_scene(&mut project, "a", "b").unwrap());
+        assert!(project.scenes["a"].nested_scenes.is_empty());
+    }
+
+    #[test]
+    fn moved_asset_paths_update_scenes_and_prefab_definitions() {
+        let mut project = Project::default();
+        let sprite_entity = |id: &str| kiln_core::Entity {
+            id: id.into(),
+            name: id.into(),
+            components: vec![kiln_core::Component::Sprite {
+                color: [1.0; 4],
+                width: 16.0,
+                height: 16.0,
+                texture: Some("art/old.png".into()),
+                layer: 0.0,
+                material: None,
+                animation_clip: None,
+            }],
+        };
+        let mut scene = empty_scene("main");
+        scene.entities.push(sprite_entity("scene-sprite"));
+        project.scenes.insert(scene.id.clone(), scene);
+        project.prefabs.insert(
+            "prefab".into(),
+            kiln_core::Prefab {
+                id: "prefab".into(),
+                name: "P".into(),
+                root_entity: sprite_entity("template"),
+            },
+        );
+        assert_eq!(
+            rewrite_asset_references(&mut project, "art/old.png", "art/new.png"),
+            2
+        );
+        assert!(
+            matches!(&project.scenes["main"].entities[0].components[0], kiln_core::Component::Sprite { texture: Some(path), .. } if path == "art/new.png")
+        );
+        assert!(
+            matches!(&project.prefabs["prefab"].root_entity.components[0], kiln_core::Component::Sprite { texture: Some(path), .. } if path == "art/new.png")
+        );
+    }
 
     #[test]
     fn the_next_entity_id_skips_the_ones_that_exist() {

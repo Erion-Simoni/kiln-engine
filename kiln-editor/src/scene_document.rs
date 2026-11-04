@@ -182,11 +182,125 @@ fn reconcile(
             components.push(component);
         }
     }
-    Entity {
+    let mut result = Entity {
         id: id.into(),
         name: original
             .map(|e| e.name.clone())
             .unwrap_or_else(|| id.into()),
         components,
+    };
+    if let Some(project) = project {
+        capture_prefab_overrides(project, &mut result);
+    }
+    result
+}
+
+fn capture_prefab_overrides(project: &Project, entity: &mut Entity) {
+    let Some((prefab_id, mut overrides)) =
+        entity
+            .components
+            .iter()
+            .find_map(|component| match component {
+                Component::PrefabInstance {
+                    prefab_id,
+                    overrides,
+                } => Some((prefab_id.clone(), overrides.clone())),
+                _ => None,
+            })
+    else {
+        return;
+    };
+    let Some(prefab) = project.prefabs.get(&prefab_id) else {
+        return;
+    };
+    use kiln_core::{ComponentOverride, PrefabOverride};
+    let base_transform =
+        prefab
+            .root_entity
+            .components
+            .iter()
+            .find_map(|component| match component {
+                Component::Transform {
+                    x,
+                    y,
+                    rotation,
+                    scale,
+                } => Some((*x, *y, *rotation, *scale)),
+                _ => None,
+            });
+    let instance_transform = entity
+        .components
+        .iter()
+        .find_map(|component| match component {
+            Component::Transform {
+                x,
+                y,
+                rotation,
+                scale,
+            } => Some((*x, *y, *rotation, *scale)),
+            _ => None,
+        });
+    if let (Some(base), Some(current)) = (base_transform, instance_transform) {
+        let delta = ComponentOverride::Transform {
+            x: (current.0 != base.0).then_some(current.0),
+            y: (current.1 != base.1).then_some(current.1),
+            rotation: (current.2 != base.2).then_some(current.2),
+            scale: (current.3 != base.3).then_some(current.3),
+        };
+        if matches!(
+            &delta,
+            ComponentOverride::Transform {
+                x: None,
+                y: None,
+                rotation: None,
+                scale: None
+            }
+        ) {
+            overrides.overrides.remove("transform");
+        } else {
+            overrides.overrides.insert("transform".into(), delta);
+        }
+    }
+    let base_sprite = prefab
+        .root_entity
+        .components
+        .iter()
+        .find_map(|component| match component {
+            Component::Sprite { color, texture, .. } => Some((*color, texture.clone())),
+            _ => None,
+        });
+    let instance_sprite = entity
+        .components
+        .iter()
+        .find_map(|component| match component {
+            Component::Sprite { color, texture, .. } => Some((*color, texture.clone())),
+            _ => None,
+        });
+    if let (Some((base_color, base_texture)), Some((color, texture))) =
+        (base_sprite, instance_sprite)
+    {
+        let color = (color != base_color).then_some(color);
+        let texture = (texture != base_texture).then_some(texture);
+        if color.is_none() && texture.is_none() {
+            overrides.overrides.remove("sprite");
+        } else {
+            overrides.overrides.insert(
+                "sprite".into(),
+                ComponentOverride::Sprite { color, texture },
+            );
+        }
+    }
+    overrides.entity_id = entity.id.clone();
+    if let Some(Component::PrefabInstance {
+        overrides: current, ..
+    }) = entity
+        .components
+        .iter_mut()
+        .find(|component| matches!(component, Component::PrefabInstance { .. }))
+    {
+        *current = PrefabOverride {
+            entity_id: entity.id.clone(),
+            overrides: overrides.overrides,
+        };
     }
 }

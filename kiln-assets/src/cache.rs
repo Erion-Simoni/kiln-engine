@@ -27,6 +27,13 @@ pub struct CacheEntry {
     pub path: PathBuf,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct CacheFile {
+    entries: Vec<CacheEntry>,
+    #[serde(default)]
+    import_settings: HashMap<PathBuf, ImportSettings>,
+}
+
 /// Import result indicating whether file was skipped or imported.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ImportResult {
@@ -65,12 +72,19 @@ impl AssetCache {
         }
 
         let data = fs::read_to_string(&cache_file)?;
-        let loaded: Vec<CacheEntry> = serde_json::from_str(&data)?;
+        let (loaded, settings) = match serde_json::from_str::<CacheFile>(&data) {
+            Ok(cache) => (cache.entries, cache.import_settings),
+            Err(_) => (
+                serde_json::from_str::<Vec<CacheEntry>>(&data)?,
+                HashMap::new(),
+            ),
+        };
 
         self.entries.clear();
         for entry in loaded {
             self.entries.insert(entry.path.clone(), entry);
         }
+        self.import_settings = settings;
 
         Ok(())
     }
@@ -80,8 +94,10 @@ impl AssetCache {
         fs::create_dir_all(&self.cache_dir)?;
         let cache_file = self.cache_dir.join("kiln-cache.json");
 
-        let entries: Vec<&CacheEntry> = self.entries.values().collect();
-        let data = serde_json::to_string_pretty(&entries)?;
+        let data = serde_json::to_string_pretty(&CacheFile {
+            entries: self.entries.values().cloned().collect(),
+            import_settings: self.import_settings.clone(),
+        })?;
         fs::write(&cache_file, data)?;
 
         Ok(())
@@ -135,12 +151,30 @@ impl AssetCache {
 
     /// Register import settings for a specific asset path.
     pub fn set_import_settings(&mut self, path: &Path, settings: ImportSettings) {
-        self.import_settings.insert(path.to_path_buf(), settings);
+        let key = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        self.import_settings.insert(key, settings);
     }
 
     /// Get the import settings for a given path, returning defaults if none set.
     pub fn get_import_settings(&self, path: &Path) -> ImportSettings {
-        self.import_settings.get(path).copied().unwrap_or_default()
+        let key = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        self.import_settings.get(&key).copied().unwrap_or_default()
+    }
+
+    /// Move a cached record and its import settings to a renamed asset path.
+    pub fn rename_cached_path(&mut self, old: &Path, new: &Path) -> Result<bool, CacheError> {
+        let new = fs::canonicalize(new)?;
+        let mut moved = false;
+        if let Some(mut entry) = self.entries.remove(old) {
+            entry.path = new.clone();
+            self.entries.insert(new.clone(), entry);
+            moved = true;
+        }
+        if let Some(settings) = self.import_settings.remove(old) {
+            self.import_settings.insert(new, settings);
+            moved = true;
+        }
+        Ok(moved)
     }
 
     /// Record that `dependent` depends on `dependency`.
@@ -250,5 +284,26 @@ mod tests {
 
         let hash = cache.get_hash(&file);
         assert!(hash.is_some());
+    }
+
+    #[test]
+    fn import_settings_persist_and_follow_a_renamed_asset() {
+        let root = TempDir::new().unwrap();
+        let old = root.path().join("old.png");
+        let new = root.path().join("new.png");
+        fs::write(&old, b"image").unwrap();
+        let cache_dir = root.path().join(".cache");
+        let mut cache = AssetCache::new(cache_dir.clone());
+        cache.import(&old).unwrap();
+        cache.set_import_settings(&old, ImportSettings::sprite());
+        let old_key = old.canonicalize().unwrap();
+        fs::rename(&old, &new).unwrap();
+        assert!(cache.rename_cached_path(&old_key, &new).unwrap());
+        cache.save().unwrap();
+
+        let mut reopened = AssetCache::new(cache_dir);
+        reopened.load().unwrap();
+        assert!(reopened.get_hash(&new).is_some());
+        assert_eq!(reopened.get_import_settings(&new), ImportSettings::sprite());
     }
 }

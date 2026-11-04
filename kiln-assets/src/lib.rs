@@ -11,4 +11,4 @@ pub use archive::{Archive, ArchiveEntry};
 pub use cache::{AssetCache, ImportResult};
 pub use hash::content_hash;
 pub use image::{decode_png, encode_png_rgba, is_png, Image, ImageError};
-pub use settings::ImportSettings;
+pub use settings::{ImportSettings, TextureFilter};
