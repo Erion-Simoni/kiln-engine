@@ -280,3 +280,10 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Prefab definition edits now propagate into saved instances across project scenes, retaining instance IDs, names, parent links, and supported overrides. Runtime instances continue to update through the existing projection path.
 - Regression coverage verifies revert/undo and saved-instance definition propagation with an overridden transform and parent link. Focused command suite: 7 passed. `just check` passed; `just test`: 541 passed, zero failed/skipped.
 - Scene snapshots now capture transform and Sprite tint/texture differences from prefab definitions into each instance's serialized override map; placement offsets are recorded at instantiate time. Texture removal overrides and applying an instance back to its definition remain unfinished. Drag/drop, nested-scene lifecycle, and asset import/rename/move workflows also remain unfinished. Task 4 has not started.
+
+### 2026-11-04 — Task 3 prefab drag-and-drop placement
+
+- Prefab list entries are now egui drag sources. Dropping a prefab into the scene canvas computes the world-space position through a tested pointer mapping helper and queues the same validated `InstantiatePrefab` scene command as toolbar placement.
+- Canvas drops work with the gizmo mode set to None and are blocked while editing is locked. Existing command behavior supplies stable IDs, undo history, authored prefab links, and persisted placement overrides.
+- Validation: pointer mapping unit test, focused prefab/entity suite (7 passed), `just check` passed, `just test`: 542 passed/zero failed, and `cargo build -p kiln-editor` passed. Native GUI drag acceptance remains unverified in this headless environment.
+- Task 3 remains IN PROGRESS: instance-to-definition Apply, texture-clear override representation, nested scenes, and asset import/rename/move workflow remain unfinished. Task 4 has not started.

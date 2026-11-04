@@ -91,7 +91,15 @@ impl PrefabEditorPanel {
                     let selected = is_selected;
 
                     ui.horizontal(|ui| {
-                        if ui.selectable_label(selected, &prefab.name).clicked() {
+                        let response = ui
+                            .dnd_drag_source(
+                                ui.id().with(("project-prefab", &prefab.id)),
+                                prefab.id.clone(),
+                                |ui| ui.selectable_label(selected, &prefab.name),
+                            )
+                            .inner
+                            .on_hover_text("Drag into the scene to place an instance");
+                        if response.clicked() {
                             let prefab_id = prefab.id.clone();
                             self.state.select_prefab(&prefab_id);
                         }

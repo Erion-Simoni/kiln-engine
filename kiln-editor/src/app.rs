@@ -3180,7 +3180,7 @@ impl TabViewer<'_> {
     }
 
     fn translation_canvas(&mut self, ui: &mut egui::Ui, panel: egui::Rect) {
-        if self.editing_locked() || self.project_blocked || self.gizmo.mode == GizmoMode::None {
+        if self.editing_locked() || self.project_blocked {
             return;
         }
         let ppp = ui.ctx().pixels_per_point();
@@ -3197,6 +3197,29 @@ impl TabViewer<'_> {
             ui.id().with("transform_gizmo_canvas"),
             egui::Sense::drag(),
         );
+        if let Some(prefab_id) = response.dnd_release_payload::<String>() {
+            let pointer = ui.input(|input| input.pointer.interact_pos());
+            if let (Some(pointer), Some(scene_id)) = (pointer, self.scenes.active_id()) {
+                let position = scene_view::pointer_to_world(
+                    [pointer.x, pointer.y],
+                    [canvas.left(), canvas.top(), canvas.right(), canvas.bottom()],
+                    self.scene_camera.position,
+                    units,
+                );
+                self.project_requests.push(ProjectRequest::Entity(
+                    crate::entity_command::EntityCommand {
+                        scene_id: scene_id.to_owned(),
+                        edit: crate::entity_command::EntityEdit::InstantiatePrefab {
+                            prefab_id: prefab_id.as_str().to_owned(),
+                            position,
+                        },
+                    },
+                ));
+            }
+        }
+        if self.gizmo.mode == GizmoMode::None {
+            return;
+        }
         if response.drag_started() {
             self.finish_transform_edit();
             if let Some(entity) = *self.selected_entity {

@@ -84,6 +84,20 @@ pub fn world_camera(world_w: f32, world_h: f32) -> Camera {
     Camera::new(world_w, world_h)
 }
 
+/// Convert an egui pointer position to world coordinates in a bottom-left
+/// oriented scene canvas.
+pub fn pointer_to_world(
+    pointer: [f32; 2],
+    canvas: [f32; 4],
+    camera_position: [f32; 2],
+    units_per_point: [f32; 2],
+) -> [f32; 2] {
+    [
+        camera_position[0] + (pointer[0] - canvas[0]) * units_per_point[0],
+        camera_position[1] + (canvas[3] - pointer[1]) * units_per_point[1],
+    ]
+}
+
 /// Axis-aligned world bounds for a centered sprite after entity rotation and scale.
 pub fn transformed_sprite_bounds(transform: Transform, size: [f32; 2]) -> [f32; 4] {
     let (sin, cos) = transform.rotation.sin_cos();
@@ -364,6 +378,19 @@ mod tests {
     fn letterbox_of_an_empty_panel_is_empty() {
         assert!(letterbox(0, 100, 640.0, 480.0).is_empty());
         assert!(letterbox(100, 100, 0.0, 480.0).is_empty());
+    }
+
+    #[test]
+    fn pointer_mapping_uses_camera_origin_and_flips_screen_y() {
+        assert_eq!(
+            pointer_to_world(
+                [20.0, 30.0],
+                [10.0, 20.0, 110.0, 120.0],
+                [5.0, -2.0],
+                [2.0, 3.0]
+            ),
+            [25.0, 268.0]
+        );
     }
 
     #[test]

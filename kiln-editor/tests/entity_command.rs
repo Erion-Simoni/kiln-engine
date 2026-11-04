@@ -321,7 +321,9 @@ fn prefab_instances_survive_duplicate_save_reopen_runtime_load_and_history() {
         .any(|component| matches!(component, Component::Parent { .. })));
     assert!(
         matches!(instance.components.last(), Some(Component::PrefabInstance { prefab_id, overrides })
-        if prefab_id == "enemy_prefab" && overrides.entity_id == instance_id)
+        if prefab_id == "enemy_prefab"
+            && overrides.entity_id == instance_id
+            && matches!(overrides.overrides.get("transform"), Some(ComponentOverride::Transform { x: Some(64.0), y: Some(96.0), .. })))
     );
 
     let duplicate_id = run(
