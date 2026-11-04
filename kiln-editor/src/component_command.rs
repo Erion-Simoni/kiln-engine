@@ -63,6 +63,9 @@ pub enum ComponentEdit {
         material: Option<String>,
         animation_clip: Option<String>,
     },
+    SetTilemapReference {
+        map: String,
+    },
 }
 
 /// A command targeting one root entity in one scene document.
@@ -115,6 +118,7 @@ impl ComponentCommand {
             ComponentEdit::Remove(kind) => *kind,
             ComponentEdit::SetRole { .. } => ComponentKind::Role,
             ComponentEdit::SetSpriteReferences { .. } => ComponentKind::Sprite,
+            ComponentEdit::SetTilemapReference { .. } => ComponentKind::Tilemap,
         };
         let components = &mut scene.entities[*index].components;
         let matches: Vec<_> = components
@@ -183,6 +187,21 @@ impl ComponentCommand {
                     *current_clip = animation_clip;
                 }
                 Ok(changed)
+            }
+            (ComponentEdit::SetTilemapReference { map }, Some(index)) => {
+                let map = map.trim();
+                if map.is_empty() || !project.tilemaps.contains_key(map) {
+                    return Err("Choose an existing project tilemap".into());
+                }
+                let Component::Tilemap { map: current } = &mut components[*index] else {
+                    unreachable!("tilemap kind resolved to a non-tilemap component")
+                };
+                if current == map {
+                    Ok(false)
+                } else {
+                    *current = map.to_owned();
+                    Ok(true)
+                }
             }
             _ => Ok(false),
         }

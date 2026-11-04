@@ -220,6 +220,44 @@ fn sprite_references_are_normalized_undoable_and_saved() {
 }
 
 #[test]
+fn tilemap_reference_can_be_changed_and_invalid_choices_are_atomic() {
+    let mut project = fixture();
+    project
+        .tilemaps
+        .insert("decor_map".into(), kiln_core::TileMap::default());
+    project.scenes.get_mut("main").unwrap().entities[0]
+        .components
+        .push(Component::Tilemap {
+            map: "level_map".into(),
+        });
+    let mut scene = project.scenes["main"].clone();
+    let mut history = SceneHistory::new();
+    let set_map = |map: &str| command(ComponentEdit::SetTilemapReference { map: map.into() });
+
+    assert!(set_map(" decor_map ")
+        .execute(&mut scene, &project, &mut history)
+        .unwrap());
+    assert_eq!(history.undo_depth(), 1);
+    assert!(!set_map("decor_map")
+        .execute(&mut scene, &project, &mut history)
+        .unwrap());
+
+    let before_invalid = json(&scene);
+    assert!(set_map("missing")
+        .execute(&mut scene, &project, &mut history)
+        .is_err());
+    assert_eq!(json(&scene), before_invalid);
+    assert_eq!(history.undo_depth(), 1);
+
+    project.scenes.insert("main".into(), scene.clone());
+    assert_disk(&project);
+    let restored = history.undo(scene).unwrap();
+    assert!(
+        matches!(restored.entities[0].components.last(), Some(Component::Tilemap { map }) if map == "level_map")
+    );
+}
+
+#[test]
 fn authored_transform_can_be_added_even_when_loading_supplies_a_default() {
     let mut project = fixture();
     let mut scene = project.scenes["main"].clone();

@@ -4360,10 +4360,25 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             });
                         }
                         if let Some(map) = authored.components.iter().find_map(|c| match c { kiln_core::Component::Tilemap { map } => Some(map), _ => None }) {
+                            let mut map_options: Vec<_> = self.current_project.as_ref()
+                                .map(|project| project.tilemaps.keys().cloned().collect())
+                                .unwrap_or_default();
+                            map_options.sort();
                             ui.group(|ui| {
+                                let map_exists = self.current_project.as_ref().is_some_and(|p| p.tilemaps.contains_key(map));
                                 ui.label(format!("Tilemap: {map}"));
-                                if !self.current_project.as_ref().is_some_and(|p| p.tilemaps.contains_key(map)) {
+                                if !map_exists {
                                     ui.colored_label(egui::Color32::YELLOW, "Tilemap resource is missing");
+                                } else {
+                                    egui::ComboBox::from_id_salt(("entity_tilemap", &authored.id))
+                                        .selected_text("Change Tilemap…")
+                                        .show_ui(ui, |ui| {
+                                            for candidate in &map_options {
+                                                if ui.selectable_label(candidate == map, candidate).clicked() {
+                                                    self.queue_component(entity, ComponentEdit::SetTilemapReference { map: candidate.clone() });
+                                                }
+                                            }
+                                        });
                                 }
                                 if ui.button("Remove Tilemap").clicked() { self.remove_component(entity, ComponentKind::Tilemap); }
                             });
