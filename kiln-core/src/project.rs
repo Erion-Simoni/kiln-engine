@@ -3,6 +3,7 @@
 use crate::clip::Clip;
 use crate::input::ActionMap;
 use crate::next_id;
+use crate::prefab::Prefab;
 use crate::tilemap::{TileMap, TileSet};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -44,6 +45,9 @@ pub struct Project {
     /// SDF font assets of the project, keyed by their id.
     #[serde(default)]
     pub sdf_fonts: HashMap<String, SdfFont>,
+    /// Reusable entity templates keyed by stable prefab id.
+    #[serde(default)]
+    pub prefabs: HashMap<String, Prefab>,
     /// Input action map for rebindable controls.
     #[serde(default)]
     pub action_map: ActionMap,
@@ -306,6 +310,7 @@ impl Default for Project {
             materials: HashMap::new(),
             audio_assets: vec![],
             sdf_fonts: HashMap::new(),
+            prefabs: HashMap::new(),
             action_map: ActionMap::new(),
         }
     }
@@ -413,6 +418,55 @@ mod tests {
 
         assert_eq!(loaded.publisher, "MyStudio");
         assert_eq!(loaded.icon, "icon.png");
+    }
+
+    #[test]
+    fn prefab_definitions_round_trip_in_project_manifest() {
+        let entity = Entity {
+            id: "enemy-template".into(),
+            name: "Enemy".into(),
+            components: vec![Component::Sprite {
+                color: [0.8, 0.2, 0.1, 1.0],
+                width: 48.0,
+                height: 48.0,
+                texture: Some("art/enemy.png".into()),
+                layer: 3.0,
+                material: None,
+                animation_clip: Some("walk".into()),
+            }],
+        };
+        let prefab = Prefab {
+            id: "prefab_enemy".into(),
+            name: "Enemy".into(),
+            root_entity: entity,
+        };
+        let mut project = Project::default();
+        project.prefabs.insert(prefab.id.clone(), prefab);
+
+        let toml = project.to_toml().unwrap();
+        let loaded = Project::from_toml(&toml).unwrap();
+        assert_eq!(loaded.prefabs["prefab_enemy"].root_entity.name, "Enemy");
+        assert!(matches!(
+            &loaded.prefabs["prefab_enemy"].root_entity.components[0],
+            Component::Sprite {
+                texture: Some(path),
+                animation_clip: Some(clip),
+                width: 48.0,
+                ..
+            } if path == "art/enemy.png" && clip == "walk"
+        ));
+    }
+
+    #[test]
+    fn older_project_manifests_default_to_an_empty_prefab_library() {
+        let legacy = r#"
+id = "legacy"
+name = "Legacy"
+version = "0.1.0"
+features = []
+"#;
+        let loaded = Project::from_toml(legacy).unwrap();
+        assert!(loaded.prefabs.is_empty());
     }
 
     #[test]

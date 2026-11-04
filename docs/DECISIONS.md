@@ -1207,3 +1207,16 @@ scene-editing UI must queue a command or use the shared transaction path; direct
 runtime/project mutation is reserved for non-scene resources and transitional
 panels outside Task 2 scope. This clarifies and supersedes ADR-0039's temporary
 snapshot bridge. No serialized format or runtime API change is required.
+
+## ADR-0050: Prefab definitions are project resources
+
+**Date:** 2026-11-04
+**Status:** accepted
+
+Store reusable prefab definitions in a serde-defaulted `Project.prefabs` map,
+keyed by stable prefab ID. The Prefab Editor state is a transient view over
+those definitions; successful project load replaces the view, and panel
+create/edit/delete operations synchronize back into the project document so
+ordinary Save/Save As persists them. Existing manifests without the field load
+with an empty prefab library. Scene instance links and override serialization
+are separate Task 3 work and must not be inferred from definition persistence.

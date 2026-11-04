@@ -842,6 +842,9 @@ impl EditorApp {
         self.is_playing = false;
         let project = loaded.project;
         let path = loaded.path;
+        self.prefab_editor
+            .state
+            .replace_prefabs(project.prefabs.clone());
         let recovery = match crate::recovery::load_if_newer(&path) {
             Ok(recovery) => recovery.map(|(_, project)| project),
             Err(error) => {
@@ -3432,6 +3435,9 @@ impl TabViewer<'_> {
         let name = format!("Prefab_{}", source.id);
         let prefab = crate::editing::prefab_from_entity(&source, &name);
         let id = prefab.id.clone();
+        if let Some(project) = self.current_project.as_mut() {
+            project.prefabs.insert(id.clone(), prefab.clone());
+        }
         self.prefab_editor.state.add_prefab(prefab);
         self.prefab_editor.state.select_prefab(&id);
         self.log(&format!("[INFO] Created the prefab {name}"));
@@ -5030,7 +5036,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     // Render the prefab editor panel (list + override editor).
                     // Returns true if overrides were applied, in which case we
                     // update all ECS instances to match the edited prefab.
-                    if self.prefab_editor.render(ui) {
+                    let applied = self.prefab_editor.render(ui);
+                    if let Some(project) = self.current_project.as_mut() {
+                        project.prefabs = self.prefab_editor.state.prefabs().clone();
+                    }
+                    if applied {
                         let prefabs: Vec<_> = self
                             .prefab_editor
                             .state

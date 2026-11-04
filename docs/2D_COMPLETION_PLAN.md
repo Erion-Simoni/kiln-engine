@@ -36,7 +36,7 @@ Acceptance: `just check`, `just test`, native editor build, audio sample check, 
 
 Acceptance: headless two-scene acceptance now transforms/reparents/duplicates/deletes entities, undoes/redoes every operation in both isolated histories, saves/reopens, and verifies supported runtime values and asset references. Native editor restart/interaction acceptance still needs a graphical runner; the current environment has no display, Xvfb, or desktop automation.
 
-### 3. Prefabs, scenes, and asset workflow — PENDING
+### 3. Prefabs, scenes, and asset workflow — IN PROGRESS
 
 - [ ] Create prefabs from selection, instantiate by drag/drop, persist instances, apply/revert overrides, and propagate definition changes.
 - [ ] Complete nested-scene loading and transitions without cyclic ownership or accidental cross-scene edits.
@@ -259,3 +259,10 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Save As regressions cover same-root copies, relocation with a real relative texture asset, copied scripts, project round-trip, omitted recovery sidecars, occupied destination preservation, and rejection of nested copies without creating partial directories.
 - `just check`: PASSED. `just test`: 535 passed, zero failed/skipped. Focused project-roundtrip/two-scene acceptance: 11 passed. `cargo build -p kiln-editor`: PASSED.
 - Native GUI confirmation of the Save As relocation and final rotation/scale drag workflow could not run in this executor: `DISPLAY` is unset and Xvfb/xdotool are unavailable. Earlier checkpoints contain native verification of project create/open/save, scene tabs, hierarchy, inspector, and transform editing. Task 2 is implementation-complete; its graphical acceptance remains pending before marking the task fully complete. Tasks 3–9 remain pending.
+
+### 2026-11-04 — Task 3 prefab-library persistence started
+
+- Added optional `Project.prefabs`, keyed by prefab ID, so reusable definitions are saved in the project manifest. Project load hydrates the Prefab Editor state, the selection-based create action inserts definitions into the project, and panel edits/deletes sync back before project save.
+- Added ADR-0050 and tests for full TOML prefab definition round-trip, legacy manifests without a prefab map, and Prefab Editor selection behavior after project replacement.
+- Focused validation: `cargo nextest run -p kiln-core --lib` (50 passed) and `cargo nextest run -p kiln-editor --test project_roundtrip` (10 passed). Full `just check` passed; `just test` passed 538 tests; `cargo build -p kiln-editor` passed.
+- Task 3 remains PENDING. Persisted scene-instance links, drag/drop creation, functional apply/revert overrides, and propagation across save/reopen remain unimplemented.
