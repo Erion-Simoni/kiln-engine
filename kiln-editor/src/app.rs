@@ -60,6 +60,7 @@ enum SceneAction {
 
 enum ProjectRequest {
     Component(ComponentCommand),
+    Entity(crate::entity_command::EntityCommand),
     CancelTransform,
     Leave(ProjectAction),
     Resolve(SaveDecision),
@@ -1283,6 +1284,33 @@ impl EditorApp {
         Ok(())
     }
 
+    fn apply_entity_command(
+        &mut self,
+        command: crate::entity_command::EntityCommand,
+    ) -> Result<(), String> {
+        self.require_edit_mode()?;
+        self.finish_transform_edit();
+        if self.scenes.active_id() != Some(command.scene_id.as_str()) {
+            return Err("Hierarchy command targets an inactive scene".into());
+        }
+        let mut scene = self.scene_from_world();
+        let project = self.current_project.as_ref().ok_or("No project loaded")?;
+        let deleted = match &command.edit {
+            crate::entity_command::EntityEdit::Delete { entity_id } => Some(entity_id.as_str()),
+            _ => None,
+        };
+        let selected = command.execute(&mut scene, project, &mut self.scenes.history)?;
+        self.apply_scene(scene)?;
+        if deleted.is_some_and(|id| self.hierarchy_panel.selected_entity_id() == Some(id)) {
+            self.hierarchy_panel.clear_selection();
+        }
+        if let Some(id) = selected {
+            self.selected_entity = self.entity_id_to_hecs.get(&id).copied();
+            self.hierarchy_panel.select(&id);
+        }
+        Ok(())
+    }
+
     /// Apply a scene to the project and the editor world.
     fn apply_scene(&mut self, scene: Scene) -> Result<(), String> {
         let selected_source = self.selected_entity.and_then(|entity| {
@@ -1545,6 +1573,7 @@ impl EditorApp {
             }
             let result = match request {
                 ProjectRequest::Component(command) => self.apply_component_command(command),
+                ProjectRequest::Entity(command) => self.apply_entity_command(command),
                 ProjectRequest::CancelTransform => {
                     self.cancel_transform_edit();
                     Ok(())
@@ -4522,13 +4551,6 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 });
             }
             Tab::Hierarchy => {
-                let hierarchy_before = crate::scene_document::snapshot_for_scene(
-                    self.world,
-                    self.entity_textures,
-                    self.entity_roles,
-                    self.current_project.as_ref(),
-                    self.scenes.active_id(),
-                );
                 let hierarchy_size = self.world_size();
                 ui.vertical(|ui| {
                     if let Some(project) = self.current_project.as_mut() {
@@ -4554,125 +4576,50 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     }
                                 }
                                 crate::hierarchy::HierarchyAction::RemoveEntity(source_id) => {
-                                    self.scenes.history.record(hierarchy_before.clone());
-                                    if let Some(entity) = self.entity_id_to_hecs.remove(&source_id)
-                                    {
-                                        crate::editing::remove_entity(self.world, entity);
-                                        if *self.selected_entity == Some(entity) {
-                                            *self.selected_entity = None;
-                                        }
-                                    }
-                                    if let Some(scene) = project.scenes.get_mut(&scene_id) {
-                                        scene.entities.retain(|entity| entity.id != source_id);
-                                    }
-                                    self.hierarchy_panel.rebuild(project, &scene_id);
+                                    self.project_requests.push(ProjectRequest::Entity(
+                                        crate::entity_command::EntityCommand {
+                                            scene_id: scene_id.clone(),
+                                            edit: crate::entity_command::EntityEdit::Delete {
+                                                entity_id: source_id,
+                                            },
+                                        },
+                                    ));
                                 }
                                 crate::hierarchy::HierarchyAction::AddEntity(name) => {
-                                    self.scenes.history.record(hierarchy_before.clone());
-                                    // Use all known project entity IDs for unique naming.
-                                    let existing: Vec<String> =
-                                        self.entity_id_to_hecs.keys().cloned().collect();
                                     let size = hierarchy_size;
-                                    let position = [size.0 / 2.0, size.1 / 2.0];
-                                    let (source_id, entity) = crate::editing::add_entity(
-                                        self.world,
-                                        &existing,
-                                        position,
-                                        crate::editing::EntityDefaults::default(),
-                                    );
-                                    // Update the project with the new entity
-                                    if let Some(scene) = project.scenes.get_mut(&scene_id) {
-                                        scene.entities.push(kiln_core::project::Entity {
-                                            id: source_id.clone(),
-                                            name,
-                                            components: vec![
-                                                kiln_core::project::Component::Transform {
-                                                    x: position[0],
-                                                    y: position[1],
-                                                    rotation: 0.0,
-                                                    scale: 1.0,
-                                                },
-                                                kiln_core::project::Component::Sprite {
-                                                    color: [1.0, 1.0, 1.0, 1.0],
-                                                    texture: None,
-                                                    layer: 0.0,
-                                                    material: None,
-                                                    animation_clip: None,
-                                                },
-                                                kiln_core::project::Component::Role {
-                                                    role: "".to_string(),
-                                                },
-                                            ],
-                                        });
-                                    }
-                                    *self.selected_entity = Some(entity);
-                                    self.entity_id_to_hecs.insert(source_id, entity);
-                                    self.hierarchy_panel.rebuild(project, &scene_id);
+                                    self.project_requests.push(ProjectRequest::Entity(
+                                        crate::entity_command::EntityCommand {
+                                            scene_id: scene_id.clone(),
+                                            edit: crate::entity_command::EntityEdit::Create {
+                                                name,
+                                                position: [size.0 / 2.0, size.1 / 2.0],
+                                            },
+                                        },
+                                    ));
                                 }
                                 crate::hierarchy::HierarchyAction::Reparent {
                                     child_id,
                                     parent_id,
                                 } => {
-                                    self.scenes.history.record(hierarchy_before.clone());
-                                    if let Some(scene) = project.scenes.get_mut(&scene_id) {
-                                        if let Some(entity) =
-                                            scene.entities.iter_mut().find(|e| e.id == child_id)
-                                        {
-                                            entity.components.retain(|c| {
-                                                !matches!(
-                                                    c,
-                                                    kiln_core::project::Component::Parent { .. }
-                                                )
-                                            });
-                                            if let Some(parent_id) = &parent_id {
-                                                entity.components.push(
-                                                    kiln_core::project::Component::Parent {
-                                                        parent: parent_id.clone(),
-                                                    },
-                                                );
-                                            }
-                                        }
-                                    }
-                                    self.hierarchy_panel.rebuild(project, &scene_id);
+                                    self.project_requests.push(ProjectRequest::Entity(
+                                        crate::entity_command::EntityCommand {
+                                            scene_id: scene_id.clone(),
+                                            edit: crate::entity_command::EntityEdit::Reparent {
+                                                entity_id: child_id,
+                                                parent_id,
+                                            },
+                                        },
+                                    ));
                                 }
                                 crate::hierarchy::HierarchyAction::DuplicateEntity(source_id) => {
-                                    self.scenes.history.record(hierarchy_before.clone());
-                                    if let Some(&hecs_entity) =
-                                        self.entity_id_to_hecs.get(&source_id)
-                                    {
-                                        if let Ok(world_entity) = self
-                                            .world
-                                            .world_mut()
-                                            .query_one_mut::<(
-                                                &kiln_core::Transform,
-                                                &kiln_runtime::Role,
-                                                &kiln_runtime::Sprite,
-                                            )>(
-                                                hecs_entity
-                                            )
-                                            .map(|(t, r, s)| (*t, r.clone(), s.clone()))
-                                        {
-                                            let (transform, role, sprite) = world_entity;
-                                            let new_source_id = crate::editing::next_entity_id(
-                                                &self
-                                                    .entity_id_to_hecs
-                                                    .keys()
-                                                    .cloned()
-                                                    .collect::<Vec<_>>(),
-                                            );
-                                            self.world.world_mut().spawn((
-                                                kiln_core::Transform {
-                                                    position: transform.position,
-                                                    rotation: transform.rotation,
-                                                    scale: transform.scale,
-                                                },
-                                                kiln_runtime::Role(role.0.clone()),
-                                                sprite.clone(),
-                                                SourceId::new(new_source_id.clone()),
-                                            ));
-                                        }
-                                    }
-                                    self.hierarchy_panel.rebuild(project, &scene_id);
+                                    self.project_requests.push(ProjectRequest::Entity(
+                                        crate::entity_command::EntityCommand {
+                                            scene_id: scene_id.clone(),
+                                            edit: crate::entity_command::EntityEdit::Duplicate {
+                                                entity_id: source_id,
+                                            },
+                                        },
+                                    ));
                                 }
                             }
                         }

@@ -8,6 +8,7 @@ pub mod build_panel;
 pub mod component_command;
 pub mod debugger_panel;
 pub mod editing;
+pub mod entity_command;
 pub mod graph_editor;
 pub mod hierarchy;
 pub mod history;

@@ -1164,3 +1164,7 @@ editor inspector operations use commands and projection rebuilds. This completes
 component presence edits, not all property edits, entity/hierarchy commands,
 map-resource creation/import, or parent/local transform semantics. No dependency
 or serialized format change is required.
+
+## ADR-0044: Scene entity commands are document-first
+
+Hierarchy create, delete, duplicate, and reparent operations mutate the authored scene through validated commands and record one scene snapshot for undo. Runtime entities are rebuilt from that document after a successful command, keeping all authored components and metadata intact. Entity IDs remain unique across the project; duplication creates a sibling copy with a fresh ID while retaining the source's authored component values and parent link. Deleting an entity detaches its direct children to avoid dangling parent IDs. Reparenting rejects missing targets, self-parenting, and cycles.
