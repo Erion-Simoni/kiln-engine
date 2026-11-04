@@ -9,18 +9,18 @@
 - Earlier checkpoints cover native/WASM baseline repair, project lifecycle and atomic writes, authored metadata preservation, multi-scene tabs/history, project Save/Discard/Cancel, transform/property commands, component presence commands, and hierarchy entity commands. ADR-0039–0048 record the architecture.
 - Hierarchy create/delete/duplicate/reparent are document-first commands with ID validation, cycle prevention, metadata preservation, and undo. Native GUI verified create/selection, duplicate/selection, delete/undo, reparent/save, and saved undo/redo of Parent.
 - Inspector edits for Transform position/rotation/uniform-scale and Sprite tint/layer/dimensions update authored and runtime state with one undo step per field gesture. Sprite dimensions default to 32×32 in old projects.
-- Sprite rendering supports entity rotation/scale; authored width/height are carried through loading, inspection, and save/reopen.
-- Parent links now compose local translation/rotation/scale into runtime `GlobalTransform`. All editor/player/web/mobile/sample sprite renderers consume global transforms; parent motion is propagated before drawing. Inspector values remain local, viewport drags convert world poses back to local, and reparent/delete preserve child world poses. Nested-scene offsets remain separate from local values.
+- Sprite rendering supports entity rotation/scale and authored dimensions. Parent links compose local translation/rotation/scale into runtime `GlobalTransform`; editor/player/web/mobile/sample renderers consume refreshed global poses. Viewport drags convert to local space; reparent/delete preserve child world poses and nested scene offsets survive propagation.
+- Scene viewport now has visible move axes, a rotation ring, and a scale handle. Drag gestures preview local Transform edits, commit one undo step on release, and cancel through the existing Escape path. Rotation angle wrap, uniform scaling, hit targets, and translation snap math have unit coverage.
 
 ## Validation
 
-- Previous Sprite dimensions checkpoint: `just check` passed; `just test`: 507 passed; editor build, WASM check, and Chromium browser smoke passed.
-- Current parent/local checkpoint: `just check` passed; `just test`: 514 passed, zero failed/skipped. Added checks cover nested affine composition, inverse world-to-local conversion, runtime scene spawn and live parent movement, nested scene offsets through propagation, editor descendant projection, and world-pose preservation on reparent/delete. Editor build, WASM check, and Chromium smoke passed.
-- Native app GUI confirmation of parented transforms remains outstanding. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
+- Parent/local checkpoint: `just check` passed; `just test`: 514 passed. Editor build, WASM check, Chromium smoke, nested-offset, runtime propagation, editor descendant update, and reparent/delete pose-preservation checks passed.
+- Current gizmo checkpoint: `just check` passed; `just test`: 518 passed, zero failed/skipped. `cargo build -p kiln-editor` passed.
+- Native app GUI confirmation of parented transforms and gizmo dragging remains outstanding. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
 
 ## Next
 
-1. Add rotation/scale viewport gizmos, then multi-selection and framing.
+1. Add multi-selection and framing.
 2. Add dirty scene-tab Save/Discard/Cancel and autosave/recovery.
 3. Run full two-scene transform/reparent/duplicate/delete/save/restart acceptance before completing Task 2. Tasks 3–9 remain pending.
 

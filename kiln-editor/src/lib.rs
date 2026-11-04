@@ -32,6 +32,7 @@ pub mod shader_editor;
 pub mod sprite_editor;
 pub mod tilemap_editor;
 pub mod transform_edit;
+pub mod transform_gizmo;
 pub mod ui_layout_editor;
 pub mod version_control_panel;
 pub mod vfx_editor;

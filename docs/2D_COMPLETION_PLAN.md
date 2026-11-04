@@ -244,3 +244,9 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Runtime scene spawning now keeps `Transform` local, attaches runtime parent links, and carries `GlobalTransform` for resolved world poses. Render loops in editor/player/web/mobile/samples recompute global poses before drawing; separate nested-scene root offsets survive propagation.
 - Editor transform commands update local authored values and affected runtime globals. Inspector shows local values; viewport drags convert world-space changes back to local. Reparenting preserves world pose; deleting a parent detaches children without moving them.
 - Validation: `just check` passed; `just test`: 514 passed. Editor build, WASM check, Chromium smoke, nested-offset, runtime propagation, editor descendant update, and reparent/delete pose-preservation checks passed. Physics synchronization for parented entities is still pending.
+
+### 2026-11-04 checkpoint — rotation and scale viewport gizmos
+
+- Scene viewport now draws move axes, a rotation ring, and a scale handle at the selected entity's world-space origin. The move tool retains canvas dragging; rotation starts on the ring and uses angular pointer change, while scale starts on its handle and scales uniformly from vertical pointer movement.
+- Every gizmo computes from press state, converts the resulting world pose back to the authored local Transform (including parent rotation/scale), previews through the existing SceneTransaction path, commits once on release, and supports Escape cancellation.
+- Validation: `just check` passed; `just test`: 518 passed; editor build passed. Pure tests cover translation snapping, rotation/wraparound, uniform positive scale, and visible handle hit targets. Native visual drag acceptance remains outstanding.

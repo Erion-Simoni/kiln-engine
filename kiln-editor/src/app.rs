@@ -46,7 +46,8 @@ use crate::scene_workspace::SceneWorkspace;
 use crate::shader_editor::ShaderEditorState;
 use crate::sprite_editor::SpriteEditorState;
 use crate::tilemap_editor::TilemapEditorState;
-use crate::transform_edit::{SceneTransaction, SetTransform, TranslationDrag};
+use crate::transform_edit::{SceneTransaction, SetTransform};
+use crate::transform_gizmo::{hits_handle, GizmoDrag, GizmoMode};
 use crate::ui_layout_editor::UiLayoutEditorState;
 use crate::version_control_panel::VersionControlPanel;
 use crate::vfx_editor::VfxEditorState;
@@ -256,21 +257,11 @@ impl Default for CameraState {
     }
 }
 
-/// Transform gizmo mode for visual entity manipulation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-enum GizmoMode {
-    None,
-    #[default]
-    Translate,
-    Rotate,
-    Scale,
-}
-
 /// Transform gizmo state for dragging entities in the scene view.
 #[derive(Debug, Clone, Default)]
 struct GizmoState {
     mode: GizmoMode,
-    drag: Option<(String, TranslationDrag, [f32; 2])>,
+    drag: Option<(String, GizmoDrag)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2862,8 +2853,7 @@ impl TabViewer<'_> {
     }
 
     fn translation_canvas(&mut self, ui: &mut egui::Ui, panel: egui::Rect) {
-        if self.editing_locked() || self.project_blocked || self.gizmo.mode != GizmoMode::Translate
-        {
+        if self.editing_locked() || self.project_blocked || self.gizmo.mode == GizmoMode::None {
             return;
         }
         let ppp = ui.ctx().pixels_per_point();
@@ -2877,7 +2867,7 @@ impl TabViewer<'_> {
         );
         let response = ui.interact(
             canvas,
-            ui.id().with("translation_canvas"),
+            ui.id().with("transform_gizmo_canvas"),
             egui::Sense::drag(),
         );
         if response.drag_started() {
@@ -2897,7 +2887,28 @@ impl TabViewer<'_> {
                     .map(|t| t.0);
                 let origin = ui.input(|input| input.pointer.press_origin());
                 if let (Some(source), Some(initial), Some(origin)) = (source, initial, origin) {
-                    self.gizmo.drag = Some((source, TranslationDrag { origin, initial }, units));
+                    let canvas = egui::Rect::from_min_size(
+                        egui::pos2(viewport.x as f32 / ppp, viewport.y as f32 / ppp),
+                        egui::vec2(viewport.width as f32 / ppp, viewport.height as f32 / ppp),
+                    );
+                    let center = egui::pos2(
+                        canvas.left()
+                            + (initial.position.x - self.scene_camera.position[0]) / units[0],
+                        canvas.bottom()
+                            - (initial.position.y - self.scene_camera.position[1]) / units[1],
+                    );
+                    if !hits_handle(self.gizmo.mode, origin, center) {
+                        return;
+                    }
+                    let pointer_world = kiln_core::Vec2::new(
+                        self.scene_camera.position[0] + (origin.x - canvas.left()) * units[0],
+                        self.scene_camera.position[1] + (canvas.bottom() - origin.y) * units[1],
+                    );
+                    if let Some(drag) =
+                        GizmoDrag::new(self.gizmo.mode, origin, initial, units, pointer_world)
+                    {
+                        self.gizmo.drag = Some((source, drag));
+                    }
                 }
             }
         }
@@ -2909,12 +2920,12 @@ impl TabViewer<'_> {
             return;
         }
         if response.dragged() || response.drag_stopped() {
-            if let (Some((source, drag, units)), Some(pointer)) = (
+            if let (Some((source, drag)), Some(pointer)) = (
                 self.gizmo.drag.clone(),
                 ui.input(|input| input.pointer.interact_pos()),
             ) {
                 let grid = (*self.grid_snap_enabled).then_some(*self.grid_snap_size);
-                let world_value = drag.at(pointer, units, grid);
+                let world_value = drag.at(pointer, grid);
                 let local_value = crate::scene_document::snapshot_for_scene(
                     self.world,
                     self.entity_textures,
@@ -3398,7 +3409,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                 // Draw gizmo mode indicator in the top-left of the scene view
                 if self.gizmo.mode != GizmoMode::None {
-                    if let Some(_entity) = self.selected_entity {
+                    if let Some(entity) = self.selected_entity {
                         let gizmo_color = match self.gizmo.mode {
                             GizmoMode::Translate => egui::Color32::from_rgb(255, 0, 0),
                             GizmoMode::Rotate => egui::Color32::from_rgb(0, 255, 0),
@@ -3420,6 +3431,75 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             egui::FontId::proportional(10.0),
                             gizmo_color,
                         );
+                        if let Ok(transform) = self
+                            .world
+                            .world_ref()
+                            .get::<&kiln_runtime::GlobalTransform>(*entity)
+                        {
+                            let ppp = ui.ctx().pixels_per_point();
+                            let viewport =
+                                scene_view::canvas_viewport(rect, ppp, self.world_size());
+                            if let Some(units) =
+                                scene_view::units_per_point(viewport, ppp, self.scene_camera)
+                            {
+                                let canvas = egui::Rect::from_min_size(
+                                    egui::pos2(viewport.x as f32 / ppp, viewport.y as f32 / ppp),
+                                    egui::vec2(
+                                        viewport.width as f32 / ppp,
+                                        viewport.height as f32 / ppp,
+                                    ),
+                                );
+                                let center = egui::pos2(
+                                    canvas.left()
+                                        + (transform.position.x - self.scene_camera.position[0])
+                                            / units[0],
+                                    canvas.bottom()
+                                        - (transform.position.y - self.scene_camera.position[1])
+                                            / units[1],
+                                );
+                                match self.gizmo.mode {
+                                    GizmoMode::Translate => {
+                                        ui.painter().line_segment(
+                                            [center, center + egui::vec2(42.0, 0.0)],
+                                            egui::Stroke::new(
+                                                2.0_f32,
+                                                egui::Color32::from_rgb(255, 80, 80),
+                                            ),
+                                        );
+                                        ui.painter().line_segment(
+                                            [center, center + egui::vec2(0.0, -42.0)],
+                                            egui::Stroke::new(
+                                                2.0_f32,
+                                                egui::Color32::from_rgb(80, 255, 100),
+                                            ),
+                                        );
+                                    }
+                                    GizmoMode::Rotate => {
+                                        ui.painter().circle_stroke(
+                                            center,
+                                            38.0,
+                                            egui::Stroke::new(2.0_f32, gizmo_color),
+                                        );
+                                    }
+                                    GizmoMode::Scale => {
+                                        let handle = center + egui::vec2(54.0, 0.0);
+                                        ui.painter().line_segment(
+                                            [center, handle],
+                                            egui::Stroke::new(2.0_f32, gizmo_color),
+                                        );
+                                        ui.painter().rect_filled(
+                                            egui::Rect::from_center_size(
+                                                handle,
+                                                egui::vec2(12.0, 12.0),
+                                            ),
+                                            2.0,
+                                            gizmo_color,
+                                        );
+                                    }
+                                    GizmoMode::None => {}
+                                }
+                            }
+                        }
                     }
                 }
 
