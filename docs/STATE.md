@@ -11,16 +11,18 @@
 - Inspector edits for Transform position/rotation/uniform-scale and Sprite tint/layer/dimensions update authored and runtime state with one undo step per field gesture. Sprite dimensions default to 32×32 in old projects.
 - Sprite rendering supports entity rotation/scale and authored dimensions. Parent links compose local translation/rotation/scale into runtime `GlobalTransform`; editor/player/web/mobile/sample renderers consume refreshed global poses. Viewport drags convert to local space; reparent/delete preserve child world poses and nested scene offsets survive propagation.
 - Scene viewport now has visible move axes, a rotation ring, and a scale handle. Drag gestures preview local Transform edits, commit one undo step on release, and cancel through the existing Escape path. Rotation angle wrap, uniform scaling, hit targets, and translation snap math have unit coverage.
+- Hierarchy and scene-list selection now support Ctrl/Cmd additive toggling while preserving a primary inspector target. The scene view's Frame Selection button and `F` shortcut center and fit selected entity positions.
 
 ## Validation
 
 - Parent/local checkpoint: `just check` passed; `just test`: 514 passed. Editor build, WASM check, Chromium smoke, nested-offset, runtime propagation, editor descendant update, and reparent/delete pose-preservation checks passed.
 - Current gizmo checkpoint: `just check` passed; `just test`: 518 passed, zero failed/skipped. `cargo build -p kiln-editor` passed.
+- Multi-selection/framing checkpoint: `just check` passed; `just test`: 519 passed, zero failed/skipped. Additive selection state has a unit test.
 - Native app GUI confirmation of parented transforms and gizmo dragging remains outstanding. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
 
 ## Next
 
-1. Add multi-selection and framing.
+1. Add group transform dragging for multi-selected entities and frame by authored sprite bounds.
 2. Add dirty scene-tab Save/Discard/Cancel and autosave/recovery.
 3. Run full two-scene transform/reparent/duplicate/delete/save/restart acceptance before completing Task 2. Tasks 3–9 remain pending.
 

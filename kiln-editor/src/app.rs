@@ -2057,6 +2057,7 @@ impl EditorApp {
                         asset_browser: &mut self.asset_browser,
                         tilemap_editor: &mut self.tilemap_editor,
                         hierarchy_panel: &mut self.hierarchy_panel,
+                        camera_state: &mut self.camera,
                         current_project: &mut self.current_project,
                         project_requests: &mut self.project_requests,
                         project_blocked,
@@ -2613,6 +2614,7 @@ struct TabViewer<'a> {
     asset_browser: &'a mut AssetBrowser,
     tilemap_editor: &'a mut TilemapEditorState,
     hierarchy_panel: &'a mut HierarchyPanel,
+    camera_state: &'a mut CameraState,
     current_project: &'a mut Option<Project>,
     project_requests: &'a mut Vec<ProjectRequest>,
     project_blocked: bool,
@@ -3221,6 +3223,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             *self.play_toggle_requested = true;
                         }
 
+                        if ui.button("Frame Selection (F)").clicked()
+                            || (ui.ctx().input(|input| input.key_pressed(egui::Key::F))
+                                && !ui.ctx().wants_keyboard_input())
+                        {
+                            self.frame_selection();
+                        }
+
                         ui.separator();
 
                         // Gizmo mode toggle
@@ -3385,14 +3394,25 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             })
                             .collect();
                         for (entity, source, label) in entities {
-                            let selected = *self.selected_entity == Some(entity);
+                            let selected = self.hierarchy_panel.selected_ids.contains(&source);
                             if ui
                                 .selectable_label(selected, label)
-                                .on_hover_text(source)
+                                .on_hover_text(&source)
                                 .clicked()
                             {
                                 self.finish_transform_edit();
                                 *self.selected_entity = Some(entity);
+                                let additive = ui
+                                    .input(|input| input.modifiers.command || input.modifiers.ctrl);
+                                if additive {
+                                    self.hierarchy_panel.toggle_select(&source);
+                                } else {
+                                    self.hierarchy_panel.select(&source);
+                                }
+                                *self.selected_entity = self
+                                    .hierarchy_panel
+                                    .selected_entity_id()
+                                    .and_then(|id| self.entity_id_to_hecs.get(id).copied());
                             }
                         }
                     });
@@ -4801,11 +4821,12 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             match action {
                                 crate::hierarchy::HierarchyAction::SelectEntity(project_id) => {
                                     // Sync selection: project entity ID -> hecs Entity
-                                    if let Some(&hecs_entity) =
-                                        self.entity_id_to_hecs.get(&project_id)
-                                    {
-                                        *self.selected_entity = Some(hecs_entity);
-                                    }
+                                    let selected_id = self
+                                        .hierarchy_panel
+                                        .selected_entity_id()
+                                        .unwrap_or(&project_id);
+                                    *self.selected_entity =
+                                        self.entity_id_to_hecs.get(selected_id).copied();
                                 }
                                 crate::hierarchy::HierarchyAction::RemoveEntity(source_id) => {
                                     self.project_requests.push(ProjectRequest::Entity(
@@ -4903,6 +4924,42 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 }
 
 impl<'a> TabViewer<'a> {
+    fn frame_selection(&mut self) {
+        let selected = &self.hierarchy_panel.selected_ids;
+        let positions: Vec<[f32; 2]> = selected
+            .iter()
+            .filter_map(|id| {
+                let entity = *self.entity_id_to_hecs.get(id)?;
+                let transform = self
+                    .world
+                    .world_ref()
+                    .get::<&kiln_runtime::GlobalTransform>(entity)
+                    .ok()?;
+                Some([transform.0.position.x, transform.0.position.y])
+            })
+            .collect();
+        let Some(first) = positions.first().copied() else {
+            return;
+        };
+        self.camera_state.target = None;
+        let (mut min_x, mut max_x, mut min_y, mut max_y) = (first[0], first[0], first[1], first[1]);
+        for [x, y] in positions.iter().copied().skip(1) {
+            min_x = min_x.min(x);
+            max_x = max_x.max(x);
+            min_y = min_y.min(y);
+            max_y = max_y.max(y);
+        }
+        let base = scene_view::world_camera(self.scene_world_size.0, self.scene_world_size.1);
+        let width = (max_x - min_x).max(32.0) * 1.25;
+        let height = (max_y - min_y).max(32.0) * 1.25;
+        self.camera_state.zoom = (base.viewport_size[0] / width)
+            .min(base.viewport_size[1] / height)
+            .clamp(0.1, 10.0);
+        self.camera_state.position = [
+            (min_x + max_x) * 0.5 - base.viewport_size[0] / self.camera_state.zoom * 0.5,
+            (min_y + max_y) * 0.5 - base.viewport_size[1] / self.camera_state.zoom * 0.5,
+        ];
+    }
     fn show_widget_tree(&mut self, ui: &mut egui::Ui, widget_id: WidgetId, depth: usize) {
         if let Some(node) = self.ui_designer.widgets.get(&widget_id) {
             let indent = depth as f32 * 16.0;

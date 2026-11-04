@@ -46,6 +46,8 @@ pub struct HierarchyPanel {
     pub nodes: Vec<HierarchyNode>,
     /// Currently selected entity id (if any).
     pub selected_id: Option<String>,
+    /// All selected entity IDs, with `selected_id` remaining the inspector target.
+    pub selected_ids: Vec<String>,
     /// Filter text for filtering nodes by name.
     pub filter: String,
     /// Whether to show the "add entity" dialog.
@@ -101,6 +103,28 @@ impl HierarchyPanel {
 
     /// Select an entity by id.
     pub fn select(&mut self, entity_id: &str) {
+        self.selected_ids.clear();
+        self.selected_ids.push(entity_id.to_owned());
+        self.select_primary(entity_id);
+    }
+
+    /// Add or remove an entity from the current selection.
+    pub fn toggle_select(&mut self, entity_id: &str) {
+        if let Some(index) = self.selected_ids.iter().position(|id| id == entity_id) {
+            self.selected_ids.remove(index);
+            if self.selected_id.as_deref() == Some(entity_id) {
+                self.selected_id = self.selected_ids.last().cloned();
+            }
+        } else {
+            self.selected_ids.push(entity_id.to_owned());
+            self.selected_id = Some(entity_id.to_owned());
+        }
+        for node in &mut self.nodes {
+            node.selected = self.selected_ids.contains(&node.entity_id);
+        }
+    }
+
+    fn select_primary(&mut self, entity_id: &str) {
         for node in &mut self.nodes {
             node.selected = node.entity_id == entity_id;
         }
@@ -113,6 +137,7 @@ impl HierarchyPanel {
             node.selected = false;
         }
         self.selected_id = None;
+        self.selected_ids.clear();
     }
 
     /// Filter nodes by name (case-insensitive).
@@ -159,7 +184,7 @@ pub fn render_hierarchy_panel(
     egui::ScrollArea::vertical().show(ui, |ui| {
         let nodes: Vec<HierarchyNode> = state.filtered_nodes().into_iter().cloned().collect();
         for node in nodes {
-            let selected = state.selected_id.as_deref() == Some(&node.entity_id);
+            let selected = state.selected_ids.contains(&node.entity_id);
             let _node_text = if node.has_children {
                 format!("{} ▾", node.name)
             } else {
@@ -200,7 +225,13 @@ pub fn render_hierarchy_panel(
                 }
 
                 if response.clicked() {
-                    state.select(&node.entity_id);
+                    let additive =
+                        ui.input(|input| input.modifiers.command || input.modifiers.ctrl);
+                    if additive {
+                        state.toggle_select(&node.entity_id);
+                    } else {
+                        state.select(&node.entity_id);
+                    }
                     action = Some(HierarchyAction::SelectEntity(node.entity_id.clone()));
                 }
 
@@ -272,4 +303,26 @@ fn get_entity_role(project: &Project, scene_id: &str, entity_id: &str) -> Option
         }
     }
     None
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::*;
+
+    #[test]
+    fn additive_selection_tracks_members_and_primary() {
+        let mut panel = HierarchyPanel::new();
+        panel.select("first");
+        panel.toggle_select("second");
+        assert_eq!(panel.selected_ids, ["first", "second"]);
+        assert_eq!(panel.selected_entity_id(), Some("second"));
+
+        panel.toggle_select("second");
+        assert_eq!(panel.selected_ids, ["first"]);
+        assert_eq!(panel.selected_entity_id(), Some("first"));
+
+        panel.toggle_select("first");
+        assert!(panel.selected_ids.is_empty());
+        assert_eq!(panel.selected_entity_id(), None);
+    }
 }
