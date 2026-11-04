@@ -3,6 +3,7 @@
 use crate::clip::Clip;
 use crate::input::ActionMap;
 use crate::next_id;
+use crate::prefab::{Prefab, PrefabOverride};
 use crate::tilemap::{TileMap, TileSet};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -44,6 +45,9 @@ pub struct Project {
     /// SDF font assets of the project, keyed by their id.
     #[serde(default)]
     pub sdf_fonts: HashMap<String, SdfFont>,
+    /// Reusable entity templates keyed by stable prefab id.
+    #[serde(default)]
+    pub prefabs: HashMap<String, Prefab>,
     /// Input action map for rebindable controls.
     #[serde(default)]
     pub action_map: ActionMap,
@@ -220,6 +224,12 @@ pub enum Component {
     },
     Sprite {
         color: [f32; 4],
+        /// Authored width in world units. Older projects default to 32.
+        #[serde(default = "default_sprite_dimension")]
+        width: f32,
+        /// Authored height in world units. Older projects default to 32.
+        #[serde(default = "default_sprite_dimension")]
+        height: f32,
         /// Asset path of the sprite texture (e.g. `"sprites/hero.png"`).
         ///
         /// `None` means the sprite is drawn with the built-in white texel and
@@ -251,11 +261,23 @@ pub enum Component {
         /// Role name, e.g. `"player"` or `"coin"`.
         role: String,
     },
+    /// Link a scene entity to a reusable prefab definition.
+    PrefabInstance {
+        /// Stable id of the definition in [`Project::prefabs`].
+        prefab_id: String,
+        /// Per-instance property overrides.
+        #[serde(default)]
+        overrides: PrefabOverride,
+    },
     /// Parent-child relationship for entity hierarchy.
     Parent {
         /// Parent entity's source id.
         parent: String,
     },
+}
+
+fn default_sprite_dimension() -> f32 {
+    32.0
 }
 
 impl Project {
@@ -296,6 +318,7 @@ impl Default for Project {
             materials: HashMap::new(),
             audio_assets: vec![],
             sdf_fonts: HashMap::new(),
+            prefabs: HashMap::new(),
             action_map: ActionMap::new(),
         }
     }
@@ -403,6 +426,70 @@ mod tests {
 
         assert_eq!(loaded.publisher, "MyStudio");
         assert_eq!(loaded.icon, "icon.png");
+    }
+
+    #[test]
+    fn prefab_definitions_round_trip_in_project_manifest() {
+        let entity = Entity {
+            id: "enemy-template".into(),
+            name: "Enemy".into(),
+            components: vec![Component::Sprite {
+                color: [0.8, 0.2, 0.1, 1.0],
+                width: 48.0,
+                height: 48.0,
+                texture: Some("art/enemy.png".into()),
+                layer: 3.0,
+                material: None,
+                animation_clip: Some("walk".into()),
+            }],
+        };
+        let prefab = Prefab {
+            id: "prefab_enemy".into(),
+            name: "Enemy".into(),
+            root_entity: entity,
+        };
+        let mut project = Project::default();
+        project.prefabs.insert(prefab.id.clone(), prefab);
+
+        let toml = project.to_toml().unwrap();
+        let loaded = Project::from_toml(&toml).unwrap();
+        assert_eq!(loaded.prefabs["prefab_enemy"].root_entity.name, "Enemy");
+        assert!(matches!(
+            &loaded.prefabs["prefab_enemy"].root_entity.components[0],
+            Component::Sprite {
+                texture: Some(path),
+                animation_clip: Some(clip),
+                width: 48.0,
+                ..
+            } if path == "art/enemy.png" && clip == "walk"
+        ));
+    }
+
+    #[test]
+    fn older_project_manifests_default_to_an_empty_prefab_library() {
+        let legacy = r#"
+id = "legacy"
+name = "Legacy"
+version = "0.1.0"
+features = []
+"#;
+        let loaded = Project::from_toml(legacy).unwrap();
+        assert!(loaded.prefabs.is_empty());
+    }
+
+    #[test]
+    fn legacy_sprite_dimensions_default_to_thirty_two() {
+        let sprite: Component =
+            serde_json::from_str(r#"{"type":"Sprite","color":[1.0,1.0,1.0,1.0],"texture":null}"#)
+                .unwrap();
+        assert!(matches!(
+            sprite,
+            Component::Sprite {
+                width: 32.0,
+                height: 32.0,
+                ..
+            }
+        ));
     }
 
     #[test]

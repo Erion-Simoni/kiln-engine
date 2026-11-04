@@ -981,3 +981,263 @@ with no C dependencies, making it safe for WASM/web builds.
   `fonts` feature is enabled.
 
 
+
+## ADR-0037: Browser sound bridge and executable web smoke coverage (accepted)
+
+**Date:** 2026-11-03
+**Status:** accepted
+
+Browser sound playback callbacks may capture JavaScript audio handles and must
+remain on the browser thread. SliceHost exposes its sound-player setter without
+requiring the native Rodio audio feature. The callback type retains Send + Sync
+on native targets; only wasm32 relaxes these bounds. This avoids exposing VM
+internals or enabling an OS audio backend in a browser. This bridge currently
+covers play_sound; complete browser music/mixer behavior remains in task 7.
+
+The web shell uses the shared runtime scene spawner to preserve roles, source
+IDs, and animation setup. WebGPU availability is probed before claiming the
+canvas; when no adapter exists, use a separate WebGL instance with downlevel
+limits. Startup rejects its JavaScript promise on failure.
+
+Development-only browser verification uses pinned Playwright in tests/web,
+with its npm lockfile. It adds no engine or exported-game runtime dependency.
+Playwright is Apache-2.0 licensed; its browser binaries are test tooling only.
+The smoke test serves real generated bindings and sample assets, detects page
+and asset errors, checks rendered hero pixels, and verifies keyboard movement.
+A no-error console alone is insufficient evidence. WebGPU, touch devices,
+complete audio playback, and other browsers require separate checks.
+
+Browser execution also revealed that std::time::Instant panics on
+wasm32-unknown-unknown. kiln-core's Clock uses web-time 1.1 on wasm32 only,
+retaining std::time::Instant on native targets. web-time is MIT OR Apache-2.0
+licensed and already appears in the dependency graph; it supplies the browser
+monotonic clock rather than a timer stub. Its maintenance/size cost is limited
+to the WASM target. The browser movement regression exercises the real clock.
+
+## ADR-0038: Plugin entry points return opaque handles (accepted)
+
+**Date:** 2026-11-03
+**Status:** accepted
+
+Strict compilation found a C entry point returning a Rust trait-object pointer,
+whose fat-pointer/vtable layout is not a C ABI contract. The creation macro also
+allocated a boxed box while declaring a trait-object pointer. Plugin API version
+2 returns an opaque void pointer to plugin-owned storage and supplies a matching
+destroy entry point. The host must never dereference that handle or reconstruct
+a Rust trait object across module boundaries. Creation/destruction use the same
+module allocator. Null destruction is allowed; other handles must come from the
+matching creator and must be released at most once.
+
+This repairs the allocation/lifetime boundary; it does not implement the future
+plugin loader or a cross-module method dispatch protocol. The in-process registry
+continues to accept ordinary Rust trait objects. No dependencies are added.
+
+## ADR-0039: Preserve authored scene metadata and isolate project file operations (accepted)
+
+**Date:** 2026-11-03
+**Status:** accepted
+
+The serialized Project/Scene remains the source of authoring metadata. Runtime
+worlds are projections, not a complete replacement document: they omit names,
+parent links, unresolved asset references, and include nested-scene instances.
+Editor snapshots reconcile editable runtime components by SourceId with the
+original root scene, preserving unprojected metadata and filtering nested
+instances. This is an incremental bridge; a shared edit-command model is still
+required before task 2 can be considered complete.
+
+Tilemaps augment an existing entity with the same SourceId instead of spawning
+a duplicate entity. Sprite layer/material metadata is applied by the shared
+scene spawner so opening and saving cannot silently reset it.
+
+File operations live in an editor-only module independent of the window/GPU,
+allowing real create/save/reopen regression tests. Use tempfile (MIT OR
+Apache-2.0, already present in the repository dependency graph) for same-directory
+staging and atomic manifest replacement, including Windows replacement support.
+It is not added to the engine runtime or browser target. Creation never reuses
+an existing destination directory. Project path/root state changes only after
+successful I/O. Save As copies the project tree into a new or empty destination
+directory, preserving relative references; it rejects occupied directories and
+symlinks instead of overwriting unrelated files or copying data from outside the
+project root. Same-root Save As writes an additional manifest in place.
+
+This checkpoint does not claim complete undo coverage, scene-tab switching,
+project relocation, native file pickers, or autosave/recovery.
+
+## ADR-0040 — Explicit editor scene selection and isolated scene history
+
+**Status:** accepted
+
+The editor's active scene is separate from the project's startup scene. A native
+editor workspace owns open scene tabs, selection, saved scene baselines, and one
+undo/redo history per scene. Switching first reconciles the outgoing world into
+the project document, then loads the selected scene and clears transient entity
+selection/gizmo state. UI requests execute after dock rendering, so no frame can
+edit one world's entities under another scene's metadata. All editor snapshots
+receive the active scene ID explicitly; the legacy public snapshot helper keeps
+its default-scene behavior for existing callers.
+
+Scene creation inserts a real document and opens it. Closing a dirty tab is
+blocked until the project is saved; closing a clean tab never deletes its scene.
+At least one tab stays open. Saved baselines update only after successful writes.
+Play still starts the project startup scene; before replacing the editor world,
+capture the active authoring scene, then restore that scene on Stop. Switching,
+creating, closing, undo, redo, and scene reload are blocked during Play.
+
+This extends ADR-0039's bridge rather than claiming the complete command model.
+Global project-close prompts, autosave/recovery, complete gizmo undo, and
+parent/local transform semantics remain subsequent Task 2 work. No dependency
+or runtime/browser architecture changes are required.
+
+Visible acceptance also exposed two UI composition defects: the FPS row consumed
+remaining height, and scene rendering cleared the frame after the UI. Constrain
+status/entity rows, derive the viewport from the current frame, and draw scene
+pixels before the UI with transparent scene-canvas background. This preserves
+menus and floating dialogs above the rendered world. Reserve all live SourceIds
+when adding entities; texture/resource maps are not identity registries.
+
+## ADR-0041 — Guard destructive project transitions with the saved document
+
+**Status:** accepted
+
+Use an editor-only lifecycle guard for Open, Create-and-open, File Exit, and the
+window-manager close event. Compare the complete authoring Project, including the
+live active-scene snapshot, with the last successfully loaded/saved document;
+scene-tab dirty flags alone miss project settings, resources, and closed scenes.
+Retain one pending action and require Save, Discard, or Cancel before executing
+it. Save failure retains both the document and pending action for retry/cancel.
+Cancel changes neither disk nor document. Discard authorizes the pending action,
+but a failed target load/create still leaves the current document open.
+
+Opening a picker or New Project dialog is reversible and does not yet replace
+the project; guard only the actual Open/Create request. Stop Play before checking
+an outgoing document so runtime mutations never enter a scene save. Prompting
+pauses editor interaction and clears transient gizmo drag state. Route exits
+through winit's event loop rather than process::exit, allowing normal cleanup.
+Keep low-level loading available for startup and already-resolved transitions.
+
+This checkpoint covers project transitions; individual dirty scene-tab prompts,
+autosave/recovery, unsaved external script buffers, and the complete authoring
+command model remain separate work. No new dependency is required.
+
+## ADR-0042 — Shared transform commands and gesture transactions
+
+**Status:** accepted
+
+Position inspector edits and viewport translation use the same validated
+SetTransform command over the serialized root scene plus its runtime projection.
+Commands address scene/entity SourceIds, preserve unrelated metadata, reject
+missing/ambiguous runtime identities and non-finite/nonuniform values before
+mutation, and insert an authored Transform when a default projection is edited.
+A gesture captures the scene before its first change and records exactly one
+snapshot on completion. No-op gestures preserve redo. Escape cancels viewport
+translation without recording history. Complete pending gestures before scene,
+save, Play, project-transition, and undo/redo operations.
+
+Use egui canvas interactions rather than raw window mouse events, respecting
+floating windows and input capture. Convert drag displacement using the rendered
+letterboxed viewport, DPI, and camera zoom; compute from the initial transform
+rather than accumulating per-frame deltas. Share the camera with rendering.
+Inspector typing must be undoable as well as dragging. Translation snapping
+uses world grid units. This does not implement parent/local transforms,
+multi-selection, rotation/scale gizmos, or complete component command coverage.
+No dependency or serialized format change is required.
+
+## ADR-0043 — Component presence belongs to the authored scene
+
+**Status:** accepted
+
+Add/remove Transform, Sprite, Role, and Tilemap through root-scene component
+commands. Validate scene/entity identity and new values/resources before changing
+the document. Record one history snapshot only for an actual change, then rebuild
+the existing runtime projection and remap selection by SourceId. A no-op or failed
+command must preserve redo. Parent remains a hierarchy operation.
+
+Inspector component presence and add/remove controls use authored data rather
+than ECS membership: loading supplies default transforms, and unresolved map
+references may have no runtime Tilemap. Adding Tilemap requires an existing
+project map; never author an empty placeholder reference. Removal of an unresolved
+authored map is intentional and must survive snapshots/reopen. Expose root
+entities without sprites in the selection list so removing a visual component
+does not make the entity unreachable after reopening.
+
+Keep low-level runtime component helpers for their existing callers/tests, but
+editor inspector operations use commands and projection rebuilds. This completes
+component presence edits, not all property edits, entity/hierarchy commands,
+map-resource creation/import, or parent/local transform semantics. No dependency
+or serialized format change is required.
+
+## ADR-0044: Scene entity commands are document-first
+
+Hierarchy create, delete, duplicate, and reparent operations mutate the authored scene through validated commands and record one scene snapshot for undo. Runtime entities are rebuilt from that document after a successful command, keeping all authored components and metadata intact. Entity IDs remain unique across the project; duplication creates a sibling copy with a fresh ID while retaining the source's authored component values and parent link. Deleting an entity detaches its direct children to avoid dangling parent IDs. Reparenting rejects missing targets, self-parenting, and cycles.
+
+## ADR-0045: Inspector property gestures share scene transactions
+
+Inspector edits for Transform and Sprite update the authored scene and runtime projection together, then commit one undo snapshot per widget gesture. This extends the existing position transaction to rotation, uniform scale, Sprite tint, and layer. Typed edits and drags use the same path; separate widgets produce separate history entries, and edits preserve unrelated authored component fields.
+
+## ADR-0046: Sprite instances carry world rotation
+
+The shared sprite instance includes a per-instance rotation consumed by the default WGSL sprite shader. Sprite size is scaled on the CPU from the entity Transform before submission. Editor, player, web, mobile, and sample world-sprite paths use the same helper; UI, tilemap cells, and screen/world decoration default to zero rotation and unit scale. The instance buffer layout change is internal to this renderer crate; custom material shader authors must accept the added vertex attribute layout when they need rotation.
+
+## ADR-0047: Authored sprites carry dimensions
+
+Scene Sprite components store width and height as world-unit dimensions. Projects written before these fields existed deserialize with a 32×32 size. Inspector width/height edits share the validated Sprite property command and per-widget undo transaction with tint and layer, keeping the serialized scene and runtime Sprite synchronized.
+
+## ADR-0048: Transform stores local values; renderers read GlobalTransform
+
+Authored/runtime `Transform` remains local so gameplay and Inspector edits share one value. Runtime `ParentLink` components connect spawned entities, and `GlobalTransform` is recomputed from local values before scene rendering. Editor transform commands update affected global projections immediately; viewport drags convert their world-space pose back to local space. Reparenting and parent deletion preserve child world poses. Nested-scene root offsets are represented separately so propagation does not bake them into saved local values.
+
+## ADR-0049: Scene documents are authoritative; runtime worlds are projections
+
+**Date:** 2026-11-04
+**Status:** accepted
+
+`Project.scenes[active_scene_id]` is the single authoritative editable scene
+document. The editor ECS world is a runtime projection and must not become an
+independent source of authored state. Hierarchy commands, inspector commands,
+and viewport `SetTransform` previews all target the same scene identity and
+stable entity ID. Continuous widget/gesture previews use a `SceneTransaction`;
+the transaction records one undo snapshot on completion and restores its
+document snapshot on cancellation. Discrete edits use document-first commands,
+then rebuild the runtime projection and remap selection by SourceId. Project
+save reconciles only the active projection into that document before writing.
+
+Keep authoring commands independent of egui and GPU state so validation,
+history, save/reopen, and runtime projection can be tested headlessly. Any new
+scene-editing UI must queue a command or use the shared transaction path; direct
+runtime/project mutation is reserved for non-scene resources and transitional
+panels outside Task 2 scope. This clarifies and supersedes ADR-0039's temporary
+snapshot bridge. No serialized format or runtime API change is required.
+
+## ADR-0050: Prefab definitions are project resources
+
+**Date:** 2026-11-04
+**Status:** accepted
+
+Store reusable prefab definitions in a serde-defaulted `Project.prefabs` map,
+keyed by stable prefab ID. The Prefab Editor state is a transient view over
+those definitions; successful project load replaces the view, and panel
+create/edit/delete operations synchronize back into the project document so
+ordinary Save/Save As persists them. Existing manifests without the field load
+with an empty prefab library. Scene instance links and override serialization
+are handled separately as documented in ADR-0051; they must not be inferred
+from definition persistence alone.
+
+## ADR-0051: Prefab instance links belong to authored scene entities
+
+**Date:** 2026-11-04
+**Status:** accepted
+
+Represent each scene instance with a serialized `Component::PrefabInstance`
+containing its stable project prefab ID and override record. The enclosing
+scene entity ID is the instance identity; the override record's entity ID must
+match it. Instantiate through the document-first entity command, allocate a
+project-unique ID, copy the prefab's authored components, place it as a root,
+and append the link marker. Rebuilding an editor scene attaches the runtime
+`PrefabInstance` projection by SourceId, while scene snapshots preserve the
+authored marker. Duplicating an instance copies its link and retargets the
+override record to the new entity ID; deleting the entity naturally removes its
+link. This preserves save/reopen and history without adding runtime-only state
+to the serialized project format.
+
+Functional override editing/revert, definition propagation to serialized
+instances, and drag/drop creation remain follow-up Task 3 work.

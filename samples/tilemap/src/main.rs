@@ -130,7 +130,12 @@ impl TilemapApp {
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         gpu.sprite_renderer.begin_frame();
-        for (transform, sprite) in self.world.world_mut().query_mut::<(&Transform, &Sprite)>() {
+        let _ = kiln_runtime::update_global_transforms(&mut self.world);
+        for (transform, sprite) in self
+            .world
+            .world_mut()
+            .query_mut::<(&kiln_runtime::GlobalTransform, &Sprite)>()
+        {
             gpu.sprite_renderer.push_textured(
                 sprite.texture,
                 SpriteInstance {
@@ -139,7 +144,9 @@ impl TilemapApp {
                     color: sprite.color,
                     uv_rect: sprite.uv_rect,
                     material_id: 0,
-                },
+                    rotation: 0.0,
+                }
+                .with_transform(transform.rotation, [transform.scale.x, transform.scale.y]),
             );
         }
 

@@ -8,9 +8,9 @@
 //! in `kiln-ui` (which pulls in `fontdue`). Without the feature, SDF fonts
 //! can still be used with manually-authored atlas data.
 
-use std::collections::HashMap;
 use image::{GrayImage, Luma, RgbaImage};
 use kiln_core::project::{GlyphMetrics, SdfFont};
+use std::collections::HashMap;
 
 /// Configuration for building an SDF font atlas.
 #[derive(Debug, Clone)]
@@ -37,9 +37,10 @@ impl Default for SdfBuilderConfig {
             atlas_width: 512,
             atlas_height: 512,
             padding: 2,
-            chars: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,!?:;'\"-()[]{}"
-                .chars()
-                .collect(),
+            chars:
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,!?:;'\"-()[]{}"
+                    .chars()
+                    .collect(),
             spread: 8,
         }
     }
@@ -85,9 +86,8 @@ pub fn build_sdf_atlas(
         let glyph_h = metrics.height as u32;
 
         // Convert fontdue's flat byte buffer into a GrayImage.
-        let bitmap_img =
-            GrayImage::from_raw(glyph_w, glyph_h, bitmap)
-                .ok_or_else(|| format!("Failed to create bitmap for glyph '{ch}'"))?;
+        let bitmap_img = GrayImage::from_raw(glyph_w, glyph_h, bitmap)
+            .ok_or_else(|| format!("Failed to create bitmap for glyph '{ch}'"))?;
 
         // Check if the glyph fits on the current row.
         if x + glyph_w + config.padding > config.atlas_width {

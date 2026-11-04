@@ -5,18 +5,22 @@
 //! KilnScript slice runtime, and renders 2D sprites through the engine's
 //! sprite batcher. Called from JavaScript via `KilnWeb.run(canvasId, projectPath)`.
 
+// This crate hosts browser APIs and is only executable on wasm32.
+#![cfg(target_arch = "wasm32")]
+
 mod threading;
 
 use kiln_core::Transform;
 use kiln_render::{
     camera::Camera, sprite_renderer::SpriteInstance, Renderer, SpriteRenderer, TextureId,
 };
-use kiln_runtime::{GameLoop, GameWorld, SliceSession};
-use kiln_ui::TextRenderer;
-use log::{error, info, warn};
+use kiln_runtime::{GameLoop, GameWorld, SliceCommand, SliceSession};
+use kiln_ui::{TextRenderer, UiRenderer, Widget};
+use log::{info, warn};
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use wasm_bindgen::prelude::*;
-use web_sys::{HtmlCanvasElement, HtmlImageElement, KeyboardEvent, TouchEvent, AudioContext, GainNode, MouseEvent, WheelEvent};
+use web_sys::{AudioContext, HtmlCanvasElement, KeyboardEvent, MouseEvent, TouchEvent, WheelEvent};
 
 use image::GenericImageView;
 
@@ -26,57 +30,46 @@ pub fn start() {
 }
 
 #[wasm_bindgen]
-pub async fn run(canvas_id: &str, project_path: &str) {
+pub async fn run(canvas_id: &str, project_path: &str) -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
-
-    let window = match web_sys::window() {
-        Some(w) => w,
-        None => {
-            error!("No window available");
-            return;
-        }
-    };
-
-    let document = match window.document() {
-        Some(d) => d,
-        None => {
-            error!("No document available");
-            return;
-        }
-    };
-
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("No window"))?;
+    let document = window
+        .document()
+        .ok_or_else(|| JsValue::from_str("No document"))?;
     let canvas: HtmlCanvasElement = document
         .get_element_by_id(canvas_id)
-        .and_then(|el| el.dyn_into::<HtmlCanvasElement>().ok())
-        .expect("Canvas element not found");
-
+        .and_then(|element| element.dyn_into().ok())
+        .ok_or_else(|| JsValue::from_str("Canvas element not found"))?;
     let width = canvas.client_width().max(1) as u32;
     let height = canvas.client_height().max(1) as u32;
-
-    info!(
-        "Kiln web runtime starting: {}x{} canvas, project={}",
-        width, height, project_path
-    );
-
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::all(),
+    canvas.set_width(width);
+    canvas.set_height(height);
+    // wgpu selects one browser backend per instance; a present navigator.gpu
+    // does not guarantee that WebGPU can supply an adapter. Probe before
+    // claiming the canvas context, then fall back to a separate WebGL instance.
+    let gpu_instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::BROWSER_WEBGPU,
         ..Default::default()
     });
-
-    let surface = match create_wgpu_surface(&instance, canvas) {
-        Ok(s) => s,
-        Err(e) => {
-            error!("Failed to create wgpu surface: {}", e);
-            return;
-        }
+    let instance = if gpu_instance
+        .request_adapter(&wgpu::RequestAdapterOptions::default())
+        .await
+        .is_some()
+    {
+        gpu_instance
+    } else {
+        wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::GL,
+            ..Default::default()
+        })
     };
-
-    match App::new(&instance, surface, width, height, project_path).await {
-        Ok(mut app) => app.run(&window),
-        Err(e) => {
-            error!("Failed to initialize app: {}", e);
-        }
-    }
+    let surface = create_wgpu_surface(&instance, canvas.clone())
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let app = App::new(&instance, surface, canvas, width, height, project_path)
+        .await
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    app.run(&window);
+    Ok(())
 }
 
 #[derive(Default, Clone)]
@@ -99,6 +92,7 @@ struct App {
     surface: wgpu::Surface<'static>,
     renderer: Renderer,
     sprite_renderer: SpriteRenderer,
+    overlay_renderer: SpriteRenderer,
     camera: Camera,
     world: GameWorld,
     slice: Option<SliceSession>,
@@ -106,12 +100,6 @@ struct App {
     input: WebInput,
     /// Web Audio API context for audio playback
     audio_context: Option<web_sys::AudioContext>,
-    /// Master gain node
-    master_gain: Option<web_sys::GainNode>,
-    /// Registered audio buffers (name -> AudioBuffer)
-    audio_buffers: std::collections::HashMap<String, web_sys::AudioBuffer>,
-    /// Audio file paths registered for playback (name -> URL)
-    audio_files: std::collections::HashMap<String, String>,
     /// Canvas element for touch position calculations
     canvas_element: Option<web_sys::HtmlCanvasElement>,
     /// Canvas width
@@ -131,6 +119,7 @@ impl App {
     async fn new(
         instance: &wgpu::Instance,
         surface: wgpu::Surface<'static>,
+        canvas: HtmlCanvasElement,
         width: u32,
         height: u32,
         project_path: &str,
@@ -152,7 +141,8 @@ impl App {
                 &wgpu::DeviceDescriptor {
                     label: Some("Kiln Web Device"),
                     required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
+                    required_limits: wgpu::Limits::downlevel_webgl2_defaults()
+                        .using_resolution(adapter.limits()),
                     memory_hints: wgpu::MemoryHints::default(),
                 },
                 None,
@@ -167,51 +157,57 @@ impl App {
             .copied()
             .ok_or("No surface formats available")?;
 
-        let mut renderer = Renderer::new_from_parts(
-            device,
-            queue,
-            surface_format,
-            tier,
-            width,
-            height,
-        )
-        .await?;
+        let renderer =
+            Renderer::new_from_parts(device, queue, surface_format, tier, width, height).await?;
+
+        surface.configure(renderer.device(), &renderer.surface_config());
 
         let mut sprite_renderer =
             SpriteRenderer::new(renderer.device(), renderer.queue(), renderer.scene_format());
         sprite_renderer.upload_quad(renderer.queue());
+        let overlay_renderer =
+            SpriteRenderer::new(renderer.device(), renderer.queue(), surface_format);
+        overlay_renderer.upload_quad(renderer.queue());
 
         // Load project first to get audio assets and scene script
         let project = load_project(project_path).await?;
 
-        let textures =
-            load_textures(renderer.device(), renderer.queue(), &mut sprite_renderer, &project, project_path).await?;
+        let textures = load_textures(
+            renderer.device(),
+            renderer.queue(),
+            &mut sprite_renderer,
+            &project,
+            project_path,
+        )
+        .await?;
 
         let mut world = GameWorld::new();
-        let scene_id = project
-            .scenes
-            .keys()
-            .next()
-            .cloned()
-            .ok_or("Project has no scenes")?;
+        let scene_id = project.default_scene_id().ok_or("Project has no scenes")?;
         let scene = project.scenes.get(&scene_id).ok_or("Scene not found")?;
 
         // Initialize Web Audio API
         let audio_context = web_sys::AudioContext::new().ok();
-        let master_gain = audio_context.as_ref().map(|ctx| ctx.create_gain()).ok();
+        let master_gain = audio_context
+            .as_ref()
+            .and_then(|ctx| ctx.create_gain().ok());
         if let Some(gain) = &master_gain {
-            gain.connect_with_audio_node(&audio_context.as_ref().unwrap().destination()).ok();
-            gain.set_value(1.0);
+            gain.connect_with_audio_node(&audio_context.as_ref().unwrap().destination())
+                .ok();
+            gain.gain().set_value(1.0);
         }
 
         // Register all project audio assets and decode them
         let mut audio_buffers = std::collections::HashMap::new();
-        let mut audio_files = std::collections::HashMap::new();
         if let Some(ctx) = &audio_context {
             for asset in &project.audio_assets {
-                audio_files.insert(asset.name.clone(), format!("{}/{}", project_path_dir(project_path), asset.path));
-                if let Ok(array_buffer) = fetch_audio_buffer(&asset.path).await {
-                    if let Ok(buffer) = ctx.decode_audio_data_sync(&array_buffer) {
+                if let Ok(array_buffer) = fetch_audio_buffer(&format!(
+                    "{}/{}",
+                    project_path_dir(project_path),
+                    asset.path
+                ))
+                .await
+                {
+                    if let Ok(buffer) = decode_audio(ctx, &array_buffer).await {
                         audio_buffers.insert(asset.name.clone(), buffer);
                     }
                 }
@@ -226,53 +222,31 @@ impl App {
             let mut session =
                 SliceSession::with_action_map(&script_source, project.action_map.clone())
                     .map_err(|e| format!("Script compile error: {:?}", e))?;
-            
-            // Set up audio player callback for Web Audio API
-            if let Some(audio_ctx) = &audio_context {
-                let audio_buffers_clone = audio_buffers.clone();
-                let master_gain_clone = master_gain.clone();
-                let audio_files_clone = audio_files.clone();
-                session.vm.host_mut().audio_player = Some(Box::new(move |name: &str| {
-                    // Try to play from pre-decoded buffers first
-                    if let Some(buffer) = audio_buffers_clone.get(name) {
-                        if let Some(ctx) = audio_ctx.clone().dyn_into::<web_sys::AudioContext>().ok() {
-                            if let Ok(source) = ctx.create_buffer_source() {
-                                source.set_buffer(buffer);
-                                if let Some(gain) = &master_gain_clone {
-                                    let _ = source.connect_with_audio_node(gain);
-                                } else {
-                                    let _ = source.connect_with_audio_node(&ctx.destination());
-                                }
+
+            // JS audio handles stay on the browser thread; access the public host.
+            if let Some(audio_ctx) = audio_context.clone() {
+                let buffers = audio_buffers.clone();
+                let gain = master_gain.clone();
+                session.host_mut().set_audio_player(Box::new(move |name| {
+                    let Some(buffer) = buffers.get(name) else {
+                        return;
+                    };
+                    match audio_ctx.create_buffer_source() {
+                        Ok(source) => {
+                            source.set_buffer(Some(buffer));
+                            let connected = match &gain {
+                                Some(gain) => source.connect_with_audio_node(gain),
+                                None => source.connect_with_audio_node(&audio_ctx.destination()),
+                            };
+                            if connected.is_ok() {
                                 let _ = source.start();
                             }
                         }
-                    }
-                    // If not in buffers, try to fetch and play from URL
-                    else if let Some(url) = audio_files_clone.get(name) {
-                        if let Some(ctx) = audio_ctx.clone().dyn_into::<web_sys::AudioContext>().ok() {
-                            let url_clone = url.clone();
-                            let ctx_clone = ctx.clone();
-                            let master_gain_clone = master_gain_clone.clone();
-                            wasm_bindgen_futures::spawn_local(async move {
-                                if let Ok(array_buffer) = fetch_audio_buffer(&url_clone).await {
-                                    if let Ok(buffer) = ctx_clone.decode_audio_data_sync(&array_buffer) {
-                                        if let Ok(source) = ctx_clone.create_buffer_source() {
-                                            source.set_buffer(&buffer);
-                                            if let Some(gain) = &master_gain_clone {
-                                                let _ = source.connect_with_audio_node(gain);
-                                            } else {
-                                                let _ = source.connect_with_audio_node(&ctx_clone.destination());
-                                            }
-                                            let _ = source.start();
-                                        }
-                                    }
-                                }
-                            });
-                        }
+                        Err(error) => web_sys::console::error_1(&error),
                     }
                 }));
             }
-            
+
             slice = Some(session);
         }
 
@@ -282,22 +256,20 @@ impl App {
             surface,
             renderer,
             sprite_renderer,
+            overlay_renderer,
             camera,
             world,
             slice,
             game_loop: GameLoop::new(),
             input: WebInput::default(),
             audio_context,
-            master_gain,
-            audio_buffers,
-            audio_files,
             canvas_element: Some(canvas.clone()),
             canvas_width: width,
             canvas_height: height,
         })
     }
 
-    fn run(mut self, window: &web_sys::Window) {
+    fn run(self, window: &web_sys::Window) {
         let app = std::rc::Rc::new(std::cell::RefCell::new(Some(self)));
         let app_clone = std::rc::Rc::clone(&app);
 
@@ -307,6 +279,9 @@ impl App {
             let on_keydown = Closure::wrap(Box::new(move |event: KeyboardEvent| {
                 let mut app = app_for_keydown.borrow_mut();
                 if let Some(app) = app.as_mut() {
+                    if let Some(context) = &app.audio_context {
+                        let _ = context.resume();
+                    }
                     let mut changed = false;
                     match event.key().as_str() {
                         "ArrowRight" | "d" | "D" => {
@@ -337,8 +312,10 @@ impl App {
                     }
                     // Recompute input_x and input_y based on all pressed keys
                     if changed {
-                        app.input.input_x = (app.input.key_right as i8 - app.input.key_left as i8) as f64;
-                        app.input.input_y = (app.input.key_down as i8 - app.input.key_up as i8) as f64;
+                        app.input.input_x =
+                            (app.input.key_right as i8 - app.input.key_left as i8) as f64;
+                        app.input.input_y =
+                            (app.input.key_down as i8 - app.input.key_up as i8) as f64;
                     }
                 }
             }) as Box<dyn FnMut(KeyboardEvent)>);
@@ -380,13 +357,15 @@ impl App {
                     }
                     // Recompute input_x and input_y based on all pressed keys
                     if changed {
-                        app.input.input_x = (app.input.key_right as i8 - app.input.key_left as i8) as f64;
-                        app.input.input_y = (app.input.key_down as i8 - app.input.key_up as i8) as f64;
+                        app.input.input_x =
+                            (app.input.key_right as i8 - app.input.key_left as i8) as f64;
+                        app.input.input_y =
+                            (app.input.key_down as i8 - app.input.key_up as i8) as f64;
                     }
                 }
             }) as Box<dyn FnMut(KeyboardEvent)>);
-            let _ = window
-                .add_event_listener_with_callback("keyup", on_keyup.as_ref().unchecked_ref());
+            let _ =
+                window.add_event_listener_with_callback("keyup", on_keyup.as_ref().unchecked_ref());
             on_keyup.forget();
         }
         // ----------------------------------------------------------------------
@@ -397,6 +376,9 @@ impl App {
             let on_touchstart = Closure::wrap(Box::new(move |event: TouchEvent| {
                 let mut app = app_for_touchstart.borrow_mut();
                 if let Some(app) = app.as_mut() {
+                    if let Some(context) = &app.audio_context {
+                        let _ = context.resume();
+                    }
                     if let Some(touch) = event.touches().item(0) {
                         // Calculate input axes from touch position relative to canvas center
                         if let Some(canvas) = app.get_canvas_element() {
@@ -405,11 +387,13 @@ impl App {
                             let canvas_height = rect.height() as f64;
                             let touch_x = touch.client_x() as f64 - rect.left();
                             let touch_y = touch.client_y() as f64 - rect.top();
-                            
+
                             // Normalize to -1 to 1 range from canvas center
-                            app.input.input_x = (touch_x - canvas_width / 2.0) / (canvas_width / 2.0);
-                            app.input.input_y = (touch_y - canvas_height / 2.0) / (canvas_height / 2.0);
-                            
+                            app.input.input_x =
+                                (touch_x - canvas_width / 2.0) / (canvas_width / 2.0);
+                            app.input.input_y =
+                                (touch_y - canvas_height / 2.0) / (canvas_height / 2.0);
+
                             // Clamp to [-1, 1]
                             app.input.input_x = app.input.input_x.clamp(-1.0, 1.0);
                             app.input.input_y = app.input.input_y.clamp(-1.0, 1.0);
@@ -421,11 +405,10 @@ impl App {
                     }
                 }
             }) as Box<dyn FnMut(TouchEvent)>);
-            let _ = window
-                .add_event_listener_with_callback(
-                    "touchstart",
-                    on_touchstart.as_ref().unchecked_ref(),
-                );
+            let _ = window.add_event_listener_with_callback(
+                "touchstart",
+                on_touchstart.as_ref().unchecked_ref(),
+            );
             on_touchstart.forget();
 
             let app_for_touchend = app_clone.clone();
@@ -439,10 +422,7 @@ impl App {
                 }
             }) as Box<dyn FnMut(TouchEvent)>);
             let _ = window
-                .add_event_listener_with_callback(
-                    "touchend",
-                    on_touchend.as_ref().unchecked_ref(),
-                );
+                .add_event_listener_with_callback("touchend", on_touchend.as_ref().unchecked_ref());
             on_touchend.forget();
 
             let app_for_touchmove = app_clone.clone();
@@ -457,11 +437,13 @@ impl App {
                             let canvas_height = rect.height() as f64;
                             let touch_x = touch.client_x() as f64 - rect.left();
                             let touch_y = touch.client_y() as f64 - rect.top();
-                            
+
                             // Normalize to -1 to 1 range from canvas center
-                            app.input.input_x = (touch_x - canvas_width / 2.0) / (canvas_width / 2.0);
-                            app.input.input_y = (touch_y - canvas_height / 2.0) / (canvas_height / 2.0);
-                            
+                            app.input.input_x =
+                                (touch_x - canvas_width / 2.0) / (canvas_width / 2.0);
+                            app.input.input_y =
+                                (touch_y - canvas_height / 2.0) / (canvas_height / 2.0);
+
                             // Clamp to [-1, 1]
                             app.input.input_x = app.input.input_x.clamp(-1.0, 1.0);
                             app.input.input_y = app.input.input_y.clamp(-1.0, 1.0);
@@ -472,11 +454,10 @@ impl App {
                     }
                 }
             }) as Box<dyn FnMut(TouchEvent)>);
-            let _ = window
-                .add_event_listener_with_callback(
-                    "touchmove",
-                    on_touchmove.as_ref().unchecked_ref(),
-                );
+            let _ = window.add_event_listener_with_callback(
+                "touchmove",
+                on_touchmove.as_ref().unchecked_ref(),
+            );
             on_touchmove.forget();
         }
         // ----------------------------------------------------------------------
@@ -487,6 +468,9 @@ impl App {
             let on_mousedown = Closure::wrap(Box::new(move |event: MouseEvent| {
                 let mut app = app_for_mousedown.borrow_mut();
                 if let Some(app) = app.as_mut() {
+                    if let Some(context) = &app.audio_context {
+                        let _ = context.resume();
+                    }
                     app.input.mouse_pressed = true;
                     app.input.mouse_just_pressed = true;
                     app.input.mouse_x = event.client_x() as f64;
@@ -496,11 +480,10 @@ impl App {
                     app.input.input_y = 1.0;
                 }
             }) as Box<dyn FnMut(MouseEvent)>);
-            let _ = window
-                .add_event_listener_with_callback(
-                    "mousedown",
-                    on_mousedown.as_ref().unchecked_ref(),
-                );
+            let _ = window.add_event_listener_with_callback(
+                "mousedown",
+                on_mousedown.as_ref().unchecked_ref(),
+            );
             on_mousedown.forget();
 
             let app_for_mouseup = app_clone.clone();
@@ -516,10 +499,7 @@ impl App {
                 }
             }) as Box<dyn FnMut(MouseEvent)>);
             let _ = window
-                .add_event_listener_with_callback(
-                    "mouseup",
-                    on_mouseup.as_ref().unchecked_ref(),
-                );
+                .add_event_listener_with_callback("mouseup", on_mouseup.as_ref().unchecked_ref());
             on_mouseup.forget();
 
             let app_for_mousemove = app_clone.clone();
@@ -530,11 +510,10 @@ impl App {
                     app.input.mouse_y = event.client_y() as f64;
                 }
             }) as Box<dyn FnMut(MouseEvent)>);
-            let _ = window
-                .add_event_listener_with_callback(
-                    "mousemove",
-                    on_mousemove.as_ref().unchecked_ref(),
-                );
+            let _ = window.add_event_listener_with_callback(
+                "mousemove",
+                on_mousemove.as_ref().unchecked_ref(),
+            );
             on_mousemove.forget();
 
             let app_for_wheel = app_clone.clone();
@@ -546,11 +525,8 @@ impl App {
                     event.prevent_default();
                 }
             }) as Box<dyn FnMut(WheelEvent)>);
-            let _ = window
-                .add_event_listener_with_callback(
-                    "wheel",
-                    on_wheel.as_ref().unchecked_ref(),
-                );
+            let _ =
+                window.add_event_listener_with_callback("wheel", on_wheel.as_ref().unchecked_ref());
             on_wheel.forget();
         }
         // ----------------------------------------------------------------------
@@ -590,10 +566,7 @@ impl App {
                 }
             }) as Box<dyn FnMut(web_sys::Event)>);
             let _ = window
-                .add_event_listener_with_callback(
-                    "resize",
-                    on_resize.as_ref().unchecked_ref(),
-                );
+                .add_event_listener_with_callback("resize", on_resize.as_ref().unchecked_ref());
             on_resize.forget();
         }
         // ----------------------------------------------------------------------
@@ -601,23 +574,25 @@ impl App {
         let f = std::rc::Rc::new(std::cell::RefCell::new(None::<Closure<dyn FnMut()>>));
         let f_clone = std::rc::Rc::clone(&f);
 
+        let animation_window = window.clone();
         *f.borrow_mut() = Some(Closure::wrap(Box::new(move || {
             let mut app = app_clone.borrow_mut().take().unwrap();
 
             app.update();
-            app.render(&window);
+            app.render(&animation_window);
 
             app_clone.borrow_mut().replace(app);
 
             let f_ref = f_clone.clone();
-            let _ = window.request_animation_frame(
-                f_ref.borrow().as_ref().unwrap().as_ref().unchecked_ref(),
-            );
+            if let Err(error) = animation_window
+                .request_animation_frame(f_ref.borrow().as_ref().unwrap().as_ref().unchecked_ref())
+            {
+                web_sys::console::error_1(&error);
+            };
         }) as Box<dyn FnMut()>));
 
-        let _ = window.request_animation_frame(
-            f.borrow().as_ref().unwrap().as_ref().unchecked_ref(),
-        );
+        let _ =
+            window.request_animation_frame(f.borrow().as_ref().unwrap().as_ref().unchecked_ref());
     }
 
     fn update(&mut self) {
@@ -628,16 +603,23 @@ impl App {
             if let Some(slice) = &mut self.slice {
                 // Update mouse state on the slice host for UI click detection
                 let host = slice.host_mut();
-                host.mouse_x = input.mouse_x;
-                host.mouse_y = input.mouse_y;
-                host.mouse_pressed = input.mouse_just_pressed; // Only trigger on just pressed
-                
-                let _ = slice.step(&mut self.world, input_axis, dt.as_secs_f64());
+                host.set_mouse_state(input.mouse_x, input.mouse_y, input.mouse_just_pressed);
+
+                if let Err(error) = slice.step(&mut self.world, input_axis, dt.as_secs_f64()) {
+                    web_sys::console::error_1(&JsValue::from_str(&format!(
+                        "Script execution failed: {error}"
+                    )));
+                }
             }
-            // Update particle systems
-            crate::sprite::update_particle_systems(&mut self.world, dt.as_secs_f64());
+            // SliceSession updates particles itself; avoid advancing them twice.
+            if self.slice.is_none() {
+                kiln_runtime::sprite::update_particle_systems(
+                    self.world.world_mut(),
+                    dt.as_secs_f32(),
+                );
+            }
         });
-        
+
         // Reset just_pressed/just_released flags
         self.input.mouse_just_pressed = false;
         self.input.mouse_just_released = false;
@@ -658,16 +640,17 @@ impl App {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let mut encoder = self
-            .renderer
-            .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("web_frame_encoder"),
-            });
+        let mut encoder =
+            self.renderer
+                .device()
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("web_frame_encoder"),
+                });
 
         let target_view = self.renderer.scene_target().unwrap_or(&view);
 
         // Collect sprite instances from the ECS world (CPU gather pass).
+        let _ = kiln_runtime::update_global_transforms(&mut self.world);
         self.sprite_renderer.begin_frame();
 
         // Tilemaps are drawn first so entities appear on top of them.
@@ -680,13 +663,19 @@ impl App {
             }
         }
 
-        for (transform, sprite) in world.query::<(&Transform, &kiln_runtime::Sprite)>().iter() {
-            let mut instance = SpriteInstance {
+        for (transform, sprite) in world
+            .query::<(&kiln_runtime::GlobalTransform, &kiln_runtime::Sprite)>()
+            .iter()
+        {
+            let instance = SpriteInstance {
                 position: [transform.position.x, transform.position.y],
                 size: sprite.size,
                 color: sprite.color,
                 uv_rect: sprite.uv_rect,
-            };
+                material_id: 0,
+                rotation: 0.0,
+            }
+            .with_transform(transform.rotation, [transform.scale.x, transform.scale.y]);
             if sprite.texture != TextureId::WHITE {
                 self.sprite_renderer.push_textured(sprite.texture, instance);
             } else {
@@ -723,66 +712,46 @@ impl App {
             self.renderer.apply_post(&mut encoder, &view);
         }
 
-        // Render HUD if slice has HUD lines
-        if let Some(slice) = &mut self.slice {
-            // Render UI commands from script
-            let ui_commands = slice.take_ui_commands();
-            if !ui_commands.is_empty() {
-                let mut ui_renderer = UiRenderer::new();
-                let size = self.renderer.surface_config();
-                let hud_camera = Camera::new_top_left(size.width as f32, size.height as f32);
-                
-                for command in ui_commands {
-                    match command {
-                        SliceCommand::UiButton { id, x, y, w, h } => {
-                            self.render_ui_button(&mut ui_renderer, &hud_camera, &view, id, x, y, w, h, &mut encoder);
-                        }
-                        SliceCommand::UiLabel { id, x, y, text } => {
-                            self.render_ui_label(&mut ui_renderer, &hud_camera, &view, id, x, y, text, &mut encoder);
-                        }
-                        SliceCommand::UiPanel { id, x, y, w, h } => {
-                            self.render_ui_panel(&mut ui_renderer, &hud_camera, &view, id, x, y, w, h, &mut encoder);
-                        }
-                        _ => {}
-                    }
+        // World and overlay need separate GPU buffers. Reusing the world
+        // buffer here would overwrite its queued draw before submission.
+        if let Some((commands, lines)) = self
+            .slice
+            .as_mut()
+            .map(|slice| (slice.take_ui_commands(), slice.hud_lines()))
+        {
+            self.overlay_renderer.begin_frame();
+            let ui = UiRenderer::new();
+            for command in commands {
+                for quad in command_quads(command, &ui) {
+                    self.overlay_renderer
+                        .push_textured(quad.texture, quad.instance);
                 }
             }
-            
-            // Render HUD text
-            let lines = slice.hud_lines();
-            if !lines.is_empty() {
-                let text = TextRenderer::new();
-                let mut hud_instances = Vec::new();
-                for (index, line) in lines.iter().enumerate() {
-                    let y = 16.0 + index as f32 * 20.0;
-                    let quads = text.render(line, 16.0, y, 16.0, [1.0, 1.0, 1.0, 1.0]);
-                    hud_instances.extend(quads);
-                }
-                if !hud_instances.is_empty() {
-                    self.sprite_renderer.begin_frame();
-                    for instance in hud_instances {
-                        self.sprite_renderer.push(instance);
-                    }
-                    let size = self.renderer.surface_config();
-                    let hud_camera = Camera::new_top_left(size.width as f32, size.height as f32);
-                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("web_hud_pass"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &view,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Load,
-                                store: wgpu::StoreOp::Store,
-                            },
-                        })],
-                        depth_stencil_attachment: None,
-                        timestamp_writes: None,
-                        occlusion_query_set: None,
-                    });
-                    self.sprite_renderer
-                        .flush(&mut pass, &hud_camera, self.renderer.queue());
+            let text = TextRenderer::new();
+            for (index, line) in lines.iter().enumerate() {
+                for instance in text.render(line, 16.0, 16.0 + index as f32 * 20.0, 16.0, [1.0; 4])
+                {
+                    self.overlay_renderer.push(instance);
                 }
             }
+            let size = self.renderer.surface_config();
+            let camera = Camera::new_top_left(size.width as f32, size.height as f32);
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("web_overlay_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            self.overlay_renderer
+                .flush(&mut pass, &camera, self.renderer.queue());
         }
 
         self.renderer.finish_profiler_frame(&mut encoder);
@@ -792,8 +761,6 @@ impl App {
         self.renderer.poll_profiler();
     }
 }
-
-
 
 async fn load_script(path: &str, project_path: &str) -> Result<String, Box<dyn std::error::Error>> {
     let window = web_sys::window().ok_or("No window")?;
@@ -809,14 +776,24 @@ async fn load_script(path: &str, project_path: &str) -> Result<String, Box<dyn s
     let promise = window.fetch_with_request(&request);
     let resp_value = wasm_bindgen_futures::JsFuture::from(promise)
         .await
-        .map_err(|e| format!("Fetch await failed: {}", e.as_string().unwrap_or_else(|| "unknown".to_string())))?;
+        .map_err(|e| {
+            format!(
+                "Fetch await failed: {}",
+                e.as_string().unwrap_or_else(|| "unknown".to_string())
+            )
+        })?;
     let resp: web_sys::Response = resp_value
         .dyn_into()
         .map_err(|e| format!("Response cast failed: {:?}", e))?;
     let text_promise = resp.text().map_err(|e| format!("{:?}", e))?;
     let text = wasm_bindgen_futures::JsFuture::from(text_promise)
         .await
-        .map_err(|e| format!("Text await failed: {}", e.as_string().unwrap_or_else(|| "unknown".to_string())))?;
+        .map_err(|e| {
+            format!(
+                "Text await failed: {}",
+                e.as_string().unwrap_or_else(|| "unknown".to_string())
+            )
+        })?;
     Ok(text.as_string().ok_or("Script text is not valid UTF-8")?)
 }
 
@@ -829,7 +806,7 @@ async fn load_textures(
     project_path: &str,
 ) -> Result<HashMap<String, TextureId>, Box<dyn std::error::Error>> {
     let mut texture_paths = Vec::new();
-    
+
     // Collect all unique texture paths from the project
     for scene in project.scenes.values() {
         for entity in &scene.entities {
@@ -844,9 +821,9 @@ async fn load_textures(
             }
         }
     }
-    
+
     let mut textures = HashMap::new();
-    
+
     // Load each texture
     for path in &texture_paths {
         // Assume assets are served from the same base path as the project
@@ -856,7 +833,7 @@ async fn load_textures(
         } else {
             format!("{}/{}", project_path_dir(project_path), path)
         };
-        
+
         match load_png_texture(device, queue, sprite_renderer, &full_path).await {
             Ok(tex_id) => {
                 info!("Loaded texture: {} -> {:?}", path, tex_id);
@@ -869,7 +846,7 @@ async fn load_textures(
             }
         }
     }
-    
+
     Ok(textures)
 }
 
@@ -883,7 +860,9 @@ fn project_path_dir(project_path: &str) -> String {
 }
 
 /// Load a project file from the given path.
-async fn load_project(project_path: &str) -> Result<kiln_core::Project, Box<dyn std::error::Error>> {
+async fn load_project(
+    project_path: &str,
+) -> Result<kiln_core::Project, Box<dyn std::error::Error>> {
     let window = web_sys::window().ok_or("No window")?;
     let opts = web_sys::RequestInit::new();
     opts.set_method("GET");
@@ -892,33 +871,60 @@ async fn load_project(project_path: &str) -> Result<kiln_core::Project, Box<dyn 
     let promise = window.fetch_with_request(&request);
     let resp_value = wasm_bindgen_futures::JsFuture::from(promise)
         .await
-        .map_err(|e| format!("Fetch await failed: {}", e.as_string().unwrap_or_else(|| "unknown".to_string())))?;
+        .map_err(|e| {
+            format!(
+                "Fetch await failed: {}",
+                e.as_string().unwrap_or_else(|| "unknown".to_string())
+            )
+        })?;
     let resp: web_sys::Response = resp_value
         .dyn_into()
         .map_err(|e| format!("Response cast failed: {:?}", e))?;
     let text_promise = resp.text().map_err(|e| format!("{:?}", e))?;
     let text = wasm_bindgen_futures::JsFuture::from(text_promise)
         .await
-        .map_err(|e| format!("Text await failed: {}", e.as_string().unwrap_or_else(|| "unknown".to_string())))?;
+        .map_err(|e| {
+            format!(
+                "Text await failed: {}",
+                e.as_string().unwrap_or_else(|| "unknown".to_string())
+            )
+        })?;
     let text = text.as_string().ok_or("Project text is not valid UTF-8")?;
-    let project = kiln_core::Project::from_toml(&text)
-        .map_err(|e| format!("TOML parse failed: {}", e))?;
+    let project =
+        kiln_core::Project::from_toml(&text).map_err(|e| format!("TOML parse failed: {}", e))?;
     Ok(project)
 }
 
 /// Fetch an audio file and return the raw bytes.
-async fn fetch_audio_buffer(path: &str) -> Result<js_sys::Uint8Array, Box<dyn std::error::Error>> {
-    let window = web_sys::window().ok_or("No window available")?;
-    let resp = window.fetch_with_str(path).await.map_err(|e| format!("{:?}", e))?;
-    if !resp.ok() {
-        return Err(format!("HTTP error: {}", resp.status()).into());
+async fn fetch_audio_buffer(path: &str) -> Result<js_sys::ArrayBuffer, JsValue> {
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("No window"))?;
+    let response = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(path))
+        .await?
+        .dyn_into::<web_sys::Response>()?;
+    if !response.ok() {
+        return Err(JsValue::from_str(&format!(
+            "Audio HTTP error: {}",
+            response.status()
+        )));
     }
-    let buffer = resp.array_buffer().map_err(|e| format!("{:?}", e))?;
-    let buffer = wasm_bindgen_futures::JsFuture::from(buffer)
-        .await
-        .map_err(|e| format!("{:?}", e))?;
-    let bytes = js_sys::Uint8Array::new(&buffer);
-    Ok(bytes)
+    wasm_bindgen_futures::JsFuture::from(response.array_buffer()?)
+        .await?
+        .dyn_into::<js_sys::ArrayBuffer>()
+}
+
+async fn decode_audio(
+    context: &AudioContext,
+    bytes: &js_sys::ArrayBuffer,
+) -> Result<web_sys::AudioBuffer, JsValue> {
+    wasm_bindgen_futures::JsFuture::from(context.decode_audio_data(bytes)?)
+        .await?
+        .dyn_into::<web_sys::AudioBuffer>()
+}
+
+fn widget_id(name: &str) -> kiln_ui::WidgetId {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    name.hash(&mut hasher);
+    kiln_ui::WidgetId::from_u64(hasher.finish())
 }
 
 /// Load a single PNG texture from a URL and upload it to the GPU.
@@ -932,40 +938,50 @@ async fn load_png_texture(
     let opts = web_sys::RequestInit::new();
     opts.set_method("GET");
     opts.set_mode(web_sys::RequestMode::Cors);
-    
+
     let request = web_sys::Request::new_with_str_and_init(url, &opts)
         .map_err(|e| format!("Request creation failed: {:?}", e))?;
     let promise = window.fetch_with_request(&request);
     let resp_value = wasm_bindgen_futures::JsFuture::from(promise)
         .await
-        .map_err(|e| format!("Fetch await failed: {}", e.as_string().unwrap_or_else(|| "unknown".to_string())))?;
+        .map_err(|e| {
+            format!(
+                "Fetch await failed: {}",
+                e.as_string().unwrap_or_else(|| "unknown".to_string())
+            )
+        })?;
     let resp: web_sys::Response = resp_value
         .dyn_into()
         .map_err(|e| format!("Response cast failed: {:?}", e))?;
-    
+
     if !resp.ok() {
         return Err(format!("HTTP error: {}", resp.status()).into());
     }
-    
-    let array_buffer_promise = resp.array_buffer()
+
+    let array_buffer_promise = resp
+        .array_buffer()
         .map_err(|e| format!("Array buffer failed: {:?}", e))?;
     let array_buffer = wasm_bindgen_futures::JsFuture::from(array_buffer_promise)
         .await
-        .map_err(|e| format!("Array buffer await failed: {}", e.as_string().unwrap_or_else(|| "unknown".to_string())))?;
+        .map_err(|e| {
+            format!(
+                "Array buffer await failed: {}",
+                e.as_string().unwrap_or_else(|| "unknown".to_string())
+            )
+        })?;
     let array_buffer: js_sys::ArrayBuffer = array_buffer
         .dyn_into()
         .map_err(|e| format!("ArrayBuffer cast failed: {:?}", e))?;
     let bytes = js_sys::Uint8Array::new(&array_buffer).to_vec();
-    
+
     // Decode PNG
-    let image = image::load_from_memory(&bytes)
-        .map_err(|e| format!("PNG decode failed: {}", e))?;
+    let image = image::load_from_memory(&bytes).map_err(|e| format!("PNG decode failed: {}", e))?;
     let rgba = image.to_rgba8();
     let (width, height) = image.dimensions();
-    
+
     // Upload to sprite renderer
     let tex_id = sprite_renderer.create_texture_rgba(device, queue, &url, width, height, &rgba);
-    
+
     Ok(tex_id)
 }
 
@@ -977,47 +993,43 @@ fn spawn_scene_entities(
     textures: &HashMap<String, TextureId>,
     _sprite_renderer: &SpriteRenderer,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    for entity in &scene.entities {
-        let mut transform = Transform::new(0.0, 0.0);
-        let mut sprite = kiln_runtime::Sprite::new(1.0, 1.0, 1.0, 1.0);
-
+    // Share entity identity, roles and animation setup with the native player.
+    let mut make_sprite = |entity: &kiln_core::Entity, color: [f32; 4], texture: Option<&str>| {
+        let mut sprite =
+            kiln_runtime::Sprite::new(color[0], color[1], color[2], color[3]).with_size(32.0, 32.0);
+        if let Some(id) = texture.and_then(|path| textures.get(path)) {
+            sprite = sprite.with_texture(*id);
+        }
         for component in &entity.components {
-            match component {
-                kiln_core::project::Component::Transform { x, y, rotation, scale } => {
-                    transform = Transform::new(*x, *y)
-                        .with_rotation(*rotation)
-                        .with_scale(glam::Vec2::splat(*scale));
-                }
-                kiln_core::project::Component::Sprite { color, texture, layer, material, animation_clip } => {
-                    sprite = kiln_runtime::Sprite::new(color[0], color[1], color[2], color[3]);
-                    if let Some(path) = texture {
-                        if let Some(&tex_id) = textures.get(path) {
-                            sprite = sprite.with_texture(tex_id);
-                        }
-                    }
-                    sprite.layer = layer;
-                    sprite.material = material.clone();
-                    sprite.animation_clip = animation_clip.clone();
-                }
-                _ => {}
+            if let kiln_core::Component::Sprite {
+                layer, material, ..
+            } = component
+            {
+                sprite.layer = *layer;
+                sprite.material = material.clone();
             }
         }
-
-        world.world_mut().spawn((transform, sprite));
-    }
+        sprite
+    };
+    kiln_runtime::spawn_scene(world, project, &scene.id, &mut make_sprite);
 
     // Spawn tilemaps using the runtime's function with a texture resolver.
     // Create a resolver that maps tileset IDs to TextureIds.
     let mut resolve = |tileset_id: &str| {
         // Look up the tileset in the project and get its texture path
-        project.tilesets.get(tileset_id).and_then(|ts| {
-            textures.get(&ts.texture).copied()
-        })
+        project
+            .tilesets
+            .get(tileset_id)
+            .and_then(|ts| textures.get(&ts.texture).copied())
     };
-    
-    if let Err(e) = kiln_runtime::spawn_tilemaps(world, project, scene, kiln_core::SceneOffset::default(), &mut resolve) {
-        warn!("Failed to spawn tilemaps: {}", e);
-    }
+
+    kiln_runtime::spawn_tilemaps(
+        world,
+        project,
+        scene,
+        kiln_core::SceneOffset::default(),
+        &mut resolve,
+    );
 
     Ok(())
 }
@@ -1030,131 +1042,26 @@ fn create_wgpu_surface(
     Ok(surface)
 }
 
-impl App {
-    fn render_ui_button(
-        &mut self,
-        ui_renderer: &mut kiln_ui::UiRenderer,
-        hud_camera: &Camera,
-        view: &wgpu::TextureView,
-        id: String,
-        x: f64,
-        y: f64,
-        w: f64,
-        h: f64,
-        encoder: &mut wgpu::CommandEncoder,
-    ) {
-        let button = kiln_ui::widget::Button::new(
-            kiln_ui::widget::WidgetId::from_u64(id.hash::<std::collections::hash_map::DefaultHasher>() as u64),
-            id.clone(),
-        ).with_layout(kiln_ui::layout::Layout {
-            anchor: kiln_ui::layout::Anchor::TopLeft,
-            constraints: kiln_ui::layout::LayoutConstraints::tight(w as f32, h as f32),
-            ..Default::default()
-        });
-        let button = button.with_bounds(kiln_ui::layout::Rect::new(x as f32, y as f32, w as f32, h as f32));
-        let quads = ui_renderer.render_button(&button, false, false);
-        self.sprite_renderer.begin_frame();
-        for quad in quads {
-            self.sprite_renderer.push_textured(quad.texture, quad.instance);
+/// Convert script UI commands into one overlay batch rather than overwriting
+/// the instance buffer between several draws in the same command encoder.
+fn command_quads(command: SliceCommand, renderer: &UiRenderer) -> Vec<kiln_ui::UiQuad> {
+    use kiln_ui::{Button, Label, Panel, Rect};
+    match command {
+        SliceCommand::UiButton { id, x, y } => {
+            let mut button = Button::new(widget_id(&id), id);
+            button.set_bounds(Rect::new(x as f32, y as f32, 64.0, 32.0));
+            renderer.render_button(&button, false, false)
         }
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("web_ui_pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        });
-        self.sprite_renderer.flush(&mut pass, hud_camera, self.renderer.queue());
-    }
-
-    fn render_ui_label(
-        &mut self,
-        ui_renderer: &mut kiln_ui::UiRenderer,
-        hud_camera: &Camera,
-        view: &wgpu::TextureView,
-        id: String,
-        x: f64,
-        y: f64,
-        text: String,
-        encoder: &mut wgpu::CommandEncoder,
-    ) {
-        let label = kiln_ui::widget::Label::new(
-            kiln_ui::widget::WidgetId::from_u64(id.hash::<std::collections::hash_map::DefaultHasher>() as u64),
-            text,
-        ).with_layout(kiln_ui::layout::Layout {
-            anchor: kiln_ui::layout::Anchor::TopLeft,
-            ..Default::default()
-        });
-        let label = label.with_bounds(kiln_ui::layout::Rect::new(x as f32, y as f32, 200.0, 24.0));
-        let quads = ui_renderer.render_label(&label);
-        self.sprite_renderer.begin_frame();
-        for quad in quads {
-            self.sprite_renderer.push_textured(quad.texture, quad.instance);
+        SliceCommand::UiLabel { id, x, y, text } => {
+            let mut label = Label::new(widget_id(&id), text);
+            label.set_bounds(Rect::new(x as f32, y as f32, 200.0, 24.0));
+            renderer.render_label(&label)
         }
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("web_ui_pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        });
-        self.sprite_renderer.flush(&mut pass, hud_camera, self.renderer.queue());
-    }
-
-    fn render_ui_panel(
-        &mut self,
-        ui_renderer: &mut kiln_ui::UiRenderer,
-        hud_camera: &Camera,
-        view: &wgpu::TextureView,
-        id: String,
-        x: f64,
-        y: f64,
-        w: f64,
-        h: f64,
-        encoder: &mut wgpu::CommandEncoder,
-    ) {
-        let panel = kiln_ui::widget::Panel::new(
-            kiln_ui::widget::WidgetId::from_u64(id.hash::<std::collections::hash_map::DefaultHasher>() as u64),
-        ).with_layout(kiln_ui::layout::Layout {
-            anchor: kiln_ui::layout::Anchor::TopLeft,
-            constraints: kiln_ui::layout::LayoutConstraints::tight(w as f32, h as f32),
-            ..Default::default()
-        });
-        let panel = panel.with_bounds(kiln_ui::layout::Rect::new(x as f32, y as f32, w as f32, h as f32));
-        let quads = ui_renderer.render_panel(&panel);
-        self.sprite_renderer.begin_frame();
-        for quad in quads {
-            self.sprite_renderer.push_textured(quad.texture, quad.instance);
+        SliceCommand::UiPanel { id, x, y, w, h } => {
+            let mut panel = Panel::new(widget_id(&id));
+            panel.set_bounds(Rect::new(x as f32, y as f32, w as f32, h as f32));
+            renderer.render_panel(&panel)
         }
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("web_ui_pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        });
-        self.sprite_renderer.flush(&mut pass, hud_camera, self.renderer.queue());
+        _ => Vec::new(),
     }
-}
 }

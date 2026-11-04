@@ -9,6 +9,8 @@ foundation) is in progress: the `3d` feature and mesh/material types landed
 in `kiln-core` (commit `4556431`). See `docs/ROADMAP.md` for milestones and
 `docs/STATE.md` for the current session handoff.
 
+For remaining production workflow gaps and test evidence, see [the 2D completion plan](docs/2D_COMPLETION_PLAN.md). Earlier milestone completion does not establish that every authoring/export workflow is ready.
+
 ## Goals
 
 - **Tiny:** Web runtime <1.5 MB, editor installer <40 MB

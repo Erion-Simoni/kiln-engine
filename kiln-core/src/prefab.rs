@@ -1,7 +1,7 @@
 //! Prefab system for reusable entity templates
 
-use crate::project::{Component, Entity};
 use crate::next_id;
+use crate::project::{Component, Entity};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -14,7 +14,7 @@ pub struct Prefab {
 }
 
 /// Override values for a specific prefab instance
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PrefabOverride {
     pub entity_id: String,
     pub overrides: HashMap<String, ComponentOverride>,
@@ -151,6 +151,8 @@ mod tests {
                 },
                 Component::Sprite {
                     color: [1.0, 0.0, 0.0, 1.0],
+                    width: 32.0,
+                    height: 32.0,
                     texture: None,
                     layer: 0.0,
                     material: None,
@@ -227,6 +229,11 @@ mod tests {
             id: "entity1".to_string(),
             name: "TestEntity".to_string(),
             components: vec![Component::Sprite {
+                layer: 0.0,
+                width: 32.0,
+                height: 32.0,
+                material: None,
+                animation_clip: None,
                 color: [1.0, 0.0, 0.0, 1.0],
                 texture: None,
             }],
@@ -290,6 +297,8 @@ mod tests {
                 },
                 Component::Sprite {
                     color: [1.0, 0.0, 0.0, 1.0],
+                    width: 32.0,
+                    height: 32.0,
                     texture: None,
                     layer: 0.0,
                     material: None,

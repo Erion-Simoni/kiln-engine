@@ -36,13 +36,23 @@ web-sys = { version = "0.3.106", features = [
     "AddEventListenerOptions",
     "TouchEvent",
     "AudioContext",
+    "BaseAudioContext",
+    "AudioNode",
+    "AudioParam",
+    "AudioDestinationNode",
+    "AudioBufferSourceNode",
+    "AudioScheduledSourceNode",
+    "TouchList",
+    "Touch",
+    "HtmlImageElement",
+    "DomRect",
     "GainNode",
     "AudioBuffer",
     "RequestMode",
 ] }
 console_error_panic_hook = "0.1.7"
 pollster = { workspace = true }
-wgpu = { workspace = true, features = ["webgpu"] }
+wgpu = { workspace = true, features = ["webgpu", "webgl"] }
 glam = { workspace = true }
 bytemuck = { workspace = true }
 kiln-core = { workspace = true }

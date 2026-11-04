@@ -171,9 +171,7 @@ pub struct SdfGlyphMetrics {
 impl SdfTextRenderer {
     /// Creates a new SDF text renderer with no font loaded.
     pub fn new() -> Self {
-        Self {
-            font: None,
-        }
+        Self { font: None }
     }
 
     /// Load an SDF font into the renderer.
@@ -225,10 +223,7 @@ impl SdfTextRenderer {
                 let draw_y = cursor_y + glyph.bearing[1] * scale;
 
                 out.push(SpriteInstance::colored(
-                    [
-                        draw_x + display_w / 2.0,
-                        draw_y + display_h / 2.0,
-                    ],
+                    [draw_x + display_w / 2.0, draw_y + display_h / 2.0],
                     [display_w, display_h],
                     color,
                 ));

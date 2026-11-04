@@ -1,8 +1,10 @@
 //! Main editor application.
 
 use hecs;
-use kiln_core::project::{Component, Entity};
-use kiln_core::{project::{Project, Scene}, Transform};
+use kiln_core::{
+    project::{Project, Scene},
+    Transform,
+};
 use kiln_gameplay::{DataTable, Dialogue, Quest};
 use kiln_graph::{ArithmeticOp, ConstantValue, Graph, Node, NodeType};
 use kiln_render::{
@@ -17,7 +19,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use thiserror::Error;
 use winit::{
-    event::{ElementState, KeyEvent, WindowEvent},
+    event::{ElementState, KeyEvent},
     event_loop::{ActiveEventLoop, EventLoop},
     keyboard::{Key, NamedKey},
     window::Window,
@@ -25,30 +27,62 @@ use winit::{
 
 use crate::anim_editor::AnimationEditorState;
 use crate::assets::{AssetBrowser, AssetKind};
-use crate::build_panel::BuildPanel;
-use crate::history::SceneHistory;
-use crate::hierarchy::HierarchyPanel;
-use crate::inspector::InspectorPanel;
-use crate::prefab_editor_panel::PrefabEditorPanel;
-use crate::plugin_manager_panel::PluginManagerPanel;
-use crate::preferences::PreferencesPanel;
-use crate::version_control_panel::VersionControlPanel;
-use crate::ui_layout_editor::UiLayoutEditorState;
-use crate::physics_editor::PhysicsEditorState;
 use crate::audio_editor::AudioEditorState;
-use crate::vfx_editor::VfxEditorState;
+use crate::build_panel::BuildPanel;
+use crate::component_command::{ComponentCommand, ComponentEdit, ComponentKind};
 use crate::debugger_panel::DebuggerPanel;
-use crate::profiler_panel::ProfilerPanel;
-use crate::shader_editor::{render_shader_editor, ShaderEditorState};
-use crate::project_hub::ProjectHubState;
-use crate::scene_view::{self, SceneTextures, ViewportRect};
+use crate::hierarchy::HierarchyPanel;
 use crate::input_rebind_panel::InputRebindPanel;
+use crate::physics_editor::PhysicsEditorState;
+use crate::plugin_manager_panel::PluginManagerPanel;
+use crate::prefab_editor_panel::PrefabEditorPanel;
+use crate::preferences::PreferencesPanel;
+use crate::profiler_panel::ProfilerPanel;
+use crate::project_hub::ProjectHubState;
+use crate::project_lifecycle::{ProjectAction, ProjectLifecycle, SaveDecision};
+use crate::property_edit::SetSpriteVisual;
+use crate::scene_view::{self, SceneTextures, ViewportRect};
+use crate::scene_workspace::SceneWorkspace;
+use crate::shader_editor::ShaderEditorState;
 use crate::sprite_editor::SpriteEditorState;
 use crate::tilemap_editor::TilemapEditorState;
-use crate::graph_editor::GraphEditorState;
+use crate::transform_edit::{SceneTransaction, SetTransform};
+use crate::transform_gizmo::{hits_handle, GizmoDrag, GizmoMode};
+use crate::ui_layout_editor::UiLayoutEditorState;
+use crate::version_control_panel::VersionControlPanel;
+use crate::vfx_editor::VfxEditorState;
+
+#[derive(Debug, Clone)]
+enum SceneAction {
+    Open(String),
+    Create,
+    Switch(usize),
+    Close(usize),
+}
+
+#[derive(Debug, Clone)]
+struct SceneClosePrompt {
+    index: usize,
+    save_error: Option<String>,
+}
+
+struct RecoveryPrompt {
+    project_path: PathBuf,
+    project: Project,
+}
 
 enum ProjectRequest {
+    Component(ComponentCommand),
+    Entity(crate::entity_command::EntityCommand),
+    CancelTransform,
+    Leave(ProjectAction),
+    Resolve(SaveDecision),
+    ResolveSceneClose(SaveDecision),
+    ResolveRecovery(bool),
+    Scene(SceneAction),
     Open(PathBuf),
+    SaveAs(PathBuf),
+    CreateDialog,
     Create(String, PathBuf, String),
 }
 
@@ -69,19 +103,19 @@ impl PlaySession {
     /// Play an audio preview by name.
     #[cfg(feature = "audio")]
     pub fn play_audio_preview(&mut self, name: &str) {
-        self.slice.play_audio_preview(name);
+        self.slice.host_mut().play_audio_preview(name);
     }
 
     /// Stop audio playback preview.
     #[cfg(feature = "audio")]
     pub fn stop_audio_preview(&mut self) {
-        self.slice.stop_audio_preview();
+        self.slice.host_mut().stop_audio_preview();
     }
 
     /// Register an audio asset with the slice session.
     #[cfg(feature = "audio")]
     pub fn register_audio(&mut self, name: &str, path: &str) {
-        self.slice.register_audio(name, path);
+        self.slice.host_mut().register_audio(name, path);
     }
 }
 
@@ -97,15 +131,6 @@ const GRID_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.06];
 /// The colour behind the scene view.
 const BACKGROUND_COLOR: [f32; 4] = [0.07, 0.07, 0.08, 1.0];
 
-/// The components an entity can have.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ComponentKind {
-    Transform,
-    Sprite,
-    Role,
-    Tilemap,
-}
-
 /// The default size of a sprite without a texture, in world units.
 const DEFAULT_SPRITE_SIZE: [f32; 2] = [32.0, 32.0];
 
@@ -119,6 +144,7 @@ pub enum EditorError {
 
 #[derive(Debug, Clone)]
 enum MenuAction {
+    Exit,
     NewProject,
     OpenProject,
     SaveProject,
@@ -139,6 +165,9 @@ pub struct EditorApp {
     dock_state: egui_dock::DockState<Tab>,
     world: GameWorld,
     selected_entity: Option<hecs::Entity>,
+    rename_input: Option<(String, String)>,
+    role_input: Option<(String, String)>,
+    sprite_reference_input: Option<(String, SpriteReferenceDraft)>,
     is_playing: bool,
     /// The running game session, present while playing.
     play: Option<PlaySession>,
@@ -167,7 +196,7 @@ pub struct EditorApp {
     /// The number of frames rendered so far.
     frame_count: u32,
     /// The history of scene edits, used by undo and redo.
-    history: SceneHistory,
+    scenes: SceneWorkspace,
     ui_designer: UIDesignerState,
     gameplay_editor: GameplayEditorState,
     tilemap_editor: TilemapEditorState,
@@ -190,16 +219,20 @@ pub struct EditorApp {
     input_rebind: InputRebindPanel,
     /// Mapping from project entity ID (source_id) to hecs Entity for selection sync.
     entity_id_to_hecs: HashMap<String, hecs::Entity>,
-    graph_editor: GraphEditorState,
-    inspector_panel: InspectorPanel,
     project_path: Option<PathBuf>,
     project_requests: Vec<ProjectRequest>,
+    project_error: Option<String>,
+    lifecycle: ProjectLifecycle,
+    exit_requested: bool,
+    show_save_as: bool,
+    save_as_path: String,
     current_project: Option<Project>,
     asset_browser: AssetBrowser,
     /// Filter text for the asset browser.
     asset_filter: String,
     /// Transform gizmo state for visual entity manipulation.
     gizmo: GizmoState,
+    transform_edit: Option<SceneTransaction>,
     /// Set by the welcome screen, handled after the UI pass.
     open_project_requested: bool,
     /// Set by the scene toolbar, handled after the UI pass.
@@ -208,19 +241,22 @@ pub struct EditorApp {
     scene_save_requested: bool,
     /// Set by the scene toolbar, handled after the UI pass.
     scene_load_requested: bool,
-    /// Scene tabs for the scene tabs bar.
-    scene_tabs: Vec<SceneTab>,
-    /// Currently active scene tab index.
-    active_scene_tab: Option<usize>,
+    scene_close_prompt: Option<SceneClosePrompt>,
+    pending_recovery: Option<RecoveryPrompt>,
+    last_autosave: Instant,
     /// Camera state for the scene view.
     camera: CameraState,
     /// Grid snap settings for the scene editor.
     grid_snap_size: f32,
     /// Whether grid snapping is enabled.
     grid_snap_enabled: bool,
-    /// Last known mouse position in screen space.
-    mouse_x: f32,
-    mouse_y: f32,
+}
+
+#[derive(Clone, Default)]
+struct SpriteReferenceDraft {
+    texture: String,
+    material: String,
+    animation_clip: String,
 }
 
 /// Camera state for the scene editor viewport.
@@ -247,63 +283,18 @@ impl Default for CameraState {
     }
 }
 
-/// Transform gizmo mode for visual entity manipulation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum GizmoMode {
-    None,
-    Translate,
-    Rotate,
-    Scale,
-}
-
 /// Transform gizmo state for dragging entities in the scene view.
 #[derive(Debug, Clone, Default)]
 struct GizmoState {
     mode: GizmoMode,
-    active_axis: Option<GizmoAxis>,
-    /// Screen-space position where the drag started (pixels, top-left origin).
-    drag_start_screen_pos: Option<(f64, f64)>,
-    /// World-space position where the drag started.
-    drag_start_world_pos: Option<(f32, f32)>,
+    drag: Option<GizmoDragSession>,
 }
 
-/// Gizmo axis for translate/rotate/scale operations.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum GizmoAxis {
-    X,
-    Y,
-    Both,
-}
-
-impl Default for GizmoMode {
-    fn default() -> Self {
-        GizmoMode::Translate
-    }
-}
-
-/// Convert screen-space mouse position to world-space using the camera.
-fn screen_to_world(
-    camera: &CameraState,
-    screen_x: f64,
-    screen_y: f64,
-    viewport_width: f64,
-    viewport_height: f64,
-) -> (f32, f32) {
-    let world_x = camera.position[0] + screen_x as f32 / camera.zoom;
-    // Y grows up in world space, down in screen space
-    let world_y = camera.position[1] + (viewport_height as f32 - screen_y as f32) / camera.zoom;
-    (world_x, world_y)
-}
-
-/// A scene tab entry for the scene tabs bar.
 #[derive(Debug, Clone)]
-struct SceneTab {
-    /// The scene ID.
-    scene_id: String,
-    /// Whether this tab is the active one.
-    is_active: bool,
-    /// Whether the scene has unsaved changes.
-    dirty: bool,
+struct GizmoDragSession {
+    source: String,
+    drag: GizmoDrag,
+    selected: Vec<(String, Transform)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -528,12 +519,13 @@ fn start_play_session(
     let source = std::fs::read_to_string(root.join(path))
         .map_err(|e| format!("could not read the scene script: {e}"))?;
 
-    let slice = kiln_runtime::SliceSession::with_action_map(&source, project.action_map.clone()).map_err(|d| {
-        d.iter()
-            .map(|d| d.message.clone())
-            .collect::<Vec<_>>()
-            .join("; ")
-    })?;
+    let slice = kiln_runtime::SliceSession::with_action_map(&source, project.action_map.clone())
+        .map_err(|d| {
+            d.iter()
+                .map(|d| d.message.clone())
+                .collect::<Vec<_>>()
+                .join("; ")
+        })?;
 
     let (world, _spawned) = spawn_editor_scene(project, &scene_id, textures);
     Ok((slice, scene_id, world))
@@ -549,90 +541,7 @@ pub fn scene_from_world(
     entity_roles: &HashMap<String, String>,
     project: Option<&Project>,
 ) -> Scene {
-    let scene_id = project
-        .and_then(|p| p.default_scene_id())
-        .unwrap_or_else(|| "main_scene".to_string());
-    let script = project
-        .and_then(|p| p.scenes.get(&scene_id))
-        .and_then(|s| s.script.clone());
-
-    let mut entities = Vec::new();
-    let mut entity_id = 0;
-    let world = world.world_ref();
-
-    // Sprite entities: SourceId + Transform + Sprite.
-    let mut query = world.query::<(&SourceId, &Transform, &Sprite)>();
-    for (source_id, transform, sprite) in query.iter() {
-        entity_id += 1;
-        let id = source_id.0.clone();
-        let texture = entity_textures.get(&id).cloned();
-        let role = entity_roles.get(&id).cloned();
-        let mut components = vec![
-            kiln_core::project::Component::Transform {
-                x: transform.position.x,
-                y: transform.position.y,
-                rotation: transform.rotation,
-                scale: transform.scale.x,
-            },
-            kiln_core::project::Component::Sprite {
-                color: sprite.color,
-                texture,
-                layer: sprite.layer,
-                material: sprite.material.clone(),
-                animation_clip: sprite.animation_clip.clone(),
-            },
-        ];
-        if let Some(role) = role {
-            components.push(kiln_core::project::Component::Role { role });
-        }
-        entities.push(Entity {
-            id,
-            name: format!("Entity_{}", entity_id),
-            components,
-        });
-    }
-
-    // Tilemap entities: SourceId + Transform + Tilemap.
-    let mut query = world.query::<(&SourceId, &Transform, &Tilemap)>();
-    for (source_id, transform, tilemap) in query.iter() {
-        entity_id += 1;
-        let id = source_id.0.clone();
-        let role = entity_roles.get(&id).cloned();
-        let mut components = vec![
-            kiln_core::project::Component::Transform {
-                x: transform.position.x,
-                y: transform.position.y,
-                rotation: transform.rotation,
-                scale: transform.scale.x,
-            },
-            kiln_core::project::Component::Tilemap {
-                map: tilemap.map_id.clone(),
-            },
-        ];
-        if let Some(role) = role {
-            components.push(kiln_core::project::Component::Role { role });
-        }
-        entities.push(Entity {
-            id,
-            name: format!("Entity_{}", entity_id),
-            components,
-        });
-    }
-
-    // The nested scenes of the scene stay as they are: the world holds the
-    // entities of the nested scenes too, so they are not written again here.
-    let nested_scenes = project
-        .and_then(|p| p.scenes.get(&scene_id))
-        .map(|s| s.nested_scenes.clone())
-        .unwrap_or_default();
-
-    Scene {
-        id: scene_id,
-        name: "Main Scene".to_string(),
-        entities,
-        nested_scenes,
-        script,
-    }
+    crate::scene_document::snapshot(world, entity_textures, entity_roles, project)
 }
 
 /// Spawn a project scene into a fresh world for the editor.
@@ -664,6 +573,7 @@ fn spawn_editor_scene(
         .ok();
     let spawned = kiln_runtime::spawn_scene(&mut world, project, scene_id, &mut make_sprite);
     if let Some(scene) = scene {
+        crate::editing::attach_prefab_instances(&mut world, scene);
         let mut resolve = |tileset_id: &str| textures.get(tileset_id).map(|tex| tex.id);
         kiln_runtime::spawn_tilemaps(
             &mut world,
@@ -741,6 +651,9 @@ impl EditorApp {
             dock_state,
             world,
             selected_entity: None,
+            rename_input: None,
+            role_input: None,
+            sprite_reference_input: None,
             is_playing: false,
             play: None,
             console_log: Vec::new(),
@@ -756,7 +669,7 @@ impl EditorApp {
             fps: 60.0,
             last_frame: Instant::now(),
             frame_count: 0,
-            history: SceneHistory::new(),
+            scenes: SceneWorkspace::default(),
             ui_designer: UIDesignerState::new(),
             gameplay_editor: GameplayEditorState::new(),
             tilemap_editor: TilemapEditorState::new(),
@@ -778,25 +691,28 @@ impl EditorApp {
             plugin_manager: PluginManagerPanel::new(),
             input_rebind: InputRebindPanel::new(),
             entity_id_to_hecs: HashMap::new(),
-            graph_editor: GraphEditorState::new(),
-            inspector_panel: InspectorPanel::new(),
             project_path: None,
             project_requests: Vec::new(),
+            project_error: None,
+            lifecycle: ProjectLifecycle::default(),
+            exit_requested: false,
+            show_save_as: false,
+            save_as_path: String::new(),
             current_project: None,
             asset_browser: AssetBrowser::new(),
             asset_filter: String::new(),
             camera: CameraState::default(),
             grid_snap_size: 32.0,
             grid_snap_enabled: false,
-            mouse_x: 0.0,
-            mouse_y: 0.0,
             open_project_requested: false,
             play_toggle_requested: false,
             scene_save_requested: false,
             scene_load_requested: false,
-            scene_tabs: Vec::new(),
-            active_scene_tab: None,
+            scene_close_prompt: None,
+            pending_recovery: None,
+            last_autosave: Instant::now(),
             gizmo: GizmoState::default(),
+            transform_edit: None,
         })
     }
 
@@ -832,9 +748,12 @@ impl EditorApp {
 
         // Create post-processing framebuffer and pipeline for the scene view.
         // Only create them if the tier supports post-processing (not Low).
-        let (scene_view_post_framebuffer, scene_view_post_pipeline) = if renderer.tier() != RenderTier::Low {
-            let config = PostConfig::for_tier(renderer.tier());
-            let fb = PostFramebuffer::new(renderer.device(), size.width, size.height, renderer.tier());
+        let (scene_view_post_framebuffer, scene_view_post_pipeline) = if renderer.tier()
+            != RenderTier::Low
+        {
+            let _config = PostConfig::for_tier(renderer.tier());
+            let fb =
+                PostFramebuffer::new(renderer.device(), size.width, size.height, renderer.tier());
             let pipe = PostPipeline::new(renderer.device(), renderer.tier(), renderer.format());
             (Some(fb), Some(pipe))
         } else {
@@ -859,46 +778,98 @@ impl EditorApp {
     /// The scene of the world is written into the project first, so the
     /// edits of the inspector are not lost.
     pub fn save_project(&mut self) -> Result<(), String> {
+        self.finish_transform_edit();
         let path = self
             .project_path
-            .as_ref()
-            .ok_or("No project file open. Use Save As first.")?
-            .clone();
-
-        // The world is what the editor shows, so it is what is written.
-        if self.current_project.is_some() {
-            let scene = self.scene_from_world();
-            if let Some(project) = &mut self.current_project {
-                project.scenes.insert(scene.id.clone(), scene);
-            }
-        }
-
-        let Some(project) = &self.current_project else {
-            return Err("No project loaded".to_string());
-        };
-        let toml_str = project.to_toml().map_err(|e| e.to_string())?;
-        std::fs::write(&path, toml_str).map_err(|e| e.to_string())?;
+            .clone()
+            .ok_or("No project file open. Use Save As first.")?;
+        let project = self.project_to_save()?;
+        let path = crate::project_files::save(&project, &path)?;
+        let _ = crate::recovery::clear(&path);
+        self.project_path = Some(path);
+        self.scenes.mark_saved(&project);
+        self.lifecycle.mark_saved(&project);
+        self.current_project = Some(project);
+        self.project_error = None;
         Ok(())
     }
 
-    /// Save the current project to a new file path.
-    pub fn save_project_as(&mut self, path: PathBuf) -> Result<(), String> {
-        self.project_path = Some(path.clone());
-
-        if self.current_project.is_none() {
-            self.current_project = Some(Project::default());
+    fn project_to_save(&self) -> Result<Project, String> {
+        if self.play.is_some() {
+            return Err("Stop play mode before saving scene edits".into());
         }
+        let mut project = self.current_project.clone().ok_or("No project loaded")?;
+        if self.scenes.active_id().is_some() {
+            self.scenes.capture(&mut project, self.scene_from_world())?;
+        }
+        Ok(project)
+    }
 
-        self.save_project()
+    /// Save a project copy while preserving relative assets, committing state only on success.
+    pub fn save_project_as(&mut self, path: PathBuf) -> Result<(), String> {
+        self.finish_transform_edit();
+        let source = self
+            .project_path
+            .as_ref()
+            .ok_or("Open or create a project before Save As")?;
+        let project = self.project_to_save()?;
+        let path = crate::project_files::save_as(&project, source, &path)?;
+        let _ = crate::recovery::clear(&path);
+        self.project_path = Some(path.clone());
+        self.project_path_input = path.to_string_lossy().into_owned();
+        self.scenes.mark_saved(&project);
+        self.lifecycle.mark_saved(&project);
+        self.current_project = Some(project);
+        if let Some(root) = path.parent() {
+            self.project_root = Some(root.to_path_buf());
+            self.asset_browser.scan(root);
+        }
+        if let Some(project) = self.current_project.as_ref() {
+            self.project_hub
+                .add_recent(path.clone(), project.name.clone());
+        }
+        self.upload_scene_textures();
+        self.project_error = None;
+        Ok(())
     }
 
     /// Load a project from a file path.
     pub fn load_project(&mut self, path: PathBuf) -> Result<(), String> {
-        let toml_str = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let project = Project::from_toml(&toml_str).map_err(|e| e.to_string())?;
-
+        let loaded = crate::project_files::load(&path)?;
+        self.finish_transform_edit();
+        if self.play.is_some() {
+            self.stop_play();
+        }
+        self.is_playing = false;
+        let project = loaded.project;
+        let path = loaded.path;
+        self.prefab_editor
+            .state
+            .replace_prefabs(project.prefabs.clone());
+        let recovery = match crate::recovery::load_if_newer(&path) {
+            Ok(recovery) => recovery.map(|(_, project)| project),
+            Err(error) => {
+                self.console_log.push(format!(
+                    "[WARN] Ignoring unreadable recovery snapshot: {error}"
+                ));
+                None
+            }
+        };
+        self.scenes = SceneWorkspace::open(&project);
+        self.lifecycle.mark_saved(&project);
+        self.selected_entity = None;
+        self.project_path_input = path.to_string_lossy().into_owned();
+        self.show_welcome = false;
+        self.project_error = None;
+        self.project_hub
+            .add_recent(path.clone(), project.name.clone());
         self.project_path = Some(path.clone());
         self.current_project = Some(project);
+        self.pending_recovery = recovery.map(|project| RecoveryPrompt {
+            project_path: path.clone(),
+            project,
+        });
+        self.last_autosave = Instant::now();
 
         // Scan the project directory so the asset browser lists its files.
         if let Some(dir) = path.parent() {
@@ -910,25 +881,8 @@ impl EditorApp {
         // draw the same art the player draws.
         self.upload_scene_textures();
 
-        // Initialize scene tabs from project scenes
-        self.scene_tabs.clear();
-        if let Some(project) = &self.current_project {
-            for (scene_id, _) in &project.scenes {
-                self.scene_tabs.push(SceneTab {
-                    scene_id: scene_id.clone(),
-                    is_active: false,
-                    dirty: false,
-                });
-            }
-            // Activate the first scene tab by default
-            if !self.scene_tabs.is_empty() {
-                self.scene_tabs[0].is_active = true;
-                self.active_scene_tab = Some(0);
-            }
-        }
-
-        // Clear current world and load scene entities
-        self.load_project_scene();
+        // Clear transient selection and project the active scene.
+        self.reset_scene_view();
 
         Ok(())
     }
@@ -940,89 +894,85 @@ impl EditorApp {
         path: &Path,
         template: &str,
     ) -> Result<(), String> {
-        // Create project directory
-        std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+        let loaded = crate::project_files::create(name, path, template)?;
+        self.load_project(loaded.path)
+    }
 
-        // Create project file
-        let project = match template {
-            "empty_2d" => self.create_empty_2d_project(name.to_string(), path)?,
-            "platformer" => self.create_platformer_project(name.to_string(), path)?,
-            "topdown" => self.create_topdown_project(name.to_string(), path)?,
-            _ => return Err(format!("Unknown template: {}", template)),
+    fn finish_transform_edit(&mut self) {
+        if let Some(edit) = self.transform_edit.take() {
+            edit.commit(&mut self.scenes.history);
+        }
+        self.gizmo.drag = None;
+    }
+
+    fn cancel_transform_edit(&mut self) {
+        if let Some(edit) = self.transform_edit.take() {
+            let before = edit.cancel();
+            let _ = self.apply_scene(before);
+        }
+        self.gizmo.drag = None;
+    }
+
+    fn authoring_document(&self) -> Result<Option<Project>, String> {
+        if self.current_project.is_none() || self.play.is_some() {
+            return Ok(self.current_project.clone());
+        }
+        self.project_to_save().map(Some)
+    }
+
+    fn request_project_action(&mut self, action: ProjectAction) -> Result<(), String> {
+        if self.lifecycle.pending().is_some() {
+            return Ok(());
+        }
+        if self.play.is_some() {
+            self.stop_play();
+        }
+        self.finish_transform_edit();
+        self.gizmo.drag = None;
+        let document = self.authoring_document()?;
+        if let Some(action) = self.lifecycle.request(action, document.as_ref())? {
+            self.execute_project_action(action)?;
+        }
+        Ok(())
+    }
+
+    fn resolve_project_action(&mut self, decision: SaveDecision) -> Result<(), String> {
+        if self.lifecycle.pending().is_none() {
+            return Ok(());
+        }
+        let saved = if decision == SaveDecision::Save {
+            self.save_project()
+        } else {
+            Ok(())
         };
-
-        // Write project file
-        let project_file = path.join("kiln.toml");
-        std::fs::write(&project_file, project.to_toml().map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
-
-        // Create asset directories
-        std::fs::create_dir_all(path.join("art")).map_err(|e| e.to_string())?;
-        std::fs::create_dir_all(path.join("scripts")).map_err(|e| e.to_string())?;
-
-        // Create a basic script file
-        let script_file = path.join("scripts/main.ks");
-        std::fs::write(&script_file, "// Game script\nlet speed = 100.0;\nlet dt = get_delta_time();\nlet dx = get_input_x() * speed * dt;\nlet dy = get_input_y() * speed * dt;\nmove_player(dx, dy);\n").map_err(|e| e.to_string())?;
-
-        // Load the new project
-        self.load_project(path.to_path_buf())
-    }
-
-    /// Create an empty 2D project.
-    fn create_empty_2d_project(&self, name: String, path: &Path) -> Result<Project, String> {
-        let project_dir = path.file_name().unwrap().to_string_lossy().to_string();
-        Ok(Project {
-            id: project_dir,
-            name,
-            version: "0.1.0".to_string(),
-            publisher: "Kiln".to_string(),
-            icon: "".to_string(),
-            features: Vec::new(),
-            window: Default::default(),
-            mobile: Default::default(),
-            scenes: {
-                let mut scenes = HashMap::new();
-                scenes.insert(
-                    "main".to_string(),
-                    Scene {
-                        id: "main".to_string(),
-                        name: "Main".to_string(),
-                        script: Some("scripts/main.ks".to_string()),
-                        entities: Vec::new(),
-                        nested_scenes: Vec::new(),
-                    },
-                );
-                scenes
-            },
-            tilemaps: HashMap::new(),
-            tilesets: HashMap::new(),
-            animation_clips: HashMap::new(),
-            audio_assets: Vec::new(),
-            action_map: Default::default(),
-            shaders: HashMap::new(),
-            materials: HashMap::new(),
-            sdf_fonts: HashMap::new(),
-        })
-    }
-
-    /// Create a platformer project template.
-    fn create_platformer_project(&self, name: String, path: &Path) -> Result<Project, String> {
-        // For now, same as empty but with platformer script
-        let mut project = self.create_empty_2d_project(name, path)?;
-        if let Some(scene) = project.scenes.get_mut("main") {
-            scene.script = Some("scripts/main.ks".to_string());
+        if let Some(action) = self.lifecycle.resolve(decision, saved)? {
+            self.execute_project_action(action)?;
         }
-        Ok(project)
+        Ok(())
     }
 
-    /// Create a top-down project template.
-    fn create_topdown_project(&self, name: String, path: &Path) -> Result<Project, String> {
-        // For now, same as empty but with top-down script
-        let mut project = self.create_empty_2d_project(name, path)?;
-        if let Some(scene) = project.scenes.get_mut("main") {
-            scene.script = Some("scripts/main.ks".to_string());
+    fn execute_project_action(&mut self, action: ProjectAction) -> Result<(), String> {
+        match action {
+            ProjectAction::Open(path) => self.load_project(path),
+            ProjectAction::Create {
+                name,
+                path,
+                template,
+            } => self.create_project(&name, &path, &template),
+            ProjectAction::Exit => {
+                self.exit_requested = true;
+                Ok(())
+            }
         }
-        Ok(project)
+    }
+
+    fn begin_new_project(&mut self) {
+        self.show_welcome = false;
+        self.project_hub.show_new_project_dialog = true;
+        self.project_hub.new_project_name.clear();
+        self.project_hub.new_project_dir =
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        self.project_hub.new_project_template = "empty_2d".into();
     }
 
     /// Upload the open project's textures to the scene view renderer.
@@ -1060,6 +1010,8 @@ impl EditorApp {
     /// The game runs the scene's script against a fresh world, exactly like
     /// the standalone player does.
     fn start_play(&mut self) -> Result<(), String> {
+        self.finish_transform_edit();
+        self.capture_active_scene()?;
         let project = self
             .current_project
             .as_ref()
@@ -1082,6 +1034,9 @@ impl EditorApp {
         // The played scene replaces the edited one, so the scene view shows
         // the running game.
         self.world = world;
+        self.selected_entity = None;
+        self.hierarchy_panel.clear_selection();
+        self.gizmo = GizmoState::default();
         self.play = Some(PlaySession {
             slice,
             scene_id,
@@ -1097,7 +1052,7 @@ impl EditorApp {
     fn stop_play(&mut self) {
         self.play = None;
         self.is_playing = false;
-        self.load_project_scene();
+        self.reset_scene_view();
     }
 
     /// The size of the world the scene view shows, in world units.
@@ -1124,6 +1079,44 @@ impl EditorApp {
         (max_x, max_y)
     }
 
+    fn scene_camera(&self) -> kiln_render::camera::Camera {
+        let world = self.world_size();
+        let mut camera = scene_view::world_camera(world.0, world.1);
+        if let Some(target_id) = &self.camera.target {
+            if let Some(&hecs_entity) = self.entity_id_to_hecs.get(target_id) {
+                if let Ok(transform) = self
+                    .world
+                    .world_ref()
+                    .get::<&kiln_runtime::GlobalTransform>(hecs_entity)
+                {
+                    camera.position = transform.position.into();
+                }
+            }
+        }
+        camera.position[0] += self.camera.position[0];
+        camera.position[1] += self.camera.position[1];
+        camera.zoom *= self.camera.zoom;
+        // Apply bounds if set
+        if let Some([min_x, min_y, max_x, max_y]) = self.camera.bounds {
+            let view = camera.view_bounds();
+            let mut pos = camera.position;
+            if view[0] < min_x {
+                pos[0] = min_x;
+            }
+            if view[1] < min_y {
+                pos[1] = min_y;
+            }
+            if view[2] > max_x {
+                pos[0] = max_x - (view[2] - view[0]);
+            }
+            if view[3] > max_y {
+                pos[1] = max_y - (view[3] - view[1]);
+            }
+            camera.position = pos;
+        }
+        camera
+    }
+
     /// Reload the edited scene into the editor world.
     fn load_project_scene(&mut self) {
         let Some(project) = self.current_project.clone() else {
@@ -1134,7 +1127,7 @@ impl EditorApp {
             self.hierarchy_panel.clear_selection();
             return;
         };
-        let Some(scene_id) = project.default_scene_id() else {
+        let Some(scene_id) = self.scenes.active_id().map(str::to_owned) else {
             self.world = GameWorld::new();
             self.entity_textures.clear();
             self.entity_roles.clear();
@@ -1156,9 +1149,8 @@ impl EditorApp {
         let world_ref = world.world_ref();
         for entity in world_ref.iter() {
             let eid = entity.entity();
-            if let Some(source_id) = world_ref.get::<&SourceId>(eid).ok() {
-                self.entity_id_to_hecs
-                    .insert(source_id.0.clone(), eid);
+            if let Ok(source_id) = world_ref.get::<&SourceId>(eid) {
+                self.entity_id_to_hecs.insert(source_id.0.clone(), eid);
             }
         }
         self.world = world;
@@ -1229,11 +1221,12 @@ impl EditorApp {
     /// The source id keeps the entity's identity, so the roles and textures
     /// of the scene survive a save.
     fn scene_from_world(&self) -> Scene {
-        scene_from_world(
+        crate::scene_document::snapshot_for_scene(
             &self.world,
             &self.entity_textures,
             &self.entity_roles,
             self.current_project.as_ref(),
+            self.scenes.active_id(),
         )
     }
 
@@ -1311,8 +1304,10 @@ impl EditorApp {
 
     /// Undo the last scene edit.
     pub fn undo(&mut self) -> Result<(), String> {
+        self.finish_transform_edit();
+        self.require_edit_mode()?;
         let current = self.scene_from_world();
-        let Some(previous) = self.history.undo(current) else {
+        let Some(previous) = self.scenes.history.undo(current) else {
             return Err("Nothing to undo".to_string());
         };
         self.apply_scene(previous)
@@ -1320,20 +1315,106 @@ impl EditorApp {
 
     /// Redo the last undone scene edit.
     pub fn redo(&mut self) -> Result<(), String> {
+        self.finish_transform_edit();
+        self.require_edit_mode()?;
         let current = self.scene_from_world();
-        let Some(next) = self.history.redo(current) else {
+        let Some(next) = self.scenes.history.redo(current) else {
             return Err("Nothing to redo".to_string());
         };
         self.apply_scene(next)
     }
 
+    fn apply_component_command(&mut self, command: ComponentCommand) -> Result<(), String> {
+        self.require_edit_mode()?;
+        self.finish_transform_edit();
+        if self.scenes.active_id() != Some(command.scene_id.as_str()) {
+            return Err("Component command targets an inactive scene".into());
+        }
+        let count = self
+            .world
+            .world_ref()
+            .query::<(hecs::Entity, &SourceId)>()
+            .iter()
+            .filter(|(_, source)| source.0 == command.entity_id)
+            .count();
+        if count != 1 {
+            return Err("Entity identity is missing or ambiguous".into());
+        }
+        let mut scene = self.scene_from_world();
+        let project = self.current_project.as_ref().ok_or("No project loaded")?;
+        let refresh_textures = matches!(&command.edit, ComponentEdit::SetSpriteReferences { .. });
+        if command.execute(&mut scene, project, &mut self.scenes.history)? {
+            if refresh_textures {
+                self.apply_scene_with_texture_refresh(scene)?;
+            } else {
+                self.apply_scene(scene)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn apply_entity_command(
+        &mut self,
+        command: crate::entity_command::EntityCommand,
+    ) -> Result<(), String> {
+        self.require_edit_mode()?;
+        self.finish_transform_edit();
+        if self.scenes.active_id() != Some(command.scene_id.as_str()) {
+            return Err("Hierarchy command targets an inactive scene".into());
+        }
+        let mut scene = self.scene_from_world();
+        let project = self.current_project.as_ref().ok_or("No project loaded")?;
+        let deleted = match &command.edit {
+            crate::entity_command::EntityEdit::Delete { entity_id } => Some(entity_id.as_str()),
+            _ => None,
+        };
+        let selected = command.execute(&mut scene, project, &mut self.scenes.history)?;
+        self.apply_scene(scene)?;
+        if deleted.is_some_and(|id| self.hierarchy_panel.selected_entity_id() == Some(id)) {
+            self.hierarchy_panel.clear_selection();
+        }
+        if let Some(id) = selected {
+            self.selected_entity = self.entity_id_to_hecs.get(&id).copied();
+            self.hierarchy_panel.select(&id);
+        }
+        Ok(())
+    }
+
     /// Apply a scene to the project and the editor world.
     fn apply_scene(&mut self, scene: Scene) -> Result<(), String> {
+        let selected_source = self.selected_entity.and_then(|entity| {
+            self.world
+                .world_ref()
+                .get::<&SourceId>(entity)
+                .ok()
+                .map(|id| id.0.clone())
+        });
         let scene_id = scene.id.clone();
         if let Some(project) = &mut self.current_project {
             project.scenes.insert(scene_id, scene);
         }
         self.load_project_scene();
+        self.selected_entity =
+            selected_source.and_then(|id| self.entity_id_to_hecs.get(&id).copied());
+        Ok(())
+    }
+
+    fn apply_scene_with_texture_refresh(&mut self, scene: Scene) -> Result<(), String> {
+        let selected_source = self.selected_entity.and_then(|entity| {
+            self.world
+                .world_ref()
+                .get::<&SourceId>(entity)
+                .ok()
+                .map(|id| id.0.clone())
+        });
+        let scene_id = scene.id.clone();
+        if let Some(project) = &mut self.current_project {
+            project.scenes.insert(scene_id, scene);
+        }
+        self.upload_scene_textures();
+        self.load_project_scene();
+        self.selected_entity =
+            selected_source.and_then(|id| self.entity_id_to_hecs.get(&id).copied());
         Ok(())
     }
 
@@ -1382,18 +1463,134 @@ impl EditorApp {
 
     /// Load a scene into the current world.
     pub fn load_scene(&mut self) -> Result<(), String> {
-        if self.current_project.is_none() {
-            return Err("No project loaded".to_string());
+        self.finish_transform_edit();
+        self.require_edit_mode()?;
+        self.capture_active_scene()?;
+        self.reset_scene_view();
+        Ok(())
+    }
+
+    fn require_edit_mode(&self) -> Result<(), String> {
+        if self.play.is_some() {
+            return Err("Stop play mode before changing scene documents".into());
         }
-        let Some(scene_id) = self
-            .current_project
-            .as_ref()
-            .and_then(|p| p.default_scene_id())
-        else {
-            return Err("The project has no scenes".to_string());
-        };
+        Ok(())
+    }
+
+    fn capture_active_scene(&mut self) -> Result<(), String> {
+        let scene = self.scene_from_world();
+        let project = self.current_project.as_mut().ok_or("No project loaded")?;
+        self.scenes.capture(project, scene)
+    }
+
+    fn reset_scene_view(&mut self) {
+        self.selected_entity = None;
+        self.rename_input = None;
+        self.role_input = None;
+        self.sprite_reference_input = None;
+        self.hierarchy_panel.clear_selection();
+        self.gizmo = GizmoState::default();
         self.load_project_scene();
-        let _ = scene_id;
+    }
+
+    fn change_scene(&mut self, action: SceneAction) -> Result<(), String> {
+        self.finish_transform_edit();
+        self.require_edit_mode()?;
+        let current = self.scenes.active_id().map(|_| self.scene_from_world());
+        if let SceneAction::Close(index) = &action {
+            if *index >= self.scenes.tabs.len() {
+                return Err("Unknown scene tab".into());
+            }
+            if self.scenes.tabs.len() == 1 {
+                return Err("Keep at least one scene tab open".into());
+            }
+            if let Some(project) = self.current_project.as_ref() {
+                self.scenes.refresh_dirty(project, current.as_ref());
+            }
+            if self.scenes.tabs[*index].dirty {
+                self.scene_close_prompt = Some(SceneClosePrompt {
+                    index: *index,
+                    save_error: None,
+                });
+                return Ok(());
+            }
+        }
+        let project = self.current_project.as_mut().ok_or("No project loaded")?;
+        match action {
+            SceneAction::Open(id) => {
+                self.scenes
+                    .open_scene(project, current.ok_or("No active scene")?, &id)?
+            }
+            SceneAction::Create => self.scenes.create(project, current)?,
+            SceneAction::Switch(index) => {
+                self.scenes
+                    .switch(project, current.ok_or("No active scene")?, index)?
+            }
+            SceneAction::Close(index) => {
+                self.scenes
+                    .close(project, current.ok_or("No active scene")?, index)?
+            }
+        }
+        self.reset_scene_view();
+        Ok(())
+    }
+
+    fn resolve_scene_close(&mut self, decision: SaveDecision) -> Result<(), String> {
+        let Some(prompt) = self.scene_close_prompt.clone() else {
+            return Ok(());
+        };
+        match decision {
+            SaveDecision::Cancel => {
+                self.scene_close_prompt = None;
+                Ok(())
+            }
+            SaveDecision::Save => {
+                if let Err(error) = self.save_project() {
+                    if let Some(prompt) = self.scene_close_prompt.as_mut() {
+                        prompt.save_error = Some(error);
+                    }
+                    return Ok(());
+                }
+                self.scene_close_prompt = None;
+                self.change_scene(SceneAction::Close(prompt.index))
+            }
+            SaveDecision::Discard => {
+                self.finish_transform_edit();
+                self.require_edit_mode()?;
+                let current = self.scene_from_world();
+                let project = self.current_project.as_mut().ok_or("No project loaded")?;
+                self.scenes
+                    .discard_and_close(project, current, prompt.index)?;
+                self.scene_close_prompt = None;
+                self.reset_scene_view();
+                Ok(())
+            }
+        }
+    }
+
+    fn resolve_recovery(&mut self, restore: bool) -> Result<(), String> {
+        let Some(prompt) = self.pending_recovery.as_ref() else {
+            return Ok(());
+        };
+        if !restore {
+            crate::recovery::clear(&prompt.project_path)?;
+            self.pending_recovery = None;
+            self.last_autosave = Instant::now();
+            return Ok(());
+        }
+        let Some(prompt) = self.pending_recovery.take() else {
+            return Ok(());
+        };
+        {
+            let saved_project = self.current_project.clone().ok_or("No project loaded")?;
+            self.current_project = Some(prompt.project.clone());
+            self.scenes = SceneWorkspace::open(&prompt.project);
+            self.scenes.set_saved_baselines(&saved_project);
+            self.lifecycle.mark_saved(&saved_project);
+            self.reset_scene_view();
+            self.console_log
+                .push("[INFO] Recovered unsaved project changes".into());
+        }
         Ok(())
     }
 }
@@ -1420,10 +1617,8 @@ impl winit::application::ApplicationHandler for EditorApp {
                         eprintln!("Failed to auto-reopen last project: {}", e);
                     } else {
                         // Add back to recent projects since we just opened it
-                        self.project_hub.add_recent(
-                            last_project.path.clone(),
-                            last_project.name.clone(),
-                        );
+                        self.project_hub
+                            .add_recent(last_project.path.clone(), last_project.name.clone());
                     }
                 }
             }
@@ -1432,7 +1627,7 @@ impl winit::application::ApplicationHandler for EditorApp {
 
     fn window_event(
         &mut self,
-        event_loop: &ActiveEventLoop,
+        _event_loop: &ActiveEventLoop,
         _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
@@ -1440,90 +1635,40 @@ impl winit::application::ApplicationHandler for EditorApp {
 
         let gpu = self.gpu.as_mut().unwrap();
         let response = self.egui_winit.on_window_event(&gpu.window, &event);
+        // egui still receives prompt input; raw gizmo input cannot mutate behind it.
+        if self.lifecycle.pending().is_some()
+            && matches!(
+                event,
+                WindowEvent::MouseInput { .. }
+                    | WindowEvent::CursorMoved { .. }
+                    | WindowEvent::KeyboardInput { .. }
+            )
+        {
+            return;
+        }
 
         #[allow(clippy::collapsible_match)]
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                self.project_requests
+                    .push(ProjectRequest::Leave(ProjectAction::Exit));
+            }
             WindowEvent::RedrawRequested => self.render_frame(),
             WindowEvent::Resized(size) => {
                 if size.width > 0 && size.height > 0 {
                     gpu.renderer.resize(&gpu.surface, size.width, size.height);
                     // Also resize the scene view post framebuffer if it exists.
                     if let Some(fb) = gpu.scene_view_post_framebuffer.as_mut() {
-                        fb.resize(gpu.renderer.device(), size.width, size.height, gpu.renderer.tier());
+                        fb.resize(
+                            gpu.renderer.device(),
+                            size.width,
+                            size.height,
+                            gpu.renderer.tier(),
+                        );
                     }
                 }
             }
-            WindowEvent::MouseInput {
-                state,
-                button: winit::event::MouseButton::Left,
-                ..
-            } => {
-                // Gizmo drag start/stop on the scene view canvas
-                if self.gizmo.mode == GizmoMode::Translate {
-                    if let Some(rect) = self.scene_view_rect {
-                        let mouse_over = self.mouse_x >= rect.min.x
-                            && self.mouse_x < rect.max.x
-                            && self.mouse_y >= rect.min.y
-                            && self.mouse_y < rect.max.y;
-                        if mouse_over {
-                            if state.is_pressed() {
-                                // Start drag
-                                if let Some(entity) = self.selected_entity {
-                                    let (wx, wy) = screen_to_world(
-                                        &self.camera,
-                                        self.mouse_x as f64,
-                                        self.mouse_y as f64,
-                                        rect.width() as f64,
-                                        rect.height() as f64,
-                                    );
-                                    self.gizmo.drag_start_screen_pos =
-                                        Some((self.mouse_x.into(), self.mouse_y.into()));
-                                    self.gizmo.drag_start_world_pos = Some((wx, wy));
-                                    // Record current transform for undo
-                                    if let Some((_, transform)) = self
-                                        .world
-                                        .world()
-                                        .query::<(hecs::Entity, &Transform)>()
-                                        .iter()
-                                        .find(|(e, _)| *e == entity)
-                                    {
-                                        self.gizmo.drag_start_world_pos = Some((
-                                            transform.position.x,
-                                            transform.position.y,
-                                        ));
-                                    }
-                                }
-                            } else {
-                                // End drag - record history
-                                if let Some(entity) = self.selected_entity {
-                                    let before = scene_from_world(
-                                        &self.world,
-                                        &self.entity_textures,
-                                        &self.entity_roles,
-                                        self.current_project.as_ref(),
-                                    );
-                                    if self.world.world_ref().get::<&Transform>(entity).is_ok() {
-                                        // Record the change for undo
-                                        let after = scene_from_world(
-                                            &self.world,
-                                            &self.entity_textures,
-                                            &self.entity_roles,
-                                            self.current_project.as_ref(),
-                                        );
-                                        // Only record if something changed
-                                        if serde_json::to_string(&before).ok() != serde_json::to_string(&after).ok() {
-                                            self.history.record(before);
-                                        }
-                                    }
-                                    self.gizmo.drag_start_screen_pos = None;
-                                    self.gizmo.drag_start_world_pos = None;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            WindowEvent::Focused(false) => self.finish_transform_edit(),
             _ => {}
         }
 
@@ -1540,10 +1685,17 @@ impl winit::application::ApplicationHandler for EditorApp {
         {
             if !response.consumed {
                 match key {
-                    Key::Character(key) if key == "w" => self.gizmo.mode = GizmoMode::Translate,
-                    Key::Character(key) if key == "e" => self.gizmo.mode = GizmoMode::Rotate,
-                    Key::Character(key) if key == "r" => self.gizmo.mode = GizmoMode::Scale,
-                    Key::Named(NamedKey::Escape) => self.gizmo.mode = GizmoMode::None,
+                    Key::Character(key) if ["w", "e", "r"].contains(&key.as_str()) => {
+                        self.finish_transform_edit();
+                        self.gizmo.mode = match key.as_str() {
+                            "w" => GizmoMode::Translate,
+                            "e" => GizmoMode::Rotate,
+                            _ => GizmoMode::Scale,
+                        };
+                    }
+                    Key::Named(NamedKey::Escape) if self.transform_edit.is_none() => {
+                        self.gizmo.mode = GizmoMode::None
+                    }
                     _ => {}
                 }
             }
@@ -1556,19 +1708,115 @@ impl winit::application::ApplicationHandler for EditorApp {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        if let Some(gpu) = &self.gpu { gpu.window.request_redraw(); }
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if self.exit_requested {
+            event_loop.exit();
+            return;
+        }
+        if let Some(gpu) = &self.gpu {
+            gpu.window.request_redraw();
+        }
     }
 }
 
 impl EditorApp {
     fn render_frame(&mut self) {
+        if !self
+            .project_requests
+            .iter()
+            .any(|request| matches!(request, ProjectRequest::CancelTransform))
+            && self.gizmo.drag.is_none()
+            && !self.egui_winit.egui_ctx().wants_keyboard_input()
+            && !self
+                .egui_winit
+                .egui_ctx()
+                .input(|input| input.pointer.primary_down())
+        {
+            self.finish_transform_edit();
+        }
         for request in std::mem::take(&mut self.project_requests) {
+            if self.lifecycle.pending().is_some() && !matches!(request, ProjectRequest::Resolve(_))
+            {
+                continue;
+            }
+            if self.scene_close_prompt.is_some()
+                && !matches!(request, ProjectRequest::ResolveSceneClose(_))
+            {
+                continue;
+            }
+            if self.pending_recovery.is_some()
+                && !matches!(request, ProjectRequest::ResolveRecovery(_))
+            {
+                continue;
+            }
             let result = match request {
-                ProjectRequest::Open(path) => self.load_project(path),
-                ProjectRequest::Create(name, path, template) => self.create_project(&name, &path, &template),
+                ProjectRequest::Component(command) => self.apply_component_command(command),
+                ProjectRequest::Entity(command) => self.apply_entity_command(command),
+                ProjectRequest::CancelTransform => {
+                    self.cancel_transform_edit();
+                    Ok(())
+                }
+                ProjectRequest::Leave(action) => self.request_project_action(action),
+                ProjectRequest::Resolve(decision) => self.resolve_project_action(decision),
+                ProjectRequest::ResolveSceneClose(decision) => self.resolve_scene_close(decision),
+                ProjectRequest::ResolveRecovery(restore) => self.resolve_recovery(restore),
+                ProjectRequest::Scene(action) => self.change_scene(action),
+                ProjectRequest::Open(path) => {
+                    self.request_project_action(ProjectAction::Open(path))
+                }
+                ProjectRequest::SaveAs(path) => self.save_project_as(path),
+                ProjectRequest::CreateDialog => {
+                    self.begin_new_project();
+                    Ok(())
+                }
+                ProjectRequest::Create(name, path, template) => {
+                    self.request_project_action(ProjectAction::Create {
+                        name,
+                        path,
+                        template,
+                    })
+                }
             };
-            if let Err(error) = result { self.console_log.push(format!("[ERROR] {error}")); }
+            if let Err(error) = result {
+                self.console_log.push(format!("[ERROR] {error}"));
+                if self.lifecycle.pending().is_none() {
+                    self.project_error = Some(error);
+                }
+            }
+            if self.lifecycle.pending().is_some() || self.exit_requested {
+                break;
+            }
+        }
+
+        if self.play.is_none() {
+            let current = self.scenes.active_id().map(|_| self.scene_from_world());
+            if let Some(project) = &self.current_project {
+                self.scenes.refresh_dirty(project, current.as_ref());
+            }
+        }
+
+        let project_blocked = self.lifecycle.pending().is_some();
+        let project_dirty = self
+            .authoring_document()
+            .and_then(|document| self.lifecycle.is_dirty(document.as_ref()))
+            .unwrap_or(true);
+        if self.pending_recovery.is_none() {
+            if let Some(path) = self.project_path.clone() {
+                if self.play.is_none() && project_dirty {
+                    if self.last_autosave.elapsed() >= std::time::Duration::from_secs(30) {
+                        if let Ok(Some(project)) = self.authoring_document() {
+                            if let Err(error) = crate::recovery::save(&path, &project) {
+                                self.console_log.push(format!(
+                                    "[WARN] Could not write recovery snapshot: {error}"
+                                ));
+                            }
+                        }
+                        self.last_autosave = Instant::now();
+                    }
+                } else if !project_dirty {
+                    let _ = crate::recovery::clear(&path);
+                }
+            }
         }
 
         // Collect status bar data before any mutable borrows
@@ -1595,41 +1843,13 @@ impl EditorApp {
         // The world size and the scene view rectangle are read before the GPU
         // state is borrowed, so the scene can be drawn into the panel.
         let world = self.world_size();
-        let scene_view_rect = self.scene_view_rect;
+        let scene_camera = self.scene_camera();
+        self.scene_view_rect = None;
 
         let gpu = self.gpu.as_mut().unwrap();
         let size = gpu.window.inner_size();
         if size.width == 0 || size.height == 0 {
             return;
-        }
-
-        // Apply gizmo drag to selected entity (translate mode)
-        if self.gizmo.mode == GizmoMode::Translate {
-            if let Some((start_world_x, start_world_y)) = self.gizmo.drag_start_world_pos {
-                if let Some(entity) = self.selected_entity {
-                    let (current_world_x, current_world_y) = screen_to_world(
-                        &self.camera,
-                        self.mouse_x as f64,
-                        self.mouse_y as f64,
-                        size.width as f64,
-                        size.height as f64,
-                    );
-                    let dx = current_world_x - start_world_x;
-                    let dy = current_world_y - start_world_y;
-                    if dx != 0.0 || dy != 0.0 {
-                        if let Some((_, mut transform)) = self
-                            .world
-                            .world_mut()
-                            .query_mut::<(hecs::Entity, &mut Transform)>()
-                            .into_iter()
-                            .find(|(e, _)| *e == entity)
-                        {
-                            transform.position.x += dx;
-                            transform.position.y += dy;
-                        }
-                    }
-                }
-            }
         }
 
         // Apply tier change if needed
@@ -1669,6 +1889,9 @@ impl EditorApp {
 
         // Top menu bar
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
+            if project_blocked {
+                ui.disable();
+            }
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui.button("New Project").clicked() {
@@ -1702,20 +1925,21 @@ impl EditorApp {
                     }
                     ui.separator();
                     if ui.button("Exit").clicked() {
-                        std::process::exit(0);
+                        menu_actions.push(MenuAction::Exit);
+                        ui.close_menu();
                     }
                 });
 
                 ui.menu_button("Edit", |ui| {
                     if ui
-                        .add_enabled(self.history.can_undo(), egui::Button::new("Undo"))
+                        .add_enabled(self.scenes.history.can_undo(), egui::Button::new("Undo"))
                         .clicked()
                     {
                         menu_actions.push(MenuAction::Undo);
                         ui.close_menu();
                     }
                     if ui
-                        .add_enabled(self.history.can_redo(), egui::Button::new("Redo"))
+                        .add_enabled(self.scenes.history.can_redo(), egui::Button::new("Redo"))
                         .clicked()
                     {
                         menu_actions.push(MenuAction::Redo);
@@ -1758,7 +1982,11 @@ impl EditorApp {
                         ui.close_menu();
                     }
                     if ui.button("Project Hub").clicked() {
-                        self.dock_state.add_window(vec![Tab::ProjectHub]);
+                        if let Some(location) = self.dock_state.find_tab(&Tab::ProjectHub) {
+                            self.dock_state.set_active_tab(location);
+                        } else {
+                            self.dock_state.add_window(vec![Tab::ProjectHub]);
+                        }
                         ui.close_menu();
                     }
                     if ui.button("Profiler").clicked() {
@@ -1874,6 +2102,9 @@ impl EditorApp {
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(format!("v{}", env!("CARGO_PKG_VERSION")));
+                    if project_dirty {
+                        ui.label("Unsaved changes");
+                    }
                 });
             });
         });
@@ -1898,14 +2129,13 @@ impl EditorApp {
                                         .add_sized([200.0, 40.0], egui::Button::new("New Project"))
                                         .clicked()
                                     {
-                                        self.show_welcome = false;
+                                        self.project_requests.push(ProjectRequest::CreateDialog);
                                     }
                                     ui.add_space(16.0);
                                     if ui
                                         .add_sized([200.0, 40.0], egui::Button::new("Open Project"))
                                         .clicked()
                                     {
-                                        self.show_welcome = false;
                                         self.play_toggle_requested = false;
                                         self.open_project_requested = true;
                                     }
@@ -1933,6 +2163,54 @@ impl EditorApp {
             });
         }
 
+        let requests = std::cell::RefCell::new(Vec::new());
+        if !project_blocked {
+            crate::project_hub::render_project_dialogs(
+                ctx,
+                &mut self.project_hub,
+                &mut |path| requests.borrow_mut().push(ProjectRequest::Open(path)),
+                &mut |name, path, template| {
+                    requests
+                        .borrow_mut()
+                        .push(ProjectRequest::Create(name, path, template));
+                },
+            );
+        }
+        self.project_requests.extend(requests.into_inner());
+
+        if self.show_save_as && !project_blocked {
+            egui::Window::new("Save Project As")
+                .collapsible(false)
+                .show(ctx, |ui| {
+                    ui.label("Project file (in the current project directory):");
+                    ui.text_edit_singleline(&mut self.save_as_path);
+                    ui.horizontal(|ui| {
+                        if ui.button("Cancel").clicked() {
+                            self.show_save_as = false;
+                        }
+                        if ui.button("Save").clicked() {
+                            self.project_requests
+                                .push(ProjectRequest::SaveAs(PathBuf::from(
+                                    self.save_as_path.trim(),
+                                )));
+                            self.show_save_as = false;
+                        }
+                    });
+                });
+        }
+        if let Some(error) = self.project_error.clone().filter(|_| !project_blocked) {
+            let mut open = true;
+            egui::Window::new("Project operation failed")
+                .open(&mut open)
+                .collapsible(false)
+                .show(ctx, |ui| {
+                    ui.label(error);
+                });
+            if !open {
+                self.project_error = None;
+            }
+        }
+
         // The about window tells what the editor is and which version it is.
         if self.show_about {
             egui::Window::new("About Kiln")
@@ -1953,77 +2231,218 @@ impl EditorApp {
         }
 
         if !self.show_welcome {
-            // Main editor area
-            egui::CentralPanel::default().show(ctx, |ui| {
-                let mut dock_style = egui_dock::Style::from_egui(ui.style());
-                dock_style.tab_bar.bg_fill = egui::Color32::from_rgb(30, 30, 35);
-                dock_style.tab_bar.hline_color = egui::Color32::from_rgb(60, 60, 65);
-                dock_style.separator.color_idle = egui::Color32::from_rgb(60, 60, 65);
-                dock_style.separator.color_hovered = egui::Color32::from_rgb(80, 80, 90);
-                dock_style.separator.color_dragged = egui::Color32::from_rgb(100, 100, 110);
-                dock_style.separator.extra = 4.0;
+            // Scene pixels render below the dock UI; leave its canvas transparent.
+            egui::CentralPanel::default()
+                .frame(egui::Frame::none())
+                .show(ctx, |ui| {
+                    let mut dock_style = egui_dock::Style::from_egui(ui.style());
+                    dock_style.tab_bar.bg_fill = egui::Color32::from_rgb(30, 30, 35);
+                    dock_style.tab_bar.hline_color = egui::Color32::from_rgb(60, 60, 65);
+                    dock_style.separator.color_idle = egui::Color32::from_rgb(60, 60, 65);
+                    dock_style.separator.color_hovered = egui::Color32::from_rgb(80, 80, 90);
+                    dock_style.separator.color_dragged = egui::Color32::from_rgb(100, 100, 110);
+                    dock_style.separator.extra = 4.0;
 
-                let tree = egui_dock::DockArea::new(&mut self.dock_state).style(dock_style);
+                    let tree = egui_dock::DockArea::new(&mut self.dock_state).style(dock_style);
 
-                let mut tab_viewer = TabViewer {
-                    world: &mut self.world,
-                    selected_entity: &mut self.selected_entity,
-                    is_playing: &mut self.is_playing,
-                    graph: &mut self.graph,
-                    render_tier: &mut self.render_tier,
-                    pass_timings: &pass_timings,
-                    profiler_supported,
-                    ui_designer: &mut self.ui_designer,
-                    prefab_editor: &mut self.prefab_editor,
-                    gameplay_editor: &mut self.gameplay_editor,
-                    asset_browser: &mut self.asset_browser,
-                    tilemap_editor: &mut self.tilemap_editor,
-                    hierarchy_panel: &mut self.hierarchy_panel,
-                    inspector_panel: &mut self.inspector_panel,
-                    graph_editor: &mut self.graph_editor,
-                    current_project: &mut self.current_project,
-                    project_requests: &mut self.project_requests,
-                    play_toggle_requested: &mut self.play_toggle_requested,
-                    scene_save_requested: &mut self.scene_save_requested,
-                    scene_load_requested: &mut self.scene_load_requested,
-                    play: self.play.as_mut(),
-                    fps,
-                    history: &mut self.history,
-                    entity_textures: &self.entity_textures,
-                    entity_roles: &self.entity_roles,
-                    console_log: &mut self.console_log,
-                    scene_view_rect: &mut self.scene_view_rect,
-                    gizmo: &mut self.gizmo,
-                    scene_tabs: &mut self.scene_tabs,
-                    active_scene_tab: &mut self.active_scene_tab,
-                    mouse_x: &mut self.mouse_x,
-                    mouse_y: &mut self.mouse_y,
-                    entity_id_to_hecs: &mut self.entity_id_to_hecs,
-                    grid_snap_enabled: &mut self.grid_snap_enabled,
-                    audio_editor: &mut self.audio_editor,
-                    asset_filter: &mut self.asset_filter,
-                    project_hub: &mut self.project_hub,
-                    profiler_panel: &mut self.profiler_panel,
-                    vfx_editor: &mut self.vfx_editor,
-                    version_control: &mut self.version_control,
-                    ui_layout_editor: &mut self.ui_layout_editor,
-                    sprite_editor: &mut self.sprite_editor,
-                    shader_editor: &mut self.shader_editor,
-                    preferences: &mut self.preferences,
-                    plugin_manager: &mut self.plugin_manager,
-                    physics_editor: &mut self.physics_editor,
-                    input_rebind: &mut self.input_rebind,
-                    grid_snap_size: &mut self.grid_snap_size,
-                    gpu: &*gpu,
-                    debugger_panel: &mut self.debugger_panel,
-                    build_panel: &mut self.build_panel,
-                    anim_editor: &mut self.anim_editor,
-                };
-                tree.show(ctx, &mut tab_viewer);
-            });
+                    let mut tab_viewer = TabViewer {
+                        world: &mut self.world,
+                        selected_entity: &mut self.selected_entity,
+                        rename_input: &mut self.rename_input,
+                        role_input: &mut self.role_input,
+                        sprite_reference_input: &mut self.sprite_reference_input,
+                        is_playing: &mut self.is_playing,
+                        graph: &mut self.graph,
+                        render_tier: &mut self.render_tier,
+                        pass_timings: &pass_timings,
+                        profiler_supported,
+                        ui_designer: &mut self.ui_designer,
+                        prefab_editor: &mut self.prefab_editor,
+                        gameplay_editor: &mut self.gameplay_editor,
+                        asset_browser: &mut self.asset_browser,
+                        tilemap_editor: &mut self.tilemap_editor,
+                        hierarchy_panel: &mut self.hierarchy_panel,
+                        camera_state: &mut self.camera,
+                        current_project: &mut self.current_project,
+                        project_requests: &mut self.project_requests,
+                        project_blocked,
+                        play_toggle_requested: &mut self.play_toggle_requested,
+                        scene_save_requested: &mut self.scene_save_requested,
+                        scene_load_requested: &mut self.scene_load_requested,
+                        play: self.play.as_mut(),
+                        fps,
+                        scenes: &mut self.scenes,
+                        entity_textures: &self.entity_textures,
+                        entity_roles: &self.entity_roles,
+                        console_log: &mut self.console_log,
+                        scene_view_rect: &mut self.scene_view_rect,
+                        gizmo: &mut self.gizmo,
+                        transform_edit: &mut self.transform_edit,
+                        scene_camera: &scene_camera,
+                        scene_world_size: world,
+                        entity_id_to_hecs: &mut self.entity_id_to_hecs,
+                        grid_snap_enabled: &mut self.grid_snap_enabled,
+                        audio_editor: &mut self.audio_editor,
+                        asset_filter: &mut self.asset_filter,
+                        project_hub: &mut self.project_hub,
+                        profiler_panel: &mut self.profiler_panel,
+                        vfx_editor: &mut self.vfx_editor,
+                        version_control: &mut self.version_control,
+                        ui_layout_editor: &mut self.ui_layout_editor,
+                        sprite_editor: &mut self.sprite_editor,
+                        shader_editor: &mut self.shader_editor,
+                        preferences: &mut self.preferences,
+                        plugin_manager: &mut self.plugin_manager,
+                        physics_editor: &mut self.physics_editor,
+                        input_rebind: &mut self.input_rebind,
+                        grid_snap_size: &mut self.grid_snap_size,
+                        gpu: &*gpu,
+                        debugger_panel: &mut self.debugger_panel,
+                        build_panel: &mut self.build_panel,
+                        anim_editor: &mut self.anim_editor,
+                    };
+                    tree.show(ctx, &mut tab_viewer);
+                });
 
             // Status bar
             show_status_bar(ctx, fps, entity_count, tier, is_playing);
+        }
+
+        if let Some(action) = self.lifecycle.pending() {
+            let intent = match action {
+                ProjectAction::Open(_) => "opening another project",
+                ProjectAction::Create { .. } => "creating another project",
+                ProjectAction::Exit => "exiting the editor",
+            };
+            egui::Window::new("Unsaved project changes")
+                .id(egui::Id::new("unsaved_project_prompt"))
+                .order(egui::Order::Foreground)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    ui.label(format!("Save your project before {intent}?"));
+                    ui.label("Discard continues without saving your changes.");
+                    if let Some(error) = self.lifecycle.save_error() {
+                        ui.colored_label(egui::Color32::LIGHT_RED, format!("Save failed: {error}"));
+                    }
+                    ui.horizontal(|ui| {
+                        for (label, decision) in [
+                            ("Save", SaveDecision::Save),
+                            ("Discard", SaveDecision::Discard),
+                            ("Cancel", SaveDecision::Cancel),
+                        ] {
+                            if ui.button(label).clicked() {
+                                self.project_requests
+                                    .push(ProjectRequest::Resolve(decision));
+                            }
+                        }
+                    });
+                });
+            if ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+                self.project_requests
+                    .push(ProjectRequest::Resolve(SaveDecision::Cancel));
+            }
+        }
+
+        if let Some(prompt) = &self.scene_close_prompt {
+            let scene_name = self
+                .scenes
+                .tabs
+                .get(prompt.index)
+                .map(|tab| tab.scene_id.as_str())
+                .unwrap_or("scene");
+            egui::Window::new("Unsaved scene changes")
+                .id(egui::Id::new("unsaved_scene_close_prompt"))
+                .order(egui::Order::Foreground)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    ui.label(format!(
+                        "Save changes to scene `{scene_name}` before closing it?"
+                    ));
+                    ui.label("Discard restores this scene to its last saved version.");
+                    if let Some(error) = &prompt.save_error {
+                        ui.colored_label(egui::Color32::LIGHT_RED, format!("Save failed: {error}"));
+                    }
+                    ui.horizontal(|ui| {
+                        for (label, decision) in [
+                            ("Save", SaveDecision::Save),
+                            ("Discard", SaveDecision::Discard),
+                            ("Cancel", SaveDecision::Cancel),
+                        ] {
+                            if ui.button(label).clicked() {
+                                self.project_requests
+                                    .push(ProjectRequest::ResolveSceneClose(decision));
+                            }
+                        }
+                    });
+                });
+            if ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+                self.project_requests
+                    .push(ProjectRequest::ResolveSceneClose(SaveDecision::Cancel));
+            }
+        }
+
+        if self.pending_recovery.is_some() {
+            egui::Window::new("Recover unsaved project changes?")
+                .id(egui::Id::new("project_recovery_prompt"))
+                .order(egui::Order::Foreground)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    ui.label("A newer recovery snapshot was found for this project.");
+                    ui.label("Restore it to continue from your last autosave.");
+                    ui.horizontal(|ui| {
+                        if ui.button("Restore").clicked() {
+                            self.project_requests
+                                .push(ProjectRequest::ResolveRecovery(true));
+                        }
+                        if ui.button("Discard Recovery").clicked() {
+                            self.project_requests
+                                .push(ProjectRequest::ResolveRecovery(false));
+                        }
+                    });
+                });
+            if ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+                self.project_requests
+                    .push(ProjectRequest::ResolveRecovery(false));
+            }
+        }
+
+        // A hidden canvas or a release outside its bounds must still end the drag.
+        if self.gizmo.drag.is_some()
+            && !ctx.input(|input| input.pointer.primary_down())
+            && !self
+                .project_requests
+                .iter()
+                .any(|request| matches!(request, ProjectRequest::CancelTransform))
+        {
+            if let Some(edit) = self.transform_edit.take() {
+                edit.commit(&mut self.scenes.history);
+            }
+            self.gizmo.drag = None;
+        }
+
+        // Text fields retain their own editing shortcuts. Scene shortcuts apply
+        // after widgets have had a chance to consume keyboard input.
+        if !project_blocked && !ctx.wants_keyboard_input() && self.play.is_none() {
+            ctx.input_mut(|input| {
+                for (key, action) in [
+                    (egui::Key::S, MenuAction::SaveProject),
+                    (egui::Key::Z, MenuAction::Undo),
+                    (egui::Key::Y, MenuAction::Redo),
+                ] {
+                    if input.consume_shortcut(&egui::KeyboardShortcut::new(
+                        egui::Modifiers::COMMAND,
+                        key,
+                    )) {
+                        menu_actions.push(action);
+                    }
+                }
+            });
         }
 
         let full_output = ctx.end_pass();
@@ -2098,33 +2517,6 @@ impl EditorApp {
             );
         }
 
-        let egui_begin = gpu.renderer.profiler_mut().begin_pass(&mut encoder, "egui");
-        {
-            let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("egui_pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-
-            let mut pass = pass.forget_lifetime();
-            gpu.egui_renderer
-                .render(&mut pass, &paint_jobs, &screen_descriptor);
-            drop(pass);
-        }
-        gpu.renderer
-            .profiler_mut()
-            .end_pass(&mut encoder, egui_begin);
-        gpu.renderer.profiler_mut().resolve(&mut encoder);
-
         // Render the scene view with the engine's sprite renderer.
         //
         // The scene is drawn into the scene-view panel: the panel's rectangle
@@ -2132,67 +2524,37 @@ impl EditorApp {
         // player uses, and the HUD is drawn on top in screen space. The
         // engine owns every pixel of the panel, so the editor shows what the
         // player shows.
-        let panel = scene_view_rect
-            .map(|rect| scene_view::rect_to_pixels(rect, full_output.pixels_per_point));
-        if let Some(panel) = panel {
-            let viewport = scene_view::letterbox(panel.width, panel.height, world.0, world.1);
-
+        if let Some(panel) = self.scene_view_rect {
+            let viewport = scene_view::canvas_viewport(panel, full_output.pixels_per_point, world);
             if !viewport.is_empty() {
                 let queue = gpu.renderer.queue();
-                let origin_x = panel.x + viewport.x;
-                let origin_y = panel.y + viewport.y;
+                let origin_x = viewport.x;
+                let origin_y = viewport.y;
 
                 // Queue the world: background, grid, tilemaps, sprites.
                 gpu.scene_view_sprite_renderer.begin_frame();
                 gpu.scene_view_sprite_renderer.push(scene_view::background(
-                    world.0, world.1, BACKGROUND_COLOR,
+                    world.0,
+                    world.1,
+                    BACKGROUND_COLOR,
                 ));
                 for line in scene_view::grid_lines(world.0, world.1, GRID_SPACING, GRID_COLOR) {
                     gpu.scene_view_sprite_renderer.push(line);
                 }
-                let world_camera = scene_view::world_camera(world.0, world.1);
-                // Apply camera state (position, zoom, follow target)
-                let mut camera = scene_view::world_camera(world.0, world.1);
-                if let Some(target_id) = &self.camera.target {
-                    if let Some(&hecs_entity) = self.entity_id_to_hecs.get(target_id) {
-                        if let Ok((transform,)) = self
-                            .world
-                            .world_mut()
-                            .query_one_mut::<(&kiln_core::Transform,)>(hecs_entity)
-                        {
-                            camera.position = transform.position.into();
-                        }
-                    }
-                }
-                camera.position[0] += self.camera.position[0];
-                camera.position[1] += self.camera.position[1];
-                camera.zoom *= self.camera.zoom;
-                // Apply bounds if set
-                if let Some([min_x, min_y, max_x, max_y]) = self.camera.bounds {
-                    let view = camera.view_bounds();
-                    let mut pos = camera.position;
-                    if view[0] < min_x {
-                        pos[0] = min_x;
-                    }
-                    if view[1] < min_y {
-                        pos[1] = min_y;
-                    }
-                    if view[2] > max_x {
-                        pos[0] = max_x - (view[2] - view[0]);
-                    }
-                    if view[3] > max_y {
-                        pos[1] = max_y - (view[3] - view[1]);
-                    }
-                    camera.position = pos;
-                }
+                let camera = &scene_camera;
                 let view_bounds = camera.view_bounds();
+                let _ = kiln_runtime::update_global_transforms(&mut self.world);
                 for (_, tilemap) in self.world.world().query::<(&Transform, &Tilemap)>().iter() {
                     for (texture, instance) in tilemap.collect_visible(view_bounds) {
-                        gpu.scene_view_sprite_renderer.push_textured(texture, instance);
+                        gpu.scene_view_sprite_renderer
+                            .push_textured(texture, instance);
                     }
                 }
-                for (transform, sprite) in
-                    self.world.world().query::<(&Transform, &Sprite)>().iter()
+                for (transform, sprite) in self
+                    .world
+                    .world()
+                    .query::<(&kiln_runtime::GlobalTransform, &Sprite)>()
+                    .iter()
                 {
                     gpu.scene_view_sprite_renderer.push_textured(
                         sprite.texture,
@@ -2202,16 +2564,19 @@ impl EditorApp {
                             color: sprite.color,
                             uv_rect: sprite.uv_rect,
                             material_id: 0,
-                        },
+                            rotation: 0.0,
+                        }
+                        .with_transform(transform.rotation, [transform.scale.x, transform.scale.y]),
                     );
                 }
 
                 // Determine render target: post framebuffer if available, else main view.
-                let (scene_target_view, use_post) = if let Some(fb) = gpu.scene_view_post_framebuffer.as_ref() {
-                    (fb.color_view(), true)
-                } else {
-                    (&view, false)
-                };
+                let (scene_target_view, use_post) =
+                    if let Some(fb) = gpu.scene_view_post_framebuffer.as_ref() {
+                        (fb.color_view(), true)
+                    } else {
+                        (&view, false)
+                    };
 
                 // Render scene to target (post framebuffer or main view).
                 {
@@ -2221,12 +2586,11 @@ impl EditorApp {
                             view: scene_target_view,
                             resolve_target: None,
                             ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color {
-                                    r: BACKGROUND_COLOR[0] as f64,
-                                    g: BACKGROUND_COLOR[1] as f64,
-                                    b: BACKGROUND_COLOR[2] as f64,
-                                    a: BACKGROUND_COLOR[3] as f64,
-                                }),
+                                load: if use_post {
+                                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                                } else {
+                                    wgpu::LoadOp::Load
+                                },
                                 store: wgpu::StoreOp::Store,
                             },
                         })],
@@ -2234,10 +2598,17 @@ impl EditorApp {
                         timestamp_writes: None,
                         occlusion_query_set: None,
                     });
-                    pass.set_viewport(origin_x as f32, origin_y as f32,
-                        viewport.width as f32, viewport.height as f32, 0.0, 1.0);
+                    pass.set_viewport(
+                        origin_x as f32,
+                        origin_y as f32,
+                        viewport.width as f32,
+                        viewport.height as f32,
+                        0.0,
+                        1.0,
+                    );
                     pass.set_scissor_rect(origin_x, origin_y, viewport.width, viewport.height);
-                    gpu.scene_view_sprite_renderer.flush(&mut pass, &world_camera, queue);
+                    gpu.scene_view_sprite_renderer
+                        .flush(&mut pass, camera, queue);
                 }
 
                 // Apply post-processing if available.
@@ -2278,7 +2649,10 @@ impl EditorApp {
                 }
 
                 let overlay_camera = scene_view::overlay_camera(ViewportRect {
-                    x: origin_x, y: origin_y, width: viewport.width, height: viewport.height,
+                    x: origin_x,
+                    y: origin_y,
+                    width: viewport.width,
+                    height: viewport.height,
                 });
                 {
                     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -2295,14 +2669,47 @@ impl EditorApp {
                         timestamp_writes: None,
                         occlusion_query_set: None,
                     });
-                    pass.set_viewport(origin_x as f32, origin_y as f32,
-                        viewport.width as f32, viewport.height as f32, 0.0, 1.0);
+                    pass.set_viewport(
+                        origin_x as f32,
+                        origin_y as f32,
+                        viewport.width as f32,
+                        viewport.height as f32,
+                        0.0,
+                        1.0,
+                    );
                     pass.set_scissor_rect(origin_x, origin_y, viewport.width, viewport.height);
-                    gpu.scene_view_overlay_renderer.flush(&mut pass, &overlay_camera, queue);
+                    gpu.scene_view_overlay_renderer
+                        .flush(&mut pass, &overlay_camera, queue);
                 }
             }
         }
 
+        let egui_begin = gpu.renderer.profiler_mut().begin_pass(&mut encoder, "egui");
+        {
+            let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("egui_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            let mut pass = pass.forget_lifetime();
+            gpu.egui_renderer
+                .render(&mut pass, &paint_jobs, &screen_descriptor);
+            drop(pass);
+        }
+        gpu.renderer
+            .profiler_mut()
+            .end_pass(&mut encoder, egui_begin);
+        gpu.renderer.profiler_mut().resolve(&mut encoder);
 
         gpu.renderer.queue().submit([encoder.finish()]);
         gpu.window.pre_present_notify();
@@ -2311,38 +2718,38 @@ impl EditorApp {
         // Execute menu actions after UI pass (borrows are released)
         for action in menu_actions {
             match action {
-                MenuAction::NewProject => {
-                    self.show_welcome = true;
-                }
+                MenuAction::Exit => self
+                    .project_requests
+                    .push(ProjectRequest::Leave(ProjectAction::Exit)),
+                MenuAction::NewProject => self.begin_new_project(),
                 MenuAction::OpenProject => {
-                    let path = PathBuf::from(self.project_path_input.trim());
-                    match self.load_project(path.to_path_buf()) {
-                        Ok(()) => self.console_log.push("[INFO] Project loaded".to_string()),
-                        Err(e) => {
-                            let message = format!("[ERROR] Could not load the project: {e}");
-                            log::error!("{message}");
-                            self.console_log.push(message);
-                        }
-                    }
+                    self.show_welcome = false;
+                    self.project_hub.show_open_project_dialog = true;
+                    self.project_hub.open_project_path = self.project_path_input.clone();
                 }
                 MenuAction::SaveProject => {
                     if let Err(e) = self.save_project() {
-                        eprintln!("Failed to save project: {}", e);
+                        self.project_error = Some(e);
                     }
                 }
                 MenuAction::SaveProjectAs => {
-                    if let Err(e) = self.save_project_as(PathBuf::from("kiln.toml")) {
-                        eprintln!("Failed to save project as: {}", e);
-                    }
+                    self.save_as_path = self
+                        .project_path
+                        .as_ref()
+                        .map(|path| path.with_file_name("kiln-copy.toml"))
+                        .unwrap_or_else(|| PathBuf::from("kiln-copy.toml"))
+                        .to_string_lossy()
+                        .into_owned();
+                    self.show_save_as = true;
                 }
                 MenuAction::SaveScene => {
                     if let Err(e) = self.save_scene() {
-                        eprintln!("Failed to save scene: {}", e);
+                        self.project_error = Some(e);
                     }
                 }
                 MenuAction::LoadScene => {
                     if let Err(e) = self.load_scene() {
-                        eprintln!("Failed to load scene: {}", e);
+                        self.project_error = Some(e);
                     }
                 }
                 MenuAction::Undo => {
@@ -2392,14 +2799,7 @@ impl EditorApp {
         // Handle the open-project request from the welcome screen.
         if std::mem::take(&mut self.open_project_requested) {
             let path = PathBuf::from(self.project_path_input.trim());
-            match self.load_project(path.to_path_buf()) {
-                Ok(()) => self.console_log.push("[INFO] Project loaded".to_string()),
-                Err(e) => {
-                    let message = format!("[ERROR] Could not load the project: {e}");
-                    log::error!("{message}");
-                    self.console_log.push(message);
-                }
-            }
+            self.project_requests.push(ProjectRequest::Open(path));
         }
 
         // Handle the play/pause request from the scene toolbar.
@@ -2421,12 +2821,12 @@ impl EditorApp {
         // Handle scene save/load requests
         if std::mem::take(&mut self.scene_save_requested) {
             if let Err(e) = self.save_scene() {
-                eprintln!("Failed to save scene: {}", e);
+                self.project_error = Some(e);
             }
         }
         if std::mem::take(&mut self.scene_load_requested) {
             if let Err(e) = self.load_scene() {
-                eprintln!("Failed to load scene: {}", e);
+                self.project_error = Some(e);
             }
         }
 
@@ -2438,44 +2838,46 @@ impl EditorApp {
         }
         self.last_frame = Instant::now();
 
-// Standalone function for status bar (no self borrow issues)
-fn show_status_bar(
-    ctx: &egui::Context,
-    fps: f32,
-    entity_count: u32,
-    tier: kiln_render::RenderTier,
-    is_playing: bool,
-) {
-    egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing = egui::vec2(16.0, 0.0);
+        // Standalone function for status bar (no self borrow issues)
+        fn show_status_bar(
+            ctx: &egui::Context,
+            fps: f32,
+            entity_count: u32,
+            tier: kiln_render::RenderTier,
+            is_playing: bool,
+        ) {
+            egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(16.0, 0.0);
 
-            // Left side: status info
-            ui.label(format!("FPS: {:.0}", fps));
-            ui.separator();
-            ui.label(format!("Entities: {}", entity_count));
-            ui.separator();
-            ui.label(format!("Tier: {:?}", tier));
+                    // Left side: status info
+                    ui.label(format!("FPS: {:.0}", fps));
+                    ui.separator();
+                    ui.label(format!("Entities: {}", entity_count));
+                    ui.separator();
+                    ui.label(format!("Tier: {:?}", tier));
 
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                // Right side: shortcuts and info
-                ui.label("Ctrl+S: Save | Ctrl+Z: Undo | Ctrl+Y: Redo");
-                ui.separator();
-                if is_playing {
-                    ui.label("🔴 Playing");
-                } else {
-                    ui.label("⏸ Paused");
-                }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // Right side: shortcuts and info
+                        ui.label("Ctrl+S: Save | Ctrl+Z: Undo | Ctrl+Y: Redo");
+                        ui.separator();
+                        if is_playing {
+                            ui.label("🔴 Playing");
+                        } else {
+                            ui.label("⏸ Paused");
+                        }
+                    });
+                });
             });
-        });
-    });
-}
-}
-
+        }
+    }
 }
 struct TabViewer<'a> {
     world: &'a mut GameWorld,
     selected_entity: &'a mut Option<hecs::Entity>,
+    rename_input: &'a mut Option<(String, String)>,
+    role_input: &'a mut Option<(String, String)>,
+    sprite_reference_input: &'a mut Option<(String, SpriteReferenceDraft)>,
     is_playing: &'a mut bool,
     graph: &'a mut Graph,
     render_tier: &'a mut RenderTier,
@@ -2487,10 +2889,10 @@ struct TabViewer<'a> {
     asset_browser: &'a mut AssetBrowser,
     tilemap_editor: &'a mut TilemapEditorState,
     hierarchy_panel: &'a mut HierarchyPanel,
-    inspector_panel: &'a mut InspectorPanel,
-    graph_editor: &'a mut GraphEditorState,
+    camera_state: &'a mut CameraState,
     current_project: &'a mut Option<Project>,
     project_requests: &'a mut Vec<ProjectRequest>,
+    project_blocked: bool,
     play_toggle_requested: &'a mut bool,
     scene_save_requested: &'a mut bool,
     scene_load_requested: &'a mut bool,
@@ -2499,7 +2901,7 @@ struct TabViewer<'a> {
     /// The measured frame rate, in frames per second.
     fps: f32,
     /// The history of scene edits, used by undo and redo.
-    history: &'a mut SceneHistory,
+    scenes: &'a mut SceneWorkspace,
     /// Asset path of each scene entity's texture, keyed by entity id.
     entity_textures: &'a HashMap<String, String>,
     /// Gameplay role of each scene entity, keyed by entity id.
@@ -2511,13 +2913,9 @@ struct TabViewer<'a> {
     scene_view_rect: &'a mut Option<egui::Rect>,
     /// Transform gizmo state for visual entity manipulation.
     gizmo: &'a mut GizmoState,
-    /// Scene tabs for the scene tabs bar.
-    scene_tabs: &'a mut Vec<SceneTab>,
-    /// Currently active scene tab index.
-    active_scene_tab: &'a mut Option<usize>,
-    /// Last known mouse position in screen space.
-    mouse_x: &'a mut f32,
-    mouse_y: &'a mut f32,
+    transform_edit: &'a mut Option<SceneTransaction>,
+    scene_camera: &'a kiln_render::camera::Camera,
+    scene_world_size: (f32, f32),
     /// Mapping from project entity ID (source_id) to hecs Entity for selection sync.
     entity_id_to_hecs: &'a mut HashMap<String, hecs::Entity>,
     /// Whether grid snapping is enabled.
@@ -2562,97 +2960,436 @@ struct TabViewer<'a> {
 }
 
 impl TabViewer<'_> {
-    /// Record the current scene, so the edit can be undone.
-    fn record_scene(&mut self) {
-        let scene = scene_from_world(
-            &*self.world,
+    fn finish_transform_edit(&mut self) {
+        if let Some(edit) = self.transform_edit.take() {
+            edit.commit(&mut self.scenes.history);
+        }
+        self.gizmo.drag = None;
+    }
+
+    fn preview_transform(&mut self, source_id: &str, value: Transform) {
+        if self.editing_locked() || self.project_blocked {
+            return;
+        }
+        let before = crate::scene_document::snapshot_for_scene(
+            self.world,
             self.entity_textures,
             self.entity_roles,
             self.current_project.as_ref(),
+            self.scenes.active_id(),
         );
-        self.history.record(scene);
+        if self
+            .transform_edit
+            .as_ref()
+            .is_some_and(|edit| !edit.targets(&before.id, source_id))
+        {
+            self.finish_transform_edit();
+        }
+        let mut after = before.clone();
+        let scene_id = after.id.clone();
+        let result = SetTransform {
+            scene_id: &scene_id,
+            entity_id: source_id,
+            value,
+        }
+        .apply(&mut after, self.world);
+        match result {
+            Ok(true) => {
+                let edit = self
+                    .transform_edit
+                    .get_or_insert_with(|| SceneTransaction::new(before, source_id.into()));
+                edit.update(after.clone());
+                if let Some(project) = self.current_project.as_mut() {
+                    project.scenes.insert(scene_id, after);
+                }
+            }
+            Ok(false) => {}
+            Err(error) => self.log(&format!("[ERROR] {error}")),
+        }
     }
 
-    /// Add an entity to the middle of the scene.
-    ///
-    /// The scene is recorded first, so the new entity can be undone.
+    fn preview_group_transforms(&mut self, source_id: &str, targets: &[(String, Transform)]) {
+        if self.editing_locked() || self.project_blocked {
+            return;
+        }
+        let before = crate::scene_document::snapshot_for_scene(
+            self.world,
+            self.entity_textures,
+            self.entity_roles,
+            self.current_project.as_ref(),
+            self.scenes.active_id(),
+        );
+        if self
+            .transform_edit
+            .as_ref()
+            .is_some_and(|edit| !edit.targets(&before.id, source_id))
+        {
+            self.finish_transform_edit();
+        }
+        let mut after = before.clone();
+        let scene_id = after.id.clone();
+        let mut updated = false;
+        let ordered_targets = crate::transform_gizmo::order_group_targets(&after, targets);
+        for (entity_id, target) in &ordered_targets {
+            let Ok(local) =
+                kiln_core::hierarchy_transform::local_from_world(&after, entity_id, *target)
+            else {
+                continue;
+            };
+            match (SetTransform {
+                scene_id: &scene_id,
+                entity_id,
+                value: local,
+            })
+            .apply(&mut after, self.world)
+            {
+                Ok(changed) => updated |= changed,
+                Err(error) => self.log(&format!("[ERROR] {error}")),
+            }
+        }
+        if updated {
+            let edit = self
+                .transform_edit
+                .get_or_insert_with(|| SceneTransaction::new(before, source_id.into()));
+            edit.update(after.clone());
+            if let Some(project) = self.current_project.as_mut() {
+                project.scenes.insert(scene_id, after);
+            }
+        }
+    }
+
+    fn preview_sprite_visual(&mut self, source_id: &str, sprite: &Sprite) {
+        if self.editing_locked() || self.project_blocked {
+            return;
+        }
+        let before = crate::scene_document::snapshot_for_scene(
+            self.world,
+            self.entity_textures,
+            self.entity_roles,
+            self.current_project.as_ref(),
+            self.scenes.active_id(),
+        );
+        if self
+            .transform_edit
+            .as_ref()
+            .is_some_and(|edit| !edit.targets(&before.id, source_id))
+        {
+            self.finish_transform_edit();
+        }
+        let mut after = before.clone();
+        let scene_id = after.id.clone();
+        match (SetSpriteVisual {
+            scene_id: &scene_id,
+            entity_id: source_id,
+            color: sprite.color,
+            layer: sprite.layer,
+            size: sprite.size,
+        })
+        .apply(&mut after, self.world)
+        {
+            Ok(true) => {
+                let edit = self
+                    .transform_edit
+                    .get_or_insert_with(|| SceneTransaction::new(before, source_id.into()));
+                edit.update(after.clone());
+                if let Some(project) = self.current_project.as_mut() {
+                    project.scenes.insert(scene_id, after);
+                }
+            }
+            Ok(false) => {}
+            Err(error) => self.log(&format!("[ERROR] {error}")),
+        }
+    }
+
+    fn transform_response(
+        &mut self,
+        entity: hecs::Entity,
+        value: Transform,
+        response: &egui::Response,
+    ) {
+        if response.changed() {
+            if self
+                .transform_edit
+                .as_ref()
+                .is_some_and(|edit| !edit.owns_widget(response.id))
+            {
+                self.finish_transform_edit();
+            }
+            let source = self
+                .world
+                .world_ref()
+                .get::<&SourceId>(entity)
+                .ok()
+                .map(|id| id.0.clone());
+            if let Some(source) = source {
+                self.preview_transform(&source, value);
+            }
+            if let Some(edit) = self.transform_edit.as_mut() {
+                edit.set_widget(response.id);
+            }
+        }
+        if self
+            .transform_edit
+            .as_ref()
+            .is_some_and(|edit| edit.owns_widget(response.id))
+            && (response.drag_stopped()
+                || response.lost_focus()
+                || (response.changed() && !response.dragged() && !response.has_focus()))
+        {
+            self.finish_transform_edit();
+        }
+    }
+
+    fn sprite_visual_response(
+        &mut self,
+        entity: hecs::Entity,
+        sprite: &Sprite,
+        response: &egui::Response,
+    ) {
+        if response.changed() {
+            if self
+                .transform_edit
+                .as_ref()
+                .is_some_and(|edit| !edit.owns_widget(response.id))
+            {
+                self.finish_transform_edit();
+            }
+            let source = self
+                .world
+                .world_ref()
+                .get::<&SourceId>(entity)
+                .ok()
+                .map(|id| id.0.clone());
+            if let Some(source) = source {
+                self.preview_sprite_visual(&source, sprite);
+            }
+            if let Some(edit) = self.transform_edit.as_mut() {
+                edit.set_widget(response.id);
+            }
+        }
+        if self
+            .transform_edit
+            .as_ref()
+            .is_some_and(|edit| edit.owns_widget(response.id))
+            && (response.drag_stopped()
+                || response.lost_focus()
+                || (response.changed() && !response.dragged() && !response.has_focus()))
+        {
+            self.finish_transform_edit();
+        }
+    }
+
+    fn translation_canvas(&mut self, ui: &mut egui::Ui, panel: egui::Rect) {
+        if self.editing_locked() || self.project_blocked || self.gizmo.mode == GizmoMode::None {
+            return;
+        }
+        let ppp = ui.ctx().pixels_per_point();
+        let viewport = scene_view::canvas_viewport(panel, ppp, self.world_size());
+        let Some(units) = scene_view::units_per_point(viewport, ppp, self.scene_camera) else {
+            return;
+        };
+        let canvas = egui::Rect::from_min_size(
+            egui::pos2(viewport.x as f32 / ppp, viewport.y as f32 / ppp),
+            egui::vec2(viewport.width as f32 / ppp, viewport.height as f32 / ppp),
+        );
+        let response = ui.interact(
+            canvas,
+            ui.id().with("transform_gizmo_canvas"),
+            egui::Sense::drag(),
+        );
+        if response.drag_started() {
+            self.finish_transform_edit();
+            if let Some(entity) = *self.selected_entity {
+                let source = self
+                    .world
+                    .world_ref()
+                    .get::<&SourceId>(entity)
+                    .ok()
+                    .map(|id| id.0.clone());
+                let initial = self
+                    .world
+                    .world_ref()
+                    .get::<&kiln_runtime::GlobalTransform>(entity)
+                    .ok()
+                    .map(|t| t.0);
+                let origin = ui.input(|input| input.pointer.press_origin());
+                if let (Some(source), Some(initial), Some(origin)) = (source, initial, origin) {
+                    let canvas = egui::Rect::from_min_size(
+                        egui::pos2(viewport.x as f32 / ppp, viewport.y as f32 / ppp),
+                        egui::vec2(viewport.width as f32 / ppp, viewport.height as f32 / ppp),
+                    );
+                    let center = egui::pos2(
+                        canvas.left()
+                            + (initial.position.x - self.scene_camera.position[0]) / units[0],
+                        canvas.bottom()
+                            - (initial.position.y - self.scene_camera.position[1]) / units[1],
+                    );
+                    if !hits_handle(self.gizmo.mode, origin, center) {
+                        return;
+                    }
+                    let pointer_world = kiln_core::Vec2::new(
+                        self.scene_camera.position[0] + (origin.x - canvas.left()) * units[0],
+                        self.scene_camera.position[1] + (canvas.bottom() - origin.y) * units[1],
+                    );
+                    if let Some(drag) =
+                        GizmoDrag::new(self.gizmo.mode, origin, initial, units, pointer_world)
+                    {
+                        let mut selected: Vec<(String, Transform)> = self
+                            .hierarchy_panel
+                            .selected_ids
+                            .iter()
+                            .filter_map(|id| {
+                                let entity = *self.entity_id_to_hecs.get(id)?;
+                                let transform = self
+                                    .world
+                                    .world_ref()
+                                    .get::<&kiln_runtime::GlobalTransform>(entity)
+                                    .ok()?
+                                    .0;
+                                Some((id.clone(), transform))
+                            })
+                            .collect();
+                        if !selected.iter().any(|(id, _)| id == &source) {
+                            selected.push((source.clone(), initial));
+                        }
+                        self.gizmo.drag = Some(GizmoDragSession {
+                            source,
+                            drag,
+                            selected,
+                        });
+                    }
+                }
+            }
+        }
+        if self.gizmo.drag.is_some()
+            && ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+        {
+            self.project_requests.push(ProjectRequest::CancelTransform);
+            self.gizmo.drag = None;
+            return;
+        }
+        if response.dragged() || response.drag_stopped() {
+            if let (Some(session), Some(pointer)) = (
+                self.gizmo.drag.clone(),
+                ui.input(|input| input.pointer.interact_pos()),
+            ) {
+                let grid = (*self.grid_snap_enabled).then_some(*self.grid_snap_size);
+                let world_value = session.drag.at(pointer, grid);
+                if session.selected.len() > 1 {
+                    let targets = crate::transform_gizmo::apply_group_transform(
+                        self.gizmo.mode,
+                        &session.source,
+                        world_value,
+                        &session.selected,
+                    );
+                    self.preview_group_transforms(&session.source, &targets);
+                } else {
+                    let local_value = crate::scene_document::snapshot_for_scene(
+                        self.world,
+                        self.entity_textures,
+                        self.entity_roles,
+                        self.current_project.as_ref(),
+                        self.scenes.active_id(),
+                    );
+                    if let Ok(local) = kiln_core::hierarchy_transform::local_from_world(
+                        &local_value,
+                        &session.source,
+                        world_value,
+                    ) {
+                        self.preview_transform(&session.source, local);
+                    } else {
+                        self.log(
+                            "[ERROR] Could not convert dragged world transform to local space",
+                        );
+                    }
+                }
+            }
+        }
+        if response.drag_stopped() {
+            self.finish_transform_edit();
+        }
+    }
+
+    /// Queue creation through the validated scene document command path.
     fn add_entity(&mut self) {
         if self.editing_locked() {
             return;
         }
-        self.record_scene();
-
-        let existing: Vec<String> = self.entity_textures.keys().cloned().collect();
+        self.finish_transform_edit();
+        let Some(scene_id) = self.scenes.active_id().map(str::to_owned) else {
+            return;
+        };
         let size = self.world_size();
         let position = [size.0 / 2.0, size.1 / 2.0];
-        let (_, entity) = crate::editing::add_entity(
-            self.world,
-            &existing,
-            position,
-            crate::editing::EntityDefaults::default(),
-        );
-        *self.selected_entity = Some(entity);
+        self.project_requests.push(ProjectRequest::Entity(
+            crate::entity_command::EntityCommand {
+                scene_id,
+                edit: crate::entity_command::EntityEdit::Create {
+                    name: "Entity".into(),
+                    position,
+                },
+            },
+        ));
     }
 
     /// The size of the world the scene view shows, in world units.
     fn world_size(&self) -> (f32, f32) {
-        match self.current_project.as_ref() {
-            Some(project) => (project.window.width as f32, project.window.height as f32),
-            None => (DEFAULT_WORLD_SIZE.0, DEFAULT_WORLD_SIZE.1),
+        self.scene_world_size
+    }
+
+    fn authored_entity(&self, entity: hecs::Entity) -> Option<kiln_core::Entity> {
+        let source = self
+            .world
+            .world_ref()
+            .get::<&SourceId>(entity)
+            .ok()?
+            .0
+            .clone();
+        crate::scene_document::snapshot_for_scene(
+            self.world,
+            self.entity_textures,
+            self.entity_roles,
+            self.current_project.as_ref(),
+            self.scenes.active_id(),
+        )
+        .entities
+        .into_iter()
+        .find(|entity| entity.id == source)
+    }
+
+    fn queue_component(&mut self, entity: hecs::Entity, edit: ComponentEdit) {
+        if self.editing_locked() || self.project_blocked {
+            return;
+        }
+        let Some(scene_id) = self.scenes.active_id().map(str::to_owned) else {
+            return;
+        };
+        let source = self
+            .world
+            .world_ref()
+            .get::<&SourceId>(entity)
+            .ok()
+            .map(|id| id.0.clone());
+        if let Some(entity_id) = source {
+            self.project_requests
+                .push(ProjectRequest::Component(ComponentCommand {
+                    scene_id,
+                    entity_id,
+                    edit,
+                }));
         }
     }
 
-    /// Remove a component from an entity.
+    /// Remove an authored component, including unresolved resource references.
     fn remove_component(&mut self, entity: hecs::Entity, kind: ComponentKind) {
-        if self.editing_locked() {
-            return;
-        }
-        // The scene is recorded before the change, so the change can be
-        // undone. It is only kept when the component was really there.
-        let before = scene_from_world(
-            &*self.world,
-            self.entity_textures,
-            self.entity_roles,
-            self.current_project.as_ref(),
-        );
-        let removed = match kind {
-            ComponentKind::Transform => crate::editing::remove_transform(self.world, entity),
-            ComponentKind::Sprite => crate::editing::remove_sprite(self.world, entity),
-            ComponentKind::Role => crate::editing::remove_role(self.world, entity),
-            ComponentKind::Tilemap => crate::editing::remove_tilemap(self.world, entity),
-        };
-        if !removed {
-            return;
-        }
-        self.history.record(before);
-        *self.selected_entity = None;
+        self.queue_component(entity, ComponentEdit::Remove(kind));
     }
 
-    /// Add a component to an entity.
+    /// Add an explicit authored component, independent of projection defaults.
     fn add_component(&mut self, entity: hecs::Entity, kind: ComponentKind) {
-        if self.editing_locked() {
-            return;
+        if let Some(component) = kind.default_component() {
+            self.queue_component(entity, ComponentEdit::Add(component));
         }
-        let before = scene_from_world(
-            &*self.world,
-            self.entity_textures,
-            self.entity_roles,
-            self.current_project.as_ref(),
-        );
-        let added = match kind {
-            ComponentKind::Transform => crate::editing::add_transform(self.world, entity),
-            ComponentKind::Sprite => crate::editing::add_sprite(
-                self.world,
-                entity,
-                crate::editing::EntityDefaults::default(),
-            ),
-            ComponentKind::Role => crate::editing::add_role(self.world, entity),
-            ComponentKind::Tilemap => crate::editing::add_tilemap(self.world, entity),
-        };
-        if !added {
-            return;
-        }
-        self.history.record(before);
     }
 
     /// Whether the scene may not be edited right now.
@@ -2684,11 +3421,12 @@ impl TabViewer<'_> {
             return;
         };
 
-        let scene = scene_from_world(
+        let scene = crate::scene_document::snapshot_for_scene(
             self.world,
             self.entity_textures,
             self.entity_roles,
             self.current_project.as_ref(),
+            self.scenes.active_id(),
         );
         let Some(source) = scene.entities.iter().find(|e| e.id == source_id).cloned() else {
             self.log("[INFO] The selected entity has no scene data");
@@ -2698,6 +3436,9 @@ impl TabViewer<'_> {
         let name = format!("Prefab_{}", source.id);
         let prefab = crate::editing::prefab_from_entity(&source, &name);
         let id = prefab.id.clone();
+        if let Some(project) = self.current_project.as_mut() {
+            project.prefabs.insert(id.clone(), prefab.clone());
+        }
         self.prefab_editor.state.add_prefab(prefab);
         self.prefab_editor.state.select_prefab(&id);
         self.log(&format!("[INFO] Created the prefab {name}"));
@@ -2705,48 +3446,54 @@ impl TabViewer<'_> {
 
     /// Add an instance of the selected prefab to the scene.
     fn instantiate_selected_prefab(&mut self) {
+        self.finish_transform_edit();
+        if self.editing_locked() || self.project_blocked {
+            return;
+        }
         let Some(prefab) = self.prefab_editor.state.selected_prefab().cloned() else {
             self.log("[INFO] Select a prefab to instantiate it");
             return;
         };
-
-        let before = scene_from_world(
-            self.world,
-            self.entity_textures,
-            self.entity_roles,
-            self.current_project.as_ref(),
-        );
-        let existing: Vec<String> = self.entity_textures.keys().cloned().collect();
-        let size = self.world_size();
-        let position = [size.0 / 2.0, size.1 / 2.0];
-        let id = crate::editing::instantiate_prefab(self.world, &prefab, &existing, position);
-        match id {
-            Some(id) => {
-                self.history.record(before);
-                self.log(&format!("[INFO] Instantiated the prefab as {id}"));
-            }
-            None => self.log("[ERROR] The prefab could not be instantiated"),
-        }
-    }
-
-    /// Create an empty scene in the project.
-    fn create_scene(&mut self) {
-        let Some(project) = self.current_project.as_mut() else {
-            self.log("[INFO] Open a project to add a scene to it");
+        let Some(scene_id) = self.scenes.active_id().map(str::to_owned) else {
+            self.log("[INFO] Open a scene before instantiating a prefab");
             return;
         };
-        let name = "New Scene".to_string();
-        let id = crate::editing::create_scene(project, &name);
-        self.log(&format!("[INFO] Created the scene {id}"));
+        if !self
+            .current_project
+            .as_ref()
+            .is_some_and(|project| project.prefabs.contains_key(&prefab.id))
+        {
+            self.log("[ERROR] The selected prefab is not stored in the current project");
+            return;
+        }
+        let size = self.world_size();
+        self.project_requests.push(ProjectRequest::Entity(
+            crate::entity_command::EntityCommand {
+                scene_id,
+                edit: crate::entity_command::EntityEdit::InstantiatePrefab {
+                    prefab_id: prefab.id,
+                    position: [size.0 / 2.0, size.1 / 2.0],
+                },
+            },
+        ));
+    }
+
+    /// Create and activate a real scene after this UI pass.
+    fn create_scene(&mut self) {
+        if !self.editing_locked() {
+            self.project_requests
+                .push(ProjectRequest::Scene(SceneAction::Create));
+        }
     }
 
     /// Add another scene as a nested scene of the current one.
     fn nest_scene(&mut self) {
+        self.finish_transform_edit();
         let Some(project) = self.current_project.as_mut() else {
             self.log("[INFO] Open a project to nest a scene in it");
             return;
         };
-        let Some(parent_id) = project.default_scene_id() else {
+        let Some(parent_id) = self.scenes.active_id().map(str::to_owned) else {
             self.log("[INFO] The project has no scene to nest in");
             return;
         };
@@ -2811,6 +3558,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
     type Tab = Tab;
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
+        if self.project_blocked {
+            ui.disable();
+        }
         match tab {
             Tab::SceneView => {
                 ui.vertical(|ui| {
@@ -2828,6 +3578,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             *self.play_toggle_requested = true;
                         }
 
+                        if ui.button("Frame Selection (F)").clicked()
+                            || (ui.ctx().input(|input| input.key_pressed(egui::Key::F))
+                                && !ui.ctx().wants_keyboard_input())
+                        {
+                            self.frame_selection();
+                        }
+
                         ui.separator();
 
                         // Gizmo mode toggle
@@ -2838,6 +3595,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             GizmoMode::None => "Gizmo: None",
                         };
                         if ui.button(gizmo_mode_label).clicked() {
+                            self.finish_transform_edit();
                             self.gizmo.mode = match self.gizmo.mode {
                                 GizmoMode::None => GizmoMode::Translate,
                                 GizmoMode::Translate => GizmoMode::Rotate,
@@ -2851,166 +3609,376 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         // Grid snap controls
                         ui.label("Grid:");
                         ui.add_sized([60.0, 20.0], egui::DragValue::new(self.grid_snap_size));
-                        if ui.button(format!("{}", if *self.grid_snap_enabled { "✓" } else { "○" })).clicked() {
+                        if ui
+                            .button(
+                                (if *self.grid_snap_enabled {
+                                    "✓"
+                                } else {
+                                    "○"
+                                })
+                                .to_string(),
+                            )
+                            .clicked()
+                        {
                             *self.grid_snap_enabled = !*self.grid_snap_enabled;
                         }
                         ui.label("Snap");
                     });
 
-                        if ui.button("Save Scene").clicked() {
-                            *self.scene_save_requested = true;
-                        }
-                        if ui.button("Load Scene").clicked() {
-                            *self.scene_load_requested = true;
-                        }
+                    if ui.button("Save Scene").clicked() {
+                        *self.scene_save_requested = true;
+                    }
+                    if ui.button("Load Scene").clicked() {
+                        *self.scene_load_requested = true;
+                    }
 
+                    ui.horizontal(|ui| {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            // While playing, the toolbar shows the scene that is
-                            // running, so it is clear what the view shows.
                             if let Some(play) = &self.play {
                                 ui.label(format!("Playing: {}", play.scene_id));
                             }
                             ui.label(format!("FPS: {:.0}", self.fps));
                         });
                     });
+                });
 
-                    // Scene tabs bar
-                    if !self.scene_tabs.is_empty() {
-                        ui.add_space(4.0);
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing = egui::vec2(4.0, 0.0);
-                            
-                            // Add scene button
-                            if ui.button("+").clicked() {
-                                let scene_id = self.next_scene_id();
-                                self.add_scene_tab(scene_id.clone());
-                                *self.active_scene_tab = Some(self.scene_tabs.len() - 1);
-                            }
-                            
-                            for (idx, tab) in self.scene_tabs.clone().iter().enumerate() {
-                                let is_active = *self.active_scene_tab == Some(idx);
-                                let mut selected = is_active;
-                                
-                                let mut tab_ui = ui.add(egui::SelectableLabel::new(
-                                    selected, 
-                                    format!("{}{}", if tab.dirty { "*" } else { "" }, tab.scene_id)
-                                ));
-                                
-                                if tab_ui.clicked() {
-                                    *self.active_scene_tab = Some(idx);
-                                    self.switch_scene_tab(idx);
-                                }
-                                
-                                // Close on right-click
-                                if tab_ui.secondary_clicked() {
-                                    self.close_scene_tab(idx);
-                                }
-                            }
-                        });
-                    }
-
-                    let rect = ui.available_rect_before_wrap();
-
-                    ui.add_space(8.0);
-
-                    // The engine draws the scene here, so the panel must not
-                    // paint over it. The rectangle is handed to the render
-                    // loop, which converts it to pixels and draws the scene
-                    // with the engine's sprite renderer.
-                    *self.scene_view_rect = Some(rect);
-
-                    // Draw gizmo mode indicator in the top-left of the scene view
-                    if self.gizmo.mode != GizmoMode::None {
-                        if let Some(entity) = self.selected_entity {
-                            let gizmo_color = match self.gizmo.mode {
-                                GizmoMode::Translate => egui::Color32::from_rgb(255, 0, 0),
-                                GizmoMode::Rotate => egui::Color32::from_rgb(0, 255, 0),
-                                GizmoMode::Scale => egui::Color32::from_rgb(0, 0, 255),
-                                GizmoMode::None => egui::Color32::from_rgb(128, 128, 128),
-                            };
-                            ui.painter().rect_filled(
-                                egui::Rect::from_min_size(
-                                    rect.min + egui::vec2(8.0, 8.0),
-                                    egui::vec2(16.0, 16.0),
-                                ),
-                                4.0,
-                                gizmo_color,
-                            );
-                            ui.painter().text(
-                                rect.min + egui::vec2(28.0, 12.0),
-                                egui::Align2::LEFT_TOP,
-                                format!("Gizmo: {:?}", self.gizmo.mode),
-                                egui::FontId::proportional(10.0),
-                                gizmo_color,
-                            );
-                        }
-                    }
-
-                    // The grid is drawn by the engine as world-space quads, so
-                    // it lines up with the world instead of the panel.
-
-                    // The sprites and the HUD are drawn by the engine too, so
-                    // the editor shows the same pixels the player shows. The
-                    // panel itself draws nothing over the canvas.
-
-                    // Entity list for selection
-                    ui.add_space(8.0);
-                    ui.separator();
+                // Requests apply next frame, after dock UI borrows are released.
+                if self.current_project.is_some() {
                     ui.add_space(4.0);
-
-                    ui.horizontal(|ui| {
-                        ui.heading("Entities");
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui
-                                .add_enabled(
-                                    !self.editing_locked(),
-                                    egui::Button::new("+ Add Entity"),
-                                )
-                                .clicked()
-                            {
-                                self.add_entity();
+                    ui.add_enabled_ui(!self.editing_locked(), |ui| {
+                        ui.horizontal(|ui| {
+                            if ui.button("+").on_hover_text("Create scene").clicked() {
+                                self.project_requests
+                                    .push(ProjectRequest::Scene(SceneAction::Create));
+                            }
+                            ui.menu_button("Scenes", |ui| {
+                                if let Some(project) = self.current_project.as_ref() {
+                                    let mut ids: Vec<_> = project.scenes.keys().collect();
+                                    ids.sort();
+                                    for id in ids {
+                                        if ui.button(id).clicked() {
+                                            self.project_requests.push(ProjectRequest::Scene(
+                                                SceneAction::Open(id.clone()),
+                                            ));
+                                            ui.close_menu();
+                                        }
+                                    }
+                                }
+                            });
+                            for (index, tab) in self.scenes.tabs.iter().enumerate() {
+                                let response = ui
+                                    .selectable_label(
+                                        self.scenes.active == Some(index),
+                                        format!(
+                                            "{}{}",
+                                            if tab.dirty { "*" } else { "" },
+                                            tab.scene_id
+                                        ),
+                                    )
+                                    .on_hover_text(
+                                        "Click to switch; right-click to close a saved tab",
+                                    );
+                                if response.clicked() {
+                                    self.project_requests
+                                        .push(ProjectRequest::Scene(SceneAction::Switch(index)));
+                                }
+                                if response.secondary_clicked() {
+                                    self.project_requests
+                                        .push(ProjectRequest::Scene(SceneAction::Close(index)));
+                                }
                             }
                         });
                     });
+                }
 
-                    ui.add_space(4.0);
+                // Entity list for selection
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(4.0);
 
-                    egui::ScrollArea::vertical()
-                        .max_height(ui.available_height())
-                        .show(ui, |ui| {
-                            let entities: Vec<(hecs::Entity, Transform)> = self
-                                .world
-                                .world()
-                                .query::<(hecs::Entity, &Transform, &Sprite)>()
-                                .iter()
-                                .map(|(e, t, _s)| (e, *t))
-                                .collect();
-                            for (entity, transform) in entities {
+                ui.horizontal(|ui| {
+                    ui.heading("Entities");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add_enabled(!self.editing_locked(), egui::Button::new("+ Add Entity"))
+                            .clicked()
+                        {
+                            self.add_entity();
+                        }
+                    });
+                });
+
+                ui.add_space(4.0);
+
+                egui::ScrollArea::vertical()
+                    .max_height(120.0)
+                    .show(ui, |ui| {
+                        let scene = crate::scene_document::snapshot_for_scene(
+                            self.world,
+                            self.entity_textures,
+                            self.entity_roles,
+                            self.current_project.as_ref(),
+                            self.scenes.active_id(),
+                        );
+                        let handles: HashMap<_, _> = self
+                            .world
+                            .world_ref()
+                            .query::<(hecs::Entity, &SourceId)>()
+                            .iter()
+                            .map(|(entity, source)| (source.0.clone(), entity))
+                            .collect();
+                        let entities: Vec<_> = scene
+                            .entities
+                            .iter()
+                            .filter_map(|authored| {
+                                let entity = *handles.get(&authored.id)?;
                                 let label = format!(
-                                    "Entity ({:.0}, {:.0})",
-                                    transform.position.x, transform.position.y
+                                    "{}{}",
+                                    authored.name,
+                                    if authored
+                                        .components
+                                        .iter()
+                                        .any(|c| matches!(c, kiln_core::Component::Sprite { .. }))
+                                    {
+                                        ""
+                                    } else {
+                                        " (nonvisual)"
+                                    }
                                 );
-                                let selected = *self.selected_entity == Some(entity);
-                                if ui.selectable_label(selected, label).clicked() {
-                                    *self.selected_entity = Some(entity);
+                                Some((entity, authored.id.clone(), label))
+                            })
+                            .collect();
+                        for (entity, source, label) in entities {
+                            let selected = self.hierarchy_panel.selected_ids.contains(&source);
+                            if ui
+                                .selectable_label(selected, label)
+                                .on_hover_text(&source)
+                                .clicked()
+                            {
+                                self.finish_transform_edit();
+                                *self.selected_entity = Some(entity);
+                                let additive = ui
+                                    .input(|input| input.modifiers.command || input.modifiers.ctrl);
+                                if additive {
+                                    self.hierarchy_panel.toggle_select(&source);
+                                } else {
+                                    self.hierarchy_panel.select(&source);
+                                }
+                                *self.selected_entity = self
+                                    .hierarchy_panel
+                                    .selected_entity_id()
+                                    .and_then(|id| self.entity_id_to_hecs.get(id).copied());
+                            }
+                        }
+                    });
+                let rect = ui.available_rect_before_wrap();
+
+                ui.add_space(8.0);
+
+                // The engine draws the scene here, so the panel must not
+                // paint over it. The rectangle is handed to the render
+                // loop, which converts it to pixels and draws the scene
+                // with the engine's sprite renderer.
+                *self.scene_view_rect = Some(rect);
+                self.translation_canvas(ui, rect);
+
+                // Draw gizmo mode indicator in the top-left of the scene view
+                if self.gizmo.mode != GizmoMode::None {
+                    if let Some(entity) = self.selected_entity {
+                        let gizmo_color = match self.gizmo.mode {
+                            GizmoMode::Translate => egui::Color32::from_rgb(255, 0, 0),
+                            GizmoMode::Rotate => egui::Color32::from_rgb(0, 255, 0),
+                            GizmoMode::Scale => egui::Color32::from_rgb(0, 0, 255),
+                            GizmoMode::None => egui::Color32::from_rgb(128, 128, 128),
+                        };
+                        ui.painter().rect_filled(
+                            egui::Rect::from_min_size(
+                                rect.min + egui::vec2(8.0, 8.0),
+                                egui::vec2(16.0, 16.0),
+                            ),
+                            4.0,
+                            gizmo_color,
+                        );
+                        ui.painter().text(
+                            rect.min + egui::vec2(28.0, 12.0),
+                            egui::Align2::LEFT_TOP,
+                            format!("Gizmo: {:?}", self.gizmo.mode),
+                            egui::FontId::proportional(10.0),
+                            gizmo_color,
+                        );
+                        if let Ok(transform) = self
+                            .world
+                            .world_ref()
+                            .get::<&kiln_runtime::GlobalTransform>(*entity)
+                        {
+                            let ppp = ui.ctx().pixels_per_point();
+                            let viewport =
+                                scene_view::canvas_viewport(rect, ppp, self.world_size());
+                            if let Some(units) =
+                                scene_view::units_per_point(viewport, ppp, self.scene_camera)
+                            {
+                                let canvas = egui::Rect::from_min_size(
+                                    egui::pos2(viewport.x as f32 / ppp, viewport.y as f32 / ppp),
+                                    egui::vec2(
+                                        viewport.width as f32 / ppp,
+                                        viewport.height as f32 / ppp,
+                                    ),
+                                );
+                                let center = egui::pos2(
+                                    canvas.left()
+                                        + (transform.position.x - self.scene_camera.position[0])
+                                            / units[0],
+                                    canvas.bottom()
+                                        - (transform.position.y - self.scene_camera.position[1])
+                                            / units[1],
+                                );
+                                match self.gizmo.mode {
+                                    GizmoMode::Translate => {
+                                        ui.painter().line_segment(
+                                            [center, center + egui::vec2(42.0, 0.0)],
+                                            egui::Stroke::new(
+                                                2.0_f32,
+                                                egui::Color32::from_rgb(255, 80, 80),
+                                            ),
+                                        );
+                                        ui.painter().line_segment(
+                                            [center, center + egui::vec2(0.0, -42.0)],
+                                            egui::Stroke::new(
+                                                2.0_f32,
+                                                egui::Color32::from_rgb(80, 255, 100),
+                                            ),
+                                        );
+                                    }
+                                    GizmoMode::Rotate => {
+                                        ui.painter().circle_stroke(
+                                            center,
+                                            38.0,
+                                            egui::Stroke::new(2.0_f32, gizmo_color),
+                                        );
+                                    }
+                                    GizmoMode::Scale => {
+                                        let handle = center + egui::vec2(54.0, 0.0);
+                                        ui.painter().line_segment(
+                                            [center, handle],
+                                            egui::Stroke::new(2.0_f32, gizmo_color),
+                                        );
+                                        ui.painter().rect_filled(
+                                            egui::Rect::from_center_size(
+                                                handle,
+                                                egui::vec2(12.0, 12.0),
+                                            ),
+                                            2.0,
+                                            gizmo_color,
+                                        );
+                                    }
+                                    GizmoMode::None => {}
                                 }
                             }
-                        });
+                        }
+                    }
                 }
+
+                // The grid is drawn by the engine as world-space quads, so
+                // it lines up with the world instead of the panel.
+
+                // The sprites and the HUD are drawn by the engine too, so
+                // the editor shows the same pixels the player shows. The
+                // panel itself draws nothing over the canvas.
+            }
             Tab::Inspector => {
                 ui.vertical(|ui| {
                     ui.heading("Inspector");
+                    if self.editing_locked() { ui.disable(); }
 
                     // The selected entity is copied out, so the world can be
                     // borrowed while the inspector edits it.
                     let selected = *self.selected_entity;
                     if let Some(entity) = selected {
-                        ui.label(format!("Entity ID: {:?}", entity.id()));
+                        let Some(authored) = self.authored_entity(entity) else {
+                            ui.label("Select a root-scene entity to edit components.");
+                            return;
+                        };
+                        let has = |kind| authored.components.iter().any(|c| ComponentKind::of(c) == Some(kind));
+                        let has_transform = has(ComponentKind::Transform);
+                        let has_sprite = has(ComponentKind::Sprite);
+                        let has_role = has(ComponentKind::Role);
+                        let has_tilemap = has(ComponentKind::Tilemap);
+                        if self
+                            .rename_input
+                            .as_ref()
+                            .is_some_and(|(id, _)| id != &authored.id)
+                        {
+                            *self.rename_input = None;
+                        }
+                        if self
+                            .rename_input
+                            .as_ref()
+                            .is_some_and(|(id, _)| id == &authored.id)
+                        {
+                            let mut apply_rename = false;
+                            let mut cancel_rename = false;
+                            let can_rename = !self.editing_locked() && !self.project_blocked;
+                            ui.horizontal(|ui| {
+                                if let Some((_, name)) = self.rename_input.as_mut() {
+                                    ui.add_enabled(
+                                        can_rename,
+                                        egui::TextEdit::singleline(name),
+                                    );
+                                    apply_rename = ui
+                                        .add_enabled(can_rename, egui::Button::new("Apply"))
+                                        .clicked();
+                                    cancel_rename = ui.button("Cancel").clicked();
+                                }
+                            });
+                            if apply_rename {
+                                if let Some((entity_id, name)) = self.rename_input.take() {
+                                    if let Some(scene_id) = self.scenes.active_id().map(str::to_owned) {
+                                        self.project_requests.push(ProjectRequest::Entity(
+                                            crate::entity_command::EntityCommand {
+                                                scene_id,
+                                                edit: crate::entity_command::EntityEdit::Rename {
+                                                    entity_id,
+                                                    name,
+                                                },
+                                            },
+                                        ));
+                                    }
+                                }
+                            } else if cancel_rename {
+                                *self.rename_input = None;
+                            }
+                        } else {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("{} ({})", authored.name, authored.id));
+                                if ui
+                                    .add_enabled(
+                                        !self.editing_locked() && !self.project_blocked,
+                                        egui::Button::new("Rename"),
+                                    )
+                                    .clicked()
+                                {
+                                    *self.rename_input =
+                                        Some((authored.id.clone(), authored.name.clone()));
+                                }
+                            });
+                        }
                         ui.add_space(8.0);
 
                         // Read current values once
-                        let transform = self.world.world().get::<&Transform>(entity).ok().map(|t| *t);
-                        let sprite = self.world.world().get::<&Sprite>(entity).ok().map(|s| (*s).clone());
+                        let transform = authored.components.iter().find_map(|component| match component {
+                            kiln_core::Component::Transform { x, y, rotation, scale } => Some(
+                                Transform::new(*x, *y)
+                                    .with_rotation(*rotation)
+                                    .with_scale(kiln_core::Vec2::splat(*scale)),
+                            ),
+                            _ => None,
+                        }).filter(|_| has_transform);
+                        let sprite = self
+                            .world
+                            .world()
+                            .get::<&Sprite>(entity)
+                            .ok()
+                            .map(|s| (*s).clone()).filter(|_| has_sprite);
 
                         // Transform component
                         if let Some(mut transform) = transform {
@@ -3048,17 +4016,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                             egui::DragValue::new(&mut transform.position.x)
                                                 .speed(1.0),
                                         );
-                                        // A drag is one edit, so the scene is
-                                        // recorded when the drag starts.
-                                        if response.drag_started() {
-                                            self.record_scene();
-                                        }
-                                        if response.changed() {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut t) = world.get::<&mut Transform>(entity) {
-                                                t.position.x = transform.position.x;
-                                            }
-                                        }
+                                        self.transform_response(entity, transform, &response);
                                         ui.add_space(8.0);
                                         ui.label("Y:");
                                         let response = ui.add_enabled(
@@ -3066,15 +4024,33 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                             egui::DragValue::new(&mut transform.position.y)
                                                 .speed(1.0),
                                         );
-                                        if response.drag_started() {
-                                            self.record_scene();
-                                        }
+                                        self.transform_response(entity, transform, &response);
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.label("Rotation");
+                                        ui.add_space(7.0);
+                                        let mut degrees = transform.rotation.to_degrees();
+                                        let response = ui.add_enabled(
+                                            !self.editing_locked(),
+                                            egui::DragValue::new(&mut degrees)
+                                                .speed(1.0)
+                                                .suffix("°"),
+                                        );
                                         if response.changed() {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut t) = world.get::<&mut Transform>(entity) {
-                                                t.position.y = transform.position.y;
-                                            }
+                                            transform.rotation = degrees.to_radians();
                                         }
+                                        self.transform_response(entity, transform, &response);
+                                        ui.add_space(8.0);
+                                        ui.label("Scale");
+                                        let mut scale = transform.scale.x;
+                                        let response = ui.add_enabled(
+                                            !self.editing_locked(),
+                                            egui::DragValue::new(&mut scale).speed(0.01),
+                                        );
+                                        if response.changed() {
+                                            transform.scale = kiln_core::Vec2::splat(scale);
+                                        }
+                                        self.transform_response(entity, transform, &response);
                                     });
                                 });
                         }
@@ -3116,14 +4092,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                                 .speed(0.01)
                                                 .range(0.0..=1.0),
                                         );
-                                        if response.drag_started() {
-                                            self.record_scene();
-                                        }
                                         if response.changed() {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut s) = world.get::<&mut Sprite>(entity) {
-                                                s.color[0] = sprite.color[0];
-                                            }
+                                            self.sprite_visual_response(entity, &sprite, &response);
                                         }
                                         ui.add_space(8.0);
                                         ui.label("G:");
@@ -3133,14 +4103,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                                 .speed(0.01)
                                                 .range(0.0..=1.0),
                                         );
-                                        if response.drag_started() {
-                                            self.record_scene();
-                                        }
                                         if response.changed() {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut s) = world.get::<&mut Sprite>(entity) {
-                                                s.color[1] = sprite.color[1];
-                                            }
+                                            self.sprite_visual_response(entity, &sprite, &response);
                                         }
                                         ui.add_space(8.0);
                                         ui.label("B:");
@@ -3150,14 +4114,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                                 .speed(0.01)
                                                 .range(0.0..=1.0),
                                         );
-                                        if response.drag_started() {
-                                            self.record_scene();
-                                        }
                                         if response.changed() {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut s) = world.get::<&mut Sprite>(entity) {
-                                                s.color[2] = sprite.color[2];
-                                            }
+                                            self.sprite_visual_response(entity, &sprite, &response);
                                         }
                                         ui.add_space(8.0);
                                         ui.label("A:");
@@ -3167,14 +4125,47 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                                 .speed(0.01)
                                                 .range(0.0..=1.0),
                                         );
-                                        if response.drag_started() {
-                                            self.record_scene();
-                                        }
                                         if response.changed() {
-                                            let world = self.world.world_mut();
-                                            if let Ok(mut s) = world.get::<&mut Sprite>(entity) {
-                                                s.color[3] = sprite.color[3];
-                                            }
+                                            self.sprite_visual_response(entity, &sprite, &response);
+                                        }
+                                    });
+
+                                    ui.horizontal(|ui| {
+                                        ui.label("Size");
+                                        ui.add_space(16.0);
+                                        ui.label("W:");
+                                        let response = ui.add_enabled(
+                                            !self.editing_locked(),
+                                            egui::DragValue::new(&mut sprite.size[0])
+                                                .speed(0.5)
+                                                .range(0.001..=8192.0)
+                                                .suffix(" px"),
+                                        );
+                                        if response.changed() {
+                                            self.sprite_visual_response(entity, &sprite, &response);
+                                        }
+                                        ui.add_space(8.0);
+                                        ui.label("H:");
+                                        let response = ui.add_enabled(
+                                            !self.editing_locked(),
+                                            egui::DragValue::new(&mut sprite.size[1])
+                                                .speed(0.5)
+                                                .range(0.001..=8192.0)
+                                                .suffix(" px"),
+                                        );
+                                        if response.changed() {
+                                            self.sprite_visual_response(entity, &sprite, &response);
+                                        }
+                                    });
+
+                                    ui.horizontal(|ui| {
+                                        ui.label("Layer");
+                                        let response = ui.add_enabled(
+                                            !self.editing_locked(),
+                                            egui::DragValue::new(&mut sprite.layer).speed(0.1),
+                                        );
+                                        if response.changed() {
+                                            self.sprite_visual_response(entity, &sprite, &response);
                                         }
                                     });
 
@@ -3204,31 +4195,224 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 });
                         }
 
-                        ui.add_space(16.0);
-                        // The components that are missing can be added, so
-                        // an entity can be built up piece by piece.
-                        let has_transform = transform.is_some();
-                        let has_sprite = sprite.is_some();
-                        let has_role = self.world.world_ref().get::<&kiln_runtime::Role>(entity).is_ok();
-                        let has_tilemap = self.world.world_ref().get::<&Tilemap>(entity).is_ok();
-                        if !has_transform || !has_sprite || !has_role || !has_tilemap {
-                            ui.horizontal(|ui| {
-                                if !has_transform && ui.button("+ Transform").clicked() {
-                                    self.add_component(entity, ComponentKind::Transform);
-                                }
-                                if !has_sprite && ui.button("+ Sprite").clicked() {
-                                    self.add_component(entity, ComponentKind::Sprite);
-                                }
-                                if !has_role && ui.button("+ Role").clicked() {
-                                    self.add_component(entity, ComponentKind::Role);
-                                }
-                                if !has_tilemap && ui.button("+ Tilemap").clicked() {
-                                    self.add_component(entity, ComponentKind::Tilemap);
+                        ui.add_space(12.0);
+                        if let Some((texture, material, animation_clip)) = authored.components.iter().find_map(|c| match c {
+                            kiln_core::Component::Sprite { texture, material, animation_clip, .. } => Some((texture, material, animation_clip)),
+                            _ => None,
+                        }) {
+                            if self.sprite_reference_input.as_ref().is_some_and(|(id, _)| id != &authored.id) {
+                                *self.sprite_reference_input = None;
+                            }
+                            ui.group(|ui| {
+                                ui.strong("Sprite References");
+                                if self.sprite_reference_input.as_ref().is_some_and(|(id, _)| id == &authored.id) {
+                                    let mut apply = false;
+                                    let mut cancel = false;
+                                    let enabled = !self.editing_locked() && !self.project_blocked;
+                                    ui.vertical(|ui| {
+                                        if let Some((_, draft)) = self.sprite_reference_input.as_mut() {
+                                            ui.label("Texture path");
+                                            ui.add_enabled(enabled, egui::TextEdit::singleline(&mut draft.texture));
+                                            if let Some(project) = self.current_project.as_ref() {
+                                                let mut paths = crate::scene_view::texture_paths(project);
+                                                paths.extend(
+                                                    self.asset_browser
+                                                        .entries()
+                                                        .iter()
+                                                        .filter(|entry| entry.kind == crate::assets::AssetKind::Image)
+                                                        .map(|entry| entry.path.clone()),
+                                                );
+                                                paths.sort();
+                                                paths.dedup();
+                                                egui::ComboBox::from_id_salt(("sprite_texture", &authored.id))
+                                                    .selected_text("Choose project texture…")
+                                                    .show_ui(ui, |ui| {
+                                                        for path in paths {
+                                                            ui.selectable_value(&mut draft.texture, path.clone(), path);
+                                                        }
+                                                    });
+                                            }
+                                            ui.label("Material");
+                                            ui.add_enabled(enabled, egui::TextEdit::singleline(&mut draft.material));
+                                            if let Some(project) = self.current_project.as_ref() {
+                                                let mut ids: Vec<_> = project.materials.keys().cloned().collect();
+                                                ids.sort();
+                                                egui::ComboBox::from_id_salt(("sprite_material", &authored.id))
+                                                    .selected_text("Choose project material…")
+                                                    .show_ui(ui, |ui| {
+                                                        for id in ids {
+                                                            ui.selectable_value(&mut draft.material, id.clone(), id);
+                                                        }
+                                                    });
+                                            }
+                                            ui.label("Animation clip");
+                                            ui.add_enabled(enabled, egui::TextEdit::singleline(&mut draft.animation_clip));
+                                            if let Some(project) = self.current_project.as_ref() {
+                                                let mut ids: Vec<_> = project.animation_clips.keys().cloned().collect();
+                                                ids.sort();
+                                                egui::ComboBox::from_id_salt(("sprite_animation", &authored.id))
+                                                    .selected_text("Choose project animation…")
+                                                    .show_ui(ui, |ui| {
+                                                        for id in ids {
+                                                            ui.selectable_value(&mut draft.animation_clip, id.clone(), id);
+                                                        }
+                                                    });
+                                            }
+                                        }
+                                        ui.horizontal(|ui| {
+                                            apply = ui.add_enabled(enabled, egui::Button::new("Apply")).clicked();
+                                            cancel = ui.button("Cancel").clicked();
+                                        });
+                                    });
+                                    if apply {
+                                        if let Some((_, draft)) = self.sprite_reference_input.take() {
+                                            let option = |value: String| (!value.trim().is_empty()).then_some(value);
+                                            self.queue_component(entity, ComponentEdit::SetSpriteReferences {
+                                                texture: option(draft.texture),
+                                                material: option(draft.material),
+                                                animation_clip: option(draft.animation_clip),
+                                            });
+                                        }
+                                    } else if cancel {
+                                        *self.sprite_reference_input = None;
+                                    }
+                                } else {
+                                    ui.label(format!("Texture: {}", texture.as_deref().unwrap_or("(none)")));
+                                    ui.label(format!("Material: {}", material.as_deref().unwrap_or("(none)")));
+                                    ui.label(format!("Animation: {}", animation_clip.as_deref().unwrap_or("(none)")));
+                                    if let Some(path) = texture {
+                                        let image_exists = self.asset_browser.entries().iter().any(|entry| {
+                                            entry.kind == crate::assets::AssetKind::Image && entry.path == *path
+                                        });
+                                        if !image_exists {
+                                            ui.colored_label(egui::Color32::YELLOW, "Texture asset is missing or is not a PNG image");
+                                        } else if self.asset_browser.errors().iter().any(|(failed_path, _)| failed_path == path) {
+                                            ui.colored_label(egui::Color32::YELLOW, "Texture asset could not be decoded");
+                                        }
+                                    }
+                                    if let Some(project) = self.current_project.as_ref() {
+                                        if material.as_ref().is_some_and(|id| !project.materials.contains_key(id)) {
+                                            ui.colored_label(egui::Color32::YELLOW, "Sprite material reference is missing");
+                                        }
+                                        if animation_clip.as_ref().is_some_and(|id| !project.animation_clips.contains_key(id)) {
+                                            ui.colored_label(egui::Color32::YELLOW, "Animation clip reference is missing");
+                                        }
+                                    }
+                                    if ui.add_enabled(!self.editing_locked() && !self.project_blocked, egui::Button::new("Edit References")).clicked() {
+                                        *self.sprite_reference_input = Some((authored.id.clone(), SpriteReferenceDraft {
+                                            texture: texture.clone().unwrap_or_default(),
+                                            material: material.clone().unwrap_or_default(),
+                                            animation_clip: animation_clip.clone().unwrap_or_default(),
+                                        }));
+                                    }
                                 }
                             });
-                        } else {
-                            ui.label("The entity has every component.");
                         }
+
+                        if self
+                            .role_input
+                            .as_ref()
+                            .is_some_and(|(id, _)| id != &authored.id)
+                        {
+                            *self.role_input = None;
+                        }
+                        if let Some(role) = authored.components.iter().find_map(|c| match c { kiln_core::Component::Role { role } => Some(role), _ => None }) {
+                            ui.group(|ui| {
+                                if self
+                                    .role_input
+                                    .as_ref()
+                                    .is_some_and(|(id, _)| id == &authored.id)
+                                {
+                                    let mut apply_role = false;
+                                    let mut cancel_role = false;
+                                    let can_edit = !self.editing_locked() && !self.project_blocked;
+                                    ui.horizontal(|ui| {
+                                        if let Some((_, value)) = self.role_input.as_mut() {
+                                            ui.add_enabled(
+                                                can_edit,
+                                                egui::TextEdit::singleline(value),
+                                            );
+                                            apply_role = ui
+                                                .add_enabled(can_edit, egui::Button::new("Apply"))
+                                                .clicked();
+                                            cancel_role = ui.button("Cancel").clicked();
+                                        }
+                                    });
+                                    if apply_role {
+                                        if let Some((_, role)) = self.role_input.take() {
+                                            self.queue_component(
+                                                entity,
+                                                ComponentEdit::SetRole { role },
+                                            );
+                                        }
+                                    } else if cancel_role {
+                                        *self.role_input = None;
+                                    }
+                                } else {
+                                    ui.horizontal(|ui| {
+                                        ui.label(format!("Role: {role}"));
+                                        if ui
+                                            .add_enabled(
+                                                !self.editing_locked() && !self.project_blocked,
+                                                egui::Button::new("Edit"),
+                                            )
+                                            .clicked()
+                                        {
+                                            *self.role_input =
+                                                Some((authored.id.clone(), role.clone()));
+                                        }
+                                    });
+                                }
+                                if ui.button("Remove Role").clicked() { self.remove_component(entity, ComponentKind::Role); }
+                            });
+                        }
+                        if let Some(map) = authored.components.iter().find_map(|c| match c { kiln_core::Component::Tilemap { map } => Some(map), _ => None }) {
+                            let mut map_options: Vec<_> = self.current_project.as_ref()
+                                .map(|project| project.tilemaps.keys().cloned().collect())
+                                .unwrap_or_default();
+                            map_options.sort();
+                            ui.group(|ui| {
+                                let map_exists = self.current_project.as_ref().is_some_and(|p| p.tilemaps.contains_key(map));
+                                ui.label(format!("Tilemap: {map}"));
+                                if !map_exists {
+                                    ui.colored_label(egui::Color32::YELLOW, "Tilemap resource is missing");
+                                }
+                                if !map_options.is_empty() {
+                                    egui::ComboBox::from_id_salt(("entity_tilemap", &authored.id))
+                                        .selected_text("Change Tilemap…")
+                                        .show_ui(ui, |ui| {
+                                            for candidate in &map_options {
+                                                if ui.selectable_label(candidate == map, candidate).clicked() {
+                                                    self.queue_component(entity, ComponentEdit::SetTilemapReference { map: candidate.clone() });
+                                                }
+                                            }
+                                        });
+                                } else {
+                                    ui.label("Create a tilemap resource in the Tilemap Editor first.");
+                                }
+                                if ui.button("Remove Tilemap").clicked() { self.remove_component(entity, ComponentKind::Tilemap); }
+                            });
+                        }
+                        ui.add_space(12.0);
+                        ui.horizontal_wrapped(|ui| {
+                            if !has_transform && ui.button("+ Transform").clicked() { self.add_component(entity, ComponentKind::Transform); }
+                            if !has_sprite && ui.button("+ Sprite").clicked() { self.add_component(entity, ComponentKind::Sprite); }
+                            if !has_role && ui.button("+ Role").clicked() { self.add_component(entity, ComponentKind::Role); }
+                            if !has_tilemap {
+                                ui.menu_button("+ Tilemap", |ui| {
+                                    let mut maps: Vec<_> = self.current_project.as_ref().map(|p| p.tilemaps.keys().cloned().collect()).unwrap_or_default();
+                                    maps.sort();
+                                    if maps.is_empty() { ui.label("Create a tilemap resource in the Tilemap Editor first."); }
+                                    for map in maps {
+                                        if ui.button(&map).clicked() {
+                                            self.queue_component(entity, ComponentEdit::Add(kiln_core::Component::Tilemap { map }));
+                                            ui.close_menu();
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                        if has_transform && has_sprite && has_role && has_tilemap { ui.label("The entity has every inspector component."); }
                     } else {
                         ui.add_space(32.0);
                         ui.centered_and_justified(|ui| {
@@ -3415,12 +4599,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 if let Some(dir) =
                                     self.asset_browser.root().map(|p| p.to_path_buf())
                                 {
-                                    if let Err(e) =
-                                        std::fs::create_dir(dir.join("New Folder"))
-                                    {
-                                        self.log(&format!(
-                                            "Failed to create folder: {e}"
-                                        ));
+                                    if let Err(e) = std::fs::create_dir(dir.join("New Folder")) {
+                                        self.log(&format!("Failed to create folder: {e}"));
                                     } else {
                                         self.asset_browser.scan(&dir);
                                     }
@@ -3431,8 +4611,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.label("Filter:");
                         ui.text_edit_singleline(self.asset_filter);
                         if self.asset_browser.filter() != self.asset_filter {
-                            self.asset_browser
-                                .set_filter(self.asset_filter.clone());
+                            self.asset_browser.set_filter(self.asset_filter.clone());
                         }
                     });
 
@@ -3443,7 +4622,12 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         .rounding(4.0)
                         .inner_margin(12.0)
                         .show(ui, |ui| {
-                            let entries: Vec<_> = self.asset_browser.filtered_entries().into_iter().cloned().collect();
+                            let entries: Vec<_> = self
+                                .asset_browser
+                                .filtered_entries()
+                                .into_iter()
+                                .cloned()
+                                .collect();
                             if entries.is_empty() {
                                 ui.centered_and_justified(|ui| {
                                     ui.label("No assets found");
@@ -3462,9 +4646,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         let selected = self.asset_browser.preview_source()
                                             == Some(&entry.path);
 
-                                        let mut selectable =
-                                            ui.selectable_label(selected, &name)
-                                                .on_hover_text(&entry.path);
+                                        let selectable = ui
+                                            .selectable_label(selected, &name)
+                                            .on_hover_text(&entry.path);
 
                                         // Drag-and-drop support: start drag on the asset entry.
                                         if selectable.clicked() && entry.kind == AssetKind::Image {
@@ -3479,16 +4663,19 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         }
 
                                         // Handle drop onto this entity (if it's a sprite/texture target).
-                                        if let Some(drag_source) = self.asset_browser.drag_source() {
-                                            if selectable.hovered() && selectable.hovered() {
-                                                if entry.kind == AssetKind::Image {
-                                                    // We could support dropping an asset onto an entity here
-                                                    // to change its texture. For now, just log.
-                                                    log::info!(
-                                                        "Drag {:?} onto {}",
-                                                        drag_source, entry.path
-                                                    );
-                                                }
+                                        if let Some(drag_source) = self.asset_browser.drag_source()
+                                        {
+                                            if selectable.hovered()
+                                                && selectable.hovered()
+                                                && entry.kind == AssetKind::Image
+                                            {
+                                                // We could support dropping an asset onto an entity here
+                                                // to change its texture. For now, just log.
+                                                log::info!(
+                                                    "Drag {:?} onto {}",
+                                                    drag_source,
+                                                    entry.path
+                                                );
                                             }
                                         }
                                     }
@@ -3842,7 +5029,10 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         }
 
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.label(format!("Prefabs: {}", self.prefab_editor.state.prefab_list().len()));
+                            ui.label(format!(
+                                "Prefabs: {}",
+                                self.prefab_editor.state.prefab_list().len()
+                            ));
                         });
                     });
 
@@ -3853,7 +5043,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     // Render the prefab editor panel (list + override editor).
                     // Returns true if overrides were applied, in which case we
                     // update all ECS instances to match the edited prefab.
-                    if self.prefab_editor.render(ui) {
+                    let applied = self.prefab_editor.render(ui);
+                    if let Some(project) = self.current_project.as_mut() {
+                        project.prefabs = self.prefab_editor.state.prefabs().clone();
+                    }
+                    if applied {
                         let prefabs: Vec<_> = self
                             .prefab_editor
                             .state
@@ -3863,7 +5057,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             .collect();
                         for prefab in prefabs {
                             let updated =
-                                crate::editing::update_prefab_instances(&mut self.world, &prefab);
+                                crate::editing::update_prefab_instances(self.world, &prefab);
                             if updated > 0 {
                                 self.log(&format!(
                                     "[INFO] Updated {} instances of prefab '{}'",
@@ -3873,7 +5067,6 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         }
                     }
                 });
-
             }
             Tab::SceneEditor => {
                 ui.vertical(|ui| {
@@ -4042,17 +5235,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     }
                 });
             }
-            Tab::GraphEditor => {
-                ui.vertical(|ui| {
-                    crate::graph_editor::render_graph_editor(ui, &mut self.graph_editor);
-                });
-            }
+
             Tab::AnimationEditor => {
                 ui.vertical(|ui| {
                     if let Some(project) = self.current_project.as_mut() {
                         AnimationEditorState::render_animation_editor(
                             ui,
-                            &mut self.anim_editor,
+                            self.anim_editor,
                             &mut project.animation_clips,
                             1.0 / 60.0, // dt
                         );
@@ -4066,11 +5255,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::BuildPanel => {
                 ui.vertical(|ui| {
                     if let Some(project) = self.current_project.as_mut() {
-                        crate::build_panel::BuildPanel::render(
-                            &mut self.build_panel,
-                            ui,
-                            project,
-                        );
+                        crate::build_panel::BuildPanel::render(self.build_panel, ui, project);
                     } else {
                         ui.heading("Build / Export");
                         ui.add_space(8.0);
@@ -4080,17 +5265,16 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             }
             Tab::ProjectHub => {
                 let requests = std::cell::RefCell::new(Vec::new());
-                crate::project_hub::render_project_hub(ui, self.project_hub,
-                    &mut |path| requests.borrow_mut().push(ProjectRequest::Open(path)),
-                    &mut |name, path, template| requests.borrow_mut().push(ProjectRequest::Create(name, path, template)));
+                crate::project_hub::render_project_hub(ui, self.project_hub, &mut |path| {
+                    requests.borrow_mut().push(ProjectRequest::Open(path))
+                });
                 self.project_requests.extend(requests.into_inner());
             }
             Tab::ProfilerPanel => {
                 ui.vertical(|ui| {
-                    { let gpu = self.gpu;
-                        self.profiler_panel.update(&gpu.renderer.profiler());
-                        self.profiler_panel.render(ui, &gpu.renderer.profiler());
-                    }
+                    let gpu = self.gpu;
+                    self.profiler_panel.update(gpu.renderer.profiler());
+                    self.profiler_panel.render(ui, gpu.renderer.profiler());
                 });
             }
             Tab::DebuggerPanel => {
@@ -4128,19 +5312,24 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         // Handle preview playback
                         if let Some(name) = self.audio_editor.preview_asset.clone() {
                             if self.audio_editor.preview_playing {
-                                slice.play_audio_preview(&name);
+                                slice.host_mut().play_audio_preview(&name);
                             } else {
-                                slice.stop_audio_preview();
+                                slice.host_mut().stop_audio_preview();
                             }
                         }
                         // Register all project audio assets with the slice host
                         for (name, path) in self
                             .current_project
                             .as_ref()
-                            .map(|p| p.audio_assets.iter().map(|a| (a.name.clone(), a.path.clone())).collect::<Vec<_>>())
+                            .map(|p| {
+                                p.audio_assets
+                                    .iter()
+                                    .map(|a| (a.name.clone(), a.path.clone()))
+                                    .collect::<Vec<_>>()
+                            })
                             .unwrap_or_default()
                         {
-                            slice.register_audio(&name, &path);
+                            slice.host_mut().register_audio(&name, &path);
                         }
                     }
                 });
@@ -4153,11 +5342,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::ShaderEditor => {
                 ui.vertical(|ui| {
                     if let Some(project) = self.current_project.as_mut() {
-                        crate::shader_editor::render_shader_editor(
-                            ui,
-                            &mut self.shader_editor,
-                            project,
-                        );
+                        crate::shader_editor::render_shader_editor(ui, self.shader_editor, project);
                     } else {
                         ui.heading("Shader Editor");
                         ui.add_space(8.0);
@@ -4178,8 +5363,12 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::PluginManagerPanel => {
                 ui.vertical(|ui| {
                     let mut context = kiln_plugin_api::PluginContext {
-                        project: self.current_project.clone(), ui: None, world: None, slice_session: None,
-                        config: Default::default(), project_root: std::env::current_dir().unwrap_or_default(),
+                        project: self.current_project.clone(),
+                        ui: None,
+                        world: None,
+                        slice_session: None,
+                        config: Default::default(),
+                        project_root: std::env::current_dir().unwrap_or_default(),
                         temp_dir: std::env::temp_dir(),
                     };
                     self.plugin_manager.render(ui, &mut context);
@@ -4213,142 +5402,76 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 });
             }
             Tab::Hierarchy => {
-                let hierarchy_before = scene_from_world(self.world, self.entity_textures, self.entity_roles, self.current_project.as_ref());
                 let hierarchy_size = self.world_size();
                 ui.vertical(|ui| {
                     if let Some(project) = self.current_project.as_mut() {
-                        let scene_id = project
-                            .scenes
-                            .keys()
-                            .next()
-                            .map(|s| s.clone())
-                            .unwrap_or_default();
+                        let scene_id = self.scenes.active_id().unwrap_or_default().to_owned();
                         // Render hierarchy panel and handle actions.
                         if let Some(action) = crate::hierarchy::render_hierarchy_panel(
                             ui,
-                            &mut self.hierarchy_panel,
+                            self.hierarchy_panel,
                             project,
                             &scene_id,
                         ) {
+                            if let Some(edit) = self.transform_edit.take() {
+                                edit.commit(&mut self.scenes.history);
+                            }
+                            self.gizmo.drag = None;
                             match action {
                                 crate::hierarchy::HierarchyAction::SelectEntity(project_id) => {
                                     // Sync selection: project entity ID -> hecs Entity
-                                    if let Some(&hecs_entity) = self.entity_id_to_hecs.get(&project_id) {
-                                        *self.selected_entity = Some(hecs_entity);
-                                    }
+                                    let selected_id = self
+                                        .hierarchy_panel
+                                        .selected_entity_id()
+                                        .unwrap_or(&project_id);
+                                    *self.selected_entity =
+                                        self.entity_id_to_hecs.get(selected_id).copied();
                                 }
                                 crate::hierarchy::HierarchyAction::RemoveEntity(source_id) => {
-                                    self.history.record(hierarchy_before.clone());
-                                    if let Some(entity) = self.entity_id_to_hecs.remove(&source_id) {
-                                        crate::editing::remove_entity(self.world, entity);
-                                        if *self.selected_entity == Some(entity) { *self.selected_entity = None; }
-                                    }
-                                    if let Some(scene) = project.scenes.get_mut(&scene_id) {
-                                        scene.entities.retain(|entity| entity.id != source_id);
-                                    }
-                                    self.hierarchy_panel.rebuild(project, &scene_id);
+                                    self.project_requests.push(ProjectRequest::Entity(
+                                        crate::entity_command::EntityCommand {
+                                            scene_id: scene_id.clone(),
+                                            edit: crate::entity_command::EntityEdit::Delete {
+                                                entity_id: source_id,
+                                            },
+                                        },
+                                    ));
                                 }
                                 crate::hierarchy::HierarchyAction::AddEntity(name) => {
-                                    self.history.record(hierarchy_before.clone());
-                                    // Use all known project entity IDs for unique naming.
-                                    let existing: Vec<String> = self.entity_id_to_hecs.keys().cloned().collect();
                                     let size = hierarchy_size;
-                                    let position = [size.0 / 2.0, size.1 / 2.0];
-                                    let (source_id, entity) = crate::editing::add_entity(
-                                        self.world,
-                                        &existing,
-                                        position,
-                                        crate::editing::EntityDefaults::default(),
-                                    );
-                                    // Update the project with the new entity
-                                    if let Some(scene) = project.scenes.get_mut(&scene_id) {
-                                        scene.entities.push(kiln_core::project::Entity {
-                                            id: source_id.clone(),
-                                            name: name,
-                                            components: vec![
-                                                kiln_core::project::Component::Transform {
-                                                    x: position[0],
-                                                    y: position[1],
-                                                    rotation: 0.0,
-                                                    scale: 1.0,
-                                                },
-                                                kiln_core::project::Component::Sprite {
-                                                    color: [1.0, 1.0, 1.0, 1.0],
-                                                    texture: None,
-                                                    layer: 0.0,
-                                                    material: None,
-                                                    animation_clip: None,
-                                                },
-                                                kiln_core::project::Component::Role {
-                                                    role: "".to_string(),
-                                                },
-                                            ],
-                                        });
-                                    }
-                                    *self.selected_entity = Some(entity);
-                                    self.entity_id_to_hecs.insert(source_id, entity);
-                                    self.hierarchy_panel.rebuild(project, &scene_id);
+                                    self.project_requests.push(ProjectRequest::Entity(
+                                        crate::entity_command::EntityCommand {
+                                            scene_id: scene_id.clone(),
+                                            edit: crate::entity_command::EntityEdit::Create {
+                                                name,
+                                                position: [size.0 / 2.0, size.1 / 2.0],
+                                            },
+                                        },
+                                    ));
                                 }
                                 crate::hierarchy::HierarchyAction::Reparent {
                                     child_id,
                                     parent_id,
                                 } => {
-                                    self.history.record(hierarchy_before.clone());
-                                    if let Some(scene) = project.scenes.get_mut(&scene_id) {
-                                        if let Some(entity) = scene
-                                            .entities
-                                            .iter_mut()
-                                            .find(|e| e.id == child_id)
-                                        {
-                                            entity.components.retain(|c| !matches!(
-                                                c,
-                                                kiln_core::project::Component::Parent { .. }
-                                            ));
-                                            if let Some(parent_id) = &parent_id {
-                                                entity.components.push(
-                                                    kiln_core::project::Component::Parent {
-                                                        parent: parent_id.clone(),
-                                                    },
-                                                );
-                                            }
-                                        }
-                                    }
-                                    self.hierarchy_panel.rebuild(project, &scene_id);
+                                    self.project_requests.push(ProjectRequest::Entity(
+                                        crate::entity_command::EntityCommand {
+                                            scene_id: scene_id.clone(),
+                                            edit: crate::entity_command::EntityEdit::Reparent {
+                                                entity_id: child_id,
+                                                parent_id,
+                                            },
+                                        },
+                                    ));
                                 }
                                 crate::hierarchy::HierarchyAction::DuplicateEntity(source_id) => {
-                                    self.history.record(hierarchy_before.clone());
-                                    if let Some(&hecs_entity) = self.entity_id_to_hecs.get(&source_id)
-                                    {
-                                        if let Ok(world_entity) = self.world.world_mut().query_one_mut::<(
-                                            &kiln_core::Transform,
-                                            &kiln_runtime::Role,
-                                            &kiln_runtime::Sprite,
-                                        )>(hecs_entity).map(|(t, r, s)| (*t, r.clone(), s.clone()))
-                                        {
-                                            let (transform, role, sprite) = world_entity;
-                                            let new_source_id =
-                                                crate::editing::next_entity_id(
-                                                    &self
-                                                        .entity_id_to_hecs
-                                                        .keys()
-                                                        .cloned()
-                                                        .collect::<Vec<_>>(),
-                                                );
-                                            self.world.world_mut().spawn((
-                                                kiln_core::Transform {
-                                                    position: transform.position,
-                                                    rotation: transform.rotation,
-                                                    scale: transform.scale,
-                                                },
-                                                kiln_runtime::Role(role.0.clone()),
-                                                sprite.clone(),
-                                                SourceId::new(
-                                                    new_source_id.clone(),
-                                                ),
-                                            ));
-                                        }
-                                    }
-                                    self.hierarchy_panel.rebuild(project, &scene_id);
+                                    self.project_requests.push(ProjectRequest::Entity(
+                                        crate::entity_command::EntityCommand {
+                                            scene_id: scene_id.clone(),
+                                            edit: crate::entity_command::EntityEdit::Duplicate {
+                                                entity_id: source_id,
+                                            },
+                                        },
+                                    ));
                                 }
                             }
                         }
@@ -4360,6 +5483,10 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 });
             }
         }
+    }
+
+    fn clear_background(&self, tab: &Self::Tab) -> bool {
+        !matches!(tab, Tab::SceneView)
     }
 
     fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
@@ -4396,6 +5523,54 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 }
 
 impl<'a> TabViewer<'a> {
+    fn frame_selection(&mut self) {
+        let mut bounds: Option<[f32; 4]> = None;
+        for id in self.hierarchy_panel.selected_ids.clone() {
+            let Some(entity) = self.entity_id_to_hecs.get(&id).copied() else {
+                continue;
+            };
+            let Ok(transform) = self
+                .world
+                .world_ref()
+                .get::<&kiln_runtime::GlobalTransform>(entity)
+            else {
+                continue;
+            };
+            let entity_bounds = if let Ok(sprite) = self.world.world_ref().get::<&Sprite>(entity) {
+                scene_view::transformed_sprite_bounds(transform.0, sprite.size)
+            } else {
+                [
+                    transform.0.position.x,
+                    transform.0.position.y,
+                    transform.0.position.x,
+                    transform.0.position.y,
+                ]
+            };
+            bounds = Some(match bounds {
+                Some([min_x, min_y, max_x, max_y]) => [
+                    min_x.min(entity_bounds[0]),
+                    min_y.min(entity_bounds[1]),
+                    max_x.max(entity_bounds[2]),
+                    max_y.max(entity_bounds[3]),
+                ],
+                None => entity_bounds,
+            });
+        }
+        let Some([min_x, min_y, max_x, max_y]) = bounds else {
+            return;
+        };
+        self.camera_state.target = None;
+        let base = scene_view::world_camera(self.scene_world_size.0, self.scene_world_size.1);
+        let width = (max_x - min_x).max(1.0) * 1.2;
+        let height = (max_y - min_y).max(1.0) * 1.2;
+        self.camera_state.zoom = (base.viewport_size[0] / width)
+            .min(base.viewport_size[1] / height)
+            .clamp(0.1, 10.0);
+        self.camera_state.position = [
+            (min_x + max_x) * 0.5 - base.viewport_size[0] / self.camera_state.zoom * 0.5,
+            (min_y + max_y) * 0.5 - base.viewport_size[1] / self.camera_state.zoom * 0.5,
+        ];
+    }
     fn show_widget_tree(&mut self, ui: &mut egui::Ui, widget_id: WidgetId, depth: usize) {
         if let Some(node) = self.ui_designer.widgets.get(&widget_id) {
             let indent = depth as f32 * 16.0;
@@ -4517,58 +5692,5 @@ impl<'a> TabViewer<'a> {
                     self.ui_designer.remove_widget(widget_id);
                 }
             });
-            }
-    
-
-    /// Generate a unique scene ID.
-    fn next_scene_id(&self) -> String {
-        let mut index = 1;
-        loop {
-            let candidate = format!("scene_{}", index);
-            if !self.scene_tabs.iter().any(|t| t.scene_id == candidate) {
-                return candidate;
-            }
-            index += 1;
-        }
     }
-    
-    /// Add a new scene tab.
-    fn add_scene_tab(&mut self, scene_id: String) {
-        self.scene_tabs.push(SceneTab {
-            scene_id,
-            is_active: false,
-            dirty: false,
-        });
-    }
-    
-    /// Switch to a scene tab.
-    fn switch_scene_tab(&mut self, index: usize) {
-        if index < self.scene_tabs.len() {
-            for (i, tab) in self.scene_tabs.iter_mut().enumerate() {
-                tab.is_active = i == index;
-            }
-            *self.active_scene_tab = Some(index);
-            // TODO: Load the scene data for this tab
-        }
-    }
-    
-    /// Close a scene tab.
-    fn close_scene_tab(&mut self, index: usize) {
-        if index < self.scene_tabs.len() {
-            // TODO: Check for unsaved changes
-            self.scene_tabs.remove(index);
-            if let Some(active) = self.active_scene_tab {
-                if *active >= index && *active > 0 {
-                    *self.active_scene_tab = Some(*active - 1);
-                } else if *active >= index {
-                    *self.active_scene_tab = self.scene_tabs.first().map(|_| 0);
-                }
-            } else if !self.scene_tabs.is_empty() {
-                *self.active_scene_tab = Some(0);
-            } else {
-                *self.active_scene_tab = None;
-            }
-        }
-    }
-
 }

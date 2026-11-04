@@ -38,6 +38,8 @@ pub struct SpriteInstance {
     pub uv_rect: [f32; 4],
     /// Optional material ID for custom shader rendering (0 = default shader).
     pub material_id: u32,
+    /// Rotation in radians, applied around the sprite centre.
+    pub rotation: f32,
 }
 
 impl SpriteInstance {
@@ -52,17 +54,27 @@ impl SpriteInstance {
             color,
             uv_rect: FULL_UV,
             material_id: 0,
+            rotation: 0.0,
         }
     }
 
+    /// Apply an entity transform to this sprite's local size and rotation.
+    pub fn with_transform(mut self, rotation: f32, scale: [f32; 2]) -> Self {
+        self.rotation = rotation;
+        self.size[0] *= scale[0];
+        self.size[1] *= scale[1];
+        self
+    }
+
     /// `wgpu` vertex attributes for the instance step.
-    pub fn vertex_attributes() -> &'static [wgpu::VertexAttribute; 5] {
-        static ATTRIBUTES: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
+    pub fn vertex_attributes() -> &'static [wgpu::VertexAttribute; 6] {
+        static ATTRIBUTES: [wgpu::VertexAttribute; 6] = wgpu::vertex_attr_array![
             1 => Float32x2,   // position
             2 => Float32x2,   // size
             3 => Float32x4,   // color
             4 => Float32x4,   // uv_rect
             5 => Uint32,      // material_id
+            6 => Float32,     // rotation
         ];
         &ATTRIBUTES
     }
@@ -381,7 +393,8 @@ impl SpriteRenderer {
         } else {
             TextureId::WHITE
         };
-        self.pending.push((id, instance.material_id, layer, instance));
+        self.pending
+            .push((id, instance.material_id, layer, instance));
     }
 
     /// Queue a sprite sampled from `texture` on a specific `layer` with an explicit material ID.
@@ -489,11 +502,10 @@ impl SpriteRenderer {
         // sprites are batched into one draw call. The sort is stable, so
         // submission order is preserved within each (layer, material, texture) group.
         self.pending.sort_by(|a, b| {
-            a.2
-                .partial_cmp(&b.2)
+            a.2.partial_cmp(&b.2)
                 .unwrap_or(std::cmp::Ordering::Equal)
                 .then_with(|| a.1.cmp(&b.1))
-                .then_with(|| a.0.0.cmp(&b.0.0))
+                .then_with(|| a.0 .0.cmp(&b.0 .0))
         });
 
         let proj: [f32; 16] = camera.projection_matrix().to_cols_array();
@@ -559,9 +571,139 @@ impl SpriteRenderer {
 mod tests {
     use super::*;
 
+    fn rendered_bounds(instances: &[SpriteInstance]) -> Option<Vec<[u32; 4]>> {
+        const WIDTH: u32 = 96;
+        const HEIGHT: u32 = 96;
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            ..Default::default()
+        });
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::LowPower,
+            compatible_surface: None,
+            force_fallback_adapter: false,
+        }))?;
+        let (device, queue) = pollster::block_on(adapter.request_device(
+            &wgpu::DeviceDescriptor {
+                label: Some("sprite_transform_test_device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
+                memory_hints: wgpu::MemoryHints::default(),
+            },
+            None,
+        ))
+        .expect("device");
+        let mut renderer = SpriteRenderer::new(&device, &queue, wgpu::TextureFormat::Rgba8Unorm);
+        renderer.upload_quad(&queue);
+        let camera = Camera::new(WIDTH as f32, HEIGHT as f32);
+        let padded_bytes_per_row = (WIDTH * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
+            * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let mut bounds = Vec::with_capacity(instances.len());
+
+        for instance in instances {
+            renderer.begin_frame();
+            renderer.push(*instance);
+            let target = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("sprite_transform_test_target"),
+                size: wgpu::Extent3d {
+                    width: WIDTH,
+                    height: HEIGHT,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            let view = target.create_view(&wgpu::TextureViewDescriptor::default());
+            let readback = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("sprite_transform_test_readback"),
+                size: u64::from(padded_bytes_per_row) * u64::from(HEIGHT),
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("sprite_transform_test_encoder"),
+            });
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("sprite_transform_test_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                renderer.flush(&mut pass, &camera, &queue);
+            }
+            encoder.copy_texture_to_buffer(
+                wgpu::ImageCopyTexture {
+                    texture: &target,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::ImageCopyBuffer {
+                    buffer: &readback,
+                    layout: wgpu::ImageDataLayout {
+                        offset: 0,
+                        bytes_per_row: Some(padded_bytes_per_row),
+                        rows_per_image: Some(HEIGHT),
+                    },
+                },
+                wgpu::Extent3d {
+                    width: WIDTH,
+                    height: HEIGHT,
+                    depth_or_array_layers: 1,
+                },
+            );
+            queue.submit([encoder.finish()]);
+            let (tx, rx) = std::sync::mpsc::channel();
+            readback
+                .slice(..)
+                .map_async(wgpu::MapMode::Read, move |result| {
+                    let _ = tx.send(result);
+                });
+            device.poll(wgpu::Maintain::Wait);
+            rx.recv().expect("readback").expect("mapping");
+            let data = readback.slice(..).get_mapped_range();
+            let mut min_x = WIDTH;
+            let mut min_y = HEIGHT;
+            let mut max_x = 0;
+            let mut max_y = 0;
+            for y in 0..HEIGHT {
+                for x in 0..WIDTH {
+                    let offset = y as usize * padded_bytes_per_row as usize + x as usize * 4;
+                    if data[offset] > 200 {
+                        min_x = min_x.min(x);
+                        min_y = min_y.min(y);
+                        max_x = max_x.max(x);
+                        max_y = max_y.max(y);
+                    }
+                }
+            }
+            drop(data);
+            readback.unmap();
+            bounds.push([min_x, min_y, max_x + 1, max_y + 1]);
+        }
+        Some(bounds)
+    }
+
     #[test]
     fn sprite_instance_size() {
-        assert_eq!(std::mem::size_of::<SpriteInstance>(), 48);
+        // Four float vectors occupy 48 bytes, followed by material ID and rotation.
+        assert_eq!(std::mem::offset_of!(SpriteInstance, material_id), 48);
+        assert_eq!(std::mem::offset_of!(SpriteInstance, rotation), 52);
+        assert_eq!(std::mem::size_of::<SpriteInstance>(), 56);
+        assert_eq!(SpriteInstance::STRIDE, 56);
     }
 
     #[test]
@@ -601,9 +743,24 @@ mod tests {
     fn sort_preserves_layer_order_across_textures() {
         let mut sr = SpriteRendererCpu::default();
         // Submit in painter order: background A, foreground B, background C
-        sr.pending.push((TextureId(0), 0, 0.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // A: layer 0, tex 0
-        sr.pending.push((TextureId(1), 0, 1.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // B: layer 1, tex 1
-        sr.pending.push((TextureId(0), 0, 0.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // C: layer 0, tex 0
+        sr.pending.push((
+            TextureId(0),
+            0,
+            0.0,
+            SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]),
+        )); // A: layer 0, tex 0
+        sr.pending.push((
+            TextureId(1),
+            0,
+            1.0,
+            SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]),
+        )); // B: layer 1, tex 1
+        sr.pending.push((
+            TextureId(0),
+            0,
+            0.0,
+            SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]),
+        )); // C: layer 0, tex 0
 
         // Extract the sort order that flush would use
         let mut ordered: Vec<(f32, u32, u32)> = sr
@@ -628,8 +785,18 @@ mod tests {
     #[test]
     fn sort_preserves_submission_order_within_same_layer_and_texture() {
         let mut sr = SpriteRendererCpu::default();
-        sr.pending.push((TextureId(0), 0, 0.0, SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]))); // first
-        sr.pending.push((TextureId(0), 0, 0.0, SpriteInstance::colored([1.0; 2], [1.0; 2], [1.0; 4]))); // second
+        sr.pending.push((
+            TextureId(0),
+            0,
+            0.0,
+            SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]),
+        )); // first
+        sr.pending.push((
+            TextureId(0),
+            0,
+            0.0,
+            SpriteInstance::colored([1.0; 2], [1.0; 2], [1.0; 4]),
+        )); // second
 
         let mut ordered: Vec<(f32, u32, u32)> = sr
             .pending
@@ -651,6 +818,32 @@ mod tests {
     fn colored_defaults_full_uv() {
         let s = SpriteInstance::colored([1.0, 2.0], [3.0, 4.0], [1.0; 4]);
         assert_eq!(s.uv_rect, FULL_UV);
+        assert_eq!(s.rotation, 0.0);
+    }
+
+    #[test]
+    fn transform_scales_size_and_sets_rotation() {
+        let sprite = SpriteInstance::colored([0.0; 2], [8.0, 4.0], [1.0; 4])
+            .with_transform(std::f32::consts::FRAC_PI_2, [2.0, 0.5]);
+        assert_eq!(sprite.size, [16.0, 2.0]);
+        assert_eq!(sprite.rotation, std::f32::consts::FRAC_PI_2);
+    }
+
+    #[test]
+    fn shader_rotates_and_scales_sprite_pixel_bounds() {
+        let base = SpriteInstance::colored([48.0, 48.0], [32.0, 8.0], [1.0, 0.0, 0.0, 1.0]);
+        let rotated = base.with_transform(std::f32::consts::FRAC_PI_2, [1.0, 1.0]);
+        let scaled = base.with_transform(0.0, [2.0, 1.0]);
+        let Some(bounds) = rendered_bounds(&[base, rotated, scaled]) else {
+            eprintln!("skipping sprite transform pixel test: no GPU adapter");
+            return;
+        };
+        let [base_bounds, rotated_bounds, scaled_bounds]: [[u32; 4]; 3] =
+            bounds.try_into().expect("one bound per test sprite");
+        let dimensions = |bounds: [u32; 4]| [bounds[2] - bounds[0], bounds[3] - bounds[1]];
+        assert_eq!(dimensions(base_bounds), [32, 8]);
+        assert_eq!(dimensions(rotated_bounds), [8, 32]);
+        assert_eq!(dimensions(scaled_bounds), [64, 8]);
     }
 
     #[derive(Default)]
@@ -670,11 +863,7 @@ mod tests {
             self.pending.len()
         }
         fn draw_calls_if_flushed(&self) -> u32 {
-            let mut ids: Vec<_> = self
-                .pending
-                .iter()
-                .map(|(t, _, _, _)| t.0)
-                .collect();
+            let mut ids: Vec<_> = self.pending.iter().map(|(t, _, _, _)| t.0).collect();
             ids.sort_unstable();
             ids.dedup();
             ids.len() as u32

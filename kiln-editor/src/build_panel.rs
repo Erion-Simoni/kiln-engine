@@ -1,6 +1,6 @@
 //! Build/Export panel — in-editor wrapper for `kiln-cli export`.
 
-use egui::{Color32, ComboBox, DragValue, RichText, ScrollArea, Ui};
+use egui::{Color32, RichText, ScrollArea, Ui};
 use std::path::PathBuf;
 
 /// Build configuration for export.
@@ -80,7 +80,12 @@ impl BuildPlatform {
 impl Default for BuildConfig {
     fn default() -> Self {
         Self {
-            platforms: vec![BuildPlatform::Web, BuildPlatform::Windows, BuildPlatform::MacOS, BuildPlatform::Linux],
+            platforms: vec![
+                BuildPlatform::Web,
+                BuildPlatform::Windows,
+                BuildPlatform::MacOS,
+                BuildPlatform::Linux,
+            ],
             output_dir: PathBuf::from("export"),
             packaging: true,
             signed: false,
@@ -91,7 +96,6 @@ impl Default for BuildConfig {
         }
     }
 }
-
 
 /// State of the build panel.
 #[derive(Debug, Default)]
@@ -152,7 +156,10 @@ impl BuildPanel {
         ui.add_space(8.0);
 
         // Basic options
-        ui.checkbox(&mut self.config.packaging, "Create packaging (zip, .app, AppImage)");
+        ui.checkbox(
+            &mut self.config.packaging,
+            "Create packaging (zip, .app, AppImage)",
+        );
         ui.checkbox(&mut self.config.signed, "Signed build (Android/iOS)");
 
         ui.add_space(8.0);
@@ -177,11 +184,17 @@ impl BuildPanel {
 
         // Build button
         if !self.building {
-            if ui.button(RichText::new("Build").size(18.0).strong()).clicked() {
+            if ui
+                .button(RichText::new("Build").size(18.0).strong())
+                .clicked()
+            {
                 self.start_build();
             }
         } else {
-            ui.add_enabled(false, egui::Button::new(RichText::new("Building...").size(18.0).strong()));
+            ui.add_enabled(
+                false,
+                egui::Button::new(RichText::new("Building...").size(18.0).strong()),
+            );
         }
 
         ui.add_space(8.0);
@@ -192,7 +205,13 @@ impl BuildPanel {
             ui.label("Build Log:");
             ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
                 for line in &self.build_log {
-                    let color = if line.starts_with("ERROR:") { Color32::RED } else if line.starts_with("WARNING:") { Color32::YELLOW } else { Color32::WHITE };
+                    let color = if line.starts_with("ERROR:") {
+                        Color32::RED
+                    } else if line.starts_with("WARNING:") {
+                        Color32::YELLOW
+                    } else {
+                        Color32::WHITE
+                    };
                     ui.label(RichText::new(line).color(color).monospace());
                 }
             });
@@ -210,16 +229,16 @@ impl BuildPanel {
         self.building = true;
         self.build_log.clear();
         self.last_error = None;
-        
+
         self.build_log.push("Starting build...".to_string());
-        self.build_log.push(format!("Platforms: {:?}", self.config.platforms));
-        self.build_log.push(format!("Output: {}", self.config.output_dir.display()));
-        
+        self.build_log
+            .push(format!("Platforms: {:?}", self.config.platforms));
+        self.build_log
+            .push(format!("Output: {}", self.config.output_dir.display()));
+
         // TODO: Actually run the build (could use std::process::Command or async)
         // For now, just simulate
         self.build_log.push("Build completed!".to_string());
         self.building = false;
     }
 }
-
-

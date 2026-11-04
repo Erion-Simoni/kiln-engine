@@ -4,7 +4,6 @@
 //! Lights are culled to only affect sprites within their radius.
 
 use crate::{SpriteInstance, SpriteRenderer, TextureId};
-use wgpu::{Device, Queue};
 
 /// A 2D point light.
 #[derive(Debug, Clone, Copy)]

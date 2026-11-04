@@ -174,6 +174,11 @@ mod tests {
                 id: "e1".to_string(),
                 name: "Player".to_string(),
                 components: vec![Component::Sprite {
+                    width: 32.0,
+                    height: 32.0,
+                    layer: 0.0,
+                    material: None,
+                    animation_clip: None,
                     color: [1.0, 1.0, 1.0, 1.0],
                     texture: Some(path.to_string()),
                 }],

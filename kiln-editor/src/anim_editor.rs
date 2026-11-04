@@ -1,11 +1,9 @@
 //! Animation editor panel — sprite sheet clip authoring, frame editing, preview.
 
 use egui::{Color32, DragValue, Pos2, Rect, Sense, Stroke, Ui, Vec2};
-use kiln_anim::{Clip, Frame, FrameEvent};
+use kiln_anim::{Clip, Frame};
 use std::collections::HashMap;
 
-const FRAME_WIDTH: f32 = 100.0;
-const FRAME_HEIGHT: f32 = 100.0;
 const TIMELINE_HEIGHT: f32 = 60.0;
 
 /// State of the animation editor.
@@ -36,7 +34,9 @@ impl AnimationEditorState {
 
     /// Get the currently selected clip, if any.
     pub fn selected_clip(&self) -> Option<&Clip> {
-        self.selected_clip.as_ref().and_then(|name| self.clips.get(name))
+        self.selected_clip
+            .as_ref()
+            .and_then(|name| self.clips.get(name))
     }
 
     /// Get the currently selected clip mutably, if any.
@@ -75,244 +75,287 @@ impl AnimationEditorState {
         }
     }
 
+    /// Render the animation editor panel.
+    pub fn render_animation_editor(
+        ui: &mut Ui,
+        state: &mut AnimationEditorState,
+        animation_clips: &mut HashMap<String, Clip>,
+        dt: f32,
+    ) {
+        ui.heading("Animation Editor");
+        ui.add_space(8.0);
 
-/// Render the animation editor panel.
-pub fn render_animation_editor(
-    ui: &mut Ui,
-    state: &mut AnimationEditorState,
-    animation_clips: &mut HashMap<String, Clip>,
-    dt: f32,
-) {
-    ui.heading("Animation Editor");
-    ui.add_space(8.0);
-
-    // Clip selector and toolbar
-    ui.horizontal(|ui| {
-        ui.label("Clip:");
-        egui::ComboBox::from_label("")
-            .selected_text(
-                state
-                    .selected_clip
-                    .as_deref()
-                    .unwrap_or("Select a clip..."),
-            )
-            .show_ui(ui, |ui| {
-                for name in state.clips.keys().cloned().collect::<Vec<_>>() {
-                    if ui.selectable_label(state.selected_clip.as_deref() == Some(&name), &name).clicked() {
-                        state.selected_clip = Some(name);
-                        state.preview_time = 0.0;
+        // Clip selector and toolbar
+        ui.horizontal(|ui| {
+            ui.label("Clip:");
+            egui::ComboBox::from_label("")
+                .selected_text(state.selected_clip.as_deref().unwrap_or("Select a clip..."))
+                .show_ui(ui, |ui| {
+                    for name in state.clips.keys().cloned().collect::<Vec<_>>() {
+                        if ui
+                            .selectable_label(state.selected_clip.as_deref() == Some(&name), &name)
+                            .clicked()
+                        {
+                            state.selected_clip = Some(name);
+                            state.preview_time = 0.0;
+                        }
                     }
-                }
-            });
+                });
 
-        if ui.button("+ New Clip").clicked() {
-            state.show_new_clip_dialog = true;
-            state.new_clip_name.clear();
-        }
-
-        if ui.button("Delete Clip").clicked() {
-            if let Some(name) = state.selected_clip.take() {
-                state.remove_clip(&name);
+            if ui.button("+ New Clip").clicked() {
+                state.show_new_clip_dialog = true;
+                state.new_clip_name.clear();
             }
-        }
-    });
 
-    ui.separator();
+            if ui.button("Delete Clip").clicked() {
+                if let Some(name) = state.selected_clip.take() {
+                    state.remove_clip(&name);
+                }
+            }
+        });
 
-    // New clip dialog
-    if state.show_new_clip_dialog {
-        egui::Window::new("New Animation Clip")
-            .collapsible(false)
-            .resizable(false)
-            .show(ui.ctx(), |ui| {
-                ui.label("Clip name:");
-                ui.text_edit_singleline(&mut state.new_clip_name);
-                ui.label("Spritesheet path:");
-                ui.text_edit_singleline(&mut state.spritesheet_path);
-                ui.horizontal(|ui| {
-                    if ui.button("Create").clicked() {
-                        if !state.new_clip_name.is_empty() && !state.spritesheet_path.is_empty() {
+        ui.separator();
+
+        // New clip dialog
+        if state.show_new_clip_dialog {
+            egui::Window::new("New Animation Clip")
+                .collapsible(false)
+                .resizable(false)
+                .show(ui.ctx(), |ui| {
+                    ui.label("Clip name:");
+                    ui.text_edit_singleline(&mut state.new_clip_name);
+                    ui.label("Spritesheet path:");
+                    ui.text_edit_singleline(&mut state.spritesheet_path);
+                    ui.horizontal(|ui| {
+                        if ui.button("Create").clicked()
+                            && !state.new_clip_name.is_empty()
+                            && !state.spritesheet_path.is_empty()
+                        {
                             let clip_name = state.new_clip_name.clone();
                             let texture_path = state.spritesheet_path.clone();
                             state.add_clip(clip_name.clone(), texture_path.clone());
                             // Sync to project
-                            animation_clips.insert(clip_name.clone(), state.clips[&clip_name].clone());
+                            animation_clips
+                                .insert(clip_name.clone(), state.clips[&clip_name].clone());
                             state.show_new_clip_dialog = false;
                             state.new_clip_name.clear();
                         }
-                    }
-                    if ui.button("Cancel").clicked() {
-                        state.show_new_clip_dialog = false;
-                        state.new_clip_name.clear();
-                    }
+                        if ui.button("Cancel").clicked() {
+                            state.show_new_clip_dialog = false;
+                            state.new_clip_name.clear();
+                        }
+                    });
                 });
-            });
-    }
-
-    // Main editor area
-    if let Some(mut clip) = state.selected_clip.clone().and_then(|name| state.clips.remove(&name)) {
-        // Sync clip texture from project if changed
-        if let Some(project_clip) = animation_clips.get(&clip.name) {
-            if clip.texture != project_clip.texture {
-                clip.texture = project_clip.texture.clone();
-            }
-            if clip.loops != project_clip.loops {
-                clip.loops = project_clip.loops;
-            }
-            if serde_json::to_string(&clip.frames).ok() != serde_json::to_string(&project_clip.frames).ok() {
-                clip.frames = project_clip.frames.clone();
-            }
         }
-        ui.columns(2, |cols| {
-            // Left column: frames list and properties
-            cols[0].vertical(|ui| {
-                ui.heading("Frames");
-                ui.add_space(4.0);
 
-                // Spritesheet info
-                ui.horizontal(|ui| {
-                    ui.label("Spritesheet:");
-                    ui.text_edit_singleline(&mut clip.texture);
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Loops:");
-                    ui.checkbox(&mut clip.loops, "");
-                });
+        // Main editor area
+        if let Some(mut clip) = state
+            .selected_clip
+            .clone()
+            .and_then(|name| state.clips.remove(&name))
+        {
+            // Sync clip texture from project if changed
+            if let Some(project_clip) = animation_clips.get(&clip.name) {
+                if clip.texture != project_clip.texture {
+                    clip.texture = project_clip.texture.clone();
+                }
+                if clip.loops != project_clip.loops {
+                    clip.loops = project_clip.loops;
+                }
+                if serde_json::to_string(&clip.frames).ok()
+                    != serde_json::to_string(&project_clip.frames).ok()
+                {
+                    clip.frames = project_clip.frames.clone();
+                }
+            }
+            ui.columns(2, |cols| {
+                // Left column: frames list and properties
+                cols[0].vertical(|ui| {
+                    ui.heading("Frames");
+                    ui.add_space(4.0);
 
-                ui.separator();
+                    // Spritesheet info
+                    ui.horizontal(|ui| {
+                        ui.label("Spritesheet:");
+                        ui.text_edit_singleline(&mut clip.texture);
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Loops:");
+                        ui.checkbox(&mut clip.loops, "");
+                    });
 
-                // Frame list
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    let mut remove_frame = None;
-                    for (idx, frame) in clip.frames.iter_mut().enumerate() {
-                        ui.horizontal(|ui| {
-                            let frame_label = format!("Frame {}: {}x{} @ {:.2}s", 
-                                idx, frame.rect[2], frame.rect[3], frame.duration);
-                            if ui.selectable_label(false, frame_label).clicked() {
-                                // Frame selected
-                            }
-                            if ui.small_button("✕").clicked() {
-                                remove_frame = Some(idx);
-                            }
+                    ui.separator();
+
+                    // Frame list
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        let mut remove_frame = None;
+                        for (idx, frame) in clip.frames.iter_mut().enumerate() {
+                            ui.horizontal(|ui| {
+                                let frame_label = format!(
+                                    "Frame {}: {}x{} @ {:.2}s",
+                                    idx, frame.rect[2], frame.rect[3], frame.duration
+                                );
+                                if ui.selectable_label(false, frame_label).clicked() {
+                                    // Frame selected
+                                }
+                                if ui.small_button("✕").clicked() {
+                                    remove_frame = Some(idx);
+                                }
+                            });
+                        }
+                        if let Some(idx) = remove_frame {
+                            clip.frames.remove(idx);
+                        }
+                    });
+
+                    ui.add_space(8.0);
+                    if ui.button("+ Add Frame").clicked() {
+                        clip.add_frame(Frame {
+                            rect: [0, 0, 32, 32],
+                            pivot: [0.5, 0.5],
+                            duration: 0.1,
+                            events: Vec::new(),
                         });
                     }
-                    if let Some(idx) = remove_frame { clip.frames.remove(idx); }
-                });
 
-                ui.add_space(8.0);
-                if ui.button("+ Add Frame").clicked() {
-                    clip.add_frame(Frame {
-                        rect: [0, 0, 32, 32],
-                        pivot: [0.5, 0.5],
-                        duration: 0.1,
-                        events: Vec::new(),
-                    });
-                }
-
-                ui.add_space(8.0);
-                
-                // Frame events - simplified for now
-            });
-
-            // Right column: preview and timeline
-            cols[1].vertical(|ui| {
-                ui.heading("Preview");
-                ui.add_space(4.0);
-
-                // Preview canvas
-                let preview_rect = ui.allocate_rect(
-                    Rect::from_min_size(ui.cursor().left_top(), Vec2::new(320.0, 240.0)),
-                    Sense::hover(),
-                );
-
-                // Draw preview placeholder
-                ui.painter().rect_filled(preview_rect.rect, 4.0, Color32::from_rgb(30, 30, 35));
-                ui.painter().rect_stroke(preview_rect.rect, 4.0, Stroke::new(1.0, Color32::from_gray(80)));
-                
-                if let Some(frame) = Self::get_frame_at_time(&clip, state.preview_time) {
                     ui.add_space(8.0);
-                    ui.label(format!("Frame: {} / {}", 
-                        Self::get_frame_index_at_time(&clip, state.preview_time).unwrap_or(0),
-                        clip.frames.len().saturating_sub(1)));
-                    ui.label(format!("Time: {:.2}s / {:.2}s", state.preview_time, clip.total_duration()));
-                }
 
-                ui.add_space(8.0);
-
-                // Playback controls
-                ui.horizontal(|ui| {
-                    if ui.button(if state.preview_playing { "⏸ Pause" } else { "▶ Play" }).clicked() {
-                        state.preview_playing = !state.preview_playing;
-                    }
-                    if ui.button("⏹ Stop").clicked() {
-                        state.preview_playing = false;
-                        state.preview_time = 0.0;
-                    }
+                    // Frame events - simplified for now
                 });
 
-                // Timeline scrubber
-                ui.add_space(4.0);
-                let total = clip.total_duration();
-                if total > 0.0 {
-                    let mut t = state.preview_time;
-                    if ui.add(DragValue::new(&mut t).speed(0.01).range(0.0..=total).suffix("s")).changed() {
-                        state.preview_time = t.clamp(0.0, total);
-                    }
-                    
-                    // Visual timeline
-                    let timeline_rect = Rect::from_min_size(
-                        ui.cursor().left_top(),
-                        Vec2::new(ui.available_width(), TIMELINE_HEIGHT),
+                // Right column: preview and timeline
+                cols[1].vertical(|ui| {
+                    ui.heading("Preview");
+                    ui.add_space(4.0);
+
+                    // Preview canvas
+                    let preview_rect = ui.allocate_rect(
+                        Rect::from_min_size(ui.cursor().left_top(), Vec2::new(320.0, 240.0)),
+                        Sense::hover(),
                     );
-                    ui.allocate_rect(timeline_rect, Sense::click_and_drag());
-                    
-                    // Timeline background
-                    ui.painter().rect_filled(timeline_rect, 2.0, Color32::from_rgb(30, 30, 35));
-                    ui.painter().rect_stroke(timeline_rect, 2.0, Stroke::new(1.0, Color32::from_gray(80)));
-                    
-                    // Frame markers
-                    let mut t = 0.0;
-                    for frame in &clip.frames {
-                        let x = timeline_rect.left() + (t / total) * timeline_rect.width();
-                        ui.painter().line_segment(
-                            [Pos2::new(x, timeline_rect.top()), Pos2::new(x, timeline_rect.bottom())],
-                            Stroke::new(1.0, Color32::from_gray(100)),
+
+                    // Draw preview placeholder
+                    ui.painter()
+                        .rect_filled(preview_rect.rect, 4.0, Color32::from_rgb(30, 30, 35));
+                    ui.painter().rect_stroke(
+                        preview_rect.rect,
+                        4.0,
+                        Stroke::new(1.0_f32, Color32::from_gray(80)),
+                    );
+
+                    if let Some(_frame) = Self::get_frame_at_time(&clip, state.preview_time) {
+                        ui.add_space(8.0);
+                        ui.label(format!(
+                            "Frame: {} / {}",
+                            Self::get_frame_index_at_time(&clip, state.preview_time).unwrap_or(0),
+                            clip.frames.len().saturating_sub(1)
+                        ));
+                        ui.label(format!(
+                            "Time: {:.2}s / {:.2}s",
+                            state.preview_time,
+                            clip.total_duration()
+                        ));
+                    }
+
+                    ui.add_space(8.0);
+
+                    // Playback controls
+                    ui.horizontal(|ui| {
+                        if ui
+                            .button(if state.preview_playing {
+                                "⏸ Pause"
+                            } else {
+                                "▶ Play"
+                            })
+                            .clicked()
+                        {
+                            state.preview_playing = !state.preview_playing;
+                        }
+                        if ui.button("⏹ Stop").clicked() {
+                            state.preview_playing = false;
+                            state.preview_time = 0.0;
+                        }
+                    });
+
+                    // Timeline scrubber
+                    ui.add_space(4.0);
+                    let total = clip.total_duration();
+                    if total > 0.0 {
+                        let mut t = state.preview_time;
+                        if ui
+                            .add(
+                                DragValue::new(&mut t)
+                                    .speed(0.01)
+                                    .range(0.0..=total)
+                                    .suffix("s"),
+                            )
+                            .changed()
+                        {
+                            state.preview_time = t.clamp(0.0, total);
+                        }
+
+                        // Visual timeline
+                        let timeline_rect = Rect::from_min_size(
+                            ui.cursor().left_top(),
+                            Vec2::new(ui.available_width(), TIMELINE_HEIGHT),
                         );
-                        t += frame.duration;
+                        ui.allocate_rect(timeline_rect, Sense::click_and_drag());
+
+                        // Timeline background
+                        ui.painter()
+                            .rect_filled(timeline_rect, 2.0, Color32::from_rgb(30, 30, 35));
+                        ui.painter().rect_stroke(
+                            timeline_rect,
+                            2.0,
+                            Stroke::new(1.0_f32, Color32::from_gray(80)),
+                        );
+
+                        // Frame markers
+                        let mut t = 0.0;
+                        for frame in &clip.frames {
+                            let x = timeline_rect.left() + (t / total) * timeline_rect.width();
+                            ui.painter().line_segment(
+                                [
+                                    Pos2::new(x, timeline_rect.top()),
+                                    Pos2::new(x, timeline_rect.bottom()),
+                                ],
+                                Stroke::new(1.0_f32, Color32::from_gray(100)),
+                            );
+                            t += frame.duration;
+                        }
+
+                        // Current time marker
+                        let x = timeline_rect.left()
+                            + (state.preview_time / total) * timeline_rect.width();
+                        ui.painter().line_segment(
+                            [
+                                Pos2::new(x, timeline_rect.top()),
+                                Pos2::new(x, timeline_rect.bottom()),
+                            ],
+                            Stroke::new(2.0_f32, Color32::from_rgb(100, 200, 255)),
+                        );
                     }
-                    
-                    // Current time marker
-                    let x = timeline_rect.left() + (state.preview_time / total) * timeline_rect.width();
-                    ui.painter().line_segment(
-                        [Pos2::new(x, timeline_rect.top()), Pos2::new(x, timeline_rect.bottom())],
-                        Stroke::new(2.0, Color32::from_rgb(100, 200, 255)),
-                    );
-                }
+                });
             });
-        });
 
-        animation_clips.insert(clip.name.clone(), clip.clone());
-        state.clips.insert(clip.name.clone(), clip);
-        state.update_preview(dt);
+            animation_clips.insert(clip.name.clone(), clip.clone());
+            state.clips.insert(clip.name.clone(), clip);
+            state.update_preview(dt);
+        }
     }
-}
 
-
-/// Get the frame at a given time.
-fn get_frame_at_time(clip: &Clip, time: f32) -> Option<&Frame> {
-    match clip.frame_at_time(time) {
-        Ok((idx, _)) => clip.frames.get(idx),
-        Err(_) => None,
+    /// Get the frame at a given time.
+    fn get_frame_at_time(clip: &Clip, time: f32) -> Option<&Frame> {
+        match clip.frame_at_time(time) {
+            Ok((idx, _)) => clip.frames.get(idx),
+            Err(_) => None,
+        }
     }
-}
 
-/// Get the frame index at a given time.
-fn get_frame_index_at_time(clip: &Clip, time: f32) -> Option<usize> {
-    clip.frame_at_time(time).ok().map(|(idx, _)| idx)
-}
-
-
-
+    /// Get the frame index at a given time.
+    fn get_frame_index_at_time(clip: &Clip, time: f32) -> Option<usize> {
+        clip.frame_at_time(time).ok().map(|(idx, _)| idx)
+    }
 }
 #[cfg(test)]
 mod panel_tests {

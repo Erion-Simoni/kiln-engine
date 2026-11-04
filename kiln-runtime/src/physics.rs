@@ -1,8 +1,6 @@
 //! Physics module (feature-gated)
 //! Uses rapier2d for 2D rigid body physics
 
-use std::collections::{HashMap, HashSet};
-
 #[cfg(feature = "physics")]
 use rapier2d::prelude::*;
 
@@ -21,7 +19,6 @@ pub struct PhysicsWorld {
     multibody_joint_set: MultibodyJointSet,
     ccd_solver: CCDSolver,
     soft_body_set: SoftBodySet,
-    created_joints: HashSet<(String, String)>,
 }
 
 impl std::fmt::Debug for PhysicsWorld {
@@ -34,13 +31,25 @@ impl std::fmt::Debug for PhysicsWorld {
 impl PhysicsWorld {
     /// Remove a body and its attached colliders and joints.
     pub fn remove_body(&mut self, handle: RigidBodyHandle) {
-        self.rigid_body_set.remove(handle, &mut self.island_manager, &mut self.collider_set,
-            &mut self.joint_set, &mut self.multibody_joint_set, &mut self.soft_body_set, true);
+        self.rigid_body_set.remove(
+            handle,
+            &mut self.island_manager,
+            &mut self.collider_set,
+            &mut self.joint_set,
+            &mut self.multibody_joint_set,
+            &mut self.soft_body_set,
+            true,
+        );
     }
     /// Remove a collider and update its parent body.
     pub fn remove_collider(&mut self, handle: ColliderHandle) {
-        self.collider_set.remove(handle, &mut self.island_manager, &mut self.rigid_body_set,
-            &mut self.soft_body_set, true);
+        self.collider_set.remove(
+            handle,
+            &mut self.island_manager,
+            &mut self.rigid_body_set,
+            &mut self.soft_body_set,
+            true,
+        );
     }
     /// Create a new physics world with default gravity.
     pub fn new() -> Self {
@@ -57,7 +66,6 @@ impl PhysicsWorld {
             multibody_joint_set: MultibodyJointSet::new(),
             ccd_solver: CCDSolver::new(),
             soft_body_set: SoftBodySet::new(),
-            created_joints: HashSet::new(),
         }
     }
 
@@ -179,14 +187,16 @@ pub fn sync_physics_with_ecs(
     world: &mut hecs::World,
 ) -> Vec<CollisionEvent> {
     use crate::world::{
-        Collider2D, ColliderShape, Joint2D, JointType, PhysicsBody, RigidBody2D, RigidBodyType, SourceId,
+        Collider2D, ColliderShape, PhysicsBody, RigidBody2D, RigidBodyType, SourceId,
     };
     use kiln_core::Transform;
 
     // Register new bodies: entities with RigidBody2D + Collider2D but no PhysicsBody
     let to_register: Vec<(hecs::Entity, RigidBody2D, Collider2D, Option<SourceId>)> = {
-        let mut query = world.query::<(hecs::Entity, &RigidBody2D, &Collider2D, Option<&SourceId>)>();
-        (&mut query).into_iter()
+        let mut query =
+            world.query::<(hecs::Entity, &RigidBody2D, &Collider2D, Option<&SourceId>)>();
+        (&mut query)
+            .into_iter()
             .filter_map(|(e, rb, col, sid)| {
                 if world.get::<&PhysicsBody>(e).is_err() {
                     Some((e, *rb, *col, sid.cloned()))
@@ -197,18 +207,25 @@ pub fn sync_physics_with_ecs(
             .collect()
     };
 
-    for (entity, rb, col, source_id) in to_register {
+    for (entity, rb, col, _source_id) in to_register {
         // Get the transform for this entity to set initial position
         let transform = world.get::<&Transform>(entity).ok().map(|t| *t);
-        let pos = transform.map(|t| [t.position.x, t.position.y]).unwrap_or([0.0, 0.0]);
-        
+        let pos = transform
+            .map(|t| [t.position.x, t.position.y])
+            .unwrap_or([0.0, 0.0]);
+
         let body_builder = match rb.body_type {
             RigidBodyType::Static => rapier2d::prelude::RigidBodyBuilder::fixed(),
             RigidBodyType::Dynamic => rapier2d::prelude::RigidBodyBuilder::dynamic(),
-            RigidBodyType::Kinematic => rapier2d::prelude::RigidBodyBuilder::kinematic_position_based(),
+            RigidBodyType::Kinematic => {
+                rapier2d::prelude::RigidBodyBuilder::kinematic_position_based()
+            }
         }
         .translation(rapier2d::math::Vector::new(pos[0], pos[1]))
-        .linvel(rapier2d::math::Vector::new(rb.linear_velocity[0], rb.linear_velocity[1]))
+        .linvel(rapier2d::math::Vector::new(
+            rb.linear_velocity[0],
+            rb.linear_velocity[1],
+        ))
         .angvel(rb.angular_velocity)
         .gravity_scale(rb.gravity_scale)
         .can_sleep(rb.can_sleep);
@@ -233,7 +250,13 @@ pub fn sync_physics_with_ecs(
 
         physics.create_collider(collider_builder, handle);
 
-        let _ = world.insert_one(entity, PhysicsBody { handle: handle.into_raw_parts().0, generation: handle.into_raw_parts().1 });
+        let _ = world.insert_one(
+            entity,
+            PhysicsBody {
+                handle: handle.into_raw_parts().0,
+                generation: handle.into_raw_parts().1,
+            },
+        );
     }
 
     // Create physics joints for entities with Joint2D components
@@ -245,15 +268,16 @@ pub fn sync_physics_with_ecs(
     physics.step();
 
     // Collect collision events from the narrow phase
-    let mut collision_events = Vec::new();
+    let collision_events = Vec::new();
     // Note: rapier2d 0.36+ has changed the contact events API - this is a stub for now
     // TODO: Update to use the new rapier2d contact events API when available
 
     // Sync physics positions back to ECS transforms
-    for (physics_body, transform) in
-        world.query_mut::<(&mut PhysicsBody, &mut Transform)>()
-    {
-        let handle = rapier2d::prelude::RigidBodyHandle::from_raw_parts(physics_body.handle, physics_body.generation);
+    for (physics_body, transform) in world.query_mut::<(&mut PhysicsBody, &mut Transform)>() {
+        let handle = rapier2d::prelude::RigidBodyHandle::from_raw_parts(
+            physics_body.handle,
+            physics_body.generation,
+        );
         if let Some(body) = physics.rigid_body_set.get(handle) {
             let pos = body.translation();
             transform.position.x = pos.x;
@@ -278,7 +302,8 @@ mod tests {
     #[test]
     fn test_rigid_body_creation() {
         let mut world = PhysicsWorld::new();
-        let body = RigidBodyBuilder::new(rapier2d::prelude::RigidBodyType::Dynamic).translation(Vec2::new(0.0, 10.0));
+        let body = RigidBodyBuilder::new(rapier2d::prelude::RigidBodyType::Dynamic)
+            .translation(Vec2::new(0.0, 10.0));
         let handle = world.create_rigid_body(body);
         let position = world.get_rigid_body_position(handle);
         assert!(position.is_some());

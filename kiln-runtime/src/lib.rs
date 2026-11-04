@@ -24,7 +24,9 @@ pub mod physics;
 pub use input::*;
 pub use jobs::{load_file_async, JobHandle, TaskPool};
 pub use loop_::*;
-pub use scene::{count_scene_entities, spawn_scene, SpawnedEntity, SpriteFactory};
+pub use scene::{
+    count_scene_entities, spawn_scene, update_global_transforms, SpawnedEntity, SpriteFactory,
+};
 pub use schedule::{build_stages, Schedule, SchedulePlan, SystemEntry};
 pub use settings::*;
 pub use slice::*;
@@ -35,7 +37,7 @@ pub use tilemap_scene::{spawn_tilemaps, TilesetTextureResolver};
 pub use world::*;
 
 #[cfg(feature = "audio")]
-pub use audio::{AudioEngine, AudioCategory};
+pub use audio::{AudioCategory, AudioEngine};
 
 #[cfg(feature = "physics")]
 pub use physics::*;

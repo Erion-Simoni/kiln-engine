@@ -1,7 +1,7 @@
 //! Particle/VFX Editor panel — emitter configuration, particle preview.
 
-use egui::{Color32, DragValue, RichText, ScrollArea, Ui, Vec2};
-use kiln_vfx::{EmissionShape, Emitter, EmitterConfig, ParticleSystem, ParticleSystemConfig};
+use egui::{Color32, DragValue, ScrollArea, Ui, Vec2};
+use kiln_vfx::{EmissionShape, Emitter, EmitterConfig, ParticleSystem};
 
 /// State of the VFX editor panel.
 #[derive(Default)]
@@ -60,7 +60,6 @@ impl VfxEditorState {
         }
     }
 
-
     /// Render the VFX editor panel.
     pub fn render(&mut self, ui: &mut Ui) {
         ui.heading("Particle/VFX Editor");
@@ -68,7 +67,14 @@ impl VfxEditorState {
 
         // Toolbar
         ui.horizontal(|ui| {
-            if ui.button(if self.preview_playing { "⏸ Pause" } else { "▶ Play" }).clicked() {
+            if ui
+                .button(if self.preview_playing {
+                    "⏸ Pause"
+                } else {
+                    "▶ Play"
+                })
+                .clicked()
+            {
                 self.preview_playing = !self.preview_playing;
             }
             if ui.button("⏹ Stop").clicked() {
@@ -85,7 +91,10 @@ impl VfxEditorState {
                 self.selected_emitter = None;
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(format!("Particles: {}", self.particle_system.particle_count()));
+                ui.label(format!(
+                    "Particles: {}",
+                    self.particle_system.particle_count()
+                ));
                 ui.label(format!("Emitters: {}", self.particle_system.emitters.len()));
             });
         });
@@ -111,37 +120,44 @@ impl VfxEditorState {
         ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
             for (idx, emitter) in self.particle_system.emitters.clone().iter().enumerate() {
                 let selected = self.selected_emitter == Some(idx);
-                let mut emitter_selected = selected;
-                
+                let emitter_selected = selected;
+
                 ui.horizontal(|ui| {
-                    if ui.selectable_label(emitter_selected, format!("Emitter {}", idx)).clicked() {
+                    if ui
+                        .selectable_label(emitter_selected, format!("Emitter {}", idx))
+                        .clicked()
+                    {
                         self.selected_emitter = Some(idx);
                     }
-                    
+
                     // Show emitter info
                     let config = emitter.config();
                     ui.label(format!("Rate: {:.1}/s", config.rate));
                     ui.label(format!("Shape: {:?}", config.shape));
-                    ui.label(format!("Particles: {}", self.particle_system.particle_count()));
-                    
+                    ui.label(format!(
+                        "Particles: {}",
+                        self.particle_system.particle_count()
+                    ));
+
                     if ui.small_button("🗑").clicked() {
                         self.particle_system.emitters.remove(idx);
                         if self.selected_emitter == Some(idx) {
                             self.selected_emitter = None;
-                        } else if self.selected_emitter.is_some() && self.selected_emitter.unwrap() > idx {
+                        } else if self.selected_emitter.is_some()
+                            && self.selected_emitter.unwrap() > idx
+                        {
                             self.selected_emitter = Some(self.selected_emitter.unwrap() - 1);
                         }
                     }
                 });
             }
-            
+
             if self.particle_system.emitters.is_empty() {
                 ui.label("No emitters. Click 'Add Emitter' to create one.");
             }
         });
 
         ui.add_space(8.0);
-
 
         // Selected emitter properties
         if let Some(emitter) = self.selected_emitter_mut() {
@@ -162,8 +178,19 @@ impl VfxEditorState {
                     })
                     .show_ui(ui, |ui| {
                         ui.selectable_value(&mut config.shape, EmissionShape::Point, "Point");
-                        ui.selectable_value(&mut config.shape, EmissionShape::Circle { radius: 10.0 }, "Circle");
-                        ui.selectable_value(&mut config.shape, EmissionShape::Rectangle { width: 10.0, height: 10.0 }, "Rectangle");
+                        ui.selectable_value(
+                            &mut config.shape,
+                            EmissionShape::Circle { radius: 10.0 },
+                            "Circle",
+                        );
+                        ui.selectable_value(
+                            &mut config.shape,
+                            EmissionShape::Rectangle {
+                                width: 10.0,
+                                height: 10.0,
+                            },
+                            "Rectangle",
+                        );
                     });
             });
 
@@ -176,7 +203,10 @@ impl VfxEditorState {
                         ui.add(DragValue::new(radius).speed(0.1).suffix(" px"));
                     });
                 }
-                EmissionShape::Rectangle { ref mut width, ref mut height } => {
+                EmissionShape::Rectangle {
+                    ref mut width,
+                    ref mut height,
+                } => {
                     ui.horizontal(|ui| {
                         ui.label("Width:");
                         ui.add(DragValue::new(width).speed(0.1).suffix(" px"));
@@ -191,35 +221,72 @@ impl VfxEditorState {
             // Emission rate
             ui.horizontal(|ui| {
                 ui.label("Rate (particles/sec):");
-                ui.add(DragValue::new(&mut config.rate).speed(0.1).range(0.0..=1000.0).suffix("/s"));
+                ui.add(
+                    DragValue::new(&mut config.rate)
+                        .speed(0.1)
+                        .range(0.0..=1000.0)
+                        .suffix("/s"),
+                );
             });
 
             // Speed range
             ui.horizontal(|ui| {
                 ui.label("Speed Range:");
-                ui.add(DragValue::new(&mut config.speed_range[0]).speed(0.1).suffix(" min"));
-                ui.add(DragValue::new(&mut config.speed_range[1]).speed(0.1).suffix(" max"));
+                ui.add(
+                    DragValue::new(&mut config.speed_range[0])
+                        .speed(0.1)
+                        .suffix(" min"),
+                );
+                ui.add(
+                    DragValue::new(&mut config.speed_range[1])
+                        .speed(0.1)
+                        .suffix(" max"),
+                );
             });
 
             // Angle range
             ui.horizontal(|ui| {
                 ui.label("Angle Range (rad):");
-                ui.add(DragValue::new(&mut config.angle_range[0]).speed(0.01).suffix(" min"));
-                ui.add(DragValue::new(&mut config.angle_range[1]).speed(0.01).suffix(" max"));
+                ui.add(
+                    DragValue::new(&mut config.angle_range[0])
+                        .speed(0.01)
+                        .suffix(" min"),
+                );
+                ui.add(
+                    DragValue::new(&mut config.angle_range[1])
+                        .speed(0.01)
+                        .suffix(" max"),
+                );
             });
 
             // Lifetime range
             ui.horizontal(|ui| {
                 ui.label("Lifetime Range (s):");
-                ui.add(DragValue::new(&mut config.lifetime_range[0]).speed(0.01).suffix(" min"));
-                ui.add(DragValue::new(&mut config.lifetime_range[1]).speed(0.01).suffix(" max"));
+                ui.add(
+                    DragValue::new(&mut config.lifetime_range[0])
+                        .speed(0.01)
+                        .suffix(" min"),
+                );
+                ui.add(
+                    DragValue::new(&mut config.lifetime_range[1])
+                        .speed(0.01)
+                        .suffix(" max"),
+                );
             });
 
             // Size range
             ui.horizontal(|ui| {
                 ui.label("Size Range:");
-                ui.add(DragValue::new(&mut config.size_range[0]).speed(0.01).suffix(" min"));
-                ui.add(DragValue::new(&mut config.size_range[1]).speed(0.01).suffix(" max"));
+                ui.add(
+                    DragValue::new(&mut config.size_range[0])
+                        .speed(0.01)
+                        .suffix(" min"),
+                );
+                ui.add(
+                    DragValue::new(&mut config.size_range[1])
+                        .speed(0.01)
+                        .suffix(" max"),
+                );
             });
 
             // Color
@@ -234,8 +301,16 @@ impl VfxEditorState {
             // Gravity
             ui.horizontal(|ui| {
                 ui.label("Gravity (x, y):");
-                ui.add(DragValue::new(&mut config.gravity[0]).speed(0.1).suffix(" x"));
-                ui.add(DragValue::new(&mut config.gravity[1]).speed(0.1).suffix(" y"));
+                ui.add(
+                    DragValue::new(&mut config.gravity[0])
+                        .speed(0.1)
+                        .suffix(" x"),
+                );
+                ui.add(
+                    DragValue::new(&mut config.gravity[1])
+                        .speed(0.1)
+                        .suffix(" y"),
+                );
             });
 
             // Fade out
@@ -243,13 +318,11 @@ impl VfxEditorState {
                 ui.label("Fade Out:");
                 ui.checkbox(&mut config.fade_out, "");
             });
-
         } else {
             ui.label("Select an emitter to edit its properties, or add a new one.");
         }
 
         ui.add_space(8.0);
-
 
         ui.add_space(8.0);
 
@@ -261,10 +334,15 @@ impl VfxEditorState {
         // Preview canvas
         let preview_size = Vec2::new(400.0, 300.0);
         let (rect, response) = ui.allocate_exact_size(preview_size, egui::Sense::hover());
-        
+
         // Draw preview background
-        ui.painter().rect_filled(rect, 4.0, Color32::from_rgb(20, 20, 30));
-        ui.painter().rect_stroke(rect, 4.0, egui::Stroke::new(1.0, Color32::from_gray(80)));
+        ui.painter()
+            .rect_filled(rect, 4.0, Color32::from_rgb(20, 20, 30));
+        ui.painter().rect_stroke(
+            rect,
+            4.0,
+            egui::Stroke::new(1.0_f32, Color32::from_gray(80)),
+        );
 
         // Draw particles in preview
         let particles = self.particle_system.particles();
@@ -292,8 +370,18 @@ impl VfxEditorState {
                 center.x + emitter.position()[0] * scale,
                 center.y - emitter.position()[1] * scale,
             );
-            ui.painter().circle_stroke(pos, 8.0, egui::Stroke::new(2.0, Color32::from_rgb(100, 200, 255)));
-            ui.painter().text(pos, egui::Align2::CENTER_CENTER, "E", egui::FontId::proportional(12.0), Color32::from_rgb(100, 200, 255));
+            ui.painter().circle_stroke(
+                pos,
+                8.0,
+                egui::Stroke::new(2.0_f32, Color32::from_rgb(100, 200, 255)),
+            );
+            ui.painter().text(
+                pos,
+                egui::Align2::CENTER_CENTER,
+                "E",
+                egui::FontId::proportional(12.0),
+                Color32::from_rgb(100, 200, 255),
+            );
         }
 
         // Click to position selected emitter
@@ -310,5 +398,3 @@ impl VfxEditorState {
         self.update_preview(self.preview_dt);
     }
 }
-
-

@@ -50,7 +50,8 @@ fn playing_the_sample_moves_the_player_and_collects_a_coin() {
     )
     .expect("the script is text");
 
-    let mut session = SliceSession::with_action_map(SliceSession::new(&source)source, game.project.action_map.clone()).expect("the script compiles");
+    let mut session = SliceSession::with_action_map(&source, game.project.action_map.clone())
+        .expect("the script compiles");
 
     // Spawn the scene the way the player does, but without GPU textures.
     let mut world = GameWorld::new();
@@ -63,10 +64,11 @@ fn playing_the_sample_moves_the_player_and_collects_a_coin() {
     // The player starts at the position of the manifest.
     let start = player_position(&mut world).expect("the scene has a player");
 
-    // Moving right for a few seconds brings the player to the first coin.
+    // The manifest puts coin1 at (240, 260), diagonally from the player
+    // at (120, 200). Horizontal-only movement never reaches its pickup radius.
     for _ in 0..300 {
         session
-            .step(&mut world, (1.0, 0.0), 1.0 / 60.0)
+            .step(&mut world, (1.0, 0.5), 1.0 / 60.0)
             .expect("the script runs");
     }
 
@@ -109,7 +111,8 @@ fn the_sample_state_survives_a_save_and_load() {
     )
     .expect("the script is text");
 
-    let mut session = SliceSession::with_action_map(SliceSession::new(&source)source, game.project.action_map.clone()).expect("the script compiles");
+    let mut session = SliceSession::with_action_map(&source, game.project.action_map.clone())
+        .expect("the script compiles");
     let mut world = GameWorld::new();
     let mut make_sprite =
         |_entity: &kiln_core::project::Entity, color: [f32; 4], _texture: Option<&str>| {
@@ -119,7 +122,7 @@ fn the_sample_state_survives_a_save_and_load() {
 
     for _ in 0..300 {
         session
-            .step(&mut world, (1.0, 0.0), 1.0 / 60.0)
+            .step(&mut world, (1.0, 0.5), 1.0 / 60.0)
             .expect("the script runs");
     }
     let score = session.state().score;
@@ -168,18 +171,19 @@ fn the_script_decides_the_score_not_the_engine() {
     .expect("the script is text");
 
     // A script that scores nothing leaves the score alone.
-    let mut quiet = SliceSession::new("move_player(get_input_x(), 0.0);").unwrap();
+    let mut quiet = SliceSession::new("move_player(get_input_x() * 120.0 * get_delta_time(), get_input_y() * 120.0 * get_delta_time());").unwrap();
     let mut world = sample_world(&game);
     for _ in 0..300 {
-        quiet.step(&mut world, (1.0, 0.0), 1.0 / 60.0).unwrap();
+        quiet.step(&mut world, (1.0, 0.5), 1.0 / 60.0).unwrap();
     }
     assert_eq!(quiet.state().score, 0, "the script decides the score");
 
     // The sample's script awards a coin, so the score follows the rules.
-    let mut session = SliceSession::with_action_map(SliceSession::new(&source)source, game.project.action_map.clone()).expect("the script compiles");
+    let mut session = SliceSession::with_action_map(&source, game.project.action_map.clone())
+        .expect("the script compiles");
     let mut world = sample_world(&game);
     for _ in 0..300 {
-        session.step(&mut world, (1.0, 0.0), 1.0 / 60.0).unwrap();
+        session.step(&mut world, (1.0, 0.5), 1.0 / 60.0).unwrap();
     }
     assert!(session.state().score > 0, "the sample script scores");
 }
@@ -232,7 +236,8 @@ fn the_sample_runs_from_a_packed_archive() {
             .clone(),
     )
     .expect("the script is text");
-    let mut session = SliceSession::with_action_map(SliceSession::new(&source)source, game.project.action_map.clone()).expect("the script compiles");
+    let mut session = SliceSession::with_action_map(&source, game.project.action_map.clone())
+        .expect("the script compiles");
 
     let mut world = GameWorld::new();
     let mut make_sprite =
@@ -243,7 +248,7 @@ fn the_sample_runs_from_a_packed_archive() {
 
     for _ in 0..300 {
         session
-            .step(&mut world, (1.0, 0.0), 1.0 / 60.0)
+            .step(&mut world, (1.0, 0.5), 1.0 / 60.0)
             .expect("the script runs");
     }
     assert!(

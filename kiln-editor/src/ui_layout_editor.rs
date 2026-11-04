@@ -1,10 +1,7 @@
 //! UI Layout Editor panel — visual canvas for kiln-ui widgets.
 
-use egui::{Color32, DragValue, RichText, ScrollArea, Ui, Vec2, Stroke, Sense, Pos2, Align2};
-use kiln_ui::{
-    Anchor, Layout, LayoutConstraints, Rect, Size, WidgetId,
-    Panel, Label, Button, List, NineSlice, NineSliceRenderer,
-};
+use egui::{Align2, Color32, DragValue, Pos2, Sense, Stroke, Ui, Vec2};
+use kiln_ui::{Anchor, NineSlice, Rect, Size, WidgetId};
 
 /// UI widget types for the editor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -34,7 +31,6 @@ pub struct EditorWidget {
     pub panel_background: Option<NineSlice>,
 }
 
-
 /// State of the UI Layout Editor panel.
 #[derive(Debug, Default)]
 pub struct UiLayoutEditorState {
@@ -53,7 +49,6 @@ pub struct UiLayoutEditorState {
     /// Show add widget dialog.
     pub show_add_widget_dialog: bool,
     /// New widget type to add.
-    new_widget_type: WidgetType,
     /// Show widget properties panel.
     pub show_properties: bool,
     /// Drag state.
@@ -71,7 +66,6 @@ impl UiLayoutEditorState {
             snap_to_grid: true,
             grid_size: 10.0,
             show_add_widget_dialog: false,
-            new_widget_type: WidgetType::Panel,
             show_properties: true,
             dragging_widget: None,
             drag_offset: Vec2::ZERO,
@@ -80,7 +74,7 @@ impl UiLayoutEditorState {
 
     /// Add a new widget to the canvas.
     pub fn add_widget(&mut self, widget_type: WidgetType) -> usize {
-        let id = WidgetId::new();
+        let _id = WidgetId::new();
         let widget = match widget_type {
             WidgetType::Panel => EditorWidget {
                 id: WidgetId::new(),
@@ -134,7 +128,11 @@ impl UiLayoutEditorState {
                 button_normal: None,
                 button_hovered: None,
                 button_pressed: None,
-                list_items: vec!["Item 1".to_string(), "Item 2".to_string(), "Item 3".to_string()],
+                list_items: vec![
+                    "Item 1".to_string(),
+                    "Item 2".to_string(),
+                    "Item 3".to_string(),
+                ],
                 list_selected: Some(0),
                 panel_background: None,
             },
@@ -150,7 +148,6 @@ impl UiLayoutEditorState {
         // In play mode, could animate or update widget states
     }
 
-
     /// Render the UI Layout Editor panel.
     pub fn render(&mut self, ui: &mut Ui) {
         ui.heading("UI Layout Editor");
@@ -158,12 +155,24 @@ impl UiLayoutEditorState {
 
         // Toolbar
         ui.horizontal(|ui| {
-            if ui.button(if self.preview_mode { "⏸ Stop Preview" } else { "▶ Preview" }).clicked() {
+            if ui
+                .button(if self.preview_mode {
+                    "⏸ Stop Preview"
+                } else {
+                    "▶ Preview"
+                })
+                .clicked()
+            {
                 self.preview_mode = !self.preview_mode;
             }
             ui.separator();
             ui.checkbox(&mut self.snap_to_grid, "Snap to Grid");
-            ui.add(egui::DragValue::new(&mut self.grid_size).speed(1.0).suffix("px").range(1.0..=100.0));
+            ui.add(
+                egui::DragValue::new(&mut self.grid_size)
+                    .speed(1.0)
+                    .suffix("px")
+                    .range(1.0..=100.0),
+            );
             ui.separator();
             if ui.button("🗑 Clear Canvas").clicked() {
                 self.widgets.clear();
@@ -179,7 +188,12 @@ impl UiLayoutEditorState {
         // Widget palette
         ui.horizontal(|ui| {
             ui.heading("Widget Palette");
-            for &widget_type in &[WidgetType::Panel, WidgetType::Label, WidgetType::Button, WidgetType::List] {
+            for &widget_type in &[
+                WidgetType::Panel,
+                WidgetType::Label,
+                WidgetType::Button,
+                WidgetType::List,
+            ] {
                 if ui.button(format!("{:?}", widget_type)).clicked() {
                     self.add_widget(widget_type);
                 }
@@ -196,12 +210,19 @@ impl UiLayoutEditorState {
                 ui.add_space(4.0);
 
                 let canvas_size = Vec2::new(self.canvas_size.width, self.canvas_size.height);
-                let (canvas_rect, canvas_response) = ui.allocate_exact_size(canvas_size, Sense::click_and_drag());
-                let canvas_rect_kiln = kiln_ui::Rect::new(canvas_rect.min.x, canvas_rect.min.y, canvas_rect.width(), canvas_rect.height());
+                let (canvas_rect, canvas_response) =
+                    ui.allocate_exact_size(canvas_size, Sense::click_and_drag());
+                let canvas_rect_kiln = kiln_ui::Rect::new(
+                    canvas_rect.min.x,
+                    canvas_rect.min.y,
+                    canvas_rect.width(),
+                    canvas_rect.height(),
+                );
 
                 // Canvas background
-                ui.painter().rect_filled(canvas_rect, 4.0, Color32::from_rgb(30, 30, 40));
-                
+                ui.painter()
+                    .rect_filled(canvas_rect, 4.0, Color32::from_rgb(30, 30, 40));
+
                 // Grid
                 if self.snap_to_grid {
                     self.draw_grid(ui.painter(), canvas_rect_kiln);
@@ -210,16 +231,18 @@ impl UiLayoutEditorState {
                 // Draw widgets
                 let mut clicked_widget = None;
                 let mut drag_started = None;
-                
+
                 for (idx, widget) in self.widgets.clone().iter().enumerate() {
-                    if !widget.visible { continue; }
-                    
+                    if !widget.visible {
+                        continue;
+                    }
+
                     let widget_rect_kiln = self.widget_rect_to_canvas(widget, canvas_rect_kiln);
                     let widget_rect = egui::Rect::from_min_size(
                         egui::pos2(widget_rect_kiln.x, widget_rect_kiln.y),
                         egui::vec2(widget_rect_kiln.width, widget_rect_kiln.height),
                     );
-                    
+
                     // Widget background
                     let bg_color = if self.selected_widget == Some(idx) {
                         Color32::from_rgb(60, 100, 180)
@@ -227,12 +250,14 @@ impl UiLayoutEditorState {
                         Color32::from_rgb(50, 50, 70)
                     };
                     ui.painter().rect_filled(widget_rect, 4.0, bg_color);
-                    ui.painter().rect_stroke(widget_rect, 4.0, 
+                    ui.painter().rect_stroke(
+                        widget_rect,
+                        4.0,
                         if self.selected_widget == Some(idx) {
-                            Stroke::new(2.0, Color32::from_rgb(100, 200, 255))
+                            Stroke::new(2.0_f32, Color32::from_rgb(100, 200, 255))
                         } else {
-                            Stroke::new(1.0, Color32::from_gray(100))
-                        }
+                            Stroke::new(1.0_f32, Color32::from_gray(100))
+                        },
                     );
 
                     // Widget label
@@ -251,22 +276,35 @@ impl UiLayoutEditorState {
                     );
 
                     // Interaction
-                    let widget_response = ui.interact(widget_rect, ui.id().with(widget.id.as_u64()), Sense::click_and_drag());
-                    
+                    let widget_response = ui.interact(
+                        widget_rect,
+                        ui.id().with(widget.id.as_u64()),
+                        Sense::click_and_drag(),
+                    );
+
                     if widget_response.clicked() {
                         clicked_widget = Some(idx);
                     }
                     if widget_response.drag_started() {
-                        drag_started = Some((idx, widget_response.interact_pointer_pos().unwrap_or(Pos2::ZERO)));
+                        drag_started = Some((
+                            idx,
+                            widget_response.interact_pointer_pos().unwrap_or(Pos2::ZERO),
+                        ));
                     }
                     if widget_response.dragged() && self.dragging_widget == Some(idx) {
                         if let Some(pos) = widget_response.interact_pointer_pos() {
-                            let new_bounds = self.snap_bounds(self.canvas_pos_to_widget_bounds(pos - self.drag_offset));
+                            let new_bounds = self.snap_bounds(
+                                self.canvas_pos_to_widget_bounds(pos - self.drag_offset),
+                            );
                             if let Some(widget) = self.widgets.get_mut(idx) {
                                 widget.bounds = new_bounds;
                             }
                         }
                     }
+                }
+
+                if let Some((idx, _)) = drag_started {
+                    clicked_widget = Some(idx);
                 }
 
                 // Handle selection
@@ -275,7 +313,8 @@ impl UiLayoutEditorState {
                     self.dragging_widget = Some(idx);
                     if let Some(pos) = canvas_response.interact_pointer_pos() {
                         if let Some(widget) = self.widgets.get(idx) {
-                            let widget_rect_kiln = self.widget_rect_to_canvas(widget, canvas_rect_kiln);
+                            let widget_rect_kiln =
+                                self.widget_rect_to_canvas(widget, canvas_rect_kiln);
                             let widget_rect = egui::Rect::from_min_size(
                                 egui::pos2(widget_rect_kiln.x, widget_rect_kiln.y),
                                 egui::vec2(widget_rect_kiln.width, widget_rect_kiln.height),
@@ -295,7 +334,6 @@ impl UiLayoutEditorState {
                     self.selected_widget = None;
                 }
             });
-
 
             // Right: Properties panel
             cols[1].vertical(|ui| {
@@ -329,9 +367,17 @@ impl UiLayoutEditorState {
                         });
                         ui.horizontal(|ui| {
                             ui.label("W:");
-                            ui.add(DragValue::new(&mut widget.bounds.width).speed(1.0).suffix("px"));
+                            ui.add(
+                                DragValue::new(&mut widget.bounds.width)
+                                    .speed(1.0)
+                                    .suffix("px"),
+                            );
                             ui.label("H:");
-                            ui.add(DragValue::new(&mut widget.bounds.height).speed(1.0).suffix("px"));
+                            ui.add(
+                                DragValue::new(&mut widget.bounds.height)
+                                    .speed(1.0)
+                                    .suffix("px"),
+                            );
                         });
 
                         ui.add_space(8.0);
@@ -339,7 +385,7 @@ impl UiLayoutEditorState {
                         // Layout properties
                         ui.separator();
                         ui.label("Layout");
-                        
+
                         // Anchor
                         ui.horizontal(|ui| {
                             ui.label("Anchor:");
@@ -347,11 +393,21 @@ impl UiLayoutEditorState {
                                 .selected_text(format!("{:?}", widget.layout.anchor))
                                 .show_ui(ui, |ui| {
                                     for &anchor in &[
-                                        Anchor::TopLeft, Anchor::TopCenter, Anchor::TopRight,
-                                        Anchor::CenterLeft, Anchor::Center, Anchor::CenterRight,
-                                        Anchor::BottomLeft, Anchor::BottomCenter, Anchor::BottomRight,
+                                        Anchor::TopLeft,
+                                        Anchor::TopCenter,
+                                        Anchor::TopRight,
+                                        Anchor::CenterLeft,
+                                        Anchor::Center,
+                                        Anchor::CenterRight,
+                                        Anchor::BottomLeft,
+                                        Anchor::BottomCenter,
+                                        Anchor::BottomRight,
                                     ] {
-                                        ui.selectable_value(&mut widget.layout.anchor, anchor, format!("{:?}", anchor));
+                                        ui.selectable_value(
+                                            &mut widget.layout.anchor,
+                                            anchor,
+                                            format!("{:?}", anchor),
+                                        );
                                     }
                                 });
                         });
@@ -359,9 +415,17 @@ impl UiLayoutEditorState {
                         // Flex
                         ui.horizontal(|ui| {
                             ui.label("Flex Grow:");
-                            ui.add(DragValue::new(&mut widget.layout.flex_grow).speed(0.1).range(0.0..=10.0));
+                            ui.add(
+                                DragValue::new(&mut widget.layout.flex_grow)
+                                    .speed(0.1)
+                                    .range(0.0..=10.0),
+                            );
                             ui.label("Flex Shrink:");
-                            ui.add(DragValue::new(&mut widget.layout.flex_shrink).speed(0.1).range(0.0..=10.0));
+                            ui.add(
+                                DragValue::new(&mut widget.layout.flex_shrink)
+                                    .speed(0.1)
+                                    .range(0.0..=10.0),
+                            );
                         });
 
                         // Constraints
@@ -369,15 +433,39 @@ impl UiLayoutEditorState {
                         ui.label("Constraints");
                         ui.horizontal(|ui| {
                             ui.label("Min W:");
-                            ui.add(DragValue::new(widget.layout.constraints.min_width.get_or_insert_with(|| 0.0)).speed(1.0).suffix("px"));
+                            ui.add(
+                                DragValue::new(
+                                    widget.layout.constraints.min_width.get_or_insert(0.0),
+                                )
+                                .speed(1.0)
+                                .suffix("px"),
+                            );
                             ui.label("Max W:");
-                            ui.add(DragValue::new(widget.layout.constraints.max_width.get_or_insert_with(|| 1000.0)).speed(1.0).suffix("px"));
+                            ui.add(
+                                DragValue::new(
+                                    widget.layout.constraints.max_width.get_or_insert(1000.0),
+                                )
+                                .speed(1.0)
+                                .suffix("px"),
+                            );
                         });
                         ui.horizontal(|ui| {
                             ui.label("Min H:");
-                            ui.add(DragValue::new(widget.layout.constraints.min_height.get_or_insert_with(|| 0.0)).speed(1.0).suffix("px"));
+                            ui.add(
+                                DragValue::new(
+                                    widget.layout.constraints.min_height.get_or_insert(0.0),
+                                )
+                                .speed(1.0)
+                                .suffix("px"),
+                            );
                             ui.label("Max H:");
-                            ui.add(DragValue::new(widget.layout.constraints.max_height.get_or_insert_with(|| 1000.0)).speed(1.0).suffix("px"));
+                            ui.add(
+                                DragValue::new(
+                                    widget.layout.constraints.max_height.get_or_insert(1000.0),
+                                )
+                                .speed(1.0)
+                                .suffix("px"),
+                            );
                         });
 
                         // Type-specific properties
@@ -410,7 +498,7 @@ impl UiLayoutEditorState {
                 }
 
                 ui.add_space(8.0);
-                
+
                 // Add widget button
                 if ui.button("➕ Add Widget").clicked() {
                     // Show dialog
@@ -422,7 +510,6 @@ impl UiLayoutEditorState {
         self.update_preview(1.0 / 60.0);
     }
 
-
     /// Draw grid on canvas.
     fn draw_grid(&self, painter: &egui::Painter, canvas_rect: Rect) {
         let grid_size = self.grid_size;
@@ -432,8 +519,11 @@ impl UiLayoutEditorState {
         let mut x = start_x;
         while x <= canvas_rect.right() {
             painter.line_segment(
-                [Pos2::new(x, canvas_rect.top()), Pos2::new(x, canvas_rect.bottom())],
-                Stroke::new(0.5, Color32::from_rgba_premultiplied(100, 100, 120, 50)),
+                [
+                    Pos2::new(x, canvas_rect.top()),
+                    Pos2::new(x, canvas_rect.bottom()),
+                ],
+                Stroke::new(0.5_f32, Color32::from_rgba_premultiplied(100, 100, 120, 50)),
             );
             x += grid_size;
         }
@@ -441,8 +531,11 @@ impl UiLayoutEditorState {
         let mut y = start_y;
         while y <= canvas_rect.bottom() {
             painter.line_segment(
-                [Pos2::new(canvas_rect.left(), y), Pos2::new(canvas_rect.right(), y)],
-                Stroke::new(0.5, Color32::from_rgba_premultiplied(100, 100, 120, 50)),
+                [
+                    Pos2::new(canvas_rect.left(), y),
+                    Pos2::new(canvas_rect.right(), y),
+                ],
+                Stroke::new(0.5_f32, Color32::from_rgba_premultiplied(100, 100, 120, 50)),
             );
             y += grid_size;
         }
@@ -450,7 +543,12 @@ impl UiLayoutEditorState {
 
     /// Convert widget bounds to canvas coordinates.
     fn widget_rect_to_canvas(&self, widget: &EditorWidget, canvas_rect: Rect) -> Rect {
-        Rect::new(canvas_rect.x + widget.bounds.x, canvas_rect.y + widget.bounds.y, widget.bounds.width, widget.bounds.height)
+        Rect::new(
+            canvas_rect.x + widget.bounds.x,
+            canvas_rect.y + widget.bounds.y,
+            widget.bounds.width,
+            widget.bounds.height,
+        )
     }
 
     /// Convert canvas position to widget bounds.
@@ -472,7 +570,5 @@ impl UiLayoutEditorState {
         )
     }
 }
-
-
 
 // Add missing methods to Grid

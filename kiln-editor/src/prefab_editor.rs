@@ -22,6 +22,23 @@ impl PrefabEditorState {
         self.prefabs.insert(prefab.id.clone(), prefab);
     }
 
+    /// Replace the displayed definitions with those stored in the project.
+    pub fn replace_prefabs(&mut self, prefabs: HashMap<String, Prefab>) {
+        self.prefabs = prefabs;
+        if self
+            .selected_prefab
+            .as_ref()
+            .is_some_and(|id| !self.prefabs.contains_key(id))
+        {
+            self.selected_prefab = None;
+        }
+    }
+
+    /// Clone the definitions for project serialization.
+    pub fn prefabs(&self) -> &HashMap<String, Prefab> {
+        &self.prefabs
+    }
+
     pub fn get_prefab(&self, id: &str) -> Option<&Prefab> {
         self.prefabs.get(id)
     }
@@ -102,6 +119,24 @@ mod tests {
         editor.add_prefab(prefab.clone());
         editor.remove_prefab(&prefab.id);
         assert_eq!(editor.prefab_list().len(), 0);
+    }
+
+    #[test]
+    fn replacing_project_prefabs_preserves_selection_only_when_it_still_exists() {
+        let mut editor = PrefabEditorState::new();
+        let entity = Entity {
+            id: "enemy".to_string(),
+            name: "Enemy".to_string(),
+            components: vec![],
+        };
+        let prefab = Prefab::new("Enemy".to_string(), entity);
+        let id = prefab.id.clone();
+        editor.add_prefab(prefab.clone());
+        editor.select_prefab(&id);
+        editor.replace_prefabs(HashMap::from([(id.clone(), prefab.clone())]));
+        assert_eq!(editor.selected_prefab_id(), Some(id.as_str()));
+        editor.replace_prefabs(HashMap::new());
+        assert_eq!(editor.selected_prefab_id(), None);
     }
 
     #[test]

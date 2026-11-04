@@ -5,8 +5,8 @@
 
 #[cfg(feature = "audio")]
 use rodio::{
-    Decoder, DeviceSinkBuilder, MixerDeviceSink, Sink, Source,
     source::{Buffered, SeekError},
+    Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, Source,
 };
 #[cfg(feature = "audio")]
 use std::collections::HashMap;
@@ -19,6 +19,7 @@ use std::sync::{Arc, Mutex};
 
 /// Audio category for volume management
 /// Available even when audio feature is disabled for API compatibility.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AudioCategory {
     /// Sound effects - short, can overlap
     Sfx,
@@ -31,7 +32,7 @@ pub enum AudioCategory {
 struct SoundSource {
     name: String,
     category: AudioCategory,
-    sink: Sink,
+    sink: Player,
     loops: bool,
     paused: bool,
 }
@@ -65,16 +66,19 @@ impl AudioEngine {
     /// Register a sound by name, category, and file path
     pub fn register_sound(&mut self, name: &str, category: AudioCategory, _path: &str) {
         let mut sources = self.sources.lock().unwrap();
-        let sink = Sink::try_new(&self.master_sink.mixer()).expect("Failed to create sink");
+        let sink = Player::connect_new(self.master_sink.mixer());
         sink.set_volume(0.0);
         sink.pause();
-        sources.insert(name.to_string(), SoundSource {
-            name: name.to_string(),
-            category,
-            sink,
-            loops: category == AudioCategory::Music,
-            paused: true,
-        });
+        sources.insert(
+            name.to_string(),
+            SoundSource {
+                name: name.to_string(),
+                category,
+                sink,
+                loops: category == AudioCategory::Music,
+                paused: true,
+            },
+        );
     }
 
     /// Play a sound effect by name (SFX category)
@@ -94,7 +98,8 @@ impl AudioEngine {
         let mut sources = self.sources.lock().unwrap();
         if let Some(sound) = sources.get_mut(name) {
             if sound.category == AudioCategory::Sfx {
-                let effective_volume = self.master_volume * self.sfx_volume * volume.clamp(0.0, 1.0);
+                let effective_volume =
+                    self.master_volume * self.sfx_volume * volume.clamp(0.0, 1.0);
                 sound.sink.set_volume(effective_volume);
                 sound.sink.play();
                 sound.paused = false;
@@ -141,7 +146,9 @@ impl AudioEngine {
         let mut sources = self.sources.lock().unwrap();
         if let Some(sound) = sources.get_mut(name) {
             if sound.category == AudioCategory::Music {
-                sound.sink.set_volume(self.master_volume * self.music_volume);
+                sound
+                    .sink
+                    .set_volume(self.master_volume * self.music_volume);
                 sound.sink.play();
                 sound.paused = false;
                 self.music_handle = Some(name.to_string());
@@ -158,15 +165,15 @@ impl AudioEngine {
 
     /// Pause music
     pub fn pause_music(&mut self) {
-        if let Some(name) = &self.music_handle {
-            self.pause_sound(name);
+        if let Some(name) = self.music_handle.clone() {
+            self.pause_sound(&name);
         }
     }
 
     /// Resume music
     pub fn resume_music(&mut self) {
-        if let Some(name) = &self.music_handle {
-            self.resume_sound(name);
+        if let Some(name) = self.music_handle.clone() {
+            self.resume_sound(&name);
         }
     }
 
@@ -231,7 +238,10 @@ impl AudioEngine {
     /// Check if a sound is playing
     pub fn is_playing(&self, name: &str) -> bool {
         let sources = self.sources.lock().unwrap();
-        sources.get(name).map(|s| !s.paused && !s.sink.is_paused()).unwrap_or(false)
+        sources
+            .get(name)
+            .map(|s| !s.paused && !s.sink.is_paused())
+            .unwrap_or(false)
     }
 
     /// Check if music is playing
@@ -256,7 +266,10 @@ impl AudioEngine {
     /// Get number of active sources
     pub fn active_source_count(&self) -> usize {
         let sources = self.sources.lock().unwrap();
-        sources.values().filter(|s| !s.paused && !s.sink.is_paused()).count()
+        sources
+            .values()
+            .filter(|s| !s.paused && !s.sink.is_paused())
+            .count()
     }
 }
 
@@ -290,13 +303,25 @@ impl AudioEngine {
     pub fn set_master_volume(&mut self, _volume: f32) {}
     pub fn set_sfx_volume(&mut self, _volume: f32) {}
     pub fn set_music_volume(&mut self, _volume: f32) {}
-    pub fn master_volume(&self) -> f32 { 1.0 }
-    pub fn sfx_volume(&self) -> f32 { 1.0 }
-    pub fn music_volume(&self) -> f32 { 0.5 }
-    pub fn is_playing(&self, _name: &str) -> bool { false }
-    pub fn is_music_playing(&self) -> bool { false }
+    pub fn master_volume(&self) -> f32 {
+        1.0
+    }
+    pub fn sfx_volume(&self) -> f32 {
+        1.0
+    }
+    pub fn music_volume(&self) -> f32 {
+        0.5
+    }
+    pub fn is_playing(&self, _name: &str) -> bool {
+        false
+    }
+    pub fn is_music_playing(&self) -> bool {
+        false
+    }
     pub fn stop_all(&mut self) {}
-    pub fn active_source_count(&self) -> usize { 0 }
+    pub fn active_source_count(&self) -> usize {
+        0
+    }
 }
 
 #[cfg(not(feature = "audio"))]

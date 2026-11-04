@@ -1,7 +1,28 @@
 //! ECS world wrapper
 
 use hecs::World;
-use kiln_core::EntityId;
+use kiln_core::{EntityId, Transform};
+use std::ops::Deref;
+
+/// The resolved world-space transform produced from local Transform and Parent links.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GlobalTransform(pub Transform);
+
+impl Deref for GlobalTransform {
+    type Target = Transform;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// Runtime link to a parent entity in the same scene hierarchy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParentLink(pub hecs::Entity);
+
+/// Fixed scene-instance offset applied to a hierarchy root in world space.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct WorldOffset(pub [f32; 2]);
 
 /// The gameplay role of an entity, e.g. `"player"` or `"coin"`.
 ///

@@ -21,4 +21,4 @@ pub use ui_renderer::{UiQuad, UiRenderer};
 pub use widget::{Button, Canvas, Label, List, Panel, Widget, WidgetId};
 
 #[cfg(feature = "fonts")]
-pub use sdf_builder::{SdfAtlasResult, SdfBuilderConfig, build_sdf_atlas};
+pub use sdf_builder::{build_sdf_atlas, SdfAtlasResult, SdfBuilderConfig};

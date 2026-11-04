@@ -2,7 +2,6 @@
 
 use egui::{Color32, DragValue, Pos2, Rect, Sense, Stroke, Ui, Vec2};
 use kiln_core::project::{Component, Entity, Project};
-use std::collections::HashMap;
 
 const SPRITE_PREVIEW_SIZE: f32 = 256.0;
 
@@ -37,17 +36,12 @@ pub struct SpriteEditorState {
     last_mouse_pos: Option<Pos2>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SliceMode {
+    #[default]
     Manual,
     Grid,
     AutoDetect,
-}
-
-impl Default for SliceMode {
-    fn default() -> Self {
-        SliceMode::Manual
-    }
 }
 
 impl SpriteEditorState {
@@ -78,19 +72,35 @@ impl SpriteEditorState {
         // Entity selector
         ui.horizontal(|ui| {
             ui.label("Entity:");
-            let current = self.selected_entity.as_deref().unwrap_or("Select entity...");
+            let current = self
+                .selected_entity
+                .as_deref()
+                .unwrap_or("Select entity...");
             egui::ComboBox::from_label("")
                 .selected_text(current)
                 .show_ui(ui, |ui| {
-                    if ui.selectable_label(self.selected_entity.is_none(), "None").clicked() {
+                    if ui
+                        .selectable_label(self.selected_entity.is_none(), "None")
+                        .clicked()
+                    {
                         self.selected_entity = None;
                         self.update_from_entity(project);
                     }
                     for scene in project.scenes.values() {
                         for entity in &scene.entities {
-                            if entity.components.iter().any(|c| matches!(c, Component::Sprite { .. })) {
+                            if entity
+                                .components
+                                .iter()
+                                .any(|c| matches!(c, Component::Sprite { .. }))
+                            {
                                 let label = format!("{} ({})", entity.id, entity.name);
-                                if ui.selectable_label(self.selected_entity.as_deref() == Some(&entity.id), &label).clicked() {
+                                if ui
+                                    .selectable_label(
+                                        self.selected_entity.as_deref() == Some(&entity.id),
+                                        &label,
+                                    )
+                                    .clicked()
+                                {
                                     self.selected_entity = Some(entity.id.clone());
                                     self.update_from_entity(project);
                                 }
@@ -109,7 +119,7 @@ impl SpriteEditorState {
         ui.add_space(8.0);
 
         let entity_id = &self.selected_entity.clone().unwrap();
-        let (scene_id, entity) = self.find_entity(project, entity_id);
+        let (_scene_id, entity) = self.find_entity(project, entity_id);
 
         if entity.is_none() {
             ui.label("Entity not found");
@@ -120,8 +130,22 @@ impl SpriteEditorState {
 
         let mut sprite_comp = None;
         for component in &entity.components {
-            if let Component::Sprite { color, texture, layer, material, animation_clip } = component {
-                sprite_comp = Some((color.clone(), texture.clone(), *layer, material.clone(), animation_clip.clone()));
+            if let Component::Sprite {
+                color,
+                texture,
+                layer,
+                material,
+                animation_clip,
+                ..
+            } = component
+            {
+                sprite_comp = Some((
+                    *color,
+                    texture.clone(),
+                    *layer,
+                    material.clone(),
+                    animation_clip.clone(),
+                ));
                 break;
             }
         }
@@ -131,7 +155,7 @@ impl SpriteEditorState {
             return;
         }
 
-        let (color, texture, layer, material, animation_clip) = sprite_comp.unwrap();
+        let (_color, texture, _layer, _material, _animation_clip) = sprite_comp.unwrap();
 
         ui.separator();
         ui.heading("Sprite Settings");
@@ -148,8 +172,7 @@ impl SpriteEditorState {
                     self.update_sprite_texture(project, entity_id, Some(tex_path.clone()));
                 }
             }
-            if ui.small_button("📁").clicked() {
-            }
+            if ui.small_button("📁").clicked() {}
         });
 
         ui.add_space(8.0);
@@ -160,9 +183,17 @@ impl SpriteEditorState {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             ui.label("X:");
-            ui.add(DragValue::new(&mut self.pivot[0]).speed(0.01).range(0.0..=1.0));
+            ui.add(
+                DragValue::new(&mut self.pivot[0])
+                    .speed(0.01)
+                    .range(0.0..=1.0),
+            );
             ui.label("Y:");
-            ui.add(DragValue::new(&mut self.pivot[1]).speed(0.01).range(0.0..=1.0));
+            ui.add(
+                DragValue::new(&mut self.pivot[1])
+                    .speed(0.01)
+                    .range(0.0..=1.0),
+            );
         });
         // In a real implementation, we'd update the pivot here
 
@@ -229,13 +260,29 @@ impl SpriteEditorState {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             ui.label("Left:");
-            ui.add(DragValue::new(&mut self.nine_slice_borders.0).speed(1).range(0..=u32::MAX));
+            ui.add(
+                DragValue::new(&mut self.nine_slice_borders.0)
+                    .speed(1)
+                    .range(0..=u32::MAX),
+            );
             ui.label("Top:");
-            ui.add(DragValue::new(&mut self.nine_slice_borders.1).speed(1).range(0..=u32::MAX));
+            ui.add(
+                DragValue::new(&mut self.nine_slice_borders.1)
+                    .speed(1)
+                    .range(0..=u32::MAX),
+            );
             ui.label("Right:");
-            ui.add(DragValue::new(&mut self.nine_slice_borders.2).speed(1).range(0..=u32::MAX));
+            ui.add(
+                DragValue::new(&mut self.nine_slice_borders.2)
+                    .speed(1)
+                    .range(0..=u32::MAX),
+            );
             ui.label("Bottom:");
-            ui.add(DragValue::new(&mut self.nine_slice_borders.3).speed(1).range(0..=u32::MAX));
+            ui.add(
+                DragValue::new(&mut self.nine_slice_borders.3)
+                    .speed(1)
+                    .range(0..=u32::MAX),
+            );
         });
 
         // Quick 9-slice presets
@@ -263,7 +310,11 @@ impl SpriteEditorState {
         self.render_preview(ui, project);
     }
 
-    fn find_entity<'a>(&self, project: &'a Project, entity_id: &str) -> (Option<&'a str>, Option<&'a Entity>) {
+    fn find_entity<'a>(
+        &self,
+        project: &'a Project,
+        entity_id: &str,
+    ) -> (Option<&'a str>, Option<&'a Entity>) {
         for (scene_id, scene) in &project.scenes {
             for entity in &scene.entities {
                 if entity.id == *entity_id {
@@ -287,7 +338,10 @@ impl SpriteEditorState {
         if let Some(entity_id) = &self.selected_entity {
             if let (_, Some(entity)) = self.find_entity(project, entity_id) {
                 for component in &entity.components {
-                    if let Component::Sprite { color: _, texture, layer: _, material: _, animation_clip: _ } = component {
+                    if let Component::Sprite {
+                        color: _, texture, ..
+                    } = component
+                    {
                         self.spritesheet_path = texture.clone().unwrap_or_default();
                         self.spritesheet_size = (256, 256);
                         break;
@@ -297,34 +351,18 @@ impl SpriteEditorState {
         }
     }
 
-    fn update_sprite_pivot(&mut self, project: &mut Project, entity_id: &str) {
-    let scene_id_owned = {
-        let (sid, _) = self.find_entity(project, entity_id);
-        sid.map(|s| s.to_string())
-    };
-    if let Some(scene_id) = scene_id_owned {
-        if let Some(scene) = project.scenes.get_mut(&scene_id) {
-                for entity in &mut scene.entities {
-                    if entity.id == *entity_id {
-                        for component in &mut entity.components {
-                            if let Component::Sprite { .. } = component {
-                                break;
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    fn update_sprite_texture(&mut self, project: &mut Project, entity_id: &str, texture: Option<String>) {
-    let scene_id_owned = {
-        let (sid, _) = self.find_entity(project, entity_id);
-        sid.map(|s| s.to_string())
-    };
-    if let Some(scene_id) = scene_id_owned {
-        if let Some(scene) = project.scenes.get_mut(&scene_id) {
+    fn update_sprite_texture(
+        &mut self,
+        project: &mut Project,
+        entity_id: &str,
+        texture: Option<String>,
+    ) {
+        let scene_id_owned = {
+            let (sid, _) = self.find_entity(project, entity_id);
+            sid.map(|s| s.to_string())
+        };
+        if let Some(scene_id) = scene_id_owned {
+            if let Some(scene) = project.scenes.get_mut(&scene_id) {
                 for entity in &mut scene.entities {
                     if entity.id == *entity_id {
                         for component in &mut entity.components {
@@ -340,65 +378,68 @@ impl SpriteEditorState {
         }
     }
 
-    fn update_sprite_nine_slice(&mut self, project: &mut Project, entity_id: &str) {
-    let scene_id_owned = {
-        let (sid, _) = self.find_entity(project, entity_id);
-        sid.map(|s| s.to_string())
-    };
-    if let Some(scene_id) = scene_id_owned {
-        if let Some(scene) = project.scenes.get_mut(&scene_id) {
-                for entity in &mut scene.entities {
-                    if entity.id == *entity_id {
-                        for component in &mut entity.components {
-                            if let Component::Sprite { material, .. } = component {
-                                break;
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
     fn render_grid_slice(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
             ui.label("Cell Width:");
-            ui.add(DragValue::new(&mut self.grid_cell_size.0).speed(1).range(1..=u32::MAX));
+            ui.add(
+                DragValue::new(&mut self.grid_cell_size.0)
+                    .speed(1)
+                    .range(1..=u32::MAX),
+            );
             ui.label("Cell Height:");
-            ui.add(DragValue::new(&mut self.grid_cell_size.1).speed(1).range(1..=u32::MAX));
+            ui.add(
+                DragValue::new(&mut self.grid_cell_size.1)
+                    .speed(1)
+                    .range(1..=u32::MAX),
+            );
         });
         ui.horizontal(|ui| {
             ui.label("Spacing X:");
-            ui.add(DragValue::new(&mut self.grid_spacing.0).speed(1).range(0..=u32::MAX));
+            ui.add(
+                DragValue::new(&mut self.grid_spacing.0)
+                    .speed(1)
+                    .range(0..=u32::MAX),
+            );
             ui.label("Spacing Y:");
-            ui.add(DragValue::new(&mut self.grid_spacing.1).speed(1).range(0..=u32::MAX));
+            ui.add(
+                DragValue::new(&mut self.grid_spacing.1)
+                    .speed(1)
+                    .range(0..=u32::MAX),
+            );
         });
         ui.horizontal(|ui| {
             ui.label("Offset X:");
-            ui.add(DragValue::new(&mut self.grid_offset.0).speed(1).range(0..=u32::MAX));
+            ui.add(
+                DragValue::new(&mut self.grid_offset.0)
+                    .speed(1)
+                    .range(0..=u32::MAX),
+            );
             ui.label("Offset Y:");
-            ui.add(DragValue::new(&mut self.grid_offset.1).speed(1).range(0..=u32::MAX));
+            ui.add(
+                DragValue::new(&mut self.grid_offset.1)
+                    .speed(1)
+                    .range(0..=u32::MAX),
+            );
         });
-        if ui.button("Apply Grid Slice").clicked() {
-        }
+        if ui.button("Apply Grid Slice").clicked() {}
     }
 
     fn render_auto_detect(&mut self, ui: &mut Ui) {
         ui.label("Auto-detect slices based on transparency");
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            if ui.button("Detect Slices").clicked() {
-            }
-            if ui.button("Clear").clicked() {
-            }
+            ui.button("Detect Slices").clicked();
+            if ui.button("Clear").clicked() {}
         });
         ui.add_space(4.0);
         ui.label("Detected frames: 0");
     }
 
     fn render_preview(&mut self, ui: &mut Ui, _project: &Project) {
-        let size = Vec2::new(SPRITE_PREVIEW_SIZE * self.preview_zoom, SPRITE_PREVIEW_SIZE * self.preview_zoom);
+        let size = Vec2::new(
+            SPRITE_PREVIEW_SIZE * self.preview_zoom,
+            SPRITE_PREVIEW_SIZE * self.preview_zoom,
+        );
         let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
 
         if response.dragged() {
@@ -421,70 +462,102 @@ impl SpriteEditorState {
             }
         }
 
-        ui.painter().rect_filled(rect, 4.0, Color32::from_rgb(40, 40, 50));
-        ui.painter().rect_stroke(rect, 4.0, Stroke::new(1.0, Color32::from_gray(100)));
+        ui.painter()
+            .rect_filled(rect, 4.0, Color32::from_rgb(40, 40, 50));
+        ui.painter()
+            .rect_stroke(rect, 4.0, Stroke::new(1.0_f32, Color32::from_gray(100)));
 
         let center = rect.center();
         let preview_size = Vec2::new(128.0 * self.preview_zoom, 128.0 * self.preview_zoom);
-        let sprite_rect = Rect::from_center_size(center + Vec2::new(self.preview_pan.0, self.preview_pan.1), preview_size);
-        
-        ui.painter().rect_stroke(sprite_rect, 4.0, Stroke::new(2.0, Color32::from_rgb(100, 200, 255)));
-        
+        let sprite_rect = Rect::from_center_size(
+            center + Vec2::new(self.preview_pan.0, self.preview_pan.1),
+            preview_size,
+        );
+
+        ui.painter().rect_stroke(
+            sprite_rect,
+            4.0,
+            Stroke::new(2.0_f32, Color32::from_rgb(100, 200, 255)),
+        );
+
         let pivot_pos = Pos2::new(
             sprite_rect.left() + sprite_rect.width() * self.pivot[0],
             sprite_rect.top() + sprite_rect.height() * self.pivot[1],
         );
-        ui.painter().circle_filled(pivot_pos, 4.0 * self.preview_zoom, Color32::from_rgb(255, 100, 100));
-        
+        ui.painter().circle_filled(
+            pivot_pos,
+            4.0 * self.preview_zoom,
+            Color32::from_rgb(255, 100, 100),
+        );
+
         if self.nine_slice_borders != (0, 0, 0, 0) {
             let (left, top, right, bottom) = self.nine_slice_borders;
             let l = sprite_rect.left() + left as f32 * self.preview_zoom;
             let t = sprite_rect.top() + top as f32 * self.preview_zoom;
             let r = sprite_rect.right() - right as f32 * self.preview_zoom;
             let b = sprite_rect.bottom() - bottom as f32 * self.preview_zoom;
-            
+
             ui.painter().line_segment(
-                [Pos2::new(l, sprite_rect.top()), Pos2::new(l, sprite_rect.bottom())],
-                Stroke::new(1.0, Color32::from_rgb(255, 255, 100)),
+                [
+                    Pos2::new(l, sprite_rect.top()),
+                    Pos2::new(l, sprite_rect.bottom()),
+                ],
+                Stroke::new(1.0_f32, Color32::from_rgb(255, 255, 100)),
             );
             ui.painter().line_segment(
-                [Pos2::new(r, sprite_rect.top()), Pos2::new(r, sprite_rect.bottom())],
-                Stroke::new(1.0, Color32::from_rgb(255, 255, 100)),
+                [
+                    Pos2::new(r, sprite_rect.top()),
+                    Pos2::new(r, sprite_rect.bottom()),
+                ],
+                Stroke::new(1.0_f32, Color32::from_rgb(255, 255, 100)),
             );
             ui.painter().line_segment(
-                [Pos2::new(sprite_rect.left(), t), Pos2::new(sprite_rect.right(), t)],
-                Stroke::new(1.0, Color32::from_rgb(255, 255, 100)),
+                [
+                    Pos2::new(sprite_rect.left(), t),
+                    Pos2::new(sprite_rect.right(), t),
+                ],
+                Stroke::new(1.0_f32, Color32::from_rgb(255, 255, 100)),
             );
             ui.painter().line_segment(
-                [Pos2::new(sprite_rect.left(), b), Pos2::new(sprite_rect.right(), b)],
-                Stroke::new(1.0, Color32::from_rgb(255, 255, 100)),
+                [
+                    Pos2::new(sprite_rect.left(), b),
+                    Pos2::new(sprite_rect.right(), b),
+                ],
+                Stroke::new(1.0_f32, Color32::from_rgb(255, 255, 100)),
             );
         }
-        
+
         if self.slice_mode == SliceMode::Grid && self.spritesheet_size.0 > 0 {
             let (cell_w, cell_h) = self.grid_cell_size;
             let (spacing_x, spacing_y) = self.grid_spacing;
             let (offset_x, offset_y) = self.grid_offset;
-            
+
             let cell_w_px = cell_w as f32 * self.preview_zoom;
             let cell_h_px = cell_h as f32 * self.preview_zoom;
             let spacing_x_px = spacing_x as f32 * self.preview_zoom;
             let spacing_y_px = spacing_y as f32 * self.preview_zoom;
             let offset_x_px = offset_x as f32 * self.preview_zoom;
             let offset_y_px = offset_y as f32 * self.preview_zoom;
-            
+
             let start_x = sprite_rect.left() + offset_x_px;
             let start_y = sprite_rect.top() + offset_y_px;
-            
-            let cols = ((sprite_rect.width() - offset_x_px) / (cell_w_px + spacing_x_px)).max(1.0) as usize;
-            let rows = ((sprite_rect.height() - offset_y_px) / (cell_h_px + spacing_y_px)).max(1.0) as usize;
-            
+
+            let cols = ((sprite_rect.width() - offset_x_px) / (cell_w_px + spacing_x_px)).max(1.0)
+                as usize;
+            let rows = ((sprite_rect.height() - offset_y_px) / (cell_h_px + spacing_y_px)).max(1.0)
+                as usize;
+
             for col in 0..cols {
                 for row in 0..rows {
                     let x = start_x + col as f32 * (cell_w_px + spacing_x_px);
                     let y = start_y + row as f32 * (cell_h_px + spacing_y_px);
-                    let cell_rect = Rect::from_min_size(Pos2::new(x, y), Vec2::new(cell_w_px, cell_h_px));
-                    ui.painter().rect_stroke(cell_rect, 2.0, Stroke::new(1.0, Color32::from_rgb(100, 255, 100)));
+                    let cell_rect =
+                        Rect::from_min_size(Pos2::new(x, y), Vec2::new(cell_w_px, cell_h_px));
+                    ui.painter().rect_stroke(
+                        cell_rect,
+                        2.0,
+                        Stroke::new(1.0_f32, Color32::from_rgb(100, 255, 100)),
+                    );
                 }
             }
         }

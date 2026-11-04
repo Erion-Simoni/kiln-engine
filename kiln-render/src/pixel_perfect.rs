@@ -45,10 +45,7 @@ pub fn pixel_perfect_camera_position(
 
 /// Calculate the optimal zoom level for pixel-perfect rendering
 /// given a target pixel size for game units.
-pub fn pixel_perfect_zoom(
-    world_units_per_pixel: f32,
-    current_zoom: f32,
-) -> f32 {
+pub fn pixel_perfect_zoom(world_units_per_pixel: f32, current_zoom: f32) -> f32 {
     if world_units_per_pixel <= 0.0 {
         return current_zoom;
     }

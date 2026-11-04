@@ -44,10 +44,6 @@ impl Rect {
 
 /// Texture atlas builder using a simple shelf packing algorithm.
 pub struct AtlasBuilder {
-    /// Current width of the packed texture.
-    width: u32,
-    /// Current height of the packed texture.
-    height: u32,
     /// Current y offset for the current shelf.
     current_y: u32,
     /// Current max height in the current shelf.
@@ -66,8 +62,6 @@ impl AtlasBuilder {
     /// Create a new atlas builder.
     pub fn new(max_width: u32) -> Self {
         Self {
-            width: max_width,
-            height: 0,
             current_y: 0,
             current_max_h: 0,
             current_x: 0,
@@ -101,8 +95,8 @@ impl AtlasBuilder {
             return Err(AtlasError::AtlasFull);
         }
 
-        let x = self.current_x + self.padding;
-        let y = self.current_y + self.padding;
+        let _x = self.current_x + self.padding;
+        let _y = self.current_y + self.padding;
 
         self.sprites.push((name.to_string(), image));
         self.current_x += self.padding + w;

@@ -184,12 +184,12 @@ impl AnimationPlayer {
         let clip = self.clips.get(clip_name)?;
         let (frame_idx, _) = clip.frame_at_time(self.elapsed).ok()?;
         let frame = &clip.frames[frame_idx];
-        
+
         // Get texture dimensions for this clip
         let (tex_w, tex_h) = self.clip_textures.get(clip_name)?;
         let tex_w = *tex_w as f32;
         let tex_h = *tex_h as f32;
-        
+
         let [x, y, w, h] = frame.rect;
         Some([
             x as f32 / tex_w,

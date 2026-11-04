@@ -48,8 +48,6 @@ impl TilemapEditorState {
 
     /// The tilemap that is currently being edited, mutably.
     pub fn current_map_mut<'a>(&mut self, project: &'a mut Project) -> Option<&'a mut TileMap> {
-
-
         let id = self.selected_map.clone()?;
         project.tilemaps.get_mut(&id)
     }
@@ -311,23 +309,29 @@ fn show_grid(
     // Tile palette - select which tile to paint with
     ui.separator();
     ui.label("Tile Palette");
-    egui::Grid::new("tile_palette").num_columns(8).show(ui, |ui| {
-                let tilemap = project.tilemaps.values().next();
-        if let Some(map) = tilemap {
-            let tileset_id = &map.layers.first().map(|l| l.tileset.clone()).unwrap_or_default();
-            if let Some(tileset) = project.tilesets.get(tileset_id) {
-                for tile_id in 0..tileset.tile_count().min(64) {
-                    let response = ui.add(egui::Button::new(format!("{}", tile_id)));
-                    if response.clicked() {
-                        state.brush_tile = tile_id as u16;
-                    }
-                    if u32::from(state.brush_tile) == tile_id {
-                        ui.label("●");
+    egui::Grid::new("tile_palette")
+        .num_columns(8)
+        .show(ui, |ui| {
+            let tilemap = project.tilemaps.values().next();
+            if let Some(map) = tilemap {
+                let tileset_id = &map
+                    .layers
+                    .first()
+                    .map(|l| l.tileset.clone())
+                    .unwrap_or_default();
+                if let Some(tileset) = project.tilesets.get(tileset_id) {
+                    for tile_id in 0..tileset.tile_count().min(64) {
+                        let response = ui.add(egui::Button::new(format!("{}", tile_id)));
+                        if response.clicked() {
+                            state.brush_tile = tile_id as u16;
+                        }
+                        if u32::from(state.brush_tile) == tile_id {
+                            ui.label("●");
+                        }
                     }
                 }
             }
-        }
-    });
+        });
 }
 
 /// Colour used to draw a tile in the painting grid.

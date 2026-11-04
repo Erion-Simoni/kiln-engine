@@ -1,9 +1,11 @@
 //! Physics Editor panel — rigid body/collider/joint configuration, live preview.
 
-use egui::{Color32, DragValue, RichText, ScrollArea, Ui, Vec2};
-use kiln_runtime::physics::PhysicsWorld;
-use rapier2d::prelude::{RigidBodyHandle, ColliderHandle, ImpulseJointHandle as JointHandle, RigidBodyType};
 use egui::Stroke;
+use egui::{Color32, Vec2};
+use kiln_runtime::physics::PhysicsWorld;
+use rapier2d::prelude::{
+    ColliderHandle, ImpulseJointHandle as JointHandle, RigidBodyHandle, RigidBodyType,
+};
 
 /// Physics editor state.
 #[derive(Debug)]
@@ -94,14 +96,13 @@ impl PhysicsEditorState {
     }
 
     /// Update the preview.
-    pub fn update_preview(&mut self, dt: f32) {
+    pub fn update_preview(&mut self, _dt: f32) {
         if self.preview_playing {
             if let Some(world) = &mut self.physics_world {
                 world.step();
             }
         }
     }
-
 
     /// Render the physics editor panel.
     pub fn render(&mut self, ui: &mut egui::Ui) {
@@ -114,8 +115,16 @@ impl PhysicsEditorState {
         // Gravity controls
         ui.horizontal(|ui| {
             ui.label("Gravity:");
-            ui.add(egui::DragValue::new(&mut self.gravity_x).speed(0.1).suffix(" x"));
-            ui.add(egui::DragValue::new(&mut self.gravity_y).speed(0.1).suffix(" y"));
+            ui.add(
+                egui::DragValue::new(&mut self.gravity_x)
+                    .speed(0.1)
+                    .suffix(" x"),
+            );
+            ui.add(
+                egui::DragValue::new(&mut self.gravity_y)
+                    .speed(0.1)
+                    .suffix(" y"),
+            );
             if ui.button("Apply").clicked() {
                 if let Some(world) = &mut self.physics_world {
                     world.set_gravity(self.gravity_x, self.gravity_y);
@@ -134,7 +143,14 @@ impl PhysicsEditorState {
 
         // Preview controls
         ui.horizontal(|ui| {
-            if ui.button(if self.preview_playing { "⏸ Pause" } else { "▶ Play" }).clicked() {
+            if ui
+                .button(if self.preview_playing {
+                    "⏸ Pause"
+                } else {
+                    "▶ Play"
+                })
+                .clicked()
+            {
                 self.preview_playing = !self.preview_playing;
             }
             if ui.button("⏹ Stop").clicked() {
@@ -173,50 +189,57 @@ impl PhysicsEditorState {
         ui.add_space(4.0);
 
         if let Some(world) = &mut self.physics_world {
-            egui::ScrollArea::vertical().max_height(150.0_f32).show(ui, |ui| {
-                let mut remove_body = None;
-                for (handle, body) in world.rigid_body_set.iter() {
-                    let pos = body.translation();
-                    let vel = body.linvel();
-                    let body_type = match body.body_type() {
-                        RigidBodyType::Dynamic => "Dynamic",
-                        RigidBodyType::Fixed => "Static",
-                        RigidBodyType::KinematicPositionBased => "Kinematic (Pos)",
-                        RigidBodyType::KinematicVelocityBased => "Kinematic (Vel)",
-                        _ => "Other",
-                    };
-                    let is_selected = self.selected_body == Some(handle);
-                    let mut selected = is_selected;
+            egui::ScrollArea::vertical()
+                .max_height(150.0_f32)
+                .show(ui, |ui| {
+                    let mut remove_body = None;
+                    for (handle, body) in world.rigid_body_set.iter() {
+                        let pos = body.translation();
+                        let vel = body.linvel();
+                        let body_type = match body.body_type() {
+                            RigidBodyType::Dynamic => "Dynamic",
+                            RigidBodyType::Fixed => "Static",
+                            RigidBodyType::KinematicPositionBased => "Kinematic (Pos)",
+                            RigidBodyType::KinematicVelocityBased => "Kinematic (Vel)",
+                            _ => "Other",
+                        };
+                        let is_selected = self.selected_body == Some(handle);
+                        let selected = is_selected;
 
-                    ui.horizontal(|ui| {
-                        if ui.selectable_label(selected, format!("Body {:?} [{}]", handle, body_type)).clicked() {
-                            self.selected_body = Some(handle);
-                            self.selected_collider = None;
-                            self.selected_joint = None;
-                        }
-                        ui.label(format!("Pos: ({:.1}, {:.1})", pos.x, pos.y));
-                        ui.label(format!("Vel: ({:.1}, {:.1})", vel.x, vel.y));
-                        if ui.small_button("🗑").clicked() {
-                            remove_body = Some(handle);
-                        }
-                    });
-                }
+                        ui.horizontal(|ui| {
+                            if ui
+                                .selectable_label(
+                                    selected,
+                                    format!("Body {:?} [{}]", handle, body_type),
+                                )
+                                .clicked()
+                            {
+                                self.selected_body = Some(handle);
+                                self.selected_collider = None;
+                                self.selected_joint = None;
+                            }
+                            ui.label(format!("Pos: ({:.1}, {:.1})", pos.x, pos.y));
+                            ui.label(format!("Vel: ({:.1}, {:.1})", vel.x, vel.y));
+                            if ui.small_button("🗑").clicked() {
+                                remove_body = Some(handle);
+                            }
+                        });
+                    }
 
-                if let Some(handle) = remove_body {
-                    {
-                        world.remove_body(handle);
-                        if self.selected_body == Some(handle) {
-                            self.selected_body = None;
+                    if let Some(handle) = remove_body {
+                        {
+                            world.remove_body(handle);
+                            if self.selected_body == Some(handle) {
+                                self.selected_body = None;
+                            }
                         }
                     }
-                }
 
-                if world.rigid_body_set.is_empty() {
-                    ui.label("No rigid bodies. Click 'Add Body' to create one.");
-                }
-            });
+                    if world.rigid_body_set.is_empty() {
+                        ui.label("No rigid bodies. Click 'Add Body' to create one.");
+                    }
+                });
         }
-
 
         ui.add_space(8.0);
 
@@ -273,7 +296,6 @@ impl PhysicsEditorState {
             });
         }
 
-
         ui.add_space(8.0);
 
         // Colliders
@@ -295,26 +317,36 @@ impl PhysicsEditorState {
         ui.add_space(4.0);
 
         if let Some(world) = &mut self.physics_world {
-            egui::ScrollArea::vertical().max_height(150.0_f32).show(ui, |ui| {
-                let mut remove_collider = None;
-                for (handle, collider) in world.collider_set.iter() {
-                    let shape_type = format!("{:?}", collider.shape().shape_type());
-                    let parent = collider.parent();
-                    let is_selected = self.selected_collider == Some(handle);
-                    let mut selected = false;
+            egui::ScrollArea::vertical()
+                .max_height(150.0_f32)
+                .show(ui, |ui| {
+                    let mut remove_collider = None;
+                    for (handle, collider) in world.collider_set.iter() {
+                        let shape_type = format!("{:?}", collider.shape().shape_type());
+                        let parent = collider.parent();
+                        let _is_selected = self.selected_collider == Some(handle);
+                        let _selected = false;
 
-                    ui.horizontal(|ui| {
-                        if ui.selectable_label(false, format!("Collider {:?} [{}]", handle, shape_type)).clicked() {
-                            self.selected_collider = Some(handle);
-                        }
-                        ui.label(format!("Parent: {:?}", parent));
-                        if ui.small_button("🗑").clicked() {
-                            remove_collider = Some(handle);
-                        }
-                    });
-                }
-                if let Some(handle) = remove_collider { world.remove_collider(handle); }
-            });
+                        ui.horizontal(|ui| {
+                            if ui
+                                .selectable_label(
+                                    false,
+                                    format!("Collider {:?} [{}]", handle, shape_type),
+                                )
+                                .clicked()
+                            {
+                                self.selected_collider = Some(handle);
+                            }
+                            ui.label(format!("Parent: {:?}", parent));
+                            if ui.small_button("🗑").clicked() {
+                                remove_collider = Some(handle);
+                            }
+                        });
+                    }
+                    if let Some(handle) = remove_collider {
+                        world.remove_collider(handle);
+                    }
+                });
 
             // Add collider dialog
             if self.show_add_collider_dialog {
@@ -331,32 +363,70 @@ impl PhysicsEditorState {
                                 ColliderShape::Capsule => "Capsule",
                             })
                             .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut self.new_collider_shape, ColliderShape::Ball, "Ball");
-                                ui.selectable_value(&mut self.new_collider_shape, ColliderShape::Cuboid, "Cuboid");
-                                ui.selectable_value(&mut self.new_collider_shape, ColliderShape::Capsule, "Capsule");
+                                ui.selectable_value(
+                                    &mut self.new_collider_shape,
+                                    ColliderShape::Ball,
+                                    "Ball",
+                                );
+                                ui.selectable_value(
+                                    &mut self.new_collider_shape,
+                                    ColliderShape::Cuboid,
+                                    "Cuboid",
+                                );
+                                ui.selectable_value(
+                                    &mut self.new_collider_shape,
+                                    ColliderShape::Capsule,
+                                    "Capsule",
+                                );
                             });
 
                         match self.new_collider_shape {
                             ColliderShape::Ball => {
                                 ui.horizontal(|ui| {
                                     ui.label("Radius:");
-                                    ui.add(egui::DragValue::new(&mut self.new_collider_radius).speed(0.1).suffix(" px"));
+                                    ui.add(
+                                        egui::DragValue::new(&mut self.new_collider_radius)
+                                            .speed(0.1)
+                                            .suffix(" px"),
+                                    );
                                 });
                             }
                             ColliderShape::Cuboid => {
                                 ui.horizontal(|ui| {
                                     ui.label("Half Width:");
-                                    ui.add(egui::DragValue::new(&mut self.new_collider_half_extents[0]).speed(0.1).suffix(" px"));
+                                    ui.add(
+                                        egui::DragValue::new(
+                                            &mut self.new_collider_half_extents[0],
+                                        )
+                                        .speed(0.1)
+                                        .suffix(" px"),
+                                    );
                                     ui.label("Half Height:");
-                                    ui.add(egui::DragValue::new(&mut self.new_collider_half_extents[1]).speed(0.1).suffix(" px"));
+                                    ui.add(
+                                        egui::DragValue::new(
+                                            &mut self.new_collider_half_extents[1],
+                                        )
+                                        .speed(0.1)
+                                        .suffix(" px"),
+                                    );
                                 });
                             }
                             ColliderShape::Capsule => {
                                 ui.horizontal(|ui| {
                                     ui.label("Radius:");
-                                    ui.add(egui::DragValue::new(&mut self.new_collider_radius).speed(0.1).suffix(" px"));
+                                    ui.add(
+                                        egui::DragValue::new(&mut self.new_collider_radius)
+                                            .speed(0.1)
+                                            .suffix(" px"),
+                                    );
                                     ui.label("Half Height:");
-                                    ui.add(egui::DragValue::new(&mut self.new_collider_half_extents[1]).speed(0.1).suffix(" px"));
+                                    ui.add(
+                                        egui::DragValue::new(
+                                            &mut self.new_collider_half_extents[1],
+                                        )
+                                        .speed(0.1)
+                                        .suffix(" px"),
+                                    );
                                 });
                             }
                         }
@@ -364,15 +434,27 @@ impl PhysicsEditorState {
                         ui.add_space(8.0);
                         ui.horizontal(|ui| {
                             ui.label("Density:");
-                            ui.add(egui::DragValue::new(&mut self.new_collider_density).speed(0.1).range(0.0..=100.0));
+                            ui.add(
+                                egui::DragValue::new(&mut self.new_collider_density)
+                                    .speed(0.1)
+                                    .range(0.0..=100.0),
+                            );
                         });
                         ui.horizontal(|ui| {
                             ui.label("Friction:");
-                            ui.add(egui::DragValue::new(&mut self.new_collider_friction).speed(0.01).range(0.0..=10.0));
+                            ui.add(
+                                egui::DragValue::new(&mut self.new_collider_friction)
+                                    .speed(0.01)
+                                    .range(0.0..=10.0),
+                            );
                         });
                         ui.horizontal(|ui| {
                             ui.label("Restitution:");
-                            ui.add(egui::DragValue::new(&mut self.new_collider_restitution).speed(0.01).range(0.0..=1.0));
+                            ui.add(
+                                egui::DragValue::new(&mut self.new_collider_restitution)
+                                    .speed(0.01)
+                                    .range(0.0..=1.0),
+                            );
                         });
 
                         ui.add_space(8.0);
@@ -385,7 +467,9 @@ impl PhysicsEditorState {
                                     if let Some(world) = &mut self.physics_world {
                                         let collider = match self.new_collider_shape {
                                             ColliderShape::Ball => {
-                                                rapier2d::prelude::ColliderBuilder::ball(self.new_collider_radius)
+                                                rapier2d::prelude::ColliderBuilder::ball(
+                                                    self.new_collider_radius,
+                                                )
                                             }
                                             ColliderShape::Cuboid => {
                                                 rapier2d::prelude::ColliderBuilder::cuboid(
@@ -409,82 +493,102 @@ impl PhysicsEditorState {
                                 self.show_add_collider_dialog = false;
                             }
                         });
-            });
-        }
+                    });
+            }
 
-        ui.add_space(8.0);
+            ui.add_space(8.0);
 
+            ui.add_space(8.0);
 
-        ui.add_space(8.0);
+            // Preview
+            ui.separator();
+            ui.heading("Physics Preview");
+            ui.add_space(4.0);
 
-        // Preview
-        ui.separator();
-        ui.heading("Physics Preview");
-        ui.add_space(4.0);
+            let _preview_size = Vec2::new(400.0, 300.0);
+            let (rect, _response) =
+                ui.allocate_exact_size(Vec2::new(400.0, 300.0), egui::Sense::hover());
 
-        let preview_size = Vec2::new(400.0, 300.0);
-        let (rect, response) = ui.allocate_exact_size(Vec2::new(400.0, 300.0), egui::Sense::hover());
+            ui.painter()
+                .rect_filled(rect, 4.0, Color32::from_rgb(20, 20, 30));
+            ui.painter()
+                .rect_stroke(rect, 4.0, Stroke::new(1.0_f32, Color32::from_gray(80)));
 
-        ui.painter().rect_filled(rect, 4.0, Color32::from_rgb(20, 20, 30));
-        ui.painter().rect_stroke(rect, 4.0, Stroke::new(1.0, Color32::from_gray(80)));
+            if let Some(world) = &self.physics_world {
+                let center = rect.center();
+                let _scale = 20.0; // 1 world unit = 20 pixels
 
-        if let Some(world) = &self.physics_world {
-            let center = rect.center();
-            let scale = 20.0; // 1 world unit = 20 pixels
+                // Draw colliders
+                for (_handle, collider) in world.collider_set.iter() {
+                    let pos = collider.position().translation;
+                    let center_pos = egui::pos2(center.x + pos.x * 20.0, center.y - pos.y * 20.0);
 
-            // Draw colliders
-            for (handle, collider) in world.collider_set.iter() {
-                let pos = collider.position().translation;
-                let center_pos = egui::pos2(
-                    center.x + pos.x * 20.0,
-                    center.y - pos.y * 20.0,
-                );
+                    // Draw based on shape type
+                    if let Some(ball) = collider.shape().as_ball() {
+                        ui.painter().circle_stroke(
+                            center_pos,
+                            ball.radius * 20.0,
+                            Stroke::new(1.5_f32, Color32::from_rgb(100, 200, 255)),
+                        );
+                    } else if let Some(cuboid) = collider.shape().as_cuboid() {
+                        let half_extents = cuboid.half_extents;
+                        let rect = egui::Rect::from_min_max(
+                            egui::pos2(
+                                center_pos.x - half_extents.x * 20.0,
+                                center_pos.y - half_extents.y * 20.0,
+                            ),
+                            egui::pos2(
+                                center_pos.x + half_extents.x * 20.0,
+                                center_pos.y + half_extents.y * 20.0,
+                            ),
+                        );
+                        ui.painter().rect_stroke(
+                            rect,
+                            2.0,
+                            Stroke::new(1.5_f32, Color32::from_rgb(100, 200, 255)),
+                        );
+                    } else if let Some(capsule) = collider.shape().as_capsule() {
+                        // Draw capsule as two circles + rectangle
+                        let radius = capsule.radius * 20.0;
+                        let half_height = capsule.half_height() * 20.0;
+                        ui.painter().circle_stroke(
+                            center_pos + egui::vec2(0.0, -half_height),
+                            radius,
+                            Stroke::new(1.5_f32, Color32::from_rgb(100, 200, 255)),
+                        );
+                        ui.painter().circle_stroke(
+                            center_pos + egui::vec2(0.0, half_height),
+                            radius,
+                            Stroke::new(1.5_f32, Color32::from_rgb(100, 200, 255)),
+                        );
+                        let rect = egui::Rect::from_min_max(
+                            egui::pos2(center_pos.x - radius, center_pos.y - half_height),
+                            egui::pos2(center_pos.x + radius, center_pos.y + half_height),
+                        );
+                        ui.painter().rect_stroke(
+                            rect,
+                            2.0,
+                            Stroke::new(1.5_f32, Color32::from_rgb(100, 200, 255)),
+                        );
+                    }
+                }
 
-                // Draw based on shape type
-                if let Some(ball) = collider.shape().as_ball() {
-                    ui.painter().circle_stroke(center_pos, ball.radius * 20.0, Stroke::new(1.5, Color32::from_rgb(100, 200, 255)));
-                } else if let Some(cuboid) = collider.shape().as_cuboid() {
-                    let half_extents = cuboid.half_extents;
-                    let rect = egui::Rect::from_min_max(
-                        egui::pos2(
-                            center_pos.x - half_extents.x * 20.0,
-                            center_pos.y - half_extents.y * 20.0,
-                        ),
-                        egui::pos2(
-                            center_pos.x + half_extents.x * 20.0,
-                            center_pos.y + half_extents.y * 20.0,
-                        ),
-                    );
-                    ui.painter().rect_stroke(rect, 2.0, Stroke::new(1.5, Color32::from_rgb(100, 200, 255)));
-                } else if let Some(capsule) = collider.shape().as_capsule() {
-                    // Draw capsule as two circles + rectangle
-                    let radius = capsule.radius * 20.0;
-                    let half_height = capsule.half_height() * 20.0;
-                    ui.painter().circle_stroke(center_pos + egui::vec2(0.0, -half_height), radius, Stroke::new(1.5, Color32::from_rgb(100, 200, 255)));
-                    ui.painter().circle_stroke(center_pos + egui::vec2(0.0, half_height), radius, Stroke::new(1.5, Color32::from_rgb(100, 200, 255)));
-                    let rect = egui::Rect::from_min_max(
-                        egui::pos2(center_pos.x - radius, center_pos.y - half_height),
-                        egui::pos2(center_pos.x + radius, center_pos.y + half_height),
-                    );
-                    ui.painter().rect_stroke(rect, 2.0, Stroke::new(1.5, Color32::from_rgb(100, 200, 255)));
+                // Draw body positions
+                for (_handle, body) in world.rigid_body_set.iter() {
+                    let pos = body.translation();
+                    let center_pos = egui::pos2(center.x + pos.x * 20.0, center.y - pos.y * 20.0);
+                    ui.painter()
+                        .circle_filled(center_pos, 4.0, Color32::from_rgb(255, 200, 100));
                 }
             }
 
-            // Draw body positions
-            for (handle, body) in world.rigid_body_set.iter() {
-                let pos = body.translation();
-                let center_pos = egui::pos2(
-                    center.x + pos.x * 20.0,
-                    center.y - pos.y * 20.0,
-                );
-                ui.painter().circle_filled(center_pos, 4.0, Color32::from_rgb(255, 200, 100));
-            }
+            self.update_preview(self.preview_dt);
         }
-
-        self.update_preview(self.preview_dt);
     }
 }
 
-
-
+impl Default for PhysicsEditorState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
