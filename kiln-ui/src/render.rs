@@ -124,6 +124,7 @@ impl NineSliceRenderer {
                     color,
                     uv_rect: [us[i], vs[j], us[i + 1], vs[j + 1]],
                     material_id: 0,
+                    rotation: 0.0,
                 });
             }
         }

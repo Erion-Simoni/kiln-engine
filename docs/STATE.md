@@ -22,14 +22,13 @@
 
 ## Next
 
-1. Add Sprite transform support to the rendering instance/shader so Inspector rotation and scale visibly match gameplay, with renderer-level pixel tests.
-2. Finish remaining Sprite properties and history coverage, then add parent/local transform behavior and rotation/scale gizmos.
+1. Finish remaining Sprite properties and history coverage, then add parent/local transform behavior and rotation/scale gizmos.
 3. Add multi-selection/framing, dirty scene-tab Save/Discard/Cancel, and autosave/recovery.
 4. Run full two-scene transform/reparent/duplicate/delete/save/restart acceptance before completing Task 2. Tasks 3–9 remain pending.
 
 ## Known limits and environment
 
-The editor now authors Transform position/rotation/uniform-scale and Sprite tint/layer into scene documents with runtime updates and history. The current `SpriteInstance` and shader still ignore Transform rotation and scale, so those edits are saved and applied to the runtime component but do not yet rotate or resize the drawn sprite. Other Sprite properties, complete multi-selection/gizmos, parent/local transforms, and recovery remain incomplete.
+The editor now authors Transform position/rotation/uniform-scale and Sprite tint/layer into scene documents with runtime updates and history. Shared `SpriteInstance` submissions carry rotation and apply entity scale across the editor, player, browser, mobile builds, and samples; the WGSL renderer consumes rotation and a GPU pixel-bound test verifies actual orientation and size. Other Sprite properties, complete multi-selection/gizmos, parent/local transforms, and recovery remain incomplete. Tilemap cell instances still use identity transform.
 
 The command model covers transform properties, Sprite tint/layer, component presence, and hierarchy entity edits. Other panels retain transitional snapshot/direct mutation paths. Loader-created default Transforms remain projection-only until authored. Undo is session-only. Scene reload rebuilds authoring state rather than rereading disk; startup selection uses sorted scene IDs. Project guards do not cover external script buffers or forced termination.
 
@@ -39,3 +38,11 @@ Native visuals cover software GL/Low tier. Other devices/tiers, audible audio, c
 
 Source `/workspace/.kiln-tools/activate.sh` for cloud Cargo commands.
 Use `CHROMIUM_PATH=/usr/bin/chromium just web-smoke` for installed-browser validation.
+
+### 2026-11-04 — Task 2 sprite transform rendering checkpoint
+
+- Extended `SpriteInstance` and the shared WGSL shader with per-instance rotation; added a transform helper that applies entity scale to sprite dimensions. Updated all world-sprite submission paths in the editor, player (desktop/mobile), browser, and samples. UI and tilemap cell instances retain identity rotation/scale.
+- Added GPU readback regression checking rendered pixel bounds: 32×8 baseline, 8×32 after 90° rotation, and 64×8 after horizontal 2× scaling.
+- `just check`: PASSED. `just test`: 506 passed, zero failed/skipped. Focused renderer GPU test, `cargo build -p kiln-editor`, and WASM target check passed. Chromium browser smoke passed with moving sample pixels detected.
+- Native app build passed; native GUI transform visual confirmation remains incomplete in this environment. Physical devices, other render tiers, cross-platform runners, and remote CI remain unverified.
+- Task 2 continues with remaining Sprite properties, parent/local transforms and gizmos, multi-selection/framing, dirty-tab choices, and autosave/recovery. Tasks 3–9 remain pending.

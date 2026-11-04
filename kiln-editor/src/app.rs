@@ -2292,7 +2292,9 @@ impl EditorApp {
                             color: sprite.color,
                             uv_rect: sprite.uv_rect,
                             material_id: 0,
-                        },
+                            rotation: 0.0,
+                        }
+                        .with_transform(transform.rotation, [transform.scale.x, transform.scale.y]),
                     );
                 }
 

@@ -225,3 +225,9 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - `just check`: PASSED. `just test`: 504 passed, zero failed/skipped. Focused property suite: 3 passed; transform edit suite: 9 passed. Native editor build passed.
 - Native GUI showed typed tint/rotation/scale fields and verified Ctrl+Z restored the tint. Rotation and scale are authored, but scene rendering still ignores them because SpriteInstance/shader do not carry transform rotation/scale. Adding renderer support and pixel tests is the next step; visual parity is not claimed here.
 - Previous native hierarchy acceptance remains verified. This editor-only checkpoint did not rerun browser smoke; remote CI remains unverified.
+
+### 2026-11-04 checkpoint — sprite rotation and scale rendering
+
+- Shared sprite instances now carry rotation, and the WGSL shader rotates quads around their centers. Entity scale multiplies sprite dimensions before submission in editor, player, browser, mobile, and sample paths; UI/tilemap cell instances keep identity transforms.
+- GPU readback regression confirms 32×8 baseline bounds, 8×32 at 90°, and 64×8 at 2× horizontal scale.
+- Validation: `just check`, `just test` (506 passed), focused renderer GPU test, editor build, WASM check, and Chromium browser smoke all passed. Native editor visual confirmation is still outstanding.

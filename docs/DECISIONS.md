@@ -1172,3 +1172,7 @@ Hierarchy create, delete, duplicate, and reparent operations mutate the authored
 ## ADR-0045: Inspector property gestures share scene transactions
 
 Inspector edits for Transform and Sprite update the authored scene and runtime projection together, then commit one undo snapshot per widget gesture. This extends the existing position transaction to rotation, uniform scale, Sprite tint, and layer. Typed edits and drags use the same path; separate widgets produce separate history entries, and edits preserve unrelated authored component fields.
+
+## ADR-0046: Sprite instances carry world rotation
+
+The shared sprite instance includes a per-instance rotation consumed by the default WGSL sprite shader. Sprite size is scaled on the CPU from the entity Transform before submission. Editor, player, web, mobile, and sample world-sprite paths use the same helper; UI, tilemap cells, and screen/world decoration default to zero rotation and unit scale. The instance buffer layout change is internal to this renderer crate; custom material shader authors must accept the added vertex attribute layout when they need rotation.

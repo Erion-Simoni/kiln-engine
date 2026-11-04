@@ -137,6 +137,7 @@ impl Tilemap {
                                     color: self.color,
                                     uv_rect,
                                     material_id: 0,
+                                    rotation: 0.0,
                                 },
                             ));
                         }

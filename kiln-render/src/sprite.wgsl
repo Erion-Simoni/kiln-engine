@@ -1,6 +1,6 @@
 // Sprite batch shader — textured instanced quads with colour tint.
 // Vertex buffer: unit quad corners (x,y)
-// Instance buffer: position, size, color, uv_rect
+// Instance buffer: position, size, color, uv_rect, material ID, rotation
 
 struct Uniforms {
     projection: mat4x4<f32>,
@@ -23,6 +23,7 @@ struct InstanceInput {
     @location(2) size:     vec2<f32>,
     @location(3) color:    vec4<f32>,
     @location(4) uv_rect:  vec4<f32>, // u0, v0, u1, v1
+    @location(6) rotation: f32,
 }
 
 struct VertexOutput {
@@ -33,7 +34,11 @@ struct VertexOutput {
 
 @vertex
 fn vs_main(v: VertexInput, inst: InstanceInput) -> VertexOutput {
-    let world_pos = v.corner * inst.size + inst.position;
+    let local = v.corner * inst.size;
+    let c = cos(inst.rotation);
+    let s = sin(inst.rotation);
+    let rotated = vec2<f32>(local.x * c - local.y * s, local.x * s + local.y * c);
+    let world_pos = rotated + inst.position;
     // Map unit-quad corner [-0.5,0.5] → [0,1] then into uv_rect
     let t = v.corner + vec2<f32>(0.5, 0.5);
     let uv = mix(inst.uv_rect.xy, inst.uv_rect.zw, t);
