@@ -1245,7 +1245,7 @@ instances, and drag/drop creation remain follow-up Task 3 work.
 ## ADR-0052: Task 4 gameplay execution and Play isolation
 
 **Date:** 2026-11-04
-**Status:** accepted; entity attachment/language implementation pending
+**Status:** accepted; implemented for native editor/player
 
 Editor and player use the same runtime and fixed 60 Hz gameplay step. Pausing
 discards accumulated wall time; frame step advances exactly one gameplay tick;
@@ -1279,6 +1279,20 @@ The remaining entity-script contract is:
   Breakpoints/stepping must operate on the VM that actually mutates the world,
   and compile/runtime diagnostics must carry script source locations.
 
-These attachment, callback, module, signal, and VM-debugger requirements are
-design decisions, not completed capabilities. Keep Task 4 open until its
-two-enemy/projectile/trigger/transition acceptance passes in both hosts.
+Implementation uses `Component::Script { path, properties }` with numeric
+exposed properties. A per-entity VM retains `state_get`/`state_set` values;
+`self_entity()` resolves the stable source ID. Lifecycle dispatch executes the
+program with `script_phase()` set to start/update/signal/collision_enter/
+collision_exit/stop. Existing scene programs retain their per-frame execution.
+Functions use bounded, non-recursive inlining with isolated parameter/local
+slots. Top-level relative import directives expand once per compilation,
+reject cycles/project escapes, and retain diagnostic file/line origins.
+
+The live debugger provides pause/resume, fixed-frame step, restart, and actual
+entity-state inspection. The previous detached instruction-debugger UI is no
+longer presented as controlling live gameplay. Source/instruction breakpoints
+and arbitrary watch expressions are not exposed by this initial live debugger.
+Physics collision production remains the backend's responsibility (Task 5);
+the entity scheduler delivers backend events once per tick without stepping
+world systems again for each callback. Native graphical acceptance still
+requires a GUI-capable runner.

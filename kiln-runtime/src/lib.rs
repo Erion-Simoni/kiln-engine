@@ -7,6 +7,7 @@ pub mod loop_;
 pub mod play_clock;
 pub mod scene;
 pub mod schedule;
+mod script_source;
 pub mod settings;
 pub mod slice;
 pub mod slice_sample;

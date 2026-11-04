@@ -1,32 +1,28 @@
 # Kiln Session Handoff
 
-**Active focus:** Task 4, IN PROGRESS.
-**Branch:** `feat/2d-production-workflow`.
-**Scope:** User explicitly authorized Task 4 despite pending Task 3 graphical acceptance. 3D remains paused.
+**Active focus:** Task 4 implementation complete; native graphical acceptance pending.
+**Branch:** `feat/2d-production-workflow`. 3D remains paused. Task 5 has not started.
 
-## Delivered this checkpoint
+## Delivered
 
-- Current-scene Play launches the active document; separate Play Project Start launches the default scene. Restart reconstructs clean runtime state rather than automatically loading a save slot.
-- Shared runtime PlayClock gives editor/player fixed 60 Hz gameplay, bounded catch-up, and pause/step semantics. Editor supports Pause/Resume, Step Frame, Restart, focus-loss pause, text-input isolation, and forwarding pressed keys to runtime input actions.
-- Paused Apply Runtime Transforms and Stop copies valid local transforms for existing authored entities in the active scene, preserves other authored data, and records scene undo. Ordinary Stop rebuilds the authored world.
-- Editor/player compiler diagnostics include filename and one-based Unicode line/column. Runtime failures pause editor Play and identify the scene.
-- ADR-0052 specifies entity-script ownership, state/properties/lifecycle, dispatch, module compatibility, and live-debugger requirements.
-
-## Still required for Task 4
-
-- Implement entity attachments, self references, independent persistent script state, exposed property editing, and lifecycle callbacks.
-- Implement user functions/modules and bounded collections while preserving existing scene-script behavior.
-- Add signal dispatch and collision callbacks in the entity scheduler; connect debugger controls to the VM actually running gameplay.
-- Complete runtime-error source maps and editor/player acceptance with two enemies, projectile, trigger, and scene transition.
-- Native GUI interaction remains unverified without a display server/Xvfb. Task 3 implementation/headless acceptance passed previously.
+- Authored `Component::Script` stores a project-relative resource and numeric exposed properties. Inspector attach/edit/remove commands are validated, undoable, and preserve metadata through projection/save/reopen.
+- Editor/player use `SliceSession::with_scene_sources`, including nested/attachment-only scenes. Each stable entity ID receives an isolated VM state store and `self_entity()` reference. Lifecycle phases cover start/update, deferred signals, backend collision enter/exit, and stop. World systems run once per tick; callbacks reuse tick/frame context.
+- KilnScript supports named non-recursive functions, relative module imports, bounded arrays, per-instance state APIs, and scene-transition requests. Existing scene programs retain per-frame top-level execution. See KILNSCRIPT.md for syntax, limits, and reserved-name migration.
+- Program source offsets and expanded-module origins produce compiler/runtime file/line/column errors. Live Gameplay Debugger controls actual pause/resume/frame-step/restart and inspects entity state. The previous detached instruction debugger is no longer presented as live gameplay control.
+- Prior checkpoint supplies current-scene/project-start Play, shared fixed timing, focus/text-input handling, and explicit undoable runtime-transform application. Player restart/transition rebuilds the world and resets timing; stop callbacks run before teardown.
 
 ## Validation
 
-- `just check`: passed. Final `just test`: 556 passed, zero failed/skipped. Native editor and player builds passed.
-- Focused tests cover pause/step/resume/catch-up, Unicode diagnostics, non-default scene launch, and runtime-transform transfer isolation.
+- `just check`: passed. Full `just test`: 560 passed, zero failed/skipped. Native editor/player builds passed.
+- Shared runtime acceptance compares source resources against a deserialized player project/byte assets: two enemies with isolated state/properties/arrays, projectile motion, injected backend collision, deferred trigger signal, scene request, stop callbacks, and authoring isolation.
+- Focused physics-enabled acceptance and script component history/disk/projection tests passed. Import cycles, recursion, and imported-file compile/runtime errors are covered.
+- No display server/Xvfb is available, so native GUI interaction remains unverified.
 
-## Next
+## Supported limits / next
 
-Implement the remaining entity scheduler and language features before marking Task 4 complete. Task 5 has not started.
+- Exposed properties are numeric. Runtime state persists between ticks; serializing arbitrary script state into game saves belongs to the later save workflow.
+- Live debugging is at frame granularity. Source/instruction breakpoints and arbitrary watches are not exposed by this implementation.
+- Collision delivery is implemented; geometric event production depends on the physics backend and is Task 5 work. The acceptance injects backend events.
+- Record native graphical acceptance before claiming visual verification. Do not mark Task 5 complete based on these scripting changes.
 
-Source `/workspace/.kiln-tools/activate.sh` for Cargo. Git network operations require supported `require_escalated` network permission; this resolved prior proxy failures. Remote branch previously matched `704966b`.
+Source `/workspace/.kiln-tools/activate.sh` for Cargo. Git pushes require the supported `require_escalated` network permission; the prior remote tip was `68491af`.

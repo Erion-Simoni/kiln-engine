@@ -243,6 +243,14 @@ pub struct Entity {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Component {
+    /// Entity-attached gameplay program with per-instance numeric properties.
+    Script {
+        /// Project-relative script resource path.
+        path: String,
+        /// Inspector-exposed initial property values.
+        #[serde(default)]
+        properties: HashMap<String, f64>,
+    },
     Transform {
         x: f32,
         y: f32,

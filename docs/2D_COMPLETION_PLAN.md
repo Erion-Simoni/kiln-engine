@@ -44,21 +44,26 @@ Acceptance: headless two-scene acceptance now transforms/reparents/duplicates/de
 
 Headless acceptance passes: reuse an enemy prefab across two scenes, apply an instance's edits to the definition while preserving the other instance's override, rename its texture, save/reopen, and verify the exported archive contains the renamed texture. Native visual acceptance of prefab and asset drag/drop is pending because this executor has no display server or Xvfb.
 
-### 4. General gameplay scripting and Play workflow — IN PROGRESS
+### 4. General gameplay scripting and Play workflow — IMPLEMENTATION COMPLETE; GRAPHICAL ACCEPTANCE PENDING
 
-- [ ] Specify entity-attached scripts, self/entity references, per-instance persistent state, inspector-exposed properties, and lifecycle callbacks.
-- [ ] Add reusable functions/modules and collections as required by the reference games; preserve existing scripts or document migrations.
-- [ ] Deliver events/signals, collision callbacks, input actions, useful diagnostics, and working debugger controls.
-- [ ] Unify editor/player execution; add pause, step, restart, current-scene/project-start play, correct focus/timing, and explicit runtime-change application.
+- [x] Specify entity-attached scripts, self/entity references, per-instance persistent state, inspector-exposed properties, and lifecycle callbacks.
+- [x] Add reusable functions/modules and collections as required by the reference games; preserve existing scripts or document migrations.
+- [x] Deliver events/signals, collision callbacks, input actions, useful diagnostics, and working debugger controls.
+- [x] Unify editor/player execution; add pause, step, restart, current-scene/project-start play, correct focus/timing, and explicit runtime-change application.
 
 Acceptance: two independently scripted enemies, a projectile, a trigger, and a level transition run identically in editor and player; stop restores authoring state; errors point to the correct script location.
 
-Current checkpoint: current-scene/project-start Play, pause/frame-step/restart,
-shared fixed-step timing, focus-loss pause, text-input isolation, explicit
-undoable runtime-transform application, and filename/line/column compiler
-diagnostics are implemented. ADR-0052 specifies the entity-script contract.
-Entity attachments/state/properties/lifecycle, functions/modules/collections,
-signals and live VM debugging remain outstanding; Task 4 is not complete.
+Headless acceptance passes through the shared native host loader/scheduler:
+two isolated enemy scripts with distinct properties, a projectile, backend
+collision delivery, a trigger signal, and a transition request produce identical
+results from source resources and deserialized player project/byte assets.
+Stop callbacks run without mutating authoring documents; imported-function
+compile/runtime errors identify their source file/line/column. Geometric
+collision production is Task 5; the acceptance injects a backend event.
+Live debugger controls operate at gameplay-frame granularity and inspect actual
+instance state. Source/instruction breakpoints and arbitrary watch evaluation
+are not exposed. Native visual interaction remains unverified without a GUI
+runner; see ADR-0052 and `docs/KILNSCRIPT.md` for the supported contract.
 
 ### 5. Physics and cameras — PENDING
 
@@ -322,3 +327,11 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Current-scene Play uses the active scene; project-start Play is separate. Pause/resume, one-frame step, restart, focus-loss pause, text-input isolation, forwarded action keys, and guarded runtime-transform application are implemented. Editor/player now share the fixed-step clock with bounded catch-up.
 - Compiler diagnostics in editor/player include source file, line, and column. Tests cover Unicode/clamped spans, non-default scene launch, frame-step timing, and retaining authored metadata while applying runtime transforms.
 - `just check`: passed; `just test`: 556 passed, zero failed/skipped; editor/player builds passed. Native interaction remains unverified without a GUI runner. Entity attachments/lifecycle, functions/modules/collections, signals, live VM debugging, runtime source maps, and full gameplay acceptance remain pending. Task 4 remains IN PROGRESS.
+
+### 2026-11-04 — Task 4 entity scripting implementation completed
+
+- Added authored Script components, validated undoable attach/edit/remove commands, inspector resource selection/numeric properties, and projection/disk preservation. Native editor/player now call the same scene/module loader and entity scheduler, including attachment-only scenes.
+- Added isolated persistent state, self IDs, start/update/signal/collision/stop phases, stable dispatch order, deferred bounded signals, bounded array operations, scene-transition requests, and normalized keyboard actions. World systems advance once per tick rather than once per callback.
+- Added non-recursive named functions with isolated locals, project-relative modules with import-cycle/path/size limits, IR source offsets, and source-mapped runtime errors. Existing scene scripts keep their top-level per-frame behavior; reserved-name migration and limits are documented in KILNSCRIPT.md.
+- Replaced the detached instruction-debugger UI with actual Play pause/frame-step/restart controls and live entity-state inspection. Player restarts/transitions rebuild worlds and reset timing.
+- Shared acceptance covers independent enemy state/properties/arrays, projectile/collision/trigger/signal/transition, source-vs-player-asset parity, authoring isolation, and stop callbacks. Negative tests cover module cycles, recursive functions, and imported runtime errors. `just check`, full `just test` (560 passed), native editor/player builds, and focused physics-enabled acceptance pass. GUI interaction remains pending on a graphical runner.

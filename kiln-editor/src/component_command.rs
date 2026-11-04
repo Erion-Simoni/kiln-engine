@@ -6,6 +6,7 @@ use kiln_core::{Component, Project, Scene};
 /// Components exposed by the entity inspector. Parent is edited by the hierarchy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComponentKind {
+    Script,
     Transform,
     Sprite,
     Role,
@@ -16,6 +17,7 @@ impl ComponentKind {
     /// Identify an inspector component, excluding hierarchy links.
     pub fn of(component: &Component) -> Option<Self> {
         match component {
+            Component::Script { .. } => Some(Self::Script),
             Component::Transform { .. } => Some(Self::Transform),
             Component::Sprite { .. } => Some(Self::Sprite),
             Component::Role { .. } => Some(Self::Role),
@@ -28,6 +30,7 @@ impl ComponentKind {
     /// Defaults for resource-free components; Tilemap needs an explicit map ID.
     pub fn default_component(self) -> Option<Component> {
         match self {
+            Self::Script => None,
             Self::Transform => Some(Component::Transform {
                 x: 0.0,
                 y: 0.0,
@@ -54,6 +57,10 @@ impl ComponentKind {
 /// One component-presence edit. Add never overwrites an existing component.
 #[derive(Debug, Clone)]
 pub enum ComponentEdit {
+    SetScript {
+        path: String,
+        properties: std::collections::HashMap<String, f64>,
+    },
     Add(Component),
     Remove(ComponentKind),
     SetRole {
@@ -112,6 +119,7 @@ impl ComponentCommand {
             return Err("Select one root-scene entity to edit its components".into());
         };
         let kind = match &self.edit {
+            ComponentEdit::SetScript { .. } => ComponentKind::Script,
             ComponentEdit::Add(component) => {
                 validate(component, project)?;
                 ComponentKind::of(component).ok_or("Edit parent links through the hierarchy")?
@@ -132,6 +140,20 @@ impl ComponentCommand {
             return Err("Entity has ambiguous duplicate components".into());
         }
         match (&self.edit, matches.first()) {
+            (ComponentEdit::SetScript { path, properties }, Some(index)) => {
+                let replacement = Component::Script {
+                    path: path.clone(),
+                    properties: properties.clone(),
+                };
+                validate(&replacement, project)?;
+                if serde_json::to_value(&components[*index]).ok()
+                    == serde_json::to_value(&replacement).ok()
+                {
+                    return Ok(false);
+                }
+                components[*index] = replacement;
+                Ok(true)
+            }
             (ComponentEdit::Add(component), None) => {
                 components.push(component.clone());
                 Ok(true)
@@ -211,6 +233,16 @@ impl ComponentCommand {
 
 fn validate(component: &Component, project: &Project) -> Result<(), String> {
     match component {
+        Component::Script { path, properties }
+            if path.trim().is_empty()
+                || std::path::Path::new(path).is_absolute()
+                || std::path::Path::new(path)
+                    .components()
+                    .any(|part| !matches!(part, std::path::Component::Normal(_)))
+                || !properties.values().all(|value| value.is_finite()) =>
+        {
+            Err("Script path must be project-relative and properties must be finite".into())
+        }
         Component::Transform {
             x,
             y,

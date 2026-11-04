@@ -77,6 +77,7 @@ enum ProjectRequest {
     RestartPlay,
     PlayProject,
     ApplyPlayTransforms,
+    TransitionPlay(String),
     Component(ComponentCommand),
     Entity(crate::entity_command::EntityCommand),
     ApplyPrefabInstance(String),
@@ -541,22 +542,9 @@ fn start_play_session(
     root: &Path,
     textures: &SceneTextures,
 ) -> Result<(kiln_runtime::SliceSession, String, GameWorld), String> {
-    let scene = project
-        .scenes
-        .get(scene_id)
-        .ok_or_else(|| format!("Scene '{scene_id}' not found"))?;
-
-    let path = scene.script.as_ref().ok_or("The scene has no script")?;
-    let source = std::fs::read_to_string(root.join(path))
-        .map_err(|e| format!("could not read the scene script: {e}"))?;
-
-    let slice = kiln_runtime::SliceSession::with_action_map(&source, project.action_map.clone())
-        .map_err(|d| {
-            d.iter()
-                .map(|d| d.with_source_location(path, &source))
-                .collect::<Vec<_>>()
-                .join("; ")
-        })?;
+    let slice = kiln_runtime::SliceSession::with_scene_sources(project, scene_id, |path| {
+        std::fs::read_to_string(root.join(path)).map_err(|error| error.to_string())
+    })?;
 
     let (world, _spawned) = spawn_editor_scene(project, scene_id, textures);
     Ok((slice, scene_id.to_owned(), world))
@@ -1094,6 +1082,12 @@ impl EditorApp {
 
     /// Stop playing and return to editing the scene.
     fn stop_play(&mut self) {
+        if let Some(play) = self.play.as_mut() {
+            if let Err(error) = play.slice.stop(&mut self.world) {
+                self.console_log
+                    .push(format!("[ERROR] Stop callback: {error}"));
+            }
+        }
         self.play = None;
         self.is_playing = false;
         self.reset_scene_view();
@@ -1255,7 +1249,12 @@ impl EditorApp {
                     .collect::<Vec<_>>()
             }
         });
-        let EditorApp { world, play, .. } = self;
+        let EditorApp {
+            world,
+            play,
+            project_requests,
+            ..
+        } = self;
         let Some(play) = play.as_mut() else {
             return;
         };
@@ -1272,6 +1271,11 @@ impl EditorApp {
                 break;
             }
             play.error = None;
+            if let Some(id) = play.slice.take_scene_request() {
+                project_requests.push(ProjectRequest::TransitionPlay(id));
+                play.clock.set_paused(true);
+                break;
+            }
         }
     }
 
@@ -2024,6 +2028,18 @@ impl EditorApp {
             }
             let result = match request {
                 ProjectRequest::ApplyPlayTransforms => self.apply_play_transforms(),
+                ProjectRequest::TransitionPlay(id) => {
+                    if self
+                        .current_project
+                        .as_ref()
+                        .is_some_and(|project| project.scenes.contains_key(&id))
+                    {
+                        self.stop_play();
+                        self.start_play_scene(&id)
+                    } else {
+                        Err(format!("Unknown scene transition '{id}'"))
+                    }
+                }
                 ProjectRequest::PausePlay => {
                     if let Some(play) = self.play.as_mut() {
                         play.clock.set_paused(!play.clock.paused());
@@ -4318,6 +4334,47 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         let has_sprite = has(ComponentKind::Sprite);
                         let has_role = has(ComponentKind::Role);
                         let has_tilemap = has(ComponentKind::Tilemap);
+                        if let Some((path, properties)) = authored.components.iter().find_map(|component| match component {
+                            kiln_core::Component::Script { path, properties } => Some((path.clone(), properties.clone())), _ => None,
+                        }) {
+                            ui.group(|ui| {
+                                ui.strong(format!("Script: {path}"));
+                                if !self.asset_browser.entries().iter().any(|entry| entry.path == path) {
+                                    ui.colored_label(egui::Color32::YELLOW, "Script resource is missing");
+                                }
+                                let mut edited = properties.clone();
+                                let mut names: Vec<_> = properties.keys().cloned().collect(); names.sort();
+                                let mut changed = false;
+                                for name in names {
+                                    ui.horizontal(|ui| {
+                                        ui.label(&name);
+                                        if let Some(value) = edited.get_mut(&name) { changed |= ui.add(egui::DragValue::new(value)).changed(); }
+                                    });
+                                }
+                                let widget_id = ui.id().with(("script-property-name", &authored.id));
+                                let mut name = ui.data_mut(|data| data.get_temp::<String>(widget_id).unwrap_or_default());
+                                ui.horizontal(|ui| {
+                                    ui.text_edit_singleline(&mut name);
+                                    if ui.button("Add Property").clicked() && !name.trim().is_empty() {
+                                        edited.entry(name.trim().into()).or_insert(0.0); changed = true;
+                                    }
+                                });
+                                ui.data_mut(|data| data.insert_temp(widget_id, name));
+                                if changed { self.queue_component(entity, ComponentEdit::SetScript { path: path.clone(), properties: edited }); }
+                                if ui.button("Remove Script").clicked() { self.remove_component(entity, ComponentKind::Script); }
+                            });
+                        } else {
+                            let scripts: Vec<_> = self.asset_browser.entries().iter().filter(|entry| entry.path.ends_with(".ks")).map(|entry| entry.path.clone()).collect();
+                            ui.menu_button("Attach Script", |ui| {
+                                if scripts.is_empty() { ui.label("Add a .ks file to the project and refresh Assets."); }
+                                for path in scripts {
+                                    if ui.button(&path).clicked() {
+                                        self.queue_component(entity, ComponentEdit::Add(kiln_core::Component::Script { path, properties: HashMap::new() }));
+                                        ui.close_menu();
+                                    }
+                                }
+                            });
+                        }
                         if authored.components.iter().any(|component| matches!(component, kiln_core::Component::PrefabInstance { .. })) {
                             ui.horizontal(|ui| {
                                 ui.label("Prefab instance");
@@ -5822,13 +5879,44 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::DebuggerPanel => {
                 ui.vertical(|ui| {
                     if let Some(play) = &mut self.play {
-                        // Use the SliceSession's debugger
-                        if let Some(debugger) = play.slice.debugger_mut() {
-                            self.debugger_panel.render(ui, debugger);
-                        } else {
-                            ui.heading("KilnScript Debugger");
-                            ui.add_space(8.0);
-                            ui.label("Debugger not available");
+                        ui.heading("Live Gameplay Debugger");
+                        ui.label(format!("Scene: {}", play.scene_id));
+                        ui.horizontal(|ui| {
+                            if ui
+                                .button(if play.clock.paused() {
+                                    "Resume"
+                                } else {
+                                    "Pause"
+                                })
+                                .clicked()
+                            {
+                                self.project_requests.push(ProjectRequest::PausePlay);
+                            }
+                            if ui.button("Step Frame").clicked() {
+                                self.project_requests.push(ProjectRequest::StepPlay);
+                            }
+                            if ui.button("Restart").clicked() {
+                                self.project_requests.push(ProjectRequest::RestartPlay);
+                            }
+                        });
+                        if let Some(error) = &play.error {
+                            ui.colored_label(egui::Color32::LIGHT_RED, error);
+                        }
+                        ui.checkbox(&mut self.debugger_panel.show_locals, "Inspect entity state");
+                        if self.debugger_panel.show_locals {
+                            for entity in play.slice.entity_script_debug() {
+                                ui.collapsing(
+                                    format!(
+                                        "{} — {} ({})",
+                                        entity.entity_id, entity.path, entity.phase
+                                    ),
+                                    |ui| {
+                                        for (name, value) in entity.values {
+                                            ui.monospace(format!("{name} = {value:?}"));
+                                        }
+                                    },
+                                );
+                            }
                         }
                     } else {
                         ui.heading("KilnScript Debugger");

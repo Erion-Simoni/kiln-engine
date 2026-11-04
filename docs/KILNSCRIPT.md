@@ -196,6 +196,72 @@ KilnScript source (.ks)
 
 Compile errors produce diagnostics with source spans (undefined variable, undefined function, duplicate variable, wrong argument count). Unknown functions are a compile error.
 
+## Entity scripts and modules
+
+In the Inspector, use **Attach Script** to select a project `.ks` file. Add
+numeric property names and values there, then read them with
+`get_property("speed")`. Attachments, property defaults, duplication, undo, and
+save/reopen use the authored scene document. Each entity gets its own runtime
+state store and stable `self_entity()` reference.
+
+```kilnscript
+import "helpers/movement.ks";
+
+if script_phase() == "start" {
+    state_set("distance", 0.0);
+}
+if script_phase() == "update" {
+    let x = state_get("distance", 0.0) + get_property("speed") * get_delta_time();
+    state_set("distance", x);
+    set_entity_pos(self_entity(), x, 0.0);
+}
+if script_phase() == "collision_enter" {
+    emit_signal("hit", event_entity());
+}
+if script_phase() == "signal" {
+    if signal_name() == "level_complete" { change_scene("level_2"); }
+}
+```
+
+Lifecycle phases are `start` once, `update` each gameplay tick, `signal` for
+queued signals, `collision_enter`/`collision_exit` for backend collision events,
+and `stop` when the attachment/world is removed. `event_entity()` identifies
+the other collider; `signal_value()` reads a signal's payload. Signals emitted
+during a tick are delivered on the next tick in stable entity order, with a
+256-event limit. Collision generation requires a physics backend; the runtime
+also exposes `queue_collision_event` for custom backends.
+
+Modules use top-level `import "relative/path.ks";` directives, on their own
+line. Paths are relative to the importing resource and must stay inside the
+project. Repeated imports expand once; import cycles are errors. Helpers may
+declare named functions:
+
+```kilnscript
+fn advance(x, speed) {
+    if speed > 0 { return x + speed; }
+    return x;
+}
+```
+
+Functions can call other named functions and builtins, receive evaluated
+arguments, and have isolated locals. Recursive/nested functions and closures
+are rejected; no explicit return yields integer zero. `array_new()`,
+`array_push(array, value)`, `array_length(array)`, and `array_get(array, index)`
+provide collections for entity queries and persistent state. Arrays contain
+at most 4096 items; `array_push` returns a new array. Bad indices report runtime
+errors with source file/line/column. `state_set` stores values independently
+per attachment across ticks, with at most 4096 keys; Stop/Restart/scene changes
+create fresh instance state. Game-save serialization of arbitrary attachment
+state is separate from this per-instance runtime persistence.
+
+Existing top-level scene scripts still execute once per gameplay tick and need
+no migration. `fn` is now reserved for function declarations and top-level
+`import` is a module directive; rename legacy variables using those names.
+The native editor and player both use `SliceSession::with_scene_sources`.
+The live debugger controls real gameplay at frame granularity and displays
+actual instance state; instruction breakpoints/watch expressions are not part
+of this debugger surface.
+
 ## See Also
 
 - `docs/TUTORIAL.md` — build your first game with KilnScript

@@ -21,6 +21,9 @@ pub enum CompileError {
 }
 
 pub struct Compiler {
+    functions: HashMap<String, (Vec<String>, Vec<Stmt>)>,
+    function_stack: Vec<String>,
+    function_returns: Vec<Vec<usize>>,
     program: Program,
     /// Name → host-call id for script `name(...)` calls.
     builtins: HashMap<String, u32>,
@@ -39,6 +42,9 @@ impl Compiler {
         let mut arities = HashMap::new();
         arities.insert("print".to_string(), 1u32);
         Self {
+            functions: HashMap::new(),
+            function_stack: Vec::new(),
+            function_returns: Vec::new(),
             program: Program::new(),
             builtins,
             arities,
@@ -78,7 +84,21 @@ impl Compiler {
 
     pub fn compile(&mut self, stmts: &[Stmt]) -> Result<Program, CompileError> {
         for stmt in stmts {
-            self.compile_stmt(stmt)?;
+            if let Stmt::Function { name, params, body } = stmt {
+                if self.builtins.contains_key(name)
+                    || self
+                        .functions
+                        .insert(name.clone(), (params.clone(), body.clone()))
+                        .is_some()
+                {
+                    return Err(CompileError::Custom(format!("Duplicate function '{name}'")));
+                }
+            }
+        }
+        for stmt in stmts {
+            if !matches!(stmt, Stmt::Function { .. }) {
+                self.compile_stmt(stmt)?;
+            }
         }
         self.program.set_local_slots(self.next_slot);
         self.program.validate_jump_targets()?;
@@ -86,14 +106,28 @@ impl Compiler {
     }
 
     fn compile_stmt(&mut self, stmt: &Stmt) -> Result<(), CompileError> {
+        if self.next_slot >= 32000 {
+            return Err(CompileError::Custom("Too many script locals".into()));
+        }
         match stmt {
+            Stmt::Function { .. } => {
+                return Err(CompileError::Custom(
+                    "Function definitions must be at module top level".into(),
+                ));
+            }
             Stmt::Expr(expr) => {
                 self.compile_expr(expr)?;
                 self.program.add_instruction(Instruction::Pop);
             }
             Stmt::Return(expr) => {
                 self.compile_expr(expr)?;
-                self.program.add_instruction(Instruction::Return);
+                if let Some(returns) = self.function_returns.last_mut() {
+                    let index = self.program.instructions().len();
+                    self.program.add_instruction(Instruction::Jump(Label(0)));
+                    returns.push(index);
+                } else {
+                    self.program.add_instruction(Instruction::Return);
+                }
             }
             Stmt::Let { name, value, span } => {
                 if self.scopes.iter().any(|scope| scope.contains_key(name)) {
@@ -168,6 +202,18 @@ impl Compiler {
     }
 
     fn compile_expr(&mut self, expr: &Expr) -> Result<(), CompileError> {
+        fn offset(expr: &Expr) -> usize {
+            match expr {
+                Expr::Number(_, span)
+                | Expr::Float(_, span)
+                | Expr::String(_, span)
+                | Expr::Identifier(_, span)
+                | Expr::Call { span, .. } => span.start,
+                Expr::BinaryOp { left, .. } => offset(left),
+            }
+        }
+        let begin = self.program.instructions().len();
+        let source_offset = offset(expr);
         match expr {
             Expr::Number(n, _span) => {
                 self.program
@@ -207,6 +253,44 @@ impl Compiler {
                 for arg in args {
                     self.compile_expr(arg)?;
                 }
+                if let Some((params, body)) = self.functions.get(func).cloned() {
+                    if params.len() != args.len() {
+                        return Err(CompileError::Custom(format!(
+                            "Function '{func}' expects {} arguments, got {}",
+                            params.len(),
+                            args.len()
+                        )));
+                    }
+                    if self.function_stack.contains(func)
+                        || self.function_stack.len() >= 32
+                        || self.program.instructions().len() > 65536
+                    {
+                        return Err(CompileError::Custom(format!(
+                            "Recursive or excessively expanded function '{func}'"
+                        )));
+                    }
+                    let caller_scopes = std::mem::replace(&mut self.scopes, vec![HashMap::new()]);
+                    let slots: Vec<_> =
+                        params.iter().map(|name| self.allocate_slot(name)).collect();
+                    for slot in slots.into_iter().rev() {
+                        self.program.add_instruction(Instruction::SetLocal(slot));
+                    }
+                    self.function_stack.push(func.clone());
+                    self.function_returns.push(Vec::new());
+                    for stmt in &body {
+                        self.compile_stmt(stmt)?;
+                    }
+                    self.program
+                        .add_instruction(Instruction::PushConst(Value::I64(0)));
+                    let end = self.program.instructions().len();
+                    for index in self.function_returns.pop().unwrap_or_default() {
+                        self.program
+                            .set_instruction(index, Instruction::Jump(Label(end)));
+                    }
+                    self.function_stack.pop();
+                    self.scopes = caller_scopes;
+                    return Ok(());
+                }
                 let func_id = self
                     .builtins
                     .get(func.as_str())
@@ -225,6 +309,10 @@ impl Compiler {
                     argc: actual_argc,
                 });
             }
+        }
+        for instruction in begin..self.program.instructions().len() {
+            self.program
+                .record_source_offset(instruction, source_offset);
         }
         Ok(())
     }

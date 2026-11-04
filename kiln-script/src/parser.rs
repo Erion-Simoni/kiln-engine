@@ -46,6 +46,12 @@ pub enum BinaryOp {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
+    /// A reusable non-recursive named function.
+    Function {
+        name: String,
+        params: Vec<String>,
+        body: Vec<Stmt>,
+    },
     Expr(Expr),
     Return(Expr),
     /// `let name = expr;` — declares a new local variable.
@@ -110,6 +116,7 @@ impl<'a> Parser<'a> {
 
     fn parse_stmt(&mut self) -> Result<Option<Stmt>, ParseError> {
         match self.peek_token() {
+            Some(Token::Fn) => self.parse_function(),
             Some(Token::If) => self.parse_if(),
             Some(Token::Return) => self.parse_return(),
             Some(Token::Let) => self.parse_let(),
@@ -126,6 +133,52 @@ impl<'a> Parser<'a> {
                 Ok(Some(Stmt::Expr(expr)))
             }
         }
+    }
+
+    fn parse_function(&mut self) -> Result<Option<Stmt>, ParseError> {
+        if self.depth >= 64 {
+            return Err(ParseError::Custom("Function nesting is too deep".into()));
+        }
+        self.depth += 1;
+        self.consume(Token::Fn)?;
+        let name = match self.peek_token() {
+            Some(Token::Identifier(name)) => name.clone(),
+            token => {
+                return Err(ParseError::Custom(format!(
+                    "Expected function name, got {token:?}"
+                )))
+            }
+        };
+        self.advance();
+        self.consume(Token::LParen)?;
+        let mut params = Vec::new();
+        if self.peek_token() != Some(Token::RParen) {
+            loop {
+                let param = match self.peek_token() {
+                    Some(Token::Identifier(name)) => name.clone(),
+                    token => {
+                        return Err(ParseError::Custom(format!(
+                            "Expected parameter name, got {token:?}"
+                        )))
+                    }
+                };
+                if params.contains(&param) {
+                    return Err(ParseError::Custom("Duplicate function parameter".into()));
+                }
+                params.push(param);
+                self.advance();
+                if self.peek_token() != Some(Token::Comma) {
+                    break;
+                }
+                self.advance();
+            }
+        }
+        self.consume(Token::RParen)?;
+        self.consume(Token::LBrace)?;
+        let body = self.parse_block()?;
+        self.consume(Token::RBrace)?;
+        self.depth -= 1;
+        Ok(Some(Stmt::Function { name, params, body }))
     }
 
     /// Whether the upcoming tokens are `identifier =`.

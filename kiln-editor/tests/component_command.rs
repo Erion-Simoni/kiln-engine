@@ -49,6 +49,43 @@ fn fixture() -> Project {
         .insert("level_map".into(), kiln_core::TileMap::default());
     project
 }
+
+#[test]
+fn script_attachment_properties_are_undoable_and_survive_projection_and_disk() {
+    let mut project = fixture();
+    let mut scene = project.scenes["main"].clone();
+    let mut history = SceneHistory::new();
+    let attachment = Component::Script {
+        path: "scripts/enemy.ks".into(),
+        properties: HashMap::from([("speed".into(), 2.0)]),
+    };
+    let command = |edit| ComponentCommand {
+        scene_id: "main".into(),
+        entity_id: "hero".into(),
+        edit,
+    };
+    command(ComponentEdit::Add(attachment))
+        .execute(&mut scene, &project, &mut history)
+        .unwrap();
+    command(ComponentEdit::SetScript {
+        path: "scripts/enemy.ks".into(),
+        properties: HashMap::from([("speed".into(), 5.0)]),
+    })
+    .execute(&mut scene, &project, &mut history)
+    .unwrap();
+    let edited = scene.clone();
+    let previous = history.undo(scene).unwrap();
+    assert!(previous.entities[0].components.iter().any(|component| matches!(component, Component::Script { properties, .. } if properties["speed"] == 2.0)));
+    scene = history.redo(previous).unwrap();
+    assert_eq!(json(&scene), json(&edited));
+    project.scenes.insert("main".into(), scene);
+    let root = tempfile::tempdir().unwrap();
+    project_files::save(&project, &root.path().join("kiln.toml")).unwrap();
+    let reopened = project_files::load(root.path()).unwrap().project;
+    let projected = snapshot(&reopened, &spawn(&reopened));
+    assert_eq!(json(&projected), json(&reopened.scenes["main"]));
+    assert!(reopened.scenes["main"].entities[0].components.iter().any(|component| matches!(component, Component::Script { path, properties } if path == "scripts/enemy.ks" && properties["speed"] == 5.0)));
+}
 fn components() -> Vec<Component> {
     vec![
         Component::Transform {
