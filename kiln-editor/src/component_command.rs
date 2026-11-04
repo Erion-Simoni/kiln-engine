@@ -55,7 +55,14 @@ impl ComponentKind {
 pub enum ComponentEdit {
     Add(Component),
     Remove(ComponentKind),
-    SetRole { role: String },
+    SetRole {
+        role: String,
+    },
+    SetSpriteReferences {
+        texture: Option<String>,
+        material: Option<String>,
+        animation_clip: Option<String>,
+    },
 }
 
 /// A command targeting one root entity in one scene document.
@@ -107,6 +114,7 @@ impl ComponentCommand {
             }
             ComponentEdit::Remove(kind) => *kind,
             ComponentEdit::SetRole { .. } => ComponentKind::Role,
+            ComponentEdit::SetSpriteReferences { .. } => ComponentKind::Sprite,
         };
         let components = &mut scene.entities[*index].components;
         let matches: Vec<_> = components
@@ -138,6 +146,43 @@ impl ComponentCommand {
                     *current = role.to_owned();
                     Ok(true)
                 }
+            }
+            (
+                ComponentEdit::SetSpriteReferences {
+                    texture,
+                    material,
+                    animation_clip,
+                },
+                Some(index),
+            ) => {
+                let normalized = |value: &Option<String>| {
+                    value
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(str::to_owned)
+                };
+                let texture = normalized(texture);
+                let material = normalized(material);
+                let animation_clip = normalized(animation_clip);
+                let Component::Sprite {
+                    texture: current_texture,
+                    material: current_material,
+                    animation_clip: current_clip,
+                    ..
+                } = &mut components[*index]
+                else {
+                    unreachable!("sprite kind resolved to a non-sprite component")
+                };
+                let changed = *current_texture != texture
+                    || *current_material != material
+                    || *current_clip != animation_clip;
+                if changed {
+                    *current_texture = texture;
+                    *current_material = material;
+                    *current_clip = animation_clip;
+                }
+                Ok(changed)
             }
             _ => Ok(false),
         }

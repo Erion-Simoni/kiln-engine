@@ -161,6 +161,65 @@ fn every_supported_component_survives_add_remove_undo_redo_and_disk_reopen() {
 }
 
 #[test]
+fn sprite_references_are_normalized_undoable_and_saved() {
+    let mut project = fixture();
+    let original = Component::Sprite {
+        color: [1.0; 4],
+        width: 32.0,
+        height: 32.0,
+        texture: None,
+        layer: 0.0,
+        material: None,
+        animation_clip: None,
+    };
+    project.scenes.get_mut("main").unwrap().entities[0]
+        .components
+        .push(original);
+    let mut scene = project.scenes["main"].clone();
+    let mut history = SceneHistory::new();
+    let edit = || ComponentEdit::SetSpriteReferences {
+        texture: Some(" art/hero.png ".into()),
+        material: Some(" ink ".into()),
+        animation_clip: Some(" idle ".into()),
+    };
+    assert!(command(edit())
+        .execute(&mut scene, &project, &mut history)
+        .unwrap());
+    assert_eq!(history.undo_depth(), 1);
+    assert!(!command(edit())
+        .execute(&mut scene, &project, &mut history)
+        .unwrap());
+    let sprite = scene.entities[0]
+        .components
+        .iter()
+        .find_map(|c| match c {
+            Component::Sprite {
+                texture,
+                material,
+                animation_clip,
+                ..
+            } => Some((texture, material, animation_clip)),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(sprite.0.as_deref(), Some("art/hero.png"));
+    assert_eq!(sprite.1.as_deref(), Some("ink"));
+    assert_eq!(sprite.2.as_deref(), Some("idle"));
+    project.scenes.insert("main".into(), scene.clone());
+    assert_disk(&project);
+    let restored = history.undo(scene).unwrap();
+    assert!(matches!(
+        restored.entities[0].components.last(),
+        Some(Component::Sprite {
+            texture: None,
+            material: None,
+            animation_clip: None,
+            ..
+        })
+    ));
+}
+
+#[test]
 fn authored_transform_can_be_added_even_when_loading_supplies_a_default() {
     let mut project = fixture();
     let mut scene = project.scenes["main"].clone();

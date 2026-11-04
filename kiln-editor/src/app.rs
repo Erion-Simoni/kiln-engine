@@ -167,6 +167,7 @@ pub struct EditorApp {
     selected_entity: Option<hecs::Entity>,
     rename_input: Option<(String, String)>,
     role_input: Option<(String, String)>,
+    sprite_reference_input: Option<(String, SpriteReferenceDraft)>,
     is_playing: bool,
     /// The running game session, present while playing.
     play: Option<PlaySession>,
@@ -249,6 +250,13 @@ pub struct EditorApp {
     grid_snap_size: f32,
     /// Whether grid snapping is enabled.
     grid_snap_enabled: bool,
+}
+
+#[derive(Clone, Default)]
+struct SpriteReferenceDraft {
+    texture: String,
+    material: String,
+    animation_clip: String,
 }
 
 /// Camera state for the scene editor viewport.
@@ -644,6 +652,7 @@ impl EditorApp {
             selected_entity: None,
             rename_input: None,
             role_input: None,
+            sprite_reference_input: None,
             is_playing: false,
             play: None,
             console_log: Vec::new(),
@@ -1322,8 +1331,13 @@ impl EditorApp {
         }
         let mut scene = self.scene_from_world();
         let project = self.current_project.as_ref().ok_or("No project loaded")?;
+        let refresh_textures = matches!(&command.edit, ComponentEdit::SetSpriteReferences { .. });
         if command.execute(&mut scene, project, &mut self.scenes.history)? {
-            self.apply_scene(scene)?;
+            if refresh_textures {
+                self.apply_scene_with_texture_refresh(scene)?;
+            } else {
+                self.apply_scene(scene)?;
+            }
         }
         Ok(())
     }
@@ -1368,6 +1382,25 @@ impl EditorApp {
         if let Some(project) = &mut self.current_project {
             project.scenes.insert(scene_id, scene);
         }
+        self.load_project_scene();
+        self.selected_entity =
+            selected_source.and_then(|id| self.entity_id_to_hecs.get(&id).copied());
+        Ok(())
+    }
+
+    fn apply_scene_with_texture_refresh(&mut self, scene: Scene) -> Result<(), String> {
+        let selected_source = self.selected_entity.and_then(|entity| {
+            self.world
+                .world_ref()
+                .get::<&SourceId>(entity)
+                .ok()
+                .map(|id| id.0.clone())
+        });
+        let scene_id = scene.id.clone();
+        if let Some(project) = &mut self.current_project {
+            project.scenes.insert(scene_id, scene);
+        }
+        self.upload_scene_textures();
         self.load_project_scene();
         self.selected_entity =
             selected_source.and_then(|id| self.entity_id_to_hecs.get(&id).copied());
@@ -1443,6 +1476,7 @@ impl EditorApp {
         self.selected_entity = None;
         self.rename_input = None;
         self.role_input = None;
+        self.sprite_reference_input = None;
         self.hierarchy_panel.clear_selection();
         self.gizmo = GizmoState::default();
         self.load_project_scene();
@@ -2205,6 +2239,7 @@ impl EditorApp {
                         selected_entity: &mut self.selected_entity,
                         rename_input: &mut self.rename_input,
                         role_input: &mut self.role_input,
+                        sprite_reference_input: &mut self.sprite_reference_input,
                         is_playing: &mut self.is_playing,
                         graph: &mut self.graph,
                         render_tier: &mut self.render_tier,
@@ -2831,6 +2866,7 @@ struct TabViewer<'a> {
     selected_entity: &'a mut Option<hecs::Entity>,
     rename_input: &'a mut Option<(String, String)>,
     role_input: &'a mut Option<(String, String)>,
+    sprite_reference_input: &'a mut Option<(String, SpriteReferenceDraft)>,
     is_playing: &'a mut bool,
     graph: &'a mut Graph,
     render_tier: &'a mut RenderTier,
@@ -4153,6 +4189,60 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         }
 
                         ui.add_space(12.0);
+                        if let Some((texture, material, animation_clip)) = authored.components.iter().find_map(|c| match c {
+                            kiln_core::Component::Sprite { texture, material, animation_clip, .. } => Some((texture, material, animation_clip)),
+                            _ => None,
+                        }) {
+                            if self.sprite_reference_input.as_ref().is_some_and(|(id, _)| id != &authored.id) {
+                                *self.sprite_reference_input = None;
+                            }
+                            ui.group(|ui| {
+                                ui.strong("Sprite References");
+                                if self.sprite_reference_input.as_ref().is_some_and(|(id, _)| id == &authored.id) {
+                                    let mut apply = false;
+                                    let mut cancel = false;
+                                    let enabled = !self.editing_locked() && !self.project_blocked;
+                                    ui.vertical(|ui| {
+                                        if let Some((_, draft)) = self.sprite_reference_input.as_mut() {
+                                            ui.label("Texture path");
+                                            ui.add_enabled(enabled, egui::TextEdit::singleline(&mut draft.texture));
+                                            ui.label("Material");
+                                            ui.add_enabled(enabled, egui::TextEdit::singleline(&mut draft.material));
+                                            ui.label("Animation clip");
+                                            ui.add_enabled(enabled, egui::TextEdit::singleline(&mut draft.animation_clip));
+                                        }
+                                        ui.horizontal(|ui| {
+                                            apply = ui.add_enabled(enabled, egui::Button::new("Apply")).clicked();
+                                            cancel = ui.button("Cancel").clicked();
+                                        });
+                                    });
+                                    if apply {
+                                        if let Some((_, draft)) = self.sprite_reference_input.take() {
+                                            let option = |value: String| (!value.trim().is_empty()).then_some(value);
+                                            self.queue_component(entity, ComponentEdit::SetSpriteReferences {
+                                                texture: option(draft.texture),
+                                                material: option(draft.material),
+                                                animation_clip: option(draft.animation_clip),
+                                            });
+                                        }
+                                    } else if cancel {
+                                        *self.sprite_reference_input = None;
+                                    }
+                                } else {
+                                    ui.label(format!("Texture: {}", texture.as_deref().unwrap_or("(none)")));
+                                    ui.label(format!("Material: {}", material.as_deref().unwrap_or("(none)")));
+                                    ui.label(format!("Animation: {}", animation_clip.as_deref().unwrap_or("(none)")));
+                                    if ui.add_enabled(!self.editing_locked() && !self.project_blocked, egui::Button::new("Edit References")).clicked() {
+                                        *self.sprite_reference_input = Some((authored.id.clone(), SpriteReferenceDraft {
+                                            texture: texture.clone().unwrap_or_default(),
+                                            material: material.clone().unwrap_or_default(),
+                                            animation_clip: animation_clip.clone().unwrap_or_default(),
+                                        }));
+                                    }
+                                }
+                            });
+                        }
+
                         if self
                             .role_input
                             .as_ref()
