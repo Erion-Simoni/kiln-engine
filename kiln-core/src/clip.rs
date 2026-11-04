@@ -38,6 +38,9 @@ pub struct Clip {
     /// Whether the clip loops.
     #[serde(default = "default_true")]
     pub loops: bool,
+    /// Optional automatic transition after a non-looping clip completes.
+    #[serde(default)]
+    pub next: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -52,6 +55,7 @@ impl Clip {
             texture,
             frames: Vec::new(),
             loops: true,
+            next: None,
         }
     }
 
@@ -78,6 +82,7 @@ impl Clip {
             return Ok((0, 0.0));
         }
 
+        let t = if t.is_finite() { t.max(0.0) } else { 0.0 };
         let mut time = if self.loops { t % total } else { t.min(total) };
 
         for (i, frame) in self.frames.iter().enumerate() {
@@ -88,6 +93,37 @@ impl Clip {
         }
 
         Ok((self.frames.len() - 1, 0.0))
+    }
+
+    /// Validate a clip against the decoded sheet, including overflow-safe rects.
+    pub fn validate(&self, sheet: [u32; 2]) -> Result<(), String> {
+        if self.name.trim().is_empty()
+            || self.texture.trim().is_empty()
+            || self.frames.is_empty()
+            || self.frames.len() > 4096
+        {
+            return Err("Clip needs a name, texture and 1–4096 frames".into());
+        }
+        for frame in &self.frames {
+            let [x, y, w, h] = frame.rect;
+            if w == 0
+                || h == 0
+                || x.checked_add(w).is_none_or(|end| end > sheet[0])
+                || y.checked_add(h).is_none_or(|end| end > sheet[1])
+                || !frame.duration.is_finite()
+                || frame.duration <= 0.0
+                || !frame
+                    .pivot
+                    .iter()
+                    .all(|v| v.is_finite() && (0.0..=1.0).contains(v))
+            {
+                return Err(
+                    "Frames need positive duration, valid pivots and rectangles inside the sheet"
+                        .into(),
+                );
+            }
+        }
+        Ok(())
     }
 
     /// Get all events for a frame at the given time.

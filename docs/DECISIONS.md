@@ -1241,3 +1241,115 @@ to the serialized project format.
 
 Functional override editing/revert, definition propagation to serialized
 instances, and drag/drop creation remain follow-up Task 3 work.
+
+## ADR-0052: Task 4 gameplay execution and Play isolation
+
+**Date:** 2026-11-04
+**Status:** accepted; implemented for native editor/player
+
+Editor and player use the same runtime and fixed 60 Hz gameplay step. Pausing
+discards accumulated wall time; frame step advances exactly one gameplay tick;
+catch-up after a stalled host is bounded to 250 ms. Losing editor focus pauses
+Play and text fields consume gameplay keyboard input. Restart creates a fresh
+runtime world and state rather than automatically restoring a save slot.
+Current-scene Play uses the active authored scene; project-start Play uses the
+same default-scene selection as the player.
+
+Authoring scenes remain separate from runtime worlds. Stop reconstructs the
+authored world. Applying runtime changes is an explicit paused operation;
+the initial implementation copies valid local transforms for existing authored
+entities in the active scene only and records an undo entry. Runtime spawns,
+deletions, names, and resource changes are not applied by this action.
+
+The remaining entity-script contract is:
+
+- An authored attachment identifies an entity by stable scene/entity IDs and a
+  project-relative script resource; it stores typed exposed property overrides.
+- Each attachment has an independent persistent state store and `self` entity
+  reference. Runtime state never modifies its authored property defaults.
+- A script instance receives start once, update per gameplay tick, collision
+  enter/exit and queued signal callbacks, and stop before destruction. Dispatch
+  order is stable by entity/attachment ID; signals emitted during dispatch are
+  queued to avoid reentrant mutation and recursive callback loops.
+- Named functions, resource-relative modules, and bounded collections must be
+  added to the frontend/VM before enabling entity attachments in the inspector.
+  Existing top-level scene scripts continue running once per gameplay frame;
+  they must not silently change to callback-only execution.
+- Both editor and player must construct the same scene gameplay scheduler.
+  Breakpoints/stepping must operate on the VM that actually mutates the world,
+  and compile/runtime diagnostics must carry script source locations.
+
+Implementation uses `Component::Script { path, properties }` with numeric
+exposed properties. A per-entity VM retains `state_get`/`state_set` values;
+`self_entity()` resolves the stable source ID. Lifecycle dispatch executes the
+program with `script_phase()` set to start/update/signal/collision_enter/
+collision_exit/stop. Existing scene programs retain their per-frame execution.
+Functions use bounded, non-recursive inlining with isolated parameter/local
+slots. Top-level relative import directives expand once per compilation,
+reject cycles/project escapes, and retain diagnostic file/line origins.
+
+The live debugger provides pause/resume, fixed-frame step, restart, and actual
+entity-state inspection. The previous detached instruction-debugger UI is no
+longer presented as controlling live gameplay. Source/instruction breakpoints
+and arbitrary watch expressions are not exposed by this initial live debugger.
+Physics collision production remains the backend's responsibility (Task 5);
+the entity scheduler delivers backend events once per tick without stepping
+world systems again for each callback. Native graphical acceptance still
+requires a GUI-capable runner.
+
+## ADR-0053: Task 5 physics synchronization and query ownership
+
+**Date:** 2026-11-04
+**Status:** accepted
+
+Rapier owns physical world poses during fixed gameplay ticks. Authored/local
+transforms remain scene data; the bridge resolves hierarchy/world offsets before
+registration and converts physical poses back to local transforms afterward.
+The bridge tracks ECS entities and generational body handles, removes orphaned
+bodies/colliders/joints, and updates externally edited poses/velocities instead
+of re-registering a body every frame. Collision membership/filter values are
+bitsets, and sensor pairs and solid contacts feed deterministic enter/exit
+events into the existing script scheduler. Queries use Rapier's actual scene
+geometry and expose stable source IDs with distance/normals rather than arena
+indices. Optional physics builds remain supported.
+
+Physics components and per-scene camera settings live in `kiln-core` so their
+serialized data survives without the simulation feature. Inspector commands
+use scene history; camera settings use project-wide save/dirty tracking.
+Native editor/player share the camera controller and aspect-fit viewport,
+including integer physical upscaling in pixel-perfect mode (small panels
+downscale to fit). Joint anchors use authored local units, including entity
+scale. The prior standalone Physics panel is explicitly a sandbox preview;
+saved scene physics is authored through the Inspector.
+
+## ADR-0054: Shared Task 6 visual authoring and playback
+
+**Date:** 2026-11-04
+**Status:** accepted
+
+Keep scene/project data authoritative. Add a defaulted SpriteLayout component for
+pivot/flips/pixel scale and a Particles component containing shared emitter data;
+retain existing Sprite serialization. Move emitter configuration into kiln-core
+and re-export it from kiln-vfx, avoiding a dependency cycle or new dependencies.
+Use the same clip playback, texture bindings, sorted scene draws and particle
+simulation in native editor/player. Clips use actual sheet dimensions, crossed
+frame events and optional non-looping next-clip transitions. Tile authoring
+operates on selected map/layer data, with bounded flood fill and persisted
+four-neighbor terrain rules. Resource panels invalidate the runtime projection
+when authoring changes. Native graphical acceptance remains separate from
+headless authoring/save/reopen/runtime acceptance.
+
+The player test target depends on the existing editor crate and tempfile only
+for acceptance: it authors through the editor commands, saves and packs a real
+archive, then uses the player's loader and shared runtime. This adds no shipped
+runtime dependency. Painter sorting is stable within a layer; only adjacent
+texture/material runs batch, since grouping transparent sprites by texture
+changes the image. Import filtering and mip generation reach GPU uploads.
+
+Solid tilemaps without an explicit rigid body register a static Rapier compound
+shape using the same tile/layer offsets and solid flags as grid queries. Adjacent
+solid cells merge into horizontal row runs. Geometry edits rebuild the compound;
+translation and removal synchronize with the existing fixed tick, stable source
+IDs, contact transitions and ray queries. Automatic map colliders use membership
+bit 1 and accept all body memberships. Axis-aligned map rendering and physics
+share the same translation/world-tile-size convention.

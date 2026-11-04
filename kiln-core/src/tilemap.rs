@@ -18,6 +18,13 @@ pub const CHUNK_SIZE: u32 = 16;
 /// Tile value meaning "no tile here".
 pub const EMPTY_TILE: u16 = u16::MAX;
 
+/// Four-neighbor terrain variants, indexed by up/right/down/left mask bits.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TerrainSet {
+    pub tileset: String,
+    pub tiles: [u16; 16],
+}
+
 /// A collection of tiles packed into a single image (a tileset).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TileSet {
@@ -50,14 +57,14 @@ impl Default for TileSet {
 impl TileSet {
     /// Number of tiles in the set.
     pub fn tile_count(&self) -> u32 {
-        self.columns * self.rows
+        self.columns.checked_mul(self.rows).unwrap_or(0)
     }
 
     /// Size of the whole tileset image, in pixels.
     pub fn image_size(&self) -> [u32; 2] {
         [
-            self.tile_size[0] * self.columns,
-            self.tile_size[1] * self.rows,
+            self.tile_size[0].saturating_mul(self.columns),
+            self.tile_size[1].saturating_mul(self.rows),
         ]
     }
 
@@ -304,12 +311,12 @@ impl TileMap {
         if ts[0] <= 0.0 || ts[1] <= 0.0 {
             return None;
         }
-        let tx0 = (min_x / ts[0]).floor() as i32;
-        let ty0 = (min_y / ts[1]).floor() as i32;
-        let tx1 = (max_x / ts[0]).floor() as i32;
-        let ty1 = (max_y / ts[1]).floor() as i32;
-
         for layer in &self.layers {
+            let tx0 = ((min_x - layer.offset[0]) / ts[0]).floor() as i32;
+            let ty0 = ((min_y - layer.offset[1]) / ts[1]).floor() as i32;
+            let tx1 = ((max_x - layer.offset[0]) / ts[0]).ceil() as i32 - 1;
+            let ty1 = ((max_y - layer.offset[1]) / ts[1]).ceil() as i32 - 1;
+
             let Some(tileset) = tilesets.get(&layer.tileset) else {
                 continue;
             };
@@ -317,7 +324,10 @@ impl TileMap {
                 for tx in tx0..=tx1 {
                     let tile = layer.tile_at(tx, ty);
                     if tileset.is_solid(tile) {
-                        return Some([tx as f32 * ts[0], ty as f32 * ts[1]]);
+                        return Some([
+                            layer.offset[0] + tx as f32 * ts[0],
+                            layer.offset[1] + ty as f32 * ts[1],
+                        ]);
                     }
                 }
             }

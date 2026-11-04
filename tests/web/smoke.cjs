@@ -6,7 +6,7 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 
 const pkg = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve(__dirname, '../../target/web-smoke');
-const game = path.resolve(__dirname, '../../samples/vertical_slice');
+const game = process.env.WEB_SMOKE_PROJECT ? path.resolve(process.env.WEB_SMOKE_PROJECT) : path.resolve(__dirname, '../../samples/vertical_slice');
 const html = `<!doctype html><html><head><link rel="icon" href="data:,"></head>
 <body style="margin:0"><canvas id="game" style="width:640px;height:480px"></canvas>
 <script type="module">
@@ -100,7 +100,21 @@ async function heroPosition(page) {
     assert.ok(Math.abs(stopped.x - released.x) <= 2, `Hero kept moving after key release: ${released.x} -> ${stopped.x}`);
     assert.deepEqual(failedRequests, [], 'Assets failed to load');
     assert.deepEqual(errors, [], 'Browser runtime errors');
-    console.log(JSON.stringify({passed:true, before, after, stopped}));
+    const cadence = process.env.WEB_SMOKE_PROFILE ? await page.evaluate(async () => {
+      const intervals = [];
+      await new Promise(resolve => {
+        let previous;
+        function frame(now) {
+          if (previous !== undefined) intervals.push(now - previous);
+          previous = now;
+          if (intervals.length === 120) resolve(); else requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+      });
+      intervals.sort((a, b) => a - b);
+      return {frames:intervals.length, meanMs:intervals.reduce((sum, value) => sum + value, 0) / intervals.length, p95Ms:intervals[Math.floor(intervals.length * 0.95)]};
+    }) : undefined;
+    console.log(JSON.stringify({passed:true, before, after, stopped, cadence}));
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));

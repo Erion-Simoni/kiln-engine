@@ -49,6 +49,43 @@ fn fixture() -> Project {
         .insert("level_map".into(), kiln_core::TileMap::default());
     project
 }
+
+#[test]
+fn script_attachment_properties_are_undoable_and_survive_projection_and_disk() {
+    let mut project = fixture();
+    let mut scene = project.scenes["main"].clone();
+    let mut history = SceneHistory::new();
+    let attachment = Component::Script {
+        path: "scripts/enemy.ks".into(),
+        properties: HashMap::from([("speed".into(), 2.0)]),
+    };
+    let command = |edit| ComponentCommand {
+        scene_id: "main".into(),
+        entity_id: "hero".into(),
+        edit,
+    };
+    command(ComponentEdit::Add(attachment))
+        .execute(&mut scene, &project, &mut history)
+        .unwrap();
+    command(ComponentEdit::SetScript {
+        path: "scripts/enemy.ks".into(),
+        properties: HashMap::from([("speed".into(), 5.0)]),
+    })
+    .execute(&mut scene, &project, &mut history)
+    .unwrap();
+    let edited = scene.clone();
+    let previous = history.undo(scene).unwrap();
+    assert!(previous.entities[0].components.iter().any(|component| matches!(component, Component::Script { properties, .. } if properties["speed"] == 2.0)));
+    scene = history.redo(previous).unwrap();
+    assert_eq!(json(&scene), json(&edited));
+    project.scenes.insert("main".into(), scene);
+    let root = tempfile::tempdir().unwrap();
+    project_files::save(&project, &root.path().join("kiln.toml")).unwrap();
+    let reopened = project_files::load(root.path()).unwrap().project;
+    let projected = snapshot(&reopened, &spawn(&reopened));
+    assert_eq!(json(&projected), json(&reopened.scenes["main"]));
+    assert!(reopened.scenes["main"].entities[0].components.iter().any(|component| matches!(component, Component::Script { path, properties } if path == "scripts/enemy.ks" && properties["speed"] == 5.0)));
+}
 fn components() -> Vec<Component> {
     vec![
         Component::Transform {
@@ -72,7 +109,125 @@ fn components() -> Vec<Component> {
         Component::Tilemap {
             map: "level_map".into(),
         },
+        Component::Physics {
+            body: Default::default(),
+            collider: Default::default(),
+        },
+        Component::Joint { joint: joint() },
     ]
+}
+
+fn joint() -> kiln_core::physics_data::Joint2D {
+    kiln_core::physics_data::Joint2D {
+        entity_a: "hero".into(),
+        entity_b: "marker".into(),
+        joint_type: kiln_core::physics_data::JointType::Distance,
+        anchor_a: [1.0, 2.0],
+        anchor_b: [0.0; 2],
+        reference_angle: 0.0,
+        length: 5.0,
+        lower_translation: -2.0,
+        upper_translation: 2.0,
+        enable_limit: false,
+        motor_speed: 0.0,
+        max_motor_torque: 0.0,
+        enable_motor: false,
+    }
+}
+
+#[test]
+fn physics_edits_validate_undo_and_preserve_saved_camera_and_joint_settings() {
+    use kiln_core::physics_data::*;
+    let mut project = fixture();
+    let mut scene = project.scenes["main"].clone();
+    let mut history = SceneHistory::new();
+    command(ComponentEdit::Add(Component::Physics {
+        body: Default::default(),
+        collider: Default::default(),
+    }))
+    .execute(&mut scene, &project, &mut history)
+    .unwrap();
+    let before = scene.clone();
+    let body = RigidBody2D {
+        body_type: RigidBodyType::Kinematic,
+        linear_velocity: [4.0, 0.0],
+        ..Default::default()
+    };
+    let collider = Collider2D {
+        shape: ColliderShape::Circle { radius: 3.0 },
+        is_sensor: true,
+        layer: 2,
+        mask: 1,
+        ..Default::default()
+    };
+    command(ComponentEdit::SetPhysics { body, collider })
+        .execute(&mut scene, &project, &mut history)
+        .unwrap();
+    let edited = scene.clone();
+    scene = history.undo(scene).unwrap();
+    assert_eq!(json(&scene), json(&before));
+    scene = history.redo(scene).unwrap();
+    assert_eq!(json(&scene), json(&edited));
+    let depth = history.undo_depth();
+    let invalid = Collider2D {
+        shape: ColliderShape::Circle { radius: -1.0 },
+        ..collider
+    };
+    assert!(command(ComponentEdit::SetPhysics {
+        body,
+        collider: invalid
+    })
+    .execute(&mut scene, &project, &mut history)
+    .is_err());
+    assert_eq!(history.undo_depth(), depth);
+    assert_eq!(json(&scene), json(&edited));
+    command(ComponentEdit::Add(Component::Joint { joint: joint() }))
+        .execute(&mut scene, &project, &mut history)
+        .unwrap();
+    let mut constraint = joint();
+    constraint.length = 8.0;
+    command(ComponentEdit::SetJoint { joint: constraint })
+        .execute(&mut scene, &project, &mut history)
+        .unwrap();
+    project.scenes.insert("main".into(), scene);
+    project.cameras.insert(
+        "main".into(),
+        kiln_core::camera::CameraSettings {
+            target: Some("hero".into()),
+            zoom: 2.0,
+            smoothing: 3.0,
+            bounds: Some([-10.0, -20.0, 900.0, 700.0]),
+            pixel_perfect: true,
+            ..Default::default()
+        },
+    );
+    assert_disk(&project);
+    let projected = spawn(&project);
+    assert_eq!(
+        projected.world_ref().query::<&RigidBody2D>().iter().count(),
+        1
+    );
+    assert_eq!(
+        projected
+            .world_ref()
+            .query::<&Joint2D>()
+            .iter()
+            .next()
+            .unwrap()
+            .length,
+        8.0
+    );
+    let mut scene = project.scenes["main"].clone();
+    let copy = kiln_editor::entity_command::EntityCommand {
+        scene_id: "main".into(),
+        edit: kiln_editor::entity_command::EntityEdit::Duplicate {
+            entity_id: "hero".into(),
+        },
+    }
+    .execute(&mut scene, &project, &mut history)
+    .unwrap()
+    .unwrap();
+    assert!(scene.entities.last().unwrap().components.iter().any(|component| matches!(component, Component::Joint { joint } if joint.entity_a == copy && joint.entity_b == "marker")));
 }
 fn command(edit: ComponentEdit) -> ComponentCommand {
     ComponentCommand {
@@ -546,4 +701,38 @@ fn stale_scene_missing_entity_or_duplicate_components_fail_without_history_chang
         .is_err());
     assert_eq!(json(&scene), before);
     assert_eq!(history.undo_depth(), 0);
+}
+
+#[test]
+fn sprite_layout_and_effect_commands_preserve_history_projection_and_disk() {
+    for component in [
+        Component::SpriteLayout {
+            settings: kiln_core::visual::SpriteLayout {
+                pivot: [0.0, 1.0],
+                flip_x: true,
+                pixels_per_unit: 16.0,
+                ..Default::default()
+            },
+        },
+        Component::Particles {
+            effect: Default::default(),
+        },
+    ] {
+        let mut project = fixture();
+        let mut scene = project.scenes["main"].clone();
+        let mut history = SceneHistory::new();
+        command(ComponentEdit::SetVisual(component.clone()))
+            .execute(&mut scene, &project, &mut history)
+            .unwrap();
+        let edited = scene.clone();
+        let before = history.undo(scene).unwrap();
+        assert!(!before.entities[0]
+            .components
+            .iter()
+            .any(|c| ComponentKind::of(c) == ComponentKind::of(&component)));
+        scene = history.redo(before).unwrap();
+        assert_eq!(json(&scene), json(&edited));
+        project.scenes.insert("main".into(), scene);
+        assert_disk(&project);
+    }
 }

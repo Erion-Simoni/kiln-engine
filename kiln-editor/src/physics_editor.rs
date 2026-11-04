@@ -10,6 +10,8 @@ use rapier2d::prelude::{
 /// Physics editor state.
 #[derive(Debug)]
 pub struct PhysicsEditorState {
+    /// Show actual authored/runtime collider outlines in the scene canvas.
+    pub show_scene_colliders: bool,
     /// Physics world being edited.
     pub physics_world: Option<PhysicsWorld>,
     /// Selected rigid body handle.
@@ -62,6 +64,7 @@ pub enum ColliderShape {
 impl PhysicsEditorState {
     pub fn new() -> Self {
         Self {
+            show_scene_colliders: true,
             physics_world: None,
             selected_body: None,
             selected_collider: None,
@@ -106,7 +109,8 @@ impl PhysicsEditorState {
 
     /// Render the physics editor panel.
     pub fn render(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Physics Editor");
+        ui.heading("Physics Sandbox Preview");
+        ui.label("Use the Inspector to author saved scene bodies, colliders, and joints.");
         ui.add_space(8.0);
 
         // Initialize physics world if needed

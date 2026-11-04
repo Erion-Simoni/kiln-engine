@@ -9,7 +9,7 @@ use kiln_gameplay::{DataTable, Dialogue, Quest};
 use kiln_graph::{ArithmeticOp, ConstantValue, Graph, Node, NodeType};
 use kiln_render::{
     clear_view, execute_passes, Frame2dGraph, PassTiming, PostConfig, PostFramebuffer,
-    PostPipeline, RenderTier, SpriteInstance, SpriteRenderer,
+    PostPipeline, RenderTier, SpriteRenderer,
 };
 use kiln_runtime::{GameWorld, SourceId, Sprite, Tilemap};
 use kiln_ui::{Button, Label, List, Panel, Widget, WidgetId};
@@ -72,6 +72,13 @@ struct RecoveryPrompt {
 }
 
 enum ProjectRequest {
+    RefreshVisuals,
+    PausePlay,
+    StepPlay,
+    RestartPlay,
+    PlayProject,
+    ApplyPlayTransforms,
+    TransitionPlay(String),
     Component(ComponentCommand),
     Entity(crate::entity_command::EntityCommand),
     ApplyPrefabInstance(String),
@@ -120,6 +127,10 @@ struct PlaySession {
     scene_id: String,
     /// The last error of the script, shown in the status bar.
     error: Option<String>,
+    clock: kiln_runtime::play_clock::PlayClock,
+    last_tick: Instant,
+    camera_controller: kiln_runtime::camera::CameraController,
+    game_camera: kiln_render::camera::Camera,
 }
 
 impl PlaySession {
@@ -530,31 +541,16 @@ impl UIDesignerState {
 /// same session, so a project behaves the same in both.
 fn start_play_session(
     project: &Project,
+    scene_id: &str,
     root: &Path,
     textures: &SceneTextures,
 ) -> Result<(kiln_runtime::SliceSession, String, GameWorld), String> {
-    let scene_id = project
-        .default_scene_id()
-        .ok_or("The project has no scenes")?;
-    let scene = project
-        .scenes
-        .get(&scene_id)
-        .ok_or_else(|| format!("Scene '{scene_id}' not found"))?;
+    let slice = kiln_runtime::SliceSession::with_scene_sources(project, scene_id, |path| {
+        std::fs::read_to_string(root.join(path)).map_err(|error| error.to_string())
+    })?;
 
-    let path = scene.script.as_ref().ok_or("The scene has no script")?;
-    let source = std::fs::read_to_string(root.join(path))
-        .map_err(|e| format!("could not read the scene script: {e}"))?;
-
-    let slice = kiln_runtime::SliceSession::with_action_map(&source, project.action_map.clone())
-        .map_err(|d| {
-            d.iter()
-                .map(|d| d.message.clone())
-                .collect::<Vec<_>>()
-                .join("; ")
-        })?;
-
-    let (world, _spawned) = spawn_editor_scene(project, &scene_id, textures);
-    Ok((slice, scene_id, world))
+    let (world, _spawned) = spawn_editor_scene(project, scene_id, textures);
+    Ok((slice, scene_id.to_owned(), world))
 }
 
 /// Build the scene data of a world.
@@ -1043,8 +1039,14 @@ impl EditorApp {
     /// The game runs the scene's script against a fresh world, exactly like
     /// the standalone player does.
     fn start_play(&mut self) -> Result<(), String> {
+        let scene_id = self.scenes.active_id().ok_or("No active scene")?.to_owned();
+        self.start_play_scene(&scene_id)
+    }
+
+    fn start_play_scene(&mut self, scene_id: &str) -> Result<(), String> {
         self.finish_transform_edit();
         self.capture_active_scene()?;
+        self.upload_scene_textures();
         let project = self
             .current_project
             .as_ref()
@@ -1062,7 +1064,15 @@ impl EditorApp {
             .as_ref()
             .map(|gpu| gpu.scene_textures.clone())
             .unwrap_or_default();
-        let (slice, scene_id, world) = start_play_session(&project, &root, &textures)?;
+        let (slice, scene_id, world) = start_play_session(&project, scene_id, &root, &textures)?;
+        let mut camera_controller = kiln_runtime::camera::CameraController::default();
+        let settings = project.cameras.get(&scene_id).cloned().unwrap_or_default();
+        let game_camera = camera_controller.update(
+            &settings,
+            &world,
+            [project.window.width as f32, project.window.height as f32],
+            0.0,
+        )?;
 
         // The played scene replaces the edited one, so the scene view shows
         // the running game.
@@ -1074,18 +1084,56 @@ impl EditorApp {
             slice,
             scene_id,
             error: None,
+            clock: kiln_runtime::play_clock::PlayClock::default(),
+            last_tick: Instant::now(),
+            camera_controller,
+            game_camera,
         });
+        self.is_playing = true;
 
-        // Resume the game from its save, if there is one.
-        self.load_game();
         Ok(())
     }
 
     /// Stop playing and return to editing the scene.
     fn stop_play(&mut self) {
+        if let Some(play) = self.play.as_mut() {
+            if let Err(error) = play.slice.stop(&mut self.world) {
+                self.console_log
+                    .push(format!("[ERROR] Stop callback: {error}"));
+            }
+        }
         self.play = None;
         self.is_playing = false;
         self.reset_scene_view();
+    }
+
+    fn apply_play_transforms(&mut self) -> Result<(), String> {
+        let play = self.play.as_ref().ok_or("No running game")?;
+        if !play.clock.paused() {
+            return Err("Pause the game before applying runtime transforms".into());
+        }
+        if self.scenes.active_id() != Some(play.scene_id.as_str()) {
+            return Err(
+                "Runtime transforms can only be applied when playing the active scene".into(),
+            );
+        }
+        let project = self.current_project.as_ref().ok_or("No project loaded")?;
+        let authored = project
+            .scenes
+            .get(&play.scene_id)
+            .ok_or("Authored scene is missing")?
+            .clone();
+        let runtime = crate::scene_document::snapshot_for_scene(
+            &self.world,
+            &self.entity_textures,
+            &self.entity_roles,
+            Some(project),
+            Some(&play.scene_id),
+        );
+        let applied = crate::play_changes::apply_transforms(&authored, &runtime)?;
+        self.stop_play();
+        self.scenes.history.record(authored);
+        self.apply_scene(applied)
     }
 
     /// The size of the world the scene view shows, in world units.
@@ -1097,6 +1145,9 @@ impl EditorApp {
             Some(project) => (project.window.width as f32, project.window.height as f32),
             None => (DEFAULT_WORLD_SIZE.0, DEFAULT_WORLD_SIZE.1),
         };
+        if self.play.is_some() {
+            return base;
+        }
         let mut max_x = base.0;
         let mut max_y = base.1;
         for (_, tilemap) in self
@@ -1113,6 +1164,9 @@ impl EditorApp {
     }
 
     fn scene_camera(&self) -> kiln_render::camera::Camera {
+        if let Some(play) = &self.play {
+            return play.game_camera.clone();
+        }
         let world = self.world_size();
         let mut camera = scene_view::world_camera(world.0, world.1);
         if let Some(target_id) = &self.camera.target {
@@ -1201,22 +1255,110 @@ impl EditorApp {
     }
 
     /// Advance the running game by one frame.
-    fn update_play(&mut self, dt: f32) {
+    fn update_play(&mut self) {
+        let settings = self
+            .play
+            .as_ref()
+            .and_then(|play| {
+                self.current_project
+                    .as_ref()
+                    .and_then(|project| project.cameras.get(&play.scene_id))
+            })
+            .cloned()
+            .unwrap_or_default();
+        let size = self
+            .current_project
+            .as_ref()
+            .map(|project| [project.window.width as f32, project.window.height as f32])
+            .unwrap_or([1280.0, 720.0]);
         let axis = self.play_axis();
-        let EditorApp { world, play, .. } = self;
+        let mouse_mapping = self.scene_view_rect.and_then(|rect| {
+            let ppp = self.egui_winit.egui_ctx().pixels_per_point();
+            let viewport = scene_view::camera_viewport(rect, ppp, &self.scene_camera());
+            self.egui_winit
+                .egui_ctx()
+                .input(|input| input.pointer.hover_pos())
+                .map(|point| {
+                    (
+                        [point.x * ppp, point.y * ppp],
+                        [
+                            viewport.x as f32,
+                            viewport.y as f32,
+                            viewport.width as f32,
+                            viewport.height as f32,
+                        ],
+                    )
+                })
+        });
+        let text_input = self.egui_winit.egui_ctx().wants_keyboard_input();
+        let keys = self.egui_winit.egui_ctx().input(|input| {
+            if text_input {
+                Vec::new()
+            } else {
+                input
+                    .keys_down
+                    .iter()
+                    .map(|key| format!("{key:?}"))
+                    .collect::<Vec<_>>()
+            }
+        });
+        let EditorApp {
+            world,
+            play,
+            project_requests,
+            ..
+        } = self;
         let Some(play) = play.as_mut() else {
             return;
         };
-        let result = play.slice.step(world, axis, dt as f64);
-        play.error = match result {
-            Ok(()) => None,
-            Err(e) => Some(e.to_string()),
-        };
+        let elapsed = play.last_tick.elapsed().as_secs_f64();
+        play.last_tick = Instant::now();
+        play.slice.host_mut().set_pressed_keys(&keys);
+        for _ in 0..play.clock.advance(elapsed) {
+            if let Some((point, viewport)) = mouse_mapping {
+                if let Some(position) = play.game_camera.screen_to_world(point, viewport) {
+                    play.slice
+                        .host_mut()
+                        .set_mouse_world(position.map(|value| value as f64));
+                }
+            }
+            if let Err(error) = play
+                .slice
+                .step(world, axis, kiln_runtime::play_clock::PLAY_STEP)
+            {
+                play.error = Some(format!("Scene '{}': {error}", play.scene_id));
+                play.clock.set_paused(true);
+                break;
+            }
+            play.error = None;
+            let _ = kiln_runtime::scene::update_global_transforms(world);
+            match play.camera_controller.update(
+                &settings,
+                world,
+                size,
+                kiln_runtime::play_clock::PLAY_STEP as f32,
+            ) {
+                Ok(camera) => play.game_camera = camera,
+                Err(error) => {
+                    play.error = Some(error);
+                    play.clock.set_paused(true);
+                    break;
+                }
+            }
+            if let Some(id) = play.slice.take_scene_request() {
+                project_requests.push(ProjectRequest::TransitionPlay(id));
+                play.clock.set_paused(true);
+                break;
+            }
+        }
     }
 
     /// The movement axis from the keys held down in the editor.
     fn play_axis(&self) -> (f64, f64) {
         let ctx = self.egui_winit.egui_ctx();
+        if ctx.wants_keyboard_input() {
+            return (0.0, 0.0);
+        }
         let mut x = 0.0;
         let mut y = 0.0;
         ctx.input(|i| {
@@ -1402,7 +1544,14 @@ impl EditorApp {
             _ => None,
         };
         let selected = command.execute(&mut scene, project, &mut self.scenes.history)?;
-        self.apply_scene(scene)?;
+        if matches!(
+            command.edit,
+            crate::entity_command::EntityEdit::CreateSprite { .. }
+        ) {
+            self.apply_scene_with_texture_refresh(scene)?;
+        } else {
+            self.apply_scene(scene)?;
+        }
         if deleted.is_some_and(|id| self.hierarchy_panel.selected_entity_id() == Some(id)) {
             self.hierarchy_panel.clear_selection();
         }
@@ -1872,7 +2021,12 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                 }
             }
-            WindowEvent::Focused(false) => self.finish_transform_edit(),
+            WindowEvent::Focused(false) => {
+                self.finish_transform_edit();
+                if let Some(play) = self.play.as_mut() {
+                    play.clock.set_paused(true);
+                }
+            }
             _ => {}
         }
 
@@ -1954,6 +2108,76 @@ impl EditorApp {
                 continue;
             }
             let result = match request {
+                ProjectRequest::RefreshVisuals => self.require_edit_mode().and_then(|_| {
+                    let scene = self
+                        .scenes
+                        .active_id()
+                        .and_then(|id| self.current_project.as_ref()?.scenes.get(id))
+                        .cloned();
+                    if let Some(scene) = scene {
+                        let refresh = self
+                            .gpu
+                            .as_ref()
+                            .zip(self.current_project.as_ref())
+                            .is_some_and(|(gpu, project)| {
+                                gpu.scene_textures.needs_refresh(project)
+                            });
+                        if refresh {
+                            self.apply_scene_with_texture_refresh(scene)
+                        } else {
+                            self.apply_scene(scene)
+                        }
+                    } else {
+                        Ok(())
+                    }
+                }),
+                ProjectRequest::ApplyPlayTransforms => self.apply_play_transforms(),
+                ProjectRequest::TransitionPlay(id) => {
+                    if self
+                        .current_project
+                        .as_ref()
+                        .is_some_and(|project| project.scenes.contains_key(&id))
+                    {
+                        self.stop_play();
+                        self.start_play_scene(&id)
+                    } else {
+                        Err(format!("Unknown scene transition '{id}'"))
+                    }
+                }
+                ProjectRequest::PausePlay => {
+                    if let Some(play) = self.play.as_mut() {
+                        play.clock.set_paused(!play.clock.paused());
+                        play.last_tick = Instant::now();
+                    }
+                    Ok(())
+                }
+                ProjectRequest::StepPlay => {
+                    if let Some(play) = self.play.as_mut() {
+                        play.clock.request_step();
+                    }
+                    Ok(())
+                }
+                ProjectRequest::RestartPlay => {
+                    if let Some(scene_id) = self.play.as_ref().map(|play| play.scene_id.clone()) {
+                        self.stop_play();
+                        self.start_play_scene(&scene_id)
+                    } else {
+                        Ok(())
+                    }
+                }
+                ProjectRequest::PlayProject => {
+                    if self.play.is_some() {
+                        self.stop_play();
+                    }
+                    match self
+                        .current_project
+                        .as_ref()
+                        .and_then(Project::default_scene_id)
+                    {
+                        Some(id) => self.start_play_scene(&id),
+                        None => Err("The project has no startup scene".into()),
+                    }
+                }
                 ProjectRequest::Component(command) => self.apply_component_command(command),
                 ProjectRequest::Entity(command) => self.apply_entity_command(command),
                 ProjectRequest::ApplyPrefabInstance(entity_id) => {
@@ -2049,7 +2273,7 @@ impl EditorApp {
 
         // Advance the running game, if the editor is in play mode.
         if self.play.is_some() {
-            self.update_play(1.0 / 60.0);
+            self.update_play();
         }
 
         // The world size and the scene view rectangle are read before the GPU
@@ -2738,7 +2962,8 @@ impl EditorApp {
         // engine owns every pixel of the panel, so the editor shows what the
         // player shows.
         if let Some(panel) = self.scene_view_rect {
-            let viewport = scene_view::canvas_viewport(panel, full_output.pixels_per_point, world);
+            let viewport =
+                scene_view::camera_viewport(panel, full_output.pixels_per_point, &scene_camera);
             if !viewport.is_empty() {
                 let queue = gpu.renderer.queue();
                 let origin_x = viewport.x;
@@ -2757,30 +2982,11 @@ impl EditorApp {
                 let camera = &scene_camera;
                 let view_bounds = camera.view_bounds();
                 let _ = kiln_runtime::update_global_transforms(&mut self.world);
-                for (_, tilemap) in self.world.world().query::<(&Transform, &Tilemap)>().iter() {
-                    for (texture, instance) in tilemap.collect_visible(view_bounds) {
-                        gpu.scene_view_sprite_renderer
-                            .push_textured(texture, instance);
-                    }
-                }
-                for (transform, sprite) in self
-                    .world
-                    .world()
-                    .query::<(&kiln_runtime::GlobalTransform, &Sprite)>()
-                    .iter()
+                for (texture, instance) in
+                    kiln_runtime::visual::collect_scene_draws(&self.world, view_bounds)
                 {
-                    gpu.scene_view_sprite_renderer.push_textured(
-                        sprite.texture,
-                        SpriteInstance {
-                            position: [transform.position.x, transform.position.y],
-                            size: sprite.size,
-                            color: sprite.color,
-                            uv_rect: sprite.uv_rect,
-                            material_id: 0,
-                            rotation: 0.0,
-                        }
-                        .with_transform(transform.rotation, [transform.scale.x, transform.scale.y]),
-                    );
+                    gpu.scene_view_sprite_renderer
+                        .push_textured(texture, instance);
                 }
 
                 // Determine render target: post framebuffer if available, else main view.
@@ -3399,7 +3605,7 @@ impl TabViewer<'_> {
             return;
         }
         let ppp = ui.ctx().pixels_per_point();
-        let viewport = scene_view::canvas_viewport(panel, ppp, self.world_size());
+        let viewport = scene_view::camera_viewport(panel, ppp, self.scene_camera);
         let Some(units) = scene_view::units_per_point(viewport, ppp, self.scene_camera) else {
             return;
         };
@@ -3412,6 +3618,41 @@ impl TabViewer<'_> {
             ui.id().with("transform_gizmo_canvas"),
             egui::Sense::drag(),
         );
+        if let Some(asset) = response.dnd_release_payload::<crate::assets::SpriteAssetPayload>() {
+            let point = ui.input(|input| input.pointer.interact_pos());
+            let image = self
+                .asset_browser
+                .root()
+                .ok_or("Open a project")
+                .and_then(|root| {
+                    std::fs::read(root.join(&asset.path)).map_err(|_| "Cannot read dropped image")
+                })
+                .and_then(|bytes| {
+                    kiln_assets::decode_png(&bytes).map_err(|_| "Cannot decode dropped image")
+                });
+            match (point, self.scenes.active_id(), image) {
+                (Some(point), Some(scene_id), Ok(image)) => {
+                    let position = scene_view::pointer_to_world(
+                        [point.x, point.y],
+                        [canvas.left(), canvas.top(), canvas.right(), canvas.bottom()],
+                        self.scene_camera.position,
+                        units,
+                    );
+                    self.project_requests.push(ProjectRequest::Entity(
+                        crate::entity_command::EntityCommand {
+                            scene_id: scene_id.into(),
+                            edit: crate::entity_command::EntityEdit::CreateSprite {
+                                texture: asset.path.clone(),
+                                position,
+                                size: [image.width, image.height],
+                            },
+                        },
+                    ));
+                }
+                (_, _, Err(error)) => self.console_log.push(format!("[ERROR] {error}")),
+                _ => {}
+            }
+        }
         if let Some(prefab_id) = response.dnd_release_payload::<String>() {
             let pointer = ui.input(|input| input.pointer.interact_pos());
             if let (Some(pointer), Some(scene_id)) = (pointer, self.scenes.active_id()) {
@@ -3858,6 +4099,37 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             *self.play_toggle_requested = true;
                         }
 
+                        if let Some(play) = self.play.as_ref() {
+                            if ui
+                                .button(if play.clock.paused() {
+                                    "Resume"
+                                } else {
+                                    "Pause"
+                                })
+                                .clicked()
+                            {
+                                self.project_requests.push(ProjectRequest::PausePlay);
+                            }
+                            if ui.button("Step Frame").clicked() {
+                                self.project_requests.push(ProjectRequest::StepPlay);
+                            }
+                            if ui.button("Restart").clicked() {
+                                self.project_requests.push(ProjectRequest::RestartPlay);
+                            }
+                            if ui
+                                .add_enabled(
+                                    play.clock.paused(),
+                                    egui::Button::new("Apply Runtime Transforms and Stop"),
+                                )
+                                .clicked()
+                            {
+                                self.project_requests
+                                    .push(ProjectRequest::ApplyPlayTransforms);
+                            }
+                        } else if ui.button("Play Project Start").clicked() {
+                            self.project_requests.push(ProjectRequest::PlayProject);
+                        }
+
                         if ui.button("Frame Selection (F)").clicked()
                             || (ui.ctx().input(|input| input.key_pressed(egui::Key::F))
                                 && !ui.ctx().wants_keyboard_input())
@@ -3887,6 +4159,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.separator();
 
                         // Grid snap controls
+                        ui.checkbox(&mut self.physics_editor.show_scene_colliders, "Colliders");
                         ui.label("Grid:");
                         ui.add_sized([60.0, 20.0], egui::DragValue::new(self.grid_snap_size));
                         if ui
@@ -4061,6 +4334,47 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 // with the engine's sprite renderer.
                 *self.scene_view_rect = Some(rect);
                 self.translation_canvas(ui, rect);
+                if self.physics_editor.show_scene_colliders {
+                    let ppp = ui.ctx().pixels_per_point();
+                    let viewport = scene_view::camera_viewport(rect, ppp, self.scene_camera);
+                    let canvas = egui::Rect::from_min_size(
+                        egui::pos2(viewport.x as f32 / ppp, viewport.y as f32 / ppp),
+                        egui::vec2(viewport.width as f32 / ppp, viewport.height as f32 / ppp),
+                    );
+                    let painter = ui.painter().with_clip_rect(canvas);
+                    for (collider, pose) in self
+                        .world
+                        .world_ref()
+                        .query::<(
+                            &kiln_runtime::world::Collider2D,
+                            &kiln_runtime::GlobalTransform,
+                        )>()
+                        .iter()
+                    {
+                        let points: Vec<_> =
+                            crate::physics_inspector::collider_outline(pose.0, collider.shape)
+                                .into_iter()
+                                .filter_map(|point| {
+                                    self.scene_camera.world_to_screen(
+                                        point,
+                                        [
+                                            canvas.left(),
+                                            canvas.top(),
+                                            canvas.width(),
+                                            canvas.height(),
+                                        ],
+                                    )
+                                })
+                                .map(|point| egui::pos2(point[0], point[1]))
+                                .collect();
+                        let color = if collider.is_sensor {
+                            egui::Color32::YELLOW
+                        } else {
+                            egui::Color32::LIGHT_GREEN
+                        };
+                        painter.add(egui::Shape::line(points, egui::Stroke::new(1.5_f32, color)));
+                    }
+                }
 
                 // Draw gizmo mode indicator in the top-left of the scene view
                 if self.gizmo.mode != GizmoMode::None {
@@ -4093,7 +4407,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         {
                             let ppp = ui.ctx().pixels_per_point();
                             let viewport =
-                                scene_view::canvas_viewport(rect, ppp, self.world_size());
+                                scene_view::camera_viewport(rect, ppp, self.scene_camera);
                             if let Some(units) =
                                 scene_view::units_per_point(viewport, ppp, self.scene_camera)
                             {
@@ -4183,6 +4497,82 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         let has_sprite = has(ComponentKind::Sprite);
                         let has_role = has(ComponentKind::Role);
                         let has_tilemap = has(ComponentKind::Tilemap);
+                        if has_sprite {
+                            let mut settings=authored.components.iter().find_map(|component|match component{kiln_core::Component::SpriteLayout {settings}=>Some(*settings),_=>None}).unwrap_or_default();
+                            ui.collapsing("Sprite Pivot / Pixel Scale",|ui|{
+                                if crate::sprite_editor::layout_ui(ui,&mut settings) {self.queue_component(entity,ComponentEdit::SetVisual(kiln_core::Component::SpriteLayout {settings}));}
+                            });
+                        }
+                        if authored.components.iter().any(|component|matches!(component,kiln_core::Component::Particles {..})) {
+                            ui.label("Saved particle effect: edit in VFX Editor.");
+                            if ui.button("Remove Particles").clicked() {self.remove_component(entity,ComponentKind::Particles);}
+                        } else if ui.button("+ Particles").clicked() {self.add_component(entity,ComponentKind::Particles);}
+                        if let Some((mut body, mut collider)) = authored.components.iter().find_map(|component| match component {
+                            kiln_core::Component::Physics { body, collider } => Some((*body,*collider)), _=>None,
+                        }) {
+                            ui.group(|ui| {
+                                ui.strong("Physics Body / Collider");
+                                if crate::physics_inspector::body_ui(ui,&mut body,&mut collider) { self.queue_component(entity,ComponentEdit::SetPhysics {body,collider}); }
+                                if ui.button("Remove Physics").clicked() { self.remove_component(entity,ComponentKind::Physics); }
+                            });
+                        } else if ui.button("+ Physics Body / Collider").clicked() { self.add_component(entity,ComponentKind::Physics); }
+                        if let Some(mut joint)=authored.components.iter().find_map(|component| match component {kiln_core::Component::Joint {joint}=>Some(joint.clone()),_=>None}) {
+                            ui.group(|ui| {
+                                ui.strong("Physics Joint");
+                                if crate::physics_inspector::joint_ui(ui,&mut joint) {self.queue_component(entity,ComponentEdit::SetJoint {joint:joint.clone()});}
+                                if ui.button("Remove Joint").clicked() {self.remove_component(entity,ComponentKind::Joint);}
+                            });
+                        } else {
+                            let targets: Vec<_>=self.current_project.as_ref().and_then(|project| self.scenes.active_id().and_then(|id| project.scenes.get(id))).map(|scene| scene.entities.iter().filter(|candidate| candidate.id!=authored.id).map(|candidate| candidate.id.clone()).collect()).unwrap_or_default();
+                            ui.menu_button("+ Joint to Entity",|ui| {
+                                for target in targets {if ui.button(&target).clicked() {
+                                    self.queue_component(entity,ComponentEdit::Add(kiln_core::Component::Joint {joint:kiln_core::physics_data::Joint2D {
+                                        entity_a:authored.id.clone(),entity_b:target,joint_type:kiln_core::physics_data::JointType::Distance,anchor_a:[0.0;2],anchor_b:[0.0;2],reference_angle:0.0,length:32.0,lower_translation:-32.0,upper_translation:32.0,enable_limit:false,motor_speed:0.0,max_motor_torque:0.0,enable_motor:false,
+                                    }}));ui.close_menu();
+                                }}
+                            });
+                        }
+                        if let Some((path, properties)) = authored.components.iter().find_map(|component| match component {
+                            kiln_core::Component::Script { path, properties } => Some((path.clone(), properties.clone())), _ => None,
+                        }) {
+                            ui.group(|ui| {
+                                ui.strong(format!("Script: {path}"));
+                                if !self.asset_browser.entries().iter().any(|entry| entry.path == path) {
+                                    ui.colored_label(egui::Color32::YELLOW, "Script resource is missing");
+                                }
+                                let mut edited = properties.clone();
+                                let mut names: Vec<_> = properties.keys().cloned().collect(); names.sort();
+                                let mut changed = false;
+                                for name in names {
+                                    ui.horizontal(|ui| {
+                                        ui.label(&name);
+                                        if let Some(value) = edited.get_mut(&name) { changed |= ui.add(egui::DragValue::new(value)).changed(); }
+                                    });
+                                }
+                                let widget_id = ui.id().with(("script-property-name", &authored.id));
+                                let mut name = ui.data_mut(|data| data.get_temp::<String>(widget_id).unwrap_or_default());
+                                ui.horizontal(|ui| {
+                                    ui.text_edit_singleline(&mut name);
+                                    if ui.button("Add Property").clicked() && !name.trim().is_empty() {
+                                        edited.entry(name.trim().into()).or_insert(0.0); changed = true;
+                                    }
+                                });
+                                ui.data_mut(|data| data.insert_temp(widget_id, name));
+                                if changed { self.queue_component(entity, ComponentEdit::SetScript { path: path.clone(), properties: edited }); }
+                                if ui.button("Remove Script").clicked() { self.remove_component(entity, ComponentKind::Script); }
+                            });
+                        } else {
+                            let scripts: Vec<_> = self.asset_browser.entries().iter().filter(|entry| entry.path.ends_with(".ks")).map(|entry| entry.path.clone()).collect();
+                            ui.menu_button("Attach Script", |ui| {
+                                if scripts.is_empty() { ui.label("Add a .ks file to the project and refresh Assets."); }
+                                for path in scripts {
+                                    if ui.button(&path).clicked() {
+                                        self.queue_component(entity, ComponentEdit::Add(kiln_core::Component::Script { path, properties: HashMap::new() }));
+                                        ui.close_menu();
+                                    }
+                                }
+                            });
+                        }
                         if authored.components.iter().any(|component| matches!(component, kiln_core::Component::PrefabInstance { .. })) {
                             ui.horizontal(|ui| {
                                 ui.label("Prefab instance");
@@ -4960,7 +5350,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                             == Some(&entry.path);
 
                                         let selectable = ui
-                                            .selectable_label(selected, &name)
+                                            .add(egui::Label::new(if selected {egui::RichText::new(&name).strong()} else {egui::RichText::new(&name)}).sense(egui::Sense::click_and_drag()))
                                             .on_hover_text(&entry.path);
 
                                         // Drag-and-drop support: start drag on the asset entry.
@@ -4973,6 +5363,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         // Drag-and-drop: start drag on mouse press.
                                         if selectable.drag_started() {
                                             self.asset_browser.set_drag_source(Some(&entry.path));
+                                            if entry.kind==AssetKind::Image {selectable.dnd_set_drag_payload(crate::assets::SpriteAssetPayload {path:entry.path.clone()});}
                                         }
 
                                         // Handle drop onto this entity (if it's a sprite/texture target).
@@ -5037,6 +5428,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 });
                                 if changed {
                                     project.asset_import_settings.insert(asset_id, settings);
+                                    self.project_requests.push(ProjectRequest::RefreshVisuals);
                                 }
                             } else {
                                 ui.label("Import assets to assign a stable ID and configure import settings.");
@@ -5457,6 +5849,37 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         });
                     });
 
+                    let locked = self.editing_locked();
+                    let scene_id = self.scenes.active_id().map(str::to_owned);
+                    if let (Some(project), Some(id)) = (self.current_project.as_mut(), scene_id) {
+                        let mut settings = project.cameras.get(&id).cloned().unwrap_or_default();
+                        let mut ids: Vec<_> = project
+                            .scenes
+                            .get(&id)
+                            .map(|scene| {
+                                scene
+                                    .entities
+                                    .iter()
+                                    .map(|entity| entity.id.clone())
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        ids.sort();
+                        ui.collapsing("Gameplay Camera", |ui| {
+                            ui.add_enabled_ui(!locked, |ui| {
+                                if crate::physics_inspector::camera_ui(
+                                    ui,
+                                    &mut settings,
+                                    &ids,
+                                    [project.window.width as f32, project.window.height as f32],
+                                ) && settings.validate().is_ok()
+                                {
+                                    project.cameras.insert(id, settings);
+                                }
+                            });
+                        });
+                    }
+
                     ui.add_space(8.0);
 
                     // Scene composition info
@@ -5633,8 +6056,32 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             }
             Tab::TilemapEditor => {
                 ui.vertical(|ui| {
+                    if self.editing_locked() {
+                        ui.disable();
+                    }
                     if let Some(project) = self.current_project.as_mut() {
-                        crate::tilemap_editor::show(ui, self.tilemap_editor, project);
+                        let before = serde_json::to_value((
+                            &project.tilemaps,
+                            &project.tilesets,
+                            &project.terrains,
+                        ))
+                        .ok();
+                        crate::tilemap_editor::show_with_root(
+                            ui,
+                            self.tilemap_editor,
+                            project,
+                            self.asset_browser.root(),
+                        );
+                        if before
+                            != serde_json::to_value((
+                                &project.tilemaps,
+                                &project.tilesets,
+                                &project.terrains,
+                            ))
+                            .ok()
+                        {
+                            self.project_requests.push(ProjectRequest::RefreshVisuals);
+                        }
                     } else {
                         ui.heading("Tilemap Editor");
                         ui.add_space(8.0);
@@ -5645,13 +6092,21 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
             Tab::AnimationEditor => {
                 ui.vertical(|ui| {
+                    if self.editing_locked() {
+                        ui.disable();
+                    }
                     if let Some(project) = self.current_project.as_mut() {
-                        AnimationEditorState::render_animation_editor(
+                        let before = serde_json::to_value(&project.animation_clips).ok();
+                        AnimationEditorState::render_with_root(
                             ui,
                             self.anim_editor,
                             &mut project.animation_clips,
-                            1.0 / 60.0, // dt
+                            ui.input(|input| input.stable_dt),
+                            self.asset_browser.root(),
                         );
+                        if before != serde_json::to_value(&project.animation_clips).ok() {
+                            self.project_requests.push(ProjectRequest::RefreshVisuals);
+                        }
                     } else {
                         ui.heading("Animation Editor");
                         ui.add_space(8.0);
@@ -5687,13 +6142,44 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::DebuggerPanel => {
                 ui.vertical(|ui| {
                     if let Some(play) = &mut self.play {
-                        // Use the SliceSession's debugger
-                        if let Some(debugger) = play.slice.debugger_mut() {
-                            self.debugger_panel.render(ui, debugger);
-                        } else {
-                            ui.heading("KilnScript Debugger");
-                            ui.add_space(8.0);
-                            ui.label("Debugger not available");
+                        ui.heading("Live Gameplay Debugger");
+                        ui.label(format!("Scene: {}", play.scene_id));
+                        ui.horizontal(|ui| {
+                            if ui
+                                .button(if play.clock.paused() {
+                                    "Resume"
+                                } else {
+                                    "Pause"
+                                })
+                                .clicked()
+                            {
+                                self.project_requests.push(ProjectRequest::PausePlay);
+                            }
+                            if ui.button("Step Frame").clicked() {
+                                self.project_requests.push(ProjectRequest::StepPlay);
+                            }
+                            if ui.button("Restart").clicked() {
+                                self.project_requests.push(ProjectRequest::RestartPlay);
+                            }
+                        });
+                        if let Some(error) = &play.error {
+                            ui.colored_label(egui::Color32::LIGHT_RED, error);
+                        }
+                        ui.checkbox(&mut self.debugger_panel.show_locals, "Inspect entity state");
+                        if self.debugger_panel.show_locals {
+                            for entity in play.slice.entity_script_debug() {
+                                ui.collapsing(
+                                    format!(
+                                        "{} — {} ({})",
+                                        entity.entity_id, entity.path, entity.phase
+                                    ),
+                                    |ui| {
+                                        for (name, value) in entity.values {
+                                            ui.monospace(format!("{name} = {value:?}"));
+                                        }
+                                    },
+                                );
+                            }
                         }
                     } else {
                         ui.heading("KilnScript Debugger");
@@ -5704,7 +6190,40 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             }
             Tab::VfxEditor => {
                 ui.vertical(|ui| {
-                    self.vfx_editor.render(ui);
+                    if self.editing_locked() {
+                        ui.disable();
+                    }
+                    if let Some(entity) = *self.selected_entity {
+                        if let Some(authored) = self.authored_entity(entity) {
+                            let mut effect = authored
+                                .components
+                                .iter()
+                                .find_map(|component| match component {
+                                    kiln_core::Component::Particles { effect } => {
+                                        Some(effect.clone())
+                                    }
+                                    _ => None,
+                                })
+                                .unwrap_or_default();
+                            let attached = authored.components.iter().any(|component| {
+                                matches!(component, kiln_core::Component::Particles { .. })
+                            });
+                            let changed =
+                                self.vfx_editor.render_effect(ui, &authored.id, &mut effect);
+                            if changed
+                                || (!attached && ui.button("Attach Effect to Entity").clicked())
+                            {
+                                self.queue_component(
+                                    entity,
+                                    ComponentEdit::SetVisual(kiln_core::Component::Particles {
+                                        effect,
+                                    }),
+                                );
+                            }
+                        }
+                    } else {
+                        ui.label("Select a scene entity to author a saved particle effect.");
+                    }
                 });
             }
             Tab::AudioEditor => {
@@ -5799,8 +6318,33 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             }
             Tab::SpriteEditor => {
                 ui.vertical(|ui| {
+                    if self.editing_locked() {
+                        ui.disable();
+                    }
                     if let Some(project) = self.current_project.as_mut() {
-                        self.sprite_editor.render(ui, project);
+                        let before = project.scenes.clone();
+                        let resources = serde_json::to_value(&project.animation_clips).ok();
+                        self.sprite_editor
+                            .render_with_root(ui, project, self.asset_browser.root());
+                        let changed = serde_json::to_value(&before).ok()
+                            != serde_json::to_value(&project.scenes).ok();
+                        if changed {
+                            for (id, scene) in before {
+                                if serde_json::to_value(&scene).ok()
+                                    != project
+                                        .scenes
+                                        .get(&id)
+                                        .and_then(|scene| serde_json::to_value(scene).ok())
+                                {
+                                    self.scenes.record_external_edit(scene);
+                                }
+                            }
+                        }
+                        if changed
+                            || resources != serde_json::to_value(&project.animation_clips).ok()
+                        {
+                            self.project_requests.push(ProjectRequest::RefreshVisuals);
+                        }
                     } else {
                         ui.heading("Sprite Editor");
                         ui.add_space(8.0);
@@ -5944,7 +6488,7 @@ impl<'a> TabViewer<'a> {
                 continue;
             };
             let entity_bounds = if let Ok(sprite) = self.world.world_ref().get::<&Sprite>(entity) {
-                scene_view::transformed_sprite_bounds(transform.0, sprite.size)
+                sprite.world_bounds(transform.0)
             } else {
                 [
                     transform.0.position.x,
@@ -6099,5 +6643,44 @@ impl<'a> TabViewer<'a> {
                     self.ui_designer.remove_widget(widget_id);
                 }
             });
+    }
+}
+
+#[cfg(test)]
+mod play_tests {
+    use super::*;
+
+    #[test]
+    fn play_launch_uses_requested_scene_and_reports_script_location() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("first.ks"), "add_score(1);").unwrap();
+        std::fs::write(root.path().join("second.ks"), "add_score(7);").unwrap();
+        let mut project = Project::default();
+        for (id, script) in [("a", "first.ks"), ("b", "second.ks")] {
+            project.scenes.insert(
+                id.into(),
+                Scene {
+                    id: id.into(),
+                    name: id.into(),
+                    script: Some(script.into()),
+                    entities: vec![],
+                    nested_scenes: vec![],
+                },
+            );
+        }
+        let (mut session, id, mut world) =
+            start_play_session(&project, "b", root.path(), &SceneTextures::default()).unwrap();
+        assert_eq!(id, "b");
+        session
+            .step(&mut world, (0.0, 0.0), kiln_runtime::play_clock::PLAY_STEP)
+            .unwrap();
+        assert_eq!(session.state().score, 7);
+        std::fs::write(root.path().join("second.ks"), "\nunknown_call();").unwrap();
+        let error = match start_play_session(&project, "b", root.path(), &SceneTextures::default())
+        {
+            Ok(_) => panic!("Expected a compiler error"),
+            Err(error) => error,
+        };
+        assert!(error.contains("second.ks:2:1:"), "{error}");
     }
 }

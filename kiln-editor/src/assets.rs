@@ -8,6 +8,12 @@
 //! and folder creation.
 
 use kiln_assets::decode_png;
+
+/// Typed payload keeps image drops distinct from prefab IDs.
+#[derive(Debug, Clone)]
+pub struct SpriteAssetPayload {
+    pub path: String,
+}
 use std::path::{Path, PathBuf};
 
 /// The kind of an asset listed in the browser.

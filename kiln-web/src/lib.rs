@@ -10,10 +10,7 @@
 
 mod threading;
 
-use kiln_core::Transform;
-use kiln_render::{
-    camera::Camera, sprite_renderer::SpriteInstance, Renderer, SpriteRenderer, TextureId,
-};
+use kiln_render::{camera::Camera, Renderer, SpriteRenderer, TextureId};
 use kiln_runtime::{GameLoop, GameWorld, SliceCommand, SliceSession};
 use kiln_ui::{TextRenderer, UiRenderer, Widget};
 use log::{info, warn};
@@ -656,31 +653,10 @@ impl App {
         // Tilemaps are drawn first so entities appear on top of them.
         // Only the chunks inside the camera view are submitted.
         let view_bounds = self.camera.view_bounds();
-        let world = self.world.world_ref();
-        for (_, tilemap) in world.query::<(&Transform, &kiln_runtime::Tilemap)>().iter() {
-            for (texture, instance) in tilemap.collect_visible(view_bounds) {
-                self.sprite_renderer.push_textured(texture, instance);
-            }
-        }
-
-        for (transform, sprite) in world
-            .query::<(&kiln_runtime::GlobalTransform, &kiln_runtime::Sprite)>()
-            .iter()
+        for (texture, instance) in
+            kiln_runtime::visual::collect_scene_draws(&self.world, view_bounds)
         {
-            let instance = SpriteInstance {
-                position: [transform.position.x, transform.position.y],
-                size: sprite.size,
-                color: sprite.color,
-                uv_rect: sprite.uv_rect,
-                material_id: 0,
-                rotation: 0.0,
-            }
-            .with_transform(transform.rotation, [transform.scale.x, transform.scale.y]);
-            if sprite.texture != TextureId::WHITE {
-                self.sprite_renderer.push_textured(sprite.texture, instance);
-            } else {
-                self.sprite_renderer.push(instance);
-            }
+            self.sprite_renderer.push_textured(texture, instance);
         }
 
         {
@@ -822,6 +798,17 @@ async fn load_textures(
         }
     }
 
+    for path in project
+        .tilesets
+        .values()
+        .map(|set| &set.texture)
+        .chain(project.animation_clips.values().map(|clip| &clip.texture))
+    {
+        if !path.is_empty() && !texture_paths.contains(path) {
+            texture_paths.push(path.clone());
+        }
+    }
+    texture_paths.sort();
     let mut textures = HashMap::new();
 
     // Load each texture
@@ -834,7 +821,15 @@ async fn load_textures(
             format!("{}/{}", project_path_dir(project_path), path)
         };
 
-        match load_png_texture(device, queue, sprite_renderer, &full_path).await {
+        match load_png_texture(
+            device,
+            queue,
+            sprite_renderer,
+            &full_path,
+            project.texture_options(path),
+        )
+        .await
+        {
             Ok(tex_id) => {
                 info!("Loaded texture: {} -> {:?}", path, tex_id);
                 textures.insert(path.clone(), tex_id);
@@ -933,6 +928,7 @@ async fn load_png_texture(
     queue: &wgpu::Queue,
     sprite_renderer: &mut SpriteRenderer,
     url: &str,
+    options: [bool; 2],
 ) -> Result<TextureId, Box<dyn std::error::Error>> {
     let window = web_sys::window().ok_or("No window")?;
     let opts = web_sys::RequestInit::new();
@@ -980,7 +976,14 @@ async fn load_png_texture(
     let (width, height) = image.dimensions();
 
     // Upload to sprite renderer
-    let tex_id = sprite_renderer.create_texture_rgba(device, queue, &url, width, height, &rgba);
+    let tex_id = sprite_renderer.create_texture_rgba_with_options(
+        device,
+        queue,
+        url,
+        [width, height],
+        &rgba,
+        options,
+    );
 
     Ok(tex_id)
 }
@@ -991,7 +994,7 @@ fn spawn_scene_entities(
     project: &kiln_core::Project,
     scene: &kiln_core::project::Scene,
     textures: &HashMap<String, TextureId>,
-    _sprite_renderer: &SpriteRenderer,
+    sprite_renderer: &SpriteRenderer,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Share entity identity, roles and animation setup with the native player.
     let mut make_sprite = |entity: &kiln_core::Entity, color: [f32; 4], texture: Option<&str>| {
@@ -999,6 +1002,9 @@ fn spawn_scene_entities(
             kiln_runtime::Sprite::new(color[0], color[1], color[2], color[3]).with_size(32.0, 32.0);
         if let Some(id) = texture.and_then(|path| textures.get(path)) {
             sprite = sprite.with_texture(*id);
+            if let Some((w, h)) = sprite_renderer.texture_size(*id) {
+                sprite.size = [w as f32, h as f32];
+            }
         }
         for component in &entity.components {
             if let kiln_core::Component::Sprite {

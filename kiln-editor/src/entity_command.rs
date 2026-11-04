@@ -12,6 +12,12 @@ pub enum EntityEdit {
     Rename { entity_id: String, name: String },
     /// Create a default visible entity at a world position.
     Create { name: String, position: [f32; 2] },
+    /// Drop a decoded project image into the scene as a fully authored sprite.
+    CreateSprite {
+        texture: String,
+        position: [f32; 2],
+        size: [u32; 2],
+    },
     /// Instantiate a project prefab as a new root entity at a scene position.
     InstantiatePrefab {
         prefab_id: String,
@@ -69,6 +75,55 @@ fn apply(
     edit: &EntityEdit,
 ) -> Result<Option<String>, String> {
     match edit {
+        EntityEdit::CreateSprite {
+            texture,
+            position,
+            size,
+        } => {
+            if !position.iter().all(|value| value.is_finite())
+                || size.contains(&0)
+                || std::path::Path::new(texture).is_absolute()
+                || texture.is_empty()
+                || std::path::Path::new(texture)
+                    .components()
+                    .any(|part| !matches!(part, std::path::Component::Normal(_)))
+            {
+                return Err(
+                    "Sprite drop needs a project image, finite position and valid dimensions"
+                        .into(),
+                );
+            }
+            let id = next_id(project, scene);
+            scene.entities.push(Entity {
+                id: id.clone(),
+                name: std::path::Path::new(texture)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("Sprite")
+                    .into(),
+                components: vec![
+                    Component::Transform {
+                        x: position[0],
+                        y: position[1],
+                        rotation: 0.0,
+                        scale: 1.0,
+                    },
+                    Component::Sprite {
+                        color: [1.0; 4],
+                        width: size[0] as f32,
+                        height: size[1] as f32,
+                        texture: Some(texture.clone()),
+                        layer: 0.0,
+                        material: None,
+                        animation_clip: None,
+                    },
+                    Component::SpriteLayout {
+                        settings: Default::default(),
+                    },
+                ],
+            });
+            Ok(Some(id))
+        }
         EntityEdit::Rename { entity_id, name } => {
             let index = unique_entity_index(scene, entity_id)?;
             let name = name.trim();
@@ -249,6 +304,14 @@ fn apply(
             copy.id = id.clone();
             copy.name = format!("{} Copy", copy.name);
             for component in &mut copy.components {
+                if let Component::Joint { joint } = component {
+                    if joint.entity_a == *entity_id {
+                        joint.entity_a = id.clone();
+                    }
+                    if joint.entity_b == *entity_id {
+                        joint.entity_b = id.clone();
+                    }
+                }
                 if let Component::PrefabInstance { overrides, .. } = component {
                     overrides.entity_id = id.clone();
                 }

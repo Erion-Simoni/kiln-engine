@@ -24,9 +24,15 @@ pub struct Project {
     pub mobile: MobileSettings,
     #[serde(default)]
     pub scenes: HashMap<String, Scene>,
+    /// Gameplay camera configuration keyed by scene ID.
+    #[serde(default)]
+    pub cameras: HashMap<String, crate::camera::CameraSettings>,
     /// Tilemaps of the project, keyed by their id.
     #[serde(default)]
     pub tilemaps: HashMap<String, TileMap>,
+    /// Saved terrain palettes indexed by cardinal-neighbor occupancy.
+    #[serde(default)]
+    pub terrains: HashMap<String, crate::tilemap::TerrainSet>,
     /// Tilesets of the project, keyed by their id.
     #[serde(default)]
     pub tilesets: HashMap<String, TileSet>,
@@ -77,6 +83,18 @@ impl Default for AssetImportSettings {
             generate_mipmaps: true,
             is_sprite: false,
         }
+    }
+}
+
+impl Project {
+    /// Effective nearest-sampling/mipmap settings; legacy projects retain their
+    /// original nearest/no-mip appearance until import options are assigned.
+    pub fn texture_options(&self, path: &str) -> [bool; 2] {
+        self.asset_ids
+            .get(path)
+            .and_then(|id| self.asset_import_settings.get(id))
+            .map(|settings| [settings.nearest_filter, settings.generate_mipmaps])
+            .unwrap_or([true, false])
     }
 }
 
@@ -243,6 +261,30 @@ pub struct Entity {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Component {
+    /// Sprite drawing geometry, independent of the referenced texture.
+    SpriteLayout {
+        settings: crate::visual::SpriteLayout,
+    },
+    /// Saved CPU particle effect, simulated by the shared runtime.
+    Particles {
+        effect: crate::visual::ParticleEffect,
+    },
+
+    /// Authored physics body and its collision shape.
+    Physics {
+        body: crate::physics_data::RigidBody2D,
+        collider: crate::physics_data::Collider2D,
+    },
+    /// Authored physical joint between stable entity source IDs.
+    Joint { joint: crate::physics_data::Joint2D },
+    /// Entity-attached gameplay program with per-instance numeric properties.
+    Script {
+        /// Project-relative script resource path.
+        path: String,
+        /// Inspector-exposed initial property values.
+        #[serde(default)]
+        properties: HashMap<String, f64>,
+    },
     Transform {
         x: f32,
         y: f32,
@@ -338,7 +380,9 @@ impl Default for Project {
             window: WindowSettings::default(),
             mobile: MobileSettings::default(),
             scenes: HashMap::new(),
+            cameras: HashMap::new(),
             tilemaps: HashMap::new(),
+            terrains: HashMap::new(),
             tilesets: HashMap::new(),
             animation_clips: HashMap::new(),
             shaders: HashMap::new(),

@@ -83,12 +83,21 @@ pub fn spawn_tilemaps(
             .find(|(_, source)| source.0 == entity.id)
             .map(|(entity, _)| entity);
         if let Some(existing) = existing {
+            if let Ok(pose) = world.world_ref().get::<&crate::GlobalTransform>(existing) {
+                tilemap.offset = pose.position.to_array();
+            }
             world
                 .world_mut()
-                .insert(existing, (world_transform, tilemap))
+                .insert_one(existing, tilemap)
                 .expect("entity was read from this world");
         } else {
-            world.spawn((world_transform, tilemap, SourceId::new(entity.id.clone())));
+            world.spawn((
+                transform,
+                crate::GlobalTransform(world_transform),
+                crate::WorldOffset([offset.x, offset.y]),
+                tilemap,
+                SourceId::new(entity.id.clone()),
+            ));
         }
         spawned.push(map_id);
     }

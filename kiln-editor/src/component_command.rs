@@ -6,6 +6,11 @@ use kiln_core::{Component, Project, Scene};
 /// Components exposed by the entity inspector. Parent is edited by the hierarchy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComponentKind {
+    SpriteLayout,
+    Particles,
+    Physics,
+    Joint,
+    Script,
     Transform,
     Sprite,
     Role,
@@ -16,6 +21,11 @@ impl ComponentKind {
     /// Identify an inspector component, excluding hierarchy links.
     pub fn of(component: &Component) -> Option<Self> {
         match component {
+            Component::SpriteLayout { .. } => Some(Self::SpriteLayout),
+            Component::Particles { .. } => Some(Self::Particles),
+            Component::Physics { .. } => Some(Self::Physics),
+            Component::Joint { .. } => Some(Self::Joint),
+            Component::Script { .. } => Some(Self::Script),
             Component::Transform { .. } => Some(Self::Transform),
             Component::Sprite { .. } => Some(Self::Sprite),
             Component::Role { .. } => Some(Self::Role),
@@ -28,6 +38,18 @@ impl ComponentKind {
     /// Defaults for resource-free components; Tilemap needs an explicit map ID.
     pub fn default_component(self) -> Option<Component> {
         match self {
+            Self::SpriteLayout => Some(Component::SpriteLayout {
+                settings: Default::default(),
+            }),
+            Self::Particles => Some(Component::Particles {
+                effect: Default::default(),
+            }),
+            Self::Physics => Some(Component::Physics {
+                body: Default::default(),
+                collider: Default::default(),
+            }),
+            Self::Joint => None,
+            Self::Script => None,
             Self::Transform => Some(Component::Transform {
                 x: 0.0,
                 y: 0.0,
@@ -54,6 +76,19 @@ impl ComponentKind {
 /// One component-presence edit. Add never overwrites an existing component.
 #[derive(Debug, Clone)]
 pub enum ComponentEdit {
+    /// Replace a resource-free component, adding it if absent; still undoable.
+    SetVisual(Component),
+    SetPhysics {
+        body: kiln_core::physics_data::RigidBody2D,
+        collider: kiln_core::physics_data::Collider2D,
+    },
+    SetJoint {
+        joint: kiln_core::physics_data::Joint2D,
+    },
+    SetScript {
+        path: String,
+        properties: std::collections::HashMap<String, f64>,
+    },
     Add(Component),
     Remove(ComponentKind),
     SetRole {
@@ -112,6 +147,17 @@ impl ComponentCommand {
             return Err("Select one root-scene entity to edit its components".into());
         };
         let kind = match &self.edit {
+            ComponentEdit::SetVisual(component) => {
+                validate(component, project)?;
+                match component {
+                    Component::SpriteLayout { .. } => ComponentKind::SpriteLayout,
+                    Component::Particles { .. } => ComponentKind::Particles,
+                    _ => return Err("SetVisual expects sprite layout or particle data".into()),
+                }
+            }
+            ComponentEdit::SetPhysics { .. } => ComponentKind::Physics,
+            ComponentEdit::SetJoint { .. } => ComponentKind::Joint,
+            ComponentEdit::SetScript { .. } => ComponentKind::Script,
             ComponentEdit::Add(component) => {
                 validate(component, project)?;
                 ComponentKind::of(component).ok_or("Edit parent links through the hierarchy")?
@@ -132,6 +178,60 @@ impl ComponentCommand {
             return Err("Entity has ambiguous duplicate components".into());
         }
         match (&self.edit, matches.first()) {
+            (ComponentEdit::SetVisual(component), index) => {
+                if let Some(index) = index {
+                    if serde_json::to_value(&components[*index]).ok()
+                        == serde_json::to_value(component).ok()
+                    {
+                        return Ok(false);
+                    }
+                    components[*index] = component.clone();
+                } else {
+                    components.push(component.clone());
+                }
+                Ok(true)
+            }
+            (ComponentEdit::SetPhysics { body, collider }, Some(index)) => {
+                let replacement = Component::Physics {
+                    body: *body,
+                    collider: *collider,
+                };
+                validate(&replacement, project)?;
+                if serde_json::to_value(&components[*index]).ok()
+                    == serde_json::to_value(&replacement).ok()
+                {
+                    return Ok(false);
+                }
+                components[*index] = replacement;
+                Ok(true)
+            }
+            (ComponentEdit::SetJoint { joint }, Some(index)) => {
+                let replacement = Component::Joint {
+                    joint: joint.clone(),
+                };
+                validate(&replacement, project)?;
+                if serde_json::to_value(&components[*index]).ok()
+                    == serde_json::to_value(&replacement).ok()
+                {
+                    return Ok(false);
+                }
+                components[*index] = replacement;
+                Ok(true)
+            }
+            (ComponentEdit::SetScript { path, properties }, Some(index)) => {
+                let replacement = Component::Script {
+                    path: path.clone(),
+                    properties: properties.clone(),
+                };
+                validate(&replacement, project)?;
+                if serde_json::to_value(&components[*index]).ok()
+                    == serde_json::to_value(&replacement).ok()
+                {
+                    return Ok(false);
+                }
+                components[*index] = replacement;
+                Ok(true)
+            }
             (ComponentEdit::Add(component), None) => {
                 components.push(component.clone());
                 Ok(true)
@@ -211,6 +311,22 @@ impl ComponentCommand {
 
 fn validate(component: &Component, project: &Project) -> Result<(), String> {
     match component {
+        Component::SpriteLayout { settings } => settings.validate(),
+        Component::Particles { effect } => effect.validate(),
+        Component::Physics { body, collider } => {
+            kiln_core::physics_data::validate_body(body, collider)
+        }
+        Component::Joint { joint } => kiln_core::physics_data::validate_joint(joint),
+        Component::Script { path, properties }
+            if path.trim().is_empty()
+                || std::path::Path::new(path).is_absolute()
+                || std::path::Path::new(path)
+                    .components()
+                    .any(|part| !matches!(part, std::path::Component::Normal(_)))
+                || !properties.values().all(|value| value.is_finite()) =>
+        {
+            Err("Script path must be project-relative and properties must be finite".into())
+        }
         Component::Transform {
             x,
             y,

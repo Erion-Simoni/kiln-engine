@@ -1,9 +1,7 @@
 //! Sprite component for 2D rendering
 
-use kiln_anim::Clip;
 use kiln_render::{TextureId, FULL_UV};
 use kiln_vfx::{Emitter, EmitterConfig, ParticleSystem};
-use std::collections::HashMap;
 
 /// CPU-side sprite drawn via [`kiln_render::SpriteRenderer`].
 #[derive(Debug, Clone, hecs::Bundle)]
@@ -29,9 +27,53 @@ pub struct Sprite {
     /// Pivot point in local space (0.0 = left/top, 0.5 = center, 1.0 = right/bottom).
     /// Defaults to (0.5, 0.5) center pivot.
     pub pivot: [f32; 2],
+    /// Texture pixels represented by one world unit.
+    pub pixels_per_unit: f32,
 }
 
 impl Sprite {
+    /// Bounds of the actual pivoted/rotated draw quad, used for framing/picking.
+    pub fn world_bounds(&self, pose: kiln_core::Transform) -> [f32; 4] {
+        let draw = self.draw_instance(pose);
+        let (sin, cos) = pose.rotation.sin_cos();
+        let ex = (cos.abs() * draw.size[0].abs() + sin.abs() * draw.size[1].abs()) * 0.5;
+        let ey = (sin.abs() * draw.size[0].abs() + cos.abs() * draw.size[1].abs()) * 0.5;
+        [
+            draw.position[0] - ex,
+            draw.position[1] - ey,
+            draw.position[0] + ex,
+            draw.position[1] + ey,
+        ]
+    }
+    /// Draw geometry shared by editor/player, including pivot, pixel scale and flips.
+    pub fn draw_instance(&self, pose: kiln_core::Transform) -> kiln_render::SpriteInstance {
+        let size = [
+            self.size[0] / self.pixels_per_unit,
+            self.size[1] / self.pixels_per_unit,
+        ];
+        let local = kiln_core::Vec2::new(
+            (0.5 - self.pivot[0]) * size[0],
+            (self.pivot[1] - 0.5) * size[1],
+        );
+        let center =
+            pose.position + (local * pose.scale).rotate(kiln_core::Vec2::from_angle(pose.rotation));
+        let mut uv = self.uv_rect;
+        if self.flip_x {
+            uv.swap(0, 2);
+        }
+        if self.flip_y {
+            uv.swap(1, 3);
+        }
+        kiln_render::SpriteInstance {
+            position: center.to_array(),
+            size,
+            color: self.color,
+            uv_rect: uv,
+            material_id: 0,
+            rotation: 0.0,
+        }
+        .with_transform(pose.rotation, pose.scale.to_array())
+    }
     pub fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
         Self {
             color: [r, g, b, a],
@@ -44,6 +86,7 @@ impl Sprite {
             flip_x: false,
             flip_y: false,
             pivot: [0.5, 0.5],
+            pixels_per_unit: 1.0,
         }
     }
 
@@ -99,112 +142,14 @@ impl Default for Sprite {
     }
 }
 
-/// Animation player that drives sprite animation over time.
-///
-/// Tracks a set of named animation clips and advances the current frame
-/// based on elapsed time. The current frame's UV rect can be read and
-/// applied to a sprite's `uv_rect` each frame.
-#[derive(Debug)]
-pub struct AnimationPlayer {
-    clips: HashMap<String, Clip>,
-    /// Texture dimensions for each clip (width, height) - used to convert
-    /// pixel UV rects to normalized UV rects.
-    clip_textures: HashMap<String, (u32, u32)>,
-    current_clip: Option<String>,
-    elapsed: f32,
-    /// Playback speed multiplier (1.0 = normal speed).
-    speed: f32,
-}
-
-impl Default for AnimationPlayer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl AnimationPlayer {
-    pub fn new() -> Self {
-        Self {
-            clips: HashMap::new(),
-            clip_textures: HashMap::new(),
-            current_clip: None,
-            elapsed: 0.0,
-            speed: 1.0,
-        }
-    }
-
-    /// Add a clip to the player.
-    pub fn add_clip(&mut self, clip: Clip) {
-        // Store texture dimensions from the first frame
-        if let Some(first_frame) = clip.frames.first() {
-            self.clip_textures.insert(
-                clip.name.clone(),
-                (first_frame.rect[2], first_frame.rect[3]),
-            );
-        }
-        self.clips.insert(clip.name.clone(), clip);
-    }
-
-    /// Start playing the named clip from the beginning.
-    pub fn play(&mut self, clip_name: &str) {
-        self.current_clip = Some(clip_name.to_string());
-        self.elapsed = 0.0;
-    }
-
-    /// Stop the current clip.
-    pub fn stop(&mut self) {
-        self.current_clip = None;
-        self.elapsed = 0.0;
-    }
-
-    /// Advance the animation by `dt` seconds.
-    pub fn update(&mut self, dt: f32) {
-        self.elapsed += dt * self.speed;
-    }
-
-    /// Set the playback speed multiplier (1.0 = normal speed).
-    pub fn set_speed(&mut self, speed: f32) {
-        self.speed = speed.max(0.0);
-    }
-
-    /// Get a mutable reference to a clip by name, if it exists.
-    pub fn get_clip_mut(&mut self, clip_name: &str) -> Option<&mut Clip> {
-        self.clips.get_mut(clip_name)
-    }
-
-    /// Get mutable access to all clips.
-    pub fn clips_mut(&mut self) -> &mut HashMap<String, Clip> {
-        &mut self.clips
-    }
-
-    /// Get the current frame's normalized UV rect (0.0 to 1.0), if a clip is playing.
-    /// Returns [u0, v0, u1, v1] in normalized texture coordinates.
-    pub fn current_uv_rect(&self) -> Option<[f32; 4]> {
-        let clip_name = self.current_clip.as_ref()?;
-        let clip = self.clips.get(clip_name)?;
-        let (frame_idx, _) = clip.frame_at_time(self.elapsed).ok()?;
-        let frame = &clip.frames[frame_idx];
-
-        // Get texture dimensions for this clip
-        let (tex_w, tex_h) = self.clip_textures.get(clip_name)?;
-        let tex_w = *tex_w as f32;
-        let tex_h = *tex_h as f32;
-
-        let [x, y, w, h] = frame.rect;
-        Some([
-            x as f32 / tex_w,
-            y as f32 / tex_h,
-            (x + w) as f32 / tex_w,
-            (y + h) as f32 / tex_h,
-        ])
-    }
-}
+pub use crate::animation_player::AnimationPlayer;
 
 /// Particle system component for 2D visual effects (smoke, fire, magic, etc.).
 ///
 /// Drives a CPU particle system and can be rendered as sprite instances.
 pub struct ParticleSystemComponent {
     system: ParticleSystem,
+    pub layer: f32,
 }
 
 impl std::fmt::Debug for ParticleSystemComponent {
@@ -217,9 +162,10 @@ impl std::fmt::Debug for ParticleSystemComponent {
 
 impl Clone for ParticleSystemComponent {
     fn clone(&self) -> Self {
-        // ParticleSystem doesn't implement Clone, so create a new empty one
+        // Preserve emitter configuration, random state and live particles.
         Self {
-            system: ParticleSystem::new(Default::default()),
+            system: self.system.clone(),
+            layer: self.layer,
         }
     }
 }
@@ -229,7 +175,23 @@ impl ParticleSystemComponent {
     pub fn new() -> Self {
         Self {
             system: ParticleSystem::new(Default::default()),
+            layer: 0.0,
         }
+    }
+
+    pub fn from_effect(effect: &kiln_core::visual::ParticleEffect) -> Result<Self, String> {
+        effect.validate()?;
+        let mut system = ParticleSystem::new(kiln_vfx::ParticleSystemConfig {
+            max_particles: effect.max_particles,
+        });
+        system.emitting = effect.playing;
+        for config in &effect.emitters {
+            system.add_emitter(Emitter::new(config.clone()));
+        }
+        Ok(Self {
+            system,
+            layer: effect.layer,
+        })
     }
 
     /// Add an emitter to the particle system.
@@ -262,17 +224,27 @@ impl Default for ParticleSystemComponent {
 /// System to update animations and apply UV rects to sprites.
 /// Reads AnimationPlayer and Sprite, writes Sprite (uv_rect).
 pub fn update_animations(world: &mut hecs::World) {
+    update_animations_dt(world, 1.0 / 60.0);
+}
+
+pub fn update_animations_dt(world: &mut hecs::World, dt: f32) {
     for (anim, sprite) in world.query_mut::<(&mut AnimationPlayer, &mut Sprite)>() {
-        anim.update(1.0 / 60.0); // Fixed timestep
-        if let Some(uv_rect) = anim.current_uv_rect() {
-            sprite.uv_rect = uv_rect;
-        }
+        anim.update(dt);
+        anim.apply_to_sprite(sprite);
     }
 }
 
 /// Emit particles from particle system components for one frame.
 pub fn update_particle_systems(world: &mut hecs::World, dt: f32) {
-    for ps in world.query_mut::<&mut ParticleSystemComponent>() {
+    for (ps, pose) in world.query_mut::<(
+        &mut ParticleSystemComponent,
+        Option<&crate::GlobalTransform>,
+    )>() {
+        if let Some(pose) = pose {
+            for emitter in &mut ps.system.emitters {
+                emitter.set_position(pose.position.to_array());
+            }
+        }
         ps.system_mut().update(dt);
     }
 }

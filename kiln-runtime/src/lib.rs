@@ -1,11 +1,14 @@
 //! Kiln runtime crate
 //! Frame loop, scene, input, audio hooks
 
+pub mod camera;
 pub mod input;
 pub mod jobs;
 pub mod loop_;
+pub mod play_clock;
 pub mod scene;
 pub mod schedule;
+mod script_source;
 pub mod settings;
 pub mod slice;
 pub mod slice_sample;
@@ -20,6 +23,10 @@ pub mod audio;
 
 #[cfg(feature = "physics")]
 pub mod physics;
+#[cfg(feature = "physics")]
+mod physics_sync;
+#[cfg(feature = "physics")]
+mod physics_tilemap;
 
 pub use input::*;
 pub use jobs::{load_file_async, JobHandle, TaskPool};
@@ -41,3 +48,6 @@ pub use audio::{AudioCategory, AudioEngine};
 
 #[cfg(feature = "physics")]
 pub use physics::*;
+
+mod animation_player;
+pub mod visual;

@@ -33,6 +33,25 @@ impl Diagnostic {
             message: message.into(),
         }
     }
+
+    /// Format a compiler diagnostic with a file name and one-based Unicode
+    /// line/column coordinates. Out-of-range spans are clamped safely.
+    pub fn with_source_location(&self, path: &str, source: &str) -> String {
+        let mut offset = self.span.start.min(source.len());
+        while !source.is_char_boundary(offset) {
+            offset -= 1;
+        }
+        let prefix = &source[..offset];
+        let line = prefix.bytes().filter(|byte| *byte == b'\n').count() + 1;
+        let column = prefix
+            .rsplit('\n')
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .count()
+            + 1;
+        format!("{path}:{line}:{column}: {}", self.message)
+    }
 }
 
 impl fmt::Display for Diagnostic {
@@ -42,5 +61,25 @@ impl fmt::Display for Diagnostic {
             "[{}..{}]: {}",
             self.span.start, self.span.end, self.message
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn source_locations_handle_multiline_unicode_and_invalid_offsets() {
+        let source = "first\nλ bad";
+        assert_eq!(
+            Diagnostic::new(Span::new(9, 9), "error").with_source_location("enemy.ks", source),
+            "enemy.ks:2:3: error"
+        );
+        assert_eq!(
+            Diagnostic::new(Span::new(7, 7), "error").with_source_location("enemy.ks", source),
+            "enemy.ks:2:1: error"
+        );
+        assert!(Diagnostic::new(Span::new(999, 999), "error")
+            .with_source_location("enemy.ks", source)
+            .starts_with("enemy.ks:2:6:"));
     }
 }

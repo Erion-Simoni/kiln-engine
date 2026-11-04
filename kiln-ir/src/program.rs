@@ -114,9 +114,20 @@ pub struct Program {
     labels: HashMap<String, Label>,
     /// Number of local variable slots the program uses.
     local_slots: u16,
+    source_offsets: HashMap<usize, usize>,
 }
 
 impl Program {
+    /// Associate an instruction with its source byte offset, retaining a more
+    /// precise mapping already recorded by a nested expression.
+    pub fn record_source_offset(&mut self, instruction: usize, offset: usize) {
+        self.source_offsets.entry(instruction).or_insert(offset);
+    }
+
+    /// Source byte offset for a failing or inspected instruction.
+    pub fn source_offset(&self, instruction: usize) -> Option<usize> {
+        self.source_offsets.get(&instruction).copied()
+    }
     pub fn new() -> Self {
         Self::default()
     }

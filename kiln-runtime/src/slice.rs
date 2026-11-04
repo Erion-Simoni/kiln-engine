@@ -108,6 +108,26 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("load_game", 54, 1), // slot_id -> bool
     // Animation clip creation (55)
     ("create_animation_clip", 55, 3), // source_id, clip_name, texture_path -> void
+    ("self_entity", 56, 0),
+    ("state_get", 57, 2),
+    ("state_set", 58, 2),
+    ("get_property", 59, 1),
+    ("script_phase", 60, 0),
+    ("array_length", 61, 1),
+    ("array_get", 62, 2),
+    ("array_push", 63, 2),
+    ("emit_signal", 64, 2),
+    ("signal_name", 65, 0),
+    ("signal_value", 66, 0),
+    ("event_entity", 67, 0),
+    ("change_scene", 68, 1),
+    ("array_new", 69, 0),
+    ("overlap_circle", 70, 4),
+    ("raycast_query", 71, 6),
+    ("get_mouse_world_x", 72, 0),
+    ("get_mouse_world_y", 73, 0),
+    ("animation_event_name", 74, 0),
+    ("animation_event_value", 75, 0),
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -155,8 +175,10 @@ pub struct SliceFacts {
     pub frame_count: u64,
     /// Current time scale.
     pub time_scale: f64,
-    /// Map of entity source_id -> (x, y) position for entities with Role component.
+    /// Map of entity source_id -> authored local (x, y) position.
     pub entity_positions: HashMap<String, (f64, f64)>,
+    /// World-space linear velocity for physics bodies or Velocity components.
+    pub entity_velocities: HashMap<String, (f64, f64)>,
     /// Map of entity source_id -> sprite color [r, g, b, a].
     pub entity_sprite_colors: HashMap<String, [f64; 4]>,
     /// Map of entity source_id -> sprite size [w, h].
@@ -332,6 +354,17 @@ pub type AudioPlayer = Box<dyn Fn(&str) + Send + Sync>;
 /// The script host: reads facts and records commands.
 #[derive(Default)]
 pub struct SliceHost {
+    animation_event: (String, String),
+    mouse_world: [f64; 2],
+    self_entity: String,
+    script_state: HashMap<String, Value>,
+    properties: HashMap<String, f64>,
+    phase: String,
+    signal_name: String,
+    signal_value: Option<Value>,
+    emitted_signals: Vec<(String, Value)>,
+    event_entity: String,
+    scene_request: Option<String>,
     facts: SliceFacts,
     commands: Vec<SliceCommand>,
     #[cfg(feature = "audio")]
@@ -380,9 +413,28 @@ impl std::fmt::Debug for SliceHost {
 }
 
 impl SliceHost {
+    fn normalized_key(key: &str) -> String {
+        let candidate = key.strip_prefix("Key").unwrap_or(key);
+        if candidate.len() == 1 && candidate.as_bytes()[0].is_ascii_alphabetic() {
+            candidate.to_ascii_lowercase()
+        } else {
+            key.to_owned()
+        }
+    }
     /// A host with the given facts.
     pub fn new(facts: SliceFacts) -> Self {
         Self {
+            animation_event: Default::default(),
+            mouse_world: [0.0; 2],
+            self_entity: String::new(),
+            script_state: HashMap::new(),
+            properties: HashMap::new(),
+            phase: String::new(),
+            signal_name: String::new(),
+            signal_value: None,
+            emitted_signals: Vec::new(),
+            event_entity: String::new(),
+            scene_request: None,
             facts,
             commands: Vec::new(),
             #[cfg(feature = "audio")]
@@ -427,6 +479,11 @@ impl SliceHost {
         self.mouse_x = x;
         self.mouse_y = y;
         self.mouse_pressed = pressed;
+    }
+
+    /// Set the pointer position mapped through the active gameplay camera.
+    pub fn set_mouse_world(&mut self, point: [f64; 2]) {
+        self.mouse_world = point;
     }
 
     /// Whether a UI widget was clicked this frame.
@@ -482,7 +539,7 @@ impl SliceHost {
 
     /// Set the currently pressed keys (called by the host before each step).
     pub fn set_pressed_keys(&mut self, keys: &[String]) {
-        self.pressed_keys = keys.iter().cloned().collect();
+        self.pressed_keys = keys.iter().map(|key| Self::normalized_key(key)).collect();
     }
 
     /// Check if an action is currently pressed by checking its key bindings.
@@ -494,7 +551,9 @@ impl SliceHost {
             .bindings
             .iter()
             .any(|binding| match &binding.binding_type {
-                kiln_input::BindingType::Key(key) => self.pressed_keys.contains(key),
+                kiln_input::BindingType::Key(key) => {
+                    self.pressed_keys.contains(&Self::normalized_key(key))
+                }
                 kiln_input::BindingType::GamepadButton(btn) => {
                     self.pressed_keys.contains(&format!("GamepadBtn{}", btn))
                 }
@@ -512,7 +571,7 @@ impl SliceHost {
         for binding in &action.bindings {
             match &binding.binding_type {
                 kiln_input::BindingType::Key(key) => {
-                    if self.pressed_keys.contains(key) {
+                    if self.pressed_keys.contains(&Self::normalized_key(key)) {
                         // Map common keys to axis directions
                         match key.as_str() {
                             "KeyA" | "ArrowLeft" | "a" | "A" => value -= 1.0,
@@ -548,6 +607,15 @@ impl SliceHost {
     }
 
     fn call_host_impl(&mut self, func_id: u32, args: &[Value]) -> Result<Value, VmError> {
+        if func_id >= 56 {
+            if let Some((name, _, argc)) = BUILTINS.iter().find(|(_, id, _)| *id == func_id) {
+                if args.len() != *argc as usize {
+                    return Err(VmError::HostCallError(format!(
+                        "{name} expects {argc} arguments"
+                    )));
+                }
+            }
+        }
         match func_id {
             // Core builtins (0-16)
             0 => {
@@ -811,6 +879,12 @@ impl SliceHost {
                 let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
                 let component = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
                 match component {
+                    "velocity" | "Velocity" => Ok(self
+                        .facts
+                        .entity_velocities
+                        .get(source_id)
+                        .map(|(x, y)| Value::Array(vec![Value::F64(*x), Value::F64(*y)]))
+                        .unwrap_or(Value::Bool(false))),
                     "transform" | "Transform" | "position" | "Position" => {
                         if let Some((x, y)) = self.facts.entity_positions.get(source_id) {
                             Ok(Value::Array(vec![Value::F64(*x), Value::F64(*y)]))
@@ -886,18 +960,19 @@ impl SliceHost {
                 #[cfg(feature = "physics")]
                 {
                     if let Some(physics) = &self.physics {
-                        if let Some((body_index, distance)) =
-                            physics.raycast([x as f32, y as f32], [dx as f32, dy as f32], 100.0)
-                        {
-                            // Find the entity source_id for this physics body handle
-                            for (sid, pb) in self.facts.entity_positions.iter() {
-                                // We can't easily map physics handle to source_id here without
-                                // storing it in facts. Return distance-based hit info instead.
-                                let _ = (sid, pb, body_index, distance);
-                            }
+                        if let Some(hit) = physics.raycast_hit(
+                            [x as f32, y as f32],
+                            [dx as f32, dy as f32],
+                            100.0,
+                            u16::MAX,
+                            Some(&self.self_entity),
+                            false,
+                        ) {
                             return Ok(Value::Array(vec![
-                                Value::F64(distance as f64),
-                                Value::I64(body_index as i64),
+                                Value::Str(hit.source_id),
+                                Value::F64(hit.distance as f64),
+                                Value::F64(hit.normal[0] as f64),
+                                Value::F64(hit.normal[1] as f64),
                             ]));
                         }
                     }
@@ -1177,6 +1252,134 @@ impl SliceHost {
                 });
                 Ok(Value::I64(0))
             }
+            56 => Ok(Value::Str(self.self_entity.clone())),
+            57 => {
+                let name = args[0].as_str().ok_or_else(|| {
+                    VmError::HostCallError("state_get expects a string key".into())
+                })?;
+                Ok(self
+                    .script_state
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_else(|| args[1].clone()))
+            }
+            58 => {
+                let name = args[0].as_str().ok_or_else(|| {
+                    VmError::HostCallError("state_set expects a string key".into())
+                })?;
+                if name.len() > 256
+                    || (self.script_state.len() >= 4096 && !self.script_state.contains_key(name))
+                {
+                    return Err(VmError::HostCallError("Script state limit reached".into()));
+                }
+                self.script_state.insert(name.to_owned(), args[1].clone());
+                Ok(args[1].clone())
+            }
+            59 => {
+                let name = args[0].as_str().unwrap_or_default();
+                Ok(Value::F64(*self.properties.get(name).unwrap_or(&0.0)))
+            }
+            60 => Ok(Value::Str(
+                if self.phase.is_empty() {
+                    "update"
+                } else {
+                    &self.phase
+                }
+                .into(),
+            )),
+            61 => match &args[0] {
+                Value::Array(values) => Ok(Value::I64(values.len() as i64)),
+                _ => Err(VmError::HostCallError(
+                    "array_length expects an array".into(),
+                )),
+            },
+            62 => match (&args[0], args[1].as_i64()) {
+                (Value::Array(values), Some(index)) if index >= 0 => values
+                    .get(index as usize)
+                    .cloned()
+                    .ok_or_else(|| VmError::HostCallError("array index is out of range".into())),
+                _ => Err(VmError::HostCallError(
+                    "array_get expects an array and nonnegative integer".into(),
+                )),
+            },
+            63 => match &args[0] {
+                Value::Array(values) if values.len() < 4096 => {
+                    let mut values = values.clone();
+                    values.push(args[1].clone());
+                    Ok(Value::Array(values))
+                }
+                _ => Err(VmError::HostCallError(
+                    "array_push expects an array with fewer than 4096 items".into(),
+                )),
+            },
+            64 => {
+                let name = args[0]
+                    .as_str()
+                    .ok_or_else(|| VmError::HostCallError("signal name must be a string".into()))?;
+                if self.emitted_signals.len() >= 256 {
+                    return Err(VmError::HostCallError("signal queue limit reached".into()));
+                }
+                self.emitted_signals.push((name.into(), args[1].clone()));
+                Ok(Value::I64(0))
+            }
+            65 => Ok(Value::Str(self.signal_name.clone())),
+            66 => Ok(self.signal_value.clone().unwrap_or(Value::I64(0))),
+            67 => Ok(Value::Str(self.event_entity.clone())),
+            68 => {
+                let id = args[0].as_str().ok_or_else(|| {
+                    VmError::HostCallError("change_scene expects a scene ID".into())
+                })?;
+                self.scene_request = Some(id.into());
+                Ok(Value::I64(0))
+            }
+            69 => Ok(Value::Array(Vec::new())),
+            70 => {
+                #[cfg(feature = "physics")]
+                if let Some(physics) = &self.physics {
+                    let x = args[0].to_f64().unwrap_or(0.0) as f32;
+                    let y = args[1].to_f64().unwrap_or(0.0) as f32;
+                    let radius = args[2].to_f64().unwrap_or(0.0) as f32;
+                    let mask = args[3].as_i64().unwrap_or(65535) as u16;
+                    return Ok(Value::Array(
+                        physics
+                            .overlap_circle([x, y], radius, mask)
+                            .into_iter()
+                            .map(Value::Str)
+                            .collect(),
+                    ));
+                }
+                Ok(Value::Array(Vec::new()))
+            }
+            71 => {
+                #[cfg(feature = "physics")]
+                if let Some(physics) = &self.physics {
+                    let values: Vec<_> = args
+                        .iter()
+                        .take(5)
+                        .map(|value| value.to_f64().unwrap_or(0.0) as f32)
+                        .collect();
+                    if let Some(hit) = physics.raycast_hit(
+                        [values[0], values[1]],
+                        [values[2], values[3]],
+                        values[4],
+                        args[5].as_i64().unwrap_or(65535) as u16,
+                        Some(&self.self_entity),
+                        false,
+                    ) {
+                        return Ok(Value::Array(vec![
+                            Value::Str(hit.source_id),
+                            Value::F64(hit.distance as f64),
+                            Value::F64(hit.normal[0] as f64),
+                            Value::F64(hit.normal[1] as f64),
+                        ]));
+                    }
+                }
+                Ok(Value::Bool(false))
+            }
+            72 => Ok(Value::F64(self.mouse_world[0])),
+            73 => Ok(Value::F64(self.mouse_world[1])),
+            74 => Ok(Value::Str(self.animation_event.0.clone())),
+            75 => Ok(Value::Str(self.animation_event.1.clone())),
             _ => Err(VmError::HostCallError(format!(
                 "unknown slice builtin id {func_id}"
             ))),
@@ -1200,6 +1403,10 @@ fn describe(value: &Value) -> String {
 
 /// A running slice: the compiled script plus its state.
 pub struct SliceSession {
+    source: Option<crate::script_source::ExpandedSource>,
+    external_collisions: Vec<(String, String, bool)>,
+    attached: Vec<AttachedScript>,
+    signals: Vec<(String, Value)>,
     program: Program,
     vm: Vm<SliceHost>,
     debugger: Option<Debugger<SliceHost>>,
@@ -1208,7 +1415,219 @@ pub struct SliceSession {
     ui_commands: Vec<SliceCommand>,
 }
 
+struct AttachedScript {
+    frame: u64,
+    entity_id: String,
+    path: String,
+    session: SliceSession,
+    started: bool,
+}
+
+/// Snapshot of the actual entity VM state, used by the live editor debugger.
+#[derive(Debug, Clone)]
+pub struct EntityScriptDebug {
+    /// Stable authored/runtime source ID.
+    pub entity_id: String,
+    /// Script resource path.
+    pub path: String,
+    /// Last dispatched lifecycle phase.
+    pub phase: String,
+    /// Persistent instance values, ordered by key for deterministic inspection.
+    pub values: std::collections::BTreeMap<String, Value>,
+}
+
+impl AttachedScript {
+    fn run(
+        &mut self,
+        _parent: &mut SliceHost,
+        phase: &str,
+        world: &mut GameWorld,
+        input: (f64, f64),
+        dt: f64,
+        collisions: &[(String, String, bool)],
+    ) -> Result<(), VmError> {
+        self.session.vm.host_mut().phase = phase.into();
+        self.session.vm.host_mut().frame_count = self.frame.saturating_sub(1);
+        #[cfg(feature = "physics")]
+        std::mem::swap(
+            &mut _parent.physics,
+            &mut self.session.vm.host_mut().physics,
+        );
+        let result = self
+            .session
+            .step_program(world, input, dt, false, collisions.to_vec());
+        #[cfg(feature = "physics")]
+        std::mem::swap(
+            &mut _parent.physics,
+            &mut self.session.vm.host_mut().physics,
+        );
+        result.map_err(|error| {
+            VmError::HostCallError(format!(
+                "{} (entity {}, {phase}): {error}",
+                self.path, self.entity_id
+            ))
+        })
+    }
+}
+
 impl SliceSession {
+    /// Inspect the same per-instance state used to execute gameplay.
+    pub fn entity_script_debug(&self) -> Vec<EntityScriptDebug> {
+        self.attached
+            .iter()
+            .map(|attachment| EntityScriptDebug {
+                entity_id: attachment.entity_id.clone(),
+                path: attachment.path.clone(),
+                phase: attachment.session.vm.host().phase.clone(),
+                values: attachment
+                    .session
+                    .vm
+                    .host()
+                    .script_state
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect(),
+            })
+            .collect()
+    }
+    /// Queue a collision event from a platform/custom physics backend.
+    pub fn queue_collision_event(
+        &mut self,
+        a: String,
+        b: String,
+        started: bool,
+    ) -> Result<(), String> {
+        if self.external_collisions.len() >= 256 {
+            return Err("Collision event queue limit reached".into());
+        }
+        self.external_collisions.push((a, b, started));
+        Ok(())
+    }
+
+    /// Inspect an attachment's persistent runtime value without editing defaults.
+    pub fn entity_script_state(&self, entity_id: &str, key: &str) -> Option<&Value> {
+        self.attached
+            .iter()
+            .find(|attachment| attachment.entity_id == entity_id)
+            .and_then(|attachment| attachment.session.vm.host().script_state.get(key))
+    }
+    /// Take one deterministic scene transition request after a gameplay tick.
+    pub fn take_scene_request(&mut self) -> Option<String> {
+        let mut request = self.vm.host_mut().scene_request.take();
+        for attached in &mut self.attached {
+            if let Some(next) = attached.session.vm.host_mut().scene_request.take() {
+                if request.is_none() {
+                    request = Some(next);
+                }
+            }
+        }
+        request
+    }
+    /// Compile the scene program and every entity attachment through one loader.
+    /// Both native hosts use this path, including projects with only attachments.
+    pub fn with_scene_sources(
+        project: &kiln_core::Project,
+        scene_id: &str,
+        read: impl Fn(&str) -> Result<String, String>,
+    ) -> Result<Self, String> {
+        fn compile_resource(
+            path: &str,
+            project: &kiln_core::Project,
+            read: &impl Fn(&str) -> Result<String, String>,
+        ) -> Result<SliceSession, String> {
+            let expanded = crate::script_source::expand(path, read)?;
+            let mut session =
+                SliceSession::with_action_map(&expanded.source, project.action_map.clone())
+                    .map_err(|errors| {
+                        errors
+                            .iter()
+                            .map(|error| expanded.diagnostic(error))
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    })?;
+            session.source = Some(expanded);
+            Ok(session)
+        }
+        fn gather<'a>(
+            project: &'a kiln_core::Project,
+            id: &str,
+            stack: &mut Vec<String>,
+            entities: &mut Vec<&'a kiln_core::Entity>,
+        ) -> Result<(), String> {
+            if stack.iter().any(|parent| parent == id) {
+                return Err(format!("Cyclic nested scene '{id}'"));
+            }
+            let scene = project
+                .scenes
+                .get(id)
+                .ok_or_else(|| format!("Missing scene '{id}'"))?;
+            stack.push(id.into());
+            entities.extend(scene.entities.iter());
+            for nested in &scene.nested_scenes {
+                gather(project, &nested.scene_id, stack, entities)?;
+            }
+            stack.pop();
+            Ok(())
+        }
+        let scene = project.scenes.get(scene_id).ok_or("Scene is missing")?;
+        let mut session = if let Some(path) = &scene.script {
+            compile_resource(path, project, &read)?
+        } else {
+            Self::with_action_map("return 0;", project.action_map.clone())
+                .map_err(|errors| format!("{errors:?}"))?
+        };
+        #[cfg(feature = "physics")]
+        {
+            session.vm.host_mut().physics = Some(PhysicsWorld::new());
+        }
+        let mut entities = Vec::new();
+        gather(project, scene_id, &mut Vec::new(), &mut entities)?;
+        entities.sort_by(|left, right| left.id.cmp(&right.id));
+        let mut ids = HashMap::<String, usize>::new();
+        for entity in &entities {
+            *ids.entry(entity.id.clone()).or_default() += 1;
+        }
+        for entity in entities {
+            let scripts: Vec<_> = entity
+                .components
+                .iter()
+                .filter_map(|component| match component {
+                    kiln_core::Component::Script { path, properties } => Some((path, properties)),
+                    _ => None,
+                })
+                .collect();
+            if scripts.len() > 1 || (!scripts.is_empty() && ids.get(&entity.id) != Some(&1)) {
+                return Err(format!("Ambiguous script attachment for '{}'", entity.id));
+            }
+            for (path, properties) in scripts {
+                if !properties.values().all(|value| value.is_finite()) {
+                    return Err(format!("Non-finite script property for '{}'", entity.id));
+                }
+                let mut child = compile_resource(path, project, &read)?;
+                child.vm.host_mut().self_entity = entity.id.clone();
+                child.vm.host_mut().properties = properties.clone();
+                session.attached.push(AttachedScript {
+                    frame: 0,
+                    entity_id: entity.id.clone(),
+                    path: path.clone(),
+                    session: child,
+                    started: false,
+                });
+            }
+        }
+        Ok(session)
+    }
+
+    /// Invoke stop callbacks for started attachments before discarding a world.
+    pub fn stop(&mut self, world: &mut GameWorld) -> Result<(), VmError> {
+        for attached in &mut self.attached {
+            if attached.started {
+                attached.run(self.vm.host_mut(), "stop", world, (0.0, 0.0), 0.0, &[])?;
+                attached.started = false;
+            }
+        }
+        Ok(())
+    }
     /// Compile a slice script with the default action map.
     pub fn new(source: &str) -> Result<Self, Vec<Diagnostic>> {
         Self::with_action_map(source, ActionMap::new())
@@ -1223,15 +1642,21 @@ impl SliceSession {
         let program = frontend.compile(source)?;
         let host = SliceHost {
             action_map: action_map.clone(),
+            time_scale: 1.0,
             ..Default::default()
         };
         let vm = Vm::new(host);
         let host = SliceHost {
             action_map,
+            time_scale: 1.0,
             ..Default::default()
         };
         let debugger = Debugger::new(program.clone(), host);
         Ok(Self {
+            source: None,
+            external_collisions: Vec::new(),
+            attached: Vec::new(),
+            signals: Vec::new(),
             program,
             vm,
             debugger: Some(debugger),
@@ -1301,6 +1726,114 @@ impl SliceSession {
         input: (f64, f64),
         dt: f64,
     ) -> Result<(), VmError> {
+        self.step_program(world, input, dt, true, Vec::new())?;
+        let collisions = self.vm.host_mut().facts.collision_events.clone();
+        let animation_events: Vec<_> = world
+            .world_mut()
+            .query_mut::<(&SourceId, &mut crate::AnimationPlayer)>()
+            .into_iter()
+            .flat_map(|(source, animation)| {
+                animation
+                    .take_events()
+                    .into_iter()
+                    .map(|event| (source.0.clone(), event))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        let signals = std::mem::take(&mut self.signals);
+        let keys = self.vm.host_mut().pressed_keys.clone();
+        let mouse_world = self.vm.host().mouse_world;
+        let save_dir = self.vm.host_mut().save_dir.clone();
+        let frame = self.vm.host().frame_count;
+        self.signals.append(&mut self.vm.host_mut().emitted_signals);
+        for attached in &mut self.attached {
+            attached.frame = frame;
+            if !world
+                .world_ref()
+                .query::<&SourceId>()
+                .iter()
+                .any(|id| id.0 == attached.entity_id)
+            {
+                if attached.started {
+                    attached.run(self.vm.host_mut(), "stop", world, input, 0.0, &collisions)?;
+                    attached.started = false;
+                    self.signals
+                        .append(&mut attached.session.vm.host_mut().emitted_signals);
+                }
+                continue;
+            }
+            attached.session.vm.host_mut().pressed_keys = keys.clone();
+            attached.session.vm.host_mut().mouse_world = mouse_world;
+            attached.session.vm.host_mut().save_dir = save_dir.clone();
+            if !attached.started {
+                attached.started = true;
+                attached.run(self.vm.host_mut(), "start", world, input, 0.0, &collisions)?;
+            }
+            for (id, event) in &animation_events {
+                if id != &attached.entity_id {
+                    continue;
+                }
+                attached.session.vm.host_mut().animation_event = (
+                    event.name.clone(),
+                    event.payload.clone().unwrap_or_default(),
+                );
+                attached.run(
+                    self.vm.host_mut(),
+                    "animation_event",
+                    world,
+                    input,
+                    0.0,
+                    &collisions,
+                )?;
+            }
+            for (name, value) in &signals {
+                attached.session.vm.host_mut().signal_name = name.clone();
+                attached.session.vm.host_mut().signal_value = Some(value.clone());
+                attached.run(self.vm.host_mut(), "signal", world, input, 0.0, &collisions)?;
+            }
+            for (a, b, started) in &collisions {
+                let other = if a == &attached.entity_id {
+                    b
+                } else if b == &attached.entity_id {
+                    a
+                } else {
+                    continue;
+                };
+                attached.session.vm.host_mut().event_entity = other.clone();
+                attached.run(
+                    self.vm.host_mut(),
+                    if *started {
+                        "collision_enter"
+                    } else {
+                        "collision_exit"
+                    },
+                    world,
+                    input,
+                    0.0,
+                    &collisions,
+                )?;
+            }
+            attached.run(self.vm.host_mut(), "update", world, input, dt, &collisions)?;
+            self.ui_commands.append(&mut attached.session.ui_commands);
+            self.signals
+                .append(&mut attached.session.vm.host_mut().emitted_signals);
+        }
+        if self.signals.len() > 256 {
+            return Err(VmError::HostCallError(
+                "scene signal queue limit reached".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn step_program(
+        &mut self,
+        world: &mut GameWorld,
+        input: (f64, f64),
+        dt: f64,
+        advance_systems: bool,
+        inherited_collisions: Vec<(String, String, bool)>,
+    ) -> Result<(), VmError> {
         self.state.elapsed += dt;
 
         // Sync persistent state to host so save_game can access it.
@@ -1314,8 +1847,8 @@ impl SliceSession {
         let collision_events = {
             use crate::physics::sync_physics_with_ecs;
             let host = self.vm.host_mut();
-            if let Some(physics) = &mut host.physics {
-                sync_physics_with_ecs(physics, world.world_mut())
+            if let Some(physics) = host.physics.as_mut().filter(|_| advance_systems) {
+                sync_physics_with_ecs(physics, world)
             } else {
                 Vec::new()
             }
@@ -1328,10 +1861,19 @@ impl SliceSession {
         #[cfg(not(feature = "physics"))]
         let collision_events: Vec<(String, String, bool)> = Vec::new();
 
+        let mut collision_events = if advance_systems {
+            collision_events
+        } else {
+            inherited_collisions
+        };
+        collision_events.append(&mut self.external_collisions);
+
         // Update animations (reads AnimationPlayer, writes Sprite uv_rect)
-        crate::sprite::update_animations(world.world_mut());
-        // Update particle systems
-        crate::sprite::update_particle_systems(world.world_mut(), dt as f32);
+        if advance_systems {
+            crate::sprite::update_animations_dt(world.world_mut(), dt as f32);
+            // Update particle systems
+            crate::sprite::update_particle_systems(world.world_mut(), dt as f32);
+        }
 
         let facts = self.collect_facts(world, input, dt, collision_events);
         {
@@ -1340,7 +1882,18 @@ impl SliceSession {
             host.take_commands();
         }
 
-        self.vm.execute(&self.program)?;
+        if let Err(error) = self.vm.execute(&self.program) {
+            if let Some(source) = &self.source {
+                let offset = self
+                    .program
+                    .source_offset(self.vm.instruction_pointer())
+                    .unwrap_or(0);
+                let diagnostic =
+                    Diagnostic::new(kiln_script::Span::new(offset, offset), error.to_string());
+                return Err(VmError::HostCallError(source.diagnostic(&diagnostic)));
+            }
+            return Err(error);
+        }
 
         // Loading can replace host state during script execution. Adopt it before
         // applying this frame's commands so score, pickups and movement survive.
@@ -1413,7 +1966,7 @@ impl SliceSession {
 
         // Collect entity positions, velocities, and roles for script queries.
         let mut entity_positions = HashMap::new();
-        let _entity_velocities: HashMap<String, (f64, f64)> = HashMap::new();
+        let mut entity_velocities = HashMap::new();
         let mut entity_roles = HashMap::new();
         let mut entity_sprite_colors = HashMap::new();
         let mut entity_sprite_sizes = HashMap::new();
@@ -1427,6 +1980,29 @@ impl SliceSession {
             entity_positions.insert(
                 source_id.0.clone(),
                 (transform.position.x as f64, transform.position.y as f64),
+            );
+        }
+        for (source_id, velocity) in world
+            .world_ref()
+            .query::<(&SourceId, &crate::Velocity)>()
+            .iter()
+        {
+            entity_velocities.insert(
+                source_id.0.clone(),
+                (velocity.0[0] as f64, velocity.0[1] as f64),
+            );
+        }
+        for (source_id, body) in world
+            .world_ref()
+            .query::<(&SourceId, &crate::world::RigidBody2D)>()
+            .iter()
+        {
+            entity_velocities.insert(
+                source_id.0.clone(),
+                (
+                    body.linear_velocity[0] as f64,
+                    body.linear_velocity[1] as f64,
+                ),
             );
         }
 
@@ -1453,6 +2029,7 @@ impl SliceSession {
             frame_count: self.host_mut().frame_count,
             time_scale: self.host_mut().time_scale,
             entity_positions,
+            entity_velocities,
             entity_sprite_colors,
             entity_sprite_sizes,
             entity_roles,
@@ -1467,12 +2044,15 @@ impl SliceSession {
                 if let Some(player) = find_player(world) {
                     let target = crate::tilemap_collision::move_with_collision(
                         world,
-                        [player.x, player.y],
+                        [
+                            player.x + player.collision_offset[0],
+                            player.y + player.collision_offset[1],
+                        ],
                         player.size,
                         [dx as f32, dy as f32],
                     );
-                    let x = target[0] as f64;
-                    let y = target[1] as f64;
+                    let x = (target[0] - player.collision_offset[0]) as f64;
+                    let y = (target[1] - player.collision_offset[1]) as f64;
                     set_player_position(world, &player.source_id, x, y);
                     self.state.player_x = x;
                     self.state.player_y = y;
@@ -1535,19 +2115,21 @@ impl SliceSession {
                 }
             }
             SliceCommand::SetEntityVel { source_id, vx, vy } => {
-                #[cfg(feature = "physics")]
-                {
-                    use crate::{SourceId, Velocity};
-                    for (eid, sid) in world.world_mut().query_mut::<(hecs::Entity, &SourceId)>() {
-                        if sid.0 == source_id {
-                            if let Ok(velocity) =
-                                world.world_mut().query_one_mut::<&mut Velocity>(eid)
-                            {
-                                velocity.0[0] = vx as f32;
-                                velocity.0[1] = vy as f32;
-                            }
-                            break;
+                use crate::{SourceId, Velocity};
+                for (eid, sid) in world.world_mut().query_mut::<(hecs::Entity, &SourceId)>() {
+                    if sid.0 == source_id {
+                        if let Ok(body) = world
+                            .world_mut()
+                            .query_one_mut::<&mut crate::world::RigidBody2D>(eid)
+                        {
+                            body.linear_velocity = [vx as f32, vy as f32];
                         }
+                        if let Ok(velocity) = world.world_mut().query_one_mut::<&mut Velocity>(eid)
+                        {
+                            velocity.0[0] = vx as f32;
+                            velocity.0[1] = vy as f32;
+                        }
+                        break;
                     }
                 }
             }
@@ -1588,6 +2170,9 @@ impl SliceSession {
                                             if let (Some(Value::F64(vx)), Some(Value::F64(vy))) =
                                                 (arr.first(), arr.get(1))
                                             {
+                                                if let Ok(body) = world.world_mut().query_one_mut::<&mut crate::world::RigidBody2D>(eid) {
+                                                    body.linear_velocity = [*vx as f32, *vy as f32];
+                                                }
                                                 if let Ok(velocity) = world
                                                     .world_mut()
                                                     .query_one_mut::<&mut Velocity>(eid)
@@ -1663,6 +2248,9 @@ impl SliceSession {
                                             if let (Some(Value::F64(vx)), Some(Value::F64(vy))) =
                                                 (arr.first(), arr.get(1))
                                             {
+                                                if let Ok(body) = world.world_mut().query_one_mut::<&mut crate::world::RigidBody2D>(eid) {
+                                                    body.linear_velocity = [*vx as f32, *vy as f32];
+                                                }
                                                 if let Ok(velocity) = world
                                                     .world_mut()
                                                     .query_one_mut::<&mut Velocity>(eid)
@@ -1705,7 +2293,9 @@ impl SliceSession {
                 source_id,
                 component_type,
             } => {
-                use crate::{SourceId, Sprite, Velocity};
+                #[cfg(feature = "physics")]
+                use crate::Velocity;
+                use crate::{SourceId, Sprite};
                 use kiln_core::Transform;
                 for (eid, sid) in world.world_mut().query_mut::<(hecs::Entity, &SourceId)>() {
                     if sid.0 == source_id {
@@ -1972,20 +2562,25 @@ impl SliceSession {
                 }
             }
             SliceCommand::StartParticleSystem { source_id } => {
-                // Particle systems emit continuously; no explicit start needed
-                let _ = source_id;
+                for (id, effect) in world
+                    .world_mut()
+                    .query_mut::<(&SourceId, &mut crate::ParticleSystemComponent)>()
+                {
+                    if id.0 == source_id {
+                        effect.system_mut().emitting = true;
+                    }
+                }
             }
             SliceCommand::StopParticleSystem { source_id } => {
                 use crate::sprite::ParticleSystemComponent;
                 use crate::SourceId;
                 for (eid, sid) in world.world_mut().query_mut::<(hecs::Entity, &SourceId)>() {
                     if sid.0 == source_id {
-                        if let Ok(_ps) = world
+                        if let Ok(ps) = world
                             .world_mut()
-                            .query_one_mut::<&ParticleSystemComponent>(eid)
+                            .query_one_mut::<&mut ParticleSystemComponent>(eid)
                         {
-                            // Stop all emitters by setting rate to 0
-                            // (No direct stop method; emitters with rate 0 don't emit)
+                            ps.system_mut().emitting = false;
                         }
                         break;
                     }
@@ -2008,6 +2603,7 @@ impl SliceSession {
 
 /// A world entity with a role and a stable source id.
 struct WorldEntity {
+    collision_offset: [f32; 2],
     source_id: String,
     x: f32,
     y: f32,
@@ -2030,11 +2626,22 @@ fn find_entities(world: &mut GameWorld, role: &str) -> Vec<WorldEntity> {
         Option<&crate::sprite::Sprite>,
     )>() {
         if entity_role.as_str() == role {
+            let bounds = sprite.map(|sprite| sprite.world_bounds(*transform));
             found.push(WorldEntity {
+                collision_offset: bounds
+                    .map(|b| {
+                        [
+                            (b[0] + b[2]) * 0.5 - transform.position.x,
+                            (b[1] + b[3]) * 0.5 - transform.position.y,
+                        ]
+                    })
+                    .unwrap_or([0.0; 2]),
                 source_id: source_id.0.clone(),
                 x: transform.position.x,
                 y: transform.position.y,
-                size: sprite.map(|sprite| sprite.size).unwrap_or([0.0, 0.0]),
+                size: bounds
+                    .map(|b| [b[2] - b[0], b[3] - b[1]])
+                    .unwrap_or([0.0; 2]),
             });
         }
     }

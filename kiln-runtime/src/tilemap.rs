@@ -50,14 +50,34 @@ impl Tilemap {
 
     /// World-space rectangle of the map, as `[min_x, min_y, max_x, max_y]`.
     pub fn world_bounds(&self) -> [f32; 4] {
-        let [w, h] = self.map.size_in_tiles();
         let ts = self.map.tile_size;
-        [
+        let mut bounds: Option<[f32; 4]> = None;
+        for layer in &self.map.layers {
+            for chunk in layer.chunks.values() {
+                let x =
+                    self.offset[0] + layer.offset[0] + chunk.x as f32 * CHUNK_SIZE as f32 * ts[0];
+                let y =
+                    self.offset[1] + layer.offset[1] + chunk.y as f32 * CHUNK_SIZE as f32 * ts[1];
+                let right = x + CHUNK_SIZE as f32 * ts[0];
+                let top = y + CHUNK_SIZE as f32 * ts[1];
+                bounds = Some(if let Some(previous) = bounds {
+                    [
+                        previous[0].min(x),
+                        previous[1].min(y),
+                        previous[2].max(right),
+                        previous[3].max(top),
+                    ]
+                } else {
+                    [x, y, right, top]
+                });
+            }
+        }
+        bounds.unwrap_or([
             self.offset[0],
             self.offset[1],
-            self.offset[0] + w as f32 * ts[0],
-            self.offset[1] + h as f32 * ts[1],
-        ]
+            self.offset[0],
+            self.offset[1],
+        ])
     }
 
     /// Whether the given world-space rect overlaps a solid tile.
@@ -71,7 +91,9 @@ impl Tilemap {
             max_x - self.offset[0],
             max_y - self.offset[1],
         ];
-        self.map.first_solid_hit(&self.tilesets, shifted)
+        self.map
+            .first_solid_hit(&self.tilesets, shifted)
+            .map(|point| [point[0] + self.offset[0], point[1] + self.offset[1]])
     }
 
     /// Collect the visible tile instances for a camera viewport.
@@ -83,6 +105,14 @@ impl Tilemap {
     /// Each entry is the tileset texture to draw with and the instance to
     /// draw, so the caller can push them straight into the sprite renderer.
     pub fn collect_visible(&self, view: [f32; 4]) -> Vec<(TextureId, SpriteInstance)> {
+        self.collect_layered(view)
+            .into_iter()
+            .map(|(_, texture, instance)| (texture, instance))
+            .collect()
+    }
+
+    /// Include sorting layers so sprites can interleave with tilemap layers.
+    pub fn collect_layered(&self, view: [f32; 4]) -> Vec<(f32, TextureId, SpriteInstance)> {
         let mut instances = Vec::new();
         let ts = self.map.tile_size;
         if ts[0] <= 0.0 || ts[1] <= 0.0 {
@@ -106,10 +136,10 @@ impl Tilemap {
                 continue;
             };
 
-            let cx0 = (origin_x / chunk_span).floor() as i32;
-            let cy0 = (origin_y / chunk_span_y).floor() as i32;
-            let cx1 = (end_x / chunk_span).floor() as i32;
-            let cy1 = (end_y / chunk_span_y).floor() as i32;
+            let cx0 = ((origin_x - layer.offset[0]) / chunk_span).floor() as i32;
+            let cy0 = ((origin_y - layer.offset[1]) / chunk_span_y).floor() as i32;
+            let cx1 = ((end_x - layer.offset[0]) / chunk_span).floor() as i32;
+            let cy1 = ((end_y - layer.offset[1]) / chunk_span_y).floor() as i32;
 
             for cy in cy0..=cy1 {
                 for cx in cx0..=cx1 {
@@ -130,6 +160,7 @@ impl Tilemap {
                             let px = self.offset[0] + layer.offset[0] + tx as f32 * ts[0];
                             let py = self.offset[1] + layer.offset[1] + ty as f32 * ts[1];
                             instances.push((
+                                layer.z as f32,
                                 texture,
                                 SpriteInstance {
                                     position: [px + ts[0] * 0.5, py + ts[1] * 0.5],

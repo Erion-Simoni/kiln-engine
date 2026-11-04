@@ -16,6 +16,8 @@ pub mod input_rebind_panel;
 pub mod inspector;
 pub mod panels;
 pub mod physics_editor;
+pub mod physics_inspector;
+pub mod play_changes;
 pub mod plugin_manager_panel;
 pub mod prefab_editor;
 pub mod prefab_editor_panel;
@@ -61,3 +63,5 @@ pub use sprite_editor::SpriteEditorState;
 pub use tilemap_editor::TilemapEditorState;
 pub use version_control_panel::VersionControlPanel;
 pub use vfx_editor::VfxEditorState;
+
+pub mod image_preview;

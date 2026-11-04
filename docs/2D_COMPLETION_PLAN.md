@@ -44,31 +44,78 @@ Acceptance: headless two-scene acceptance now transforms/reparents/duplicates/de
 
 Headless acceptance passes: reuse an enemy prefab across two scenes, apply an instance's edits to the definition while preserving the other instance's override, rename its texture, save/reopen, and verify the exported archive contains the renamed texture. Native visual acceptance of prefab and asset drag/drop is pending because this executor has no display server or Xvfb.
 
-### 4. General gameplay scripting and Play workflow — PENDING
+### 4. General gameplay scripting and Play workflow — IMPLEMENTATION COMPLETE; GRAPHICAL ACCEPTANCE PENDING
 
-- [ ] Specify entity-attached scripts, self/entity references, per-instance persistent state, inspector-exposed properties, and lifecycle callbacks.
-- [ ] Add reusable functions/modules and collections as required by the reference games; preserve existing scripts or document migrations.
-- [ ] Deliver events/signals, collision callbacks, input actions, useful diagnostics, and working debugger controls.
-- [ ] Unify editor/player execution; add pause, step, restart, current-scene/project-start play, correct focus/timing, and explicit runtime-change application.
+- [x] Specify entity-attached scripts, self/entity references, per-instance persistent state, inspector-exposed properties, and lifecycle callbacks.
+- [x] Add reusable functions/modules and collections as required by the reference games; preserve existing scripts or document migrations.
+- [x] Deliver events/signals, collision callbacks, input actions, useful diagnostics, and working debugger controls.
+- [x] Unify editor/player execution; add pause, step, restart, current-scene/project-start play, correct focus/timing, and explicit runtime-change application.
 
 Acceptance: two independently scripted enemies, a projectile, a trigger, and a level transition run identically in editor and player; stop restores authoring state; errors point to the correct script location.
 
-### 5. Physics and cameras — PENDING
+Headless acceptance passes through the shared native host loader/scheduler:
+two isolated enemy scripts with distinct properties, a projectile, backend
+collision delivery, a trigger signal, and a transition request produce identical
+results from source resources and deserialized player project/byte assets.
+Stop callbacks run without mutating authoring documents; imported-function
+compile/runtime errors identify their source file/line/column. Geometric
+collision production is Task 5; the acceptance injects a backend event.
+Live debugger controls operate at gameplay-frame granularity and inspect actual
+instance state. Source/instruction breakpoints and arbitrary watch evaluation
+are not exposed. Native visual interaction remains unverified without a GUI
+runner; see ADR-0052 and `docs/KILNSCRIPT.md` for the supported contract.
 
-- [ ] Implement actual ray/shape queries, collision enter/exit events, sensors, masks, body removal, joints, and fixed-step synchronization.
-- [ ] Add reliable collider authoring and physics debug drawing.
-- [ ] Finish camera follow, smoothing, bounds, zoom, pixel-perfect settings, and viewport/input coordinate mapping.
+### 5. Physics and cameras — IMPLEMENTATION COMPLETE; NATIVE ACCEPTANCE PENDING
+
+- [x] Implement actual ray/shape queries, collision enter/exit events, sensors, masks, body removal, joints, and fixed-step synchronization.
+- [x] Add reliable collider authoring and physics debug drawing.
+- [x] Finish camera follow, smoothing, bounds, zoom, pixel-perfect settings, and viewport/input coordinate mapping.
 
 Acceptance: platformer grounding, slopes/moving platforms, triggers, collision filtering, camera limits, and multiple frame rates have gameplay regression tests and visible editor validation.
 
-### 6. Sprites, animation, tilemaps, and VFX — PENDING
+Headless regressions exercise real Rapier contacts, sensor transitions and
+geometry queries, all three joint types, moving platforms, hierarchy/offset
+conversion, body recreation/removal, command history and save/reopen. The
+checked-in `samples/physics2d_editor` scripts jump, cross a trigger and an
+excluded collision layer, and clamp the gameplay camera identically from source
+at 30 FPS and player assets at 144 FPS. Native visual acceptance is pending:
+the cloud runner has no display server. Follow `docs/PHYSICS_2D.md` to record it.
 
-- [ ] Complete sprite drag/drop, pivots, sorting, import filtering, and pixel scale.
-- [ ] Replace animation preview placeholders with actual texture playback; support frame editing, events, transitions, and runtime parity.
-- [ ] Complete tile palette/brush/erase/fill, multiple layers, terrain painting, collision previews, and map persistence.
-- [ ] Verify particle authoring, preview, serialization, and runtime execution agree.
+2026-11-04 validation: `just check` passed; `just test` ran **577 cases, all
+passed, zero skipped**; `cargo build -p kiln-editor -p kiln-player` passed;
+`cargo clippy -p kiln-runtime --no-default-features --all-targets -- -D warnings`
+passed; `cargo build --target wasm32-unknown-unknown -p kiln-web` passed. Built
+editor startup was attempted and failed at window creation because DISPLAY and
+Wayland variables are absent. No native visual or browser physics gameplay
+acceptance is claimed.
+
+### 6. Sprites, animation, tilemaps, and VFX — IMPLEMENTATION COMPLETE; NATIVE WORKFLOW ACCEPTANCE PENDING
+
+- [x] Complete sprite drag/drop, pivots, sorting, import filtering, and pixel scale.
+- [x] Replace animation preview placeholders with actual texture playback; support frame editing, events, transitions, and runtime parity.
+- [x] Complete tile palette/brush/erase/fill, multiple layers, terrain painting, collision previews, and map persistence.
+- [x] Verify particle authoring, preview, serialization, and runtime execution agree.
 
 Acceptance: create an animated character and a multilayer playable tilemap through the editor, save/reopen, play, and export without hand-editing scene files.
+
+2026-11-04: authoring-command acceptance generates
+`samples/visual2d_editor`, saves/reopens it, packs a real KAR archive and executes
+the native player loader/shared gameplay from source and archive at 30/144 FPS.
+Assertions cover wall collision, clip transitions and frame events, particles,
+sorting and authoring isolation. Painted solids also generate merged static
+Rapier geometry; grounding, contacts, rays, edits and removal are regression
+tested. Headless egui acceptance checks the actual
+decoded preview texture and frame UVs. `just check` passes; `just test` runs
+**592 tests, all passed, zero skipped**; editor/player builds, no-physics Clippy
+and WASM build pass. Chromium WebGL smoke tests pass for both this sample and
+the original vertical slice, including input and zero runtime/asset errors;
+linear filtering plus generated mipmaps is also exercised.
+
+Native editor/player startup was attempted; this runner has no X11/Wayland
+display. Native drag/drop/panel interaction and graphical packed-player
+acceptance remain unverified. Real archive export is exercised; automating the
+editor's Build/Export panel remains Task 8. See `docs/VISUAL_AUTHORING_2D.md` for
+the exact supported contract and graphical acceptance procedure.
 
 ### 7. Audio, UI, saving, and settings — PENDING
 
@@ -308,3 +355,18 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Added explicit texture-clear prefab overrides while retaining deserialization of legacy string overrides. Inspector already provides asset/material/animation pickers and missing-reference diagnostics; Asset Browser now moves images and updates project references and import cache records.
 - Added full two-scene prefab/rename/save/reopen/export acceptance. `just check` passed; `just test`: 552 passed, zero failed/skipped; editor build passed. Native visual drag/drop remains unverified without a display server or Xvfb.
 - Task 3 implementation is complete. Keep Task 4 pending until graphical acceptance is recorded in a GUI-capable environment.
+
+### 2026-11-04 — Task 4 Play controls and source diagnostics
+
+- User explicitly requested Task 4; the prior Task 3 graphical check remains separately pending. Added ADR-0052 to specify Play isolation and the remaining entity/language execution contract.
+- Current-scene Play uses the active scene; project-start Play is separate. Pause/resume, one-frame step, restart, focus-loss pause, text-input isolation, forwarded action keys, and guarded runtime-transform application are implemented. Editor/player now share the fixed-step clock with bounded catch-up.
+- Compiler diagnostics in editor/player include source file, line, and column. Tests cover Unicode/clamped spans, non-default scene launch, frame-step timing, and retaining authored metadata while applying runtime transforms.
+- `just check`: passed; `just test`: 556 passed, zero failed/skipped; editor/player builds passed. Native interaction remains unverified without a GUI runner. Entity attachments/lifecycle, functions/modules/collections, signals, live VM debugging, runtime source maps, and full gameplay acceptance remain pending. Task 4 remains IN PROGRESS.
+
+### 2026-11-04 — Task 4 entity scripting implementation completed
+
+- Added authored Script components, validated undoable attach/edit/remove commands, inspector resource selection/numeric properties, and projection/disk preservation. Native editor/player now call the same scene/module loader and entity scheduler, including attachment-only scenes.
+- Added isolated persistent state, self IDs, start/update/signal/collision/stop phases, stable dispatch order, deferred bounded signals, bounded array operations, scene-transition requests, and normalized keyboard actions. World systems advance once per tick rather than once per callback.
+- Added non-recursive named functions with isolated locals, project-relative modules with import-cycle/path/size limits, IR source offsets, and source-mapped runtime errors. Existing scene scripts keep their top-level per-frame behavior; reserved-name migration and limits are documented in KILNSCRIPT.md.
+- Replaced the detached instruction-debugger UI with actual Play pause/frame-step/restart controls and live entity-state inspection. Player restarts/transitions rebuild worlds and reset timing.
+- Shared acceptance covers independent enemy state/properties/arrays, projectile/collision/trigger/signal/transition, source-vs-player-asset parity, authoring isolation, and stop callbacks. Negative tests cover module cycles, recursive functions, and imported runtime errors. `just check`, full `just test` (560 passed), native editor/player builds, and focused physics-enabled acceptance pass. GUI interaction remains pending on a graphical runner.

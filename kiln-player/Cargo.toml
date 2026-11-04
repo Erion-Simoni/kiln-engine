@@ -10,7 +10,7 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
 kiln-core = { workspace = true }
-kiln-runtime = { workspace = true }
+kiln-runtime = { workspace = true, features = ["physics"] }
 kiln-assets = { workspace = true }
 kiln-render = { workspace = true }
 kiln-ui = { workspace = true }
@@ -30,3 +30,9 @@ gilrs = { workspace = true, optional = true }
 default = []
 gamepad = ["gilrs", "kiln-input/gamepad"]
 
+[dev-dependencies]
+kiln-editor = { workspace = true }
+tempfile = "3.14"
+serde = { workspace = true }
+serde_json = { workspace = true }
+kiln-ir = { workspace = true }

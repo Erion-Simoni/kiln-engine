@@ -18,6 +18,7 @@ pub enum Token {
     Return,
     Call,
     Let,
+    Fn,
 
     // Operators
     Plus,
@@ -194,6 +195,7 @@ impl<'a> Lexer<'a> {
             "return" => Token::Return,
             "call" => Token::Call,
             "let" => Token::Let,
+            "fn" => Token::Fn,
             _ => Token::Identifier(ident),
         };
 

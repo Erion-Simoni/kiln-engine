@@ -3,12 +3,12 @@
 
 use anyhow::Result;
 use clap::Parser;
-use kiln_core::{cache_dir, save_dir, settings_dir, Project, Transform};
+use kiln_core::{cache_dir, save_dir, settings_dir, Project};
 use kiln_player::loader;
 use kiln_player::spawn;
 use kiln_player::textures::TextureLibrary;
 use kiln_render::{camera::Camera, sprite_renderer::SpriteInstance, Renderer, SpriteRenderer};
-use kiln_runtime::{GameLoop, GameWorld, InputState, SliceSession, Sprite, Tilemap};
+use kiln_runtime::{GameLoop, GameWorld, InputState, SliceSession};
 use kiln_ui::{
     layout::Rect,
     localization::LocalizationKey,
@@ -202,6 +202,7 @@ struct GpuState {
 struct PlayerApp {
     gpu: Option<GpuState>,
     camera: Camera,
+    camera_controller: kiln_runtime::camera::CameraController,
     game_loop: GameLoop,
     world: GameWorld,
     #[allow(dead_code)]
@@ -234,6 +235,7 @@ struct PlayerApp {
     held: Vec<Key>,
     /// Currently pressed key names as strings (for action map lookup).
     pressed_keys: Vec<String>,
+    focused: bool,
     /// Width of the game window, in logical pixels.
     window_width: u32,
     /// Height of the game window, in logical pixels.
@@ -264,6 +266,7 @@ impl PlayerApp {
         Self {
             gpu: None,
             camera: Camera::new(width as f32, height as f32),
+            camera_controller: Default::default(),
             game_loop: GameLoop::new(),
             world,
             input: InputState::new(),
@@ -284,6 +287,7 @@ impl PlayerApp {
             gamepad_manager: GamepadManager::new().ok(),
             held: Vec::new(),
             pressed_keys: Vec::new(),
+            focused: true,
             window_width: width,
             window_height: height,
             save_dir,
@@ -331,6 +335,15 @@ impl PlayerApp {
         let Some(gpu) = self.gpu.as_mut() else {
             return;
         };
+        if let Some(slice) = self.slice.as_mut() {
+            if let Err(error) = slice.stop(&mut self.world) {
+                log::error!("Stop callback: {error}");
+            }
+        }
+        self.slice = None;
+        self.world = GameWorld::new();
+        self.game_loop = GameLoop::new();
+        self.camera_controller = Default::default();
 
         // Decode the project's PNG assets and upload them as GPU textures.
         let (textures, errors) = TextureLibrary::upload_for_project(
@@ -369,40 +382,39 @@ impl PlayerApp {
         }
 
         // The scene script needs the spawned entities, so it is loaded last.
+        let _ = kiln_runtime::update_global_transforms(&mut self.world);
+        let settings = self
+            .project
+            .cameras
+            .get(&self.scene_id)
+            .cloned()
+            .unwrap_or_default();
+        match self.camera_controller.update(
+            &settings,
+            &self.world,
+            [
+                self.project.window.width as f32,
+                self.project.window.height as f32,
+            ],
+            0.0,
+        ) {
+            Ok(camera) => self.camera = camera,
+            Err(error) => log::error!("Camera: {error}"),
+        }
         self.load_slice();
     }
 
     /// Compile the scene's gameplay script, if it has one.
     fn load_slice(&mut self) {
-        let Some(scene) = self.project.scenes.get(&self.scene_id) else {
-            return;
-        };
-        let Some(path) = scene.script.clone() else {
-            return;
-        };
-        let Some(source) = self.assets.get(&path) else {
-            log::warn!("scene script '{path}' not found in the project assets");
-            return;
-        };
-        let source = match std::str::from_utf8(source) {
-            Ok(text) => text.to_string(),
-            Err(e) => {
-                log::warn!("scene script '{path}' is not valid UTF-8: {e}");
-                return;
-            }
-        };
-        match SliceSession::with_action_map(&source, self.project.action_map.clone()) {
+        match SliceSession::with_scene_sources(&self.project, &self.scene_id, |path| {
+            let bytes = self.assets.get(path).ok_or("Script resource is missing")?;
+            String::from_utf8(bytes.clone()).map_err(|error| error.to_string())
+        }) {
             Ok(session) => {
-                info!("Loaded scene script '{path}'");
+                info!("Loaded gameplay for scene '{}'", self.scene_id);
                 self.slice = Some(session);
-                // Resume the game from its save, if there is one.
-                self.load_game();
             }
-            Err(diagnostics) => {
-                for diagnostic in diagnostics {
-                    log::error!("scene script '{path}': {}", diagnostic.message);
-                }
-            }
+            Err(error) => log::error!("{error}"),
         }
     }
 
@@ -589,6 +601,10 @@ impl PlayerApp {
     }
 
     fn update(&mut self) {
+        if !self.focused || self.menu_state != MenuState::Playing {
+            self.game_loop = GameLoop::new();
+            return;
+        }
         // The scene script drives the game: it reads the input axis and
         // moves the player, collects pickups and keeps the score.
         let axis = self.axis();
@@ -596,14 +612,45 @@ impl PlayerApp {
         let mouse_x = self.mouse_x;
         let mouse_y = self.mouse_y;
         let mouse_pressed = self.mouse_pressed;
+        let mouse_area = self
+            .gpu
+            .as_ref()
+            .map(|gpu| {
+                let size = gpu.renderer.size();
+                [0, 0, size.0, size.1]
+            })
+            .unwrap_or([0, 0, self.window_width, self.window_height]);
+        let mouse_viewport = self
+            .camera
+            .fit_viewport(mouse_area)
+            .map(|value| value as f32);
         let world = &mut self.world;
         let slice = &mut self.slice;
         let ui_commands = &mut self.ui_commands;
         let action_map = &mut self.action_map;
         let pressed_keys = &mut self.pressed_keys;
         let ui_widgets = &mut self.ui_widgets;
+        let camera = &mut self.camera;
+        let controller = &mut self.camera_controller;
+        let camera_settings = self
+            .project
+            .cameras
+            .get(&self.scene_id)
+            .cloned()
+            .unwrap_or_default();
+        let mut transition = None;
         self.game_loop.tick(|dt| {
+            if transition.is_some() {
+                return;
+            }
             if let Some(slice) = slice.as_mut() {
+                if let Some(position) =
+                    camera.screen_to_world([mouse_x as f32, mouse_y as f32], mouse_viewport)
+                {
+                    slice
+                        .host_mut()
+                        .set_mouse_world(position.map(|value| value as f64));
+                }
                 // Pass mouse state to the slice host for UI click detection.
                 slice
                     .host_mut()
@@ -616,6 +663,17 @@ impl PlayerApp {
                 slice.host_mut().set_save_dir(&save_dir);
                 if let Err(e) = slice.step(world, axis, dt.as_secs_f64()) {
                     log::error!("scene script failed: {e}");
+                }
+                transition = slice.take_scene_request();
+                let _ = kiln_runtime::scene::update_global_transforms(world);
+                match controller.update(
+                    &camera_settings,
+                    world,
+                    camera.viewport_size,
+                    dt.as_secs_f32(),
+                ) {
+                    Ok(updated) => *camera = updated,
+                    Err(error) => log::error!("Camera: {error}"),
                 }
                 // Collect UI commands from the last script frame and build widgets.
                 let commands = slice.take_ui_commands();
@@ -729,6 +787,19 @@ impl PlayerApp {
                 }
             }
         });
+        if let Some(id) = transition {
+            if self.project.scenes.contains_key(&id) {
+                if let Some(slice) = self.slice.as_mut() {
+                    let _ = slice.stop(&mut self.world);
+                }
+                self.slice = None;
+                self.world = GameWorld::new();
+                self.scene_id = id;
+                self.spawn_scene_and_load_slice();
+            } else {
+                log::error!("Unknown scene transition '{id}'");
+            }
+        }
     }
 
     fn render(&mut self) {
@@ -774,29 +845,10 @@ impl PlayerApp {
         // Tilemaps are drawn first so entities appear on top of them.
         // Only the chunks inside the camera view are submitted.
         let view_bounds = self.camera.view_bounds();
-        for (_, tilemap) in self.world.world_mut().query_mut::<(&Transform, &Tilemap)>() {
-            for (texture, instance) in tilemap.collect_visible(view_bounds) {
-                gpu.sprite_renderer.push_textured(texture, instance);
-            }
-        }
-
-        for (transform, sprite) in self
-            .world
-            .world_mut()
-            .query_mut::<(&kiln_runtime::GlobalTransform, &Sprite)>()
+        for (texture, instance) in
+            kiln_runtime::visual::collect_scene_draws(&self.world, view_bounds)
         {
-            gpu.sprite_renderer.push_textured(
-                sprite.texture,
-                SpriteInstance {
-                    position: [transform.position.x, transform.position.y],
-                    size: sprite.size,
-                    color: sprite.color,
-                    uv_rect: sprite.uv_rect,
-                    material_id: 0,
-                    rotation: 0.0,
-                }
-                .with_transform(transform.rotation, [transform.scale.x, transform.scale.y]),
-            );
+            gpu.sprite_renderer.push_textured(texture, instance);
         }
 
         // The HUD is drawn in screen space (top-left origin) on top of the
@@ -834,6 +886,9 @@ impl PlayerApp {
                 occlusion_query_set: None,
             });
 
+            let [x, y, width, height] = self.camera.fit_viewport([0, 0, size.width, size.height]);
+            pass.set_viewport(x as f32, y as f32, width as f32, height as f32, 0.0, 1.0);
+            pass.set_scissor_rect(x, y, width, height);
             gpu.sprite_renderer
                 .flush(&mut pass, &self.camera, gpu.renderer.queue());
         }
@@ -1161,10 +1216,23 @@ impl winit::application::ApplicationHandler for PlayerApp {
         event: winit::event::WindowEvent,
     ) {
         match event {
-            winit::event::WindowEvent::CloseRequested => event_loop.exit(),
+            winit::event::WindowEvent::CloseRequested => {
+                if let Some(slice) = self.slice.as_mut() {
+                    let _ = slice.stop(&mut self.world);
+                }
+                event_loop.exit();
+            }
+            winit::event::WindowEvent::Focused(focused) => {
+                self.focused = focused;
+                self.held.clear();
+                self.pressed_keys.clear();
+                self.mouse_pressed = false;
+                self.game_loop = GameLoop::new();
+            }
             winit::event::WindowEvent::KeyboardInput { event, .. } => self.handle_key(event),
-            winit::event::WindowEvent::Resized(size) => {
-                self.camera = Camera::new(size.width as f32, size.height as f32);
+            winit::event::WindowEvent::Resized(_) => {
+                // Keep the configured world extent when the physical window
+                // changes. Rendering and input mapping use the same viewport.
             }
             winit::event::WindowEvent::CursorMoved { position, .. } => {
                 self.mouse_x = position.x;

@@ -58,6 +58,7 @@ impl TextureLibrary {
         project: &Project,
         assets: &HashMap<String, Vec<u8>>,
     ) -> (Self, Vec<String>) {
+        renderer.clear_project_textures();
         let mut library = TextureLibrary::default();
         let mut errors = Vec::new();
 
@@ -75,13 +76,13 @@ impl TextureLibrary {
                 }
             };
 
-            let id = renderer.create_texture_rgba(
+            let id = renderer.create_texture_rgba_with_options(
                 device,
                 queue,
                 &path,
-                image.width,
-                image.height,
+                [image.width, image.height],
                 &image.pixels,
+                project.texture_options(&path),
             );
 
             library.textures.insert(
@@ -124,6 +125,11 @@ pub fn texture_paths(project: &Project) -> Vec<String> {
         }
     }
 
+    for clip in project.animation_clips.values() {
+        if !clip.texture.is_empty() && !paths.contains(&clip.texture) {
+            paths.push(clip.texture.clone());
+        }
+    }
     paths.sort();
     paths
 }

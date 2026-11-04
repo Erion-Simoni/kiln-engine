@@ -103,6 +103,11 @@ pub fn render_inspector_panel(
 
 fn component_header_name(component: &Component) -> String {
     match component {
+        Component::SpriteLayout { .. } => "Sprite Layout".into(),
+        Component::Particles { .. } => "Particles".into(),
+        Component::Physics { .. } => "Physics Body / Collider".into(),
+        Component::Joint { .. } => "Physics Joint".into(),
+        Component::Script { .. } => "Script".into(),
         Component::Transform { .. } => "📍 Transform".to_string(),
         Component::Sprite { .. } => "🖼 Sprite".to_string(),
         Component::Tilemap { .. } => "🗺 Tilemap".to_string(),
@@ -120,6 +125,31 @@ fn render_component(ui: &mut egui::Ui, component: &mut Component, project: &Proj
     let mut changed = false;
 
     match component {
+        Component::SpriteLayout { settings } => {
+            ui.label(format!(
+                "Pivot {:?}, {} px/unit",
+                settings.pivot, settings.pixels_per_unit
+            ));
+        }
+        Component::Particles { effect } => {
+            ui.label(format!("{} emitters", effect.emitters.len()));
+        }
+        Component::Physics { body, collider } => {
+            ui.label(format!(
+                "Body: {:?}, collider: {:?}",
+                body.body_type, collider.shape
+            ));
+        }
+        Component::Joint { joint } => {
+            ui.label(format!("Joint: {} → {}", joint.entity_a, joint.entity_b));
+        }
+        Component::Script { path, properties } => {
+            changed |= ui.text_edit_singleline(path).changed();
+            for (key, value) in properties {
+                ui.label(key);
+                changed |= ui.add(egui::DragValue::new(value)).changed();
+            }
+        }
         Component::Transform {
             x,
             y,

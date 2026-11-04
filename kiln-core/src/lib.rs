@@ -2,6 +2,7 @@
 //! Math, time, shared types, ECS glue
 
 pub mod access;
+pub mod camera;
 pub mod clip;
 pub mod device_tier;
 pub mod hierarchy_transform;
@@ -10,6 +11,7 @@ pub mod input;
 pub mod math;
 pub mod mesh;
 pub mod paths;
+pub mod physics_data;
 pub mod prefab;
 pub mod project;
 pub mod tilemap;
@@ -39,3 +41,6 @@ pub use project::{Component, Entity, NestedScene, Project, Scene, SceneOffset, W
 pub use tilemap::{TileChunk, TileMap, TileMapLayer, TileSet, CHUNK_SIZE, EMPTY_TILE};
 pub use time::*;
 pub use transform::*;
+
+pub mod vfx;
+pub mod visual;
