@@ -168,6 +168,38 @@ fn moving_a_parent_recomputes_descendants_while_children_keep_local_values() {
 }
 
 #[test]
+fn translating_parent_and_child_selection_keeps_their_world_offset() {
+    let mut scene = sample();
+    let mut world = spawn(&scene);
+    let original_parent = global(&world, "marker");
+    let original_child = global(&world, "hero");
+    let delta = kiln_core::Vec2::new(12.0, -7.0);
+
+    for (entity_id, initial) in [("marker", original_parent), ("hero", original_child)] {
+        let mut target = initial;
+        target.position += delta;
+        let local =
+            kiln_core::hierarchy_transform::local_from_world(&scene, entity_id, target).unwrap();
+        SetTransform {
+            scene_id: "main",
+            entity_id,
+            value: local,
+        }
+        .apply(&mut scene, &mut world)
+        .unwrap();
+    }
+
+    assert_eq!(
+        global(&world, "marker").position,
+        original_parent.position + delta
+    );
+    assert_eq!(
+        global(&world, "hero").position,
+        original_child.position + delta
+    );
+}
+
+#[test]
 fn repeated_preview_frames_form_one_undo_step_and_reopen_exactly() {
     let mut scene = sample();
     let before = scene.clone();

@@ -261,7 +261,14 @@ impl Default for CameraState {
 #[derive(Debug, Clone, Default)]
 struct GizmoState {
     mode: GizmoMode,
-    drag: Option<(String, GizmoDrag)>,
+    drag: Option<GizmoDragSession>,
+}
+
+#[derive(Debug, Clone)]
+struct GizmoDragSession {
+    source: String,
+    drag: GizmoDrag,
+    selected: Vec<(String, Transform)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2733,6 +2740,62 @@ impl TabViewer<'_> {
         }
     }
 
+    fn preview_group_translation(
+        &mut self,
+        source_id: &str,
+        selected: &[(String, Transform)],
+        delta: kiln_core::Vec2,
+    ) {
+        if self.editing_locked() || self.project_blocked {
+            return;
+        }
+        let before = crate::scene_document::snapshot_for_scene(
+            self.world,
+            self.entity_textures,
+            self.entity_roles,
+            self.current_project.as_ref(),
+            self.scenes.active_id(),
+        );
+        if self
+            .transform_edit
+            .as_ref()
+            .is_some_and(|edit| !edit.targets(&before.id, source_id))
+        {
+            self.finish_transform_edit();
+        }
+        let mut after = before.clone();
+        let scene_id = after.id.clone();
+        let mut updated = false;
+        for (entity_id, initial) in selected {
+            let mut target = *initial;
+            target.position += delta;
+            let Ok(local) =
+                kiln_core::hierarchy_transform::local_from_world(&after, entity_id, target)
+            else {
+                continue;
+            };
+            match (SetTransform {
+                scene_id: &scene_id,
+                entity_id,
+                value: local,
+            })
+            .apply(&mut after, self.world)
+            {
+                Ok(changed) => updated |= changed,
+                Err(error) => self.log(&format!("[ERROR] {error}")),
+            }
+        }
+        if updated {
+            let edit = self
+                .transform_edit
+                .get_or_insert_with(|| SceneTransaction::new(before, source_id.into()));
+            edit.update(after.clone());
+            if let Some(project) = self.current_project.as_mut() {
+                project.scenes.insert(scene_id, after);
+            }
+        }
+    }
+
     fn preview_sprite_visual(&mut self, source_id: &str, sprite: &Sprite) {
         if self.editing_locked() || self.project_blocked {
             return;
@@ -2909,7 +2972,29 @@ impl TabViewer<'_> {
                     if let Some(drag) =
                         GizmoDrag::new(self.gizmo.mode, origin, initial, units, pointer_world)
                     {
-                        self.gizmo.drag = Some((source, drag));
+                        let mut selected: Vec<(String, Transform)> = self
+                            .hierarchy_panel
+                            .selected_ids
+                            .iter()
+                            .filter_map(|id| {
+                                let entity = *self.entity_id_to_hecs.get(id)?;
+                                let transform = self
+                                    .world
+                                    .world_ref()
+                                    .get::<&kiln_runtime::GlobalTransform>(entity)
+                                    .ok()?
+                                    .0;
+                                Some((id.clone(), transform))
+                            })
+                            .collect();
+                        if !selected.iter().any(|(id, _)| id == &source) {
+                            selected.push((source.clone(), initial));
+                        }
+                        self.gizmo.drag = Some(GizmoDragSession {
+                            source,
+                            drag,
+                            selected,
+                        });
                     }
                 }
             }
@@ -2922,27 +3007,43 @@ impl TabViewer<'_> {
             return;
         }
         if response.dragged() || response.drag_stopped() {
-            if let (Some((source, drag)), Some(pointer)) = (
+            if let (Some(session), Some(pointer)) = (
                 self.gizmo.drag.clone(),
                 ui.input(|input| input.pointer.interact_pos()),
             ) {
                 let grid = (*self.grid_snap_enabled).then_some(*self.grid_snap_size);
-                let world_value = drag.at(pointer, grid);
-                let local_value = crate::scene_document::snapshot_for_scene(
-                    self.world,
-                    self.entity_textures,
-                    self.entity_roles,
-                    self.current_project.as_ref(),
-                    self.scenes.active_id(),
-                );
-                if let Ok(local) = kiln_core::hierarchy_transform::local_from_world(
-                    &local_value,
-                    &source,
-                    world_value,
-                ) {
-                    self.preview_transform(&source, local);
+                let world_value = session.drag.at(pointer, grid);
+                if self.gizmo.mode == GizmoMode::Translate && session.selected.len() > 1 {
+                    let initial = session
+                        .selected
+                        .iter()
+                        .find(|(id, _)| id == &session.source)
+                        .map(|(_, transform)| *transform)
+                        .unwrap_or(world_value);
+                    self.preview_group_translation(
+                        &session.source,
+                        &session.selected,
+                        world_value.position - initial.position,
+                    );
                 } else {
-                    self.log("[ERROR] Could not convert dragged world transform to local space");
+                    let local_value = crate::scene_document::snapshot_for_scene(
+                        self.world,
+                        self.entity_textures,
+                        self.entity_roles,
+                        self.current_project.as_ref(),
+                        self.scenes.active_id(),
+                    );
+                    if let Ok(local) = kiln_core::hierarchy_transform::local_from_world(
+                        &local_value,
+                        &session.source,
+                        world_value,
+                    ) {
+                        self.preview_transform(&session.source, local);
+                    } else {
+                        self.log(
+                            "[ERROR] Could not convert dragged world transform to local space",
+                        );
+                    }
                 }
             }
         }
