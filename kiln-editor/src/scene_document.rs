@@ -280,7 +280,7 @@ fn capture_prefab_overrides(project: &Project, entity: &mut Entity) {
         (base_sprite, instance_sprite)
     {
         let color = (color != base_color).then_some(color);
-        let texture = (texture != base_texture).then_some(texture).flatten();
+        let texture = (texture != base_texture).then_some(texture);
         if color.is_none() && texture.is_none() {
             overrides.overrides.remove("sprite");
         } else {

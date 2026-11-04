@@ -1532,12 +1532,42 @@ impl EditorApp {
         }
         let active = self.scenes.active_id().map(str::to_owned);
         let current_scene = active.as_deref().map(|_| self.scene_from_world());
+        let root = self
+            .asset_browser
+            .root()
+            .ok_or("No project asset root")?
+            .to_path_buf();
+        let old_cached_path = root.join(old_path).canonicalize().ok();
+        let new_full_path = root.join(new_path);
         self.asset_browser.rename_asset(old_path, new_path)?;
+        let mut cache = kiln_assets::AssetCache::new(root.join(".kiln-cache"));
+        if let Err(error) = cache.load() {
+            self.console_log.push(format!(
+                "[WARN] Asset moved, but import cache could not be loaded: {error}"
+            ));
+        } else {
+            if let Some(old) = old_cached_path {
+                if let Err(error) = cache.rename_cached_path(&old, &new_full_path) {
+                    self.console_log.push(format!(
+                        "[WARN] Asset moved, but cache tracking could not be updated: {error}"
+                    ));
+                }
+            }
+            let _ = cache.import(&new_full_path);
+            if let Err(error) = cache.save() {
+                self.console_log.push(format!(
+                    "[WARN] Asset moved, but import cache could not be saved: {error}"
+                ));
+            }
+        }
         let project = self.current_project.as_mut().ok_or("No project loaded")?;
         if let (Some(scene_id), Some(scene)) = (active.as_ref(), current_scene) {
             project.scenes.insert(scene_id.clone(), scene);
         }
         let updated = crate::editing::rewrite_asset_references(project, old_path, new_path);
+        if let Some(id) = project.asset_ids.remove(old_path) {
+            project.asset_ids.insert(new_path.to_owned(), id);
+        }
         self.prefab_editor
             .state
             .replace_prefabs(project.prefabs.clone());
@@ -3743,13 +3773,46 @@ impl TabViewer<'_> {
             self.log(&format!("[ERROR] The asset cache could not be read: {e}"));
             return;
         }
-        let results = match cache.import_dir(&dir) {
-            Ok(results) => results,
-            Err(e) => {
-                self.log(&format!("[ERROR] The assets could not be imported: {e}"));
+        let entries = self.asset_browser.entries().to_vec();
+        let mut results = Vec::new();
+        for entry in entries {
+            let Some(project) = self.current_project.as_mut() else {
                 return;
+            };
+            let asset_id = project
+                .asset_ids
+                .entry(entry.path.clone())
+                .or_insert_with(|| kiln_core::next_id().to_string())
+                .clone();
+            let path = dir.join(&entry.path);
+            let settings = project
+                .asset_import_settings
+                .get(&asset_id)
+                .copied()
+                .unwrap_or_default();
+            let settings = kiln_assets::ImportSettings {
+                filtering: if settings.nearest_filter {
+                    kiln_assets::TextureFilter::Nearest
+                } else {
+                    kiln_assets::TextureFilter::Linear
+                },
+                generate_mipmaps: settings.generate_mipmaps,
+                compress: !settings.is_sprite,
+                max_size: 0,
+                is_sprite: settings.is_sprite,
+            };
+            cache.set_import_settings(&path, settings);
+            match cache.import(&path) {
+                Ok(result) => results.push(result),
+                Err(error) => {
+                    self.log(&format!(
+                        "[ERROR] Asset '{}' could not be imported: {error}",
+                        entry.path
+                    ));
+                    return;
+                }
             }
-        };
+        }
         if let Err(e) = cache.save() {
             self.log(&format!("[ERROR] The asset cache could not be saved: {e}"));
             return;
@@ -4961,6 +5024,24 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     if let Some(source) = self.asset_browser.preview_source() {
                         ui.add_space(8.0);
                         ui.label(format!("Preview: {source}"));
+                        if let Some(project) = self.current_project.as_mut() {
+                            if let Some(asset_id) = project.asset_ids.get(source).cloned() {
+                                ui.small(format!("Asset ID: {asset_id}"));
+                                let mut settings = project.asset_import_settings
+                                    .get(&asset_id).copied().unwrap_or_default();
+                                let mut changed = false;
+                                ui.horizontal(|ui| {
+                                    changed |= ui.checkbox(&mut settings.is_sprite, "Sprite").changed();
+                                    changed |= ui.checkbox(&mut settings.nearest_filter, "Nearest filtering").changed();
+                                    changed |= ui.checkbox(&mut settings.generate_mipmaps, "Mipmaps").changed();
+                                });
+                                if changed {
+                                    project.asset_import_settings.insert(asset_id, settings);
+                                }
+                            } else {
+                                ui.label("Import assets to assign a stable ID and configure import settings.");
+                            }
+                        }
                         if let Some(image) = self.asset_browser.preview_color_image() {
                             let texture_id = ui.ctx().load_texture(
                                 "preview",

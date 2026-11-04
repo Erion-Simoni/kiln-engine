@@ -207,12 +207,15 @@ impl PrefabEditorPanel {
                                                 // Would add color override
                                             }
                                         }
-                                        if let Some(texture) = texture {
-                                            ui.label(format!("Texture: {}", texture));
-                                        } else {
-                                            if ui.button("Add Texture").clicked() {
-                                                // Would add texture override
+                                        match texture {
+                                            Some(Some(path)) => {
+                                                ui.label(format!("Texture: {path}"))
                                             }
+                                            Some(None) => ui.label("Texture: cleared"),
+                                            None => ui.label("Texture: inherited"),
+                                        };
+                                        if texture.is_none() && ui.button("Add Texture").clicked() {
+                                            // Would add texture override
                                         }
                                     }
                                 }

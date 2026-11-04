@@ -36,13 +36,13 @@ Acceptance: `just check`, `just test`, native editor build, audio sample check, 
 
 Acceptance: headless two-scene acceptance now transforms/reparents/duplicates/deletes entities, undoes/redoes every operation in both isolated histories, saves/reopens, and verifies supported runtime values and asset references. Native editor restart/interaction acceptance still needs a graphical runner; the current environment has no display, Xvfb, or desktop automation.
 
-### 3. Prefabs, scenes, and asset workflow — IN PROGRESS
+### 3. Prefabs, scenes, and asset workflow — IMPLEMENTATION COMPLETE; GRAPHICAL ACCEPTANCE PENDING
 
-- [ ] Create prefabs from selection, instantiate by drag/drop, persist instances, apply/revert overrides, and propagate definition changes.
-- [ ] Complete nested-scene loading and transitions without cyclic ownership or accidental cross-scene edits.
-- [ ] Add import settings, stable asset IDs, resource pickers, rename/move/reimport tracking, and missing-asset diagnostics.
+- [x] Create prefabs from selection, instantiate by drag/drop, persist instances, apply/revert overrides, and propagate definition changes.
+- [x] Complete nested-scene loading and transitions without cyclic ownership or accidental cross-scene edits.
+- [x] Add import settings, stable asset IDs, resource pickers, rename/move/reimport tracking, and missing-asset diagnostics.
 
-Acceptance: reuse an enemy prefab in two levels, override one instance, update its definition, rename its texture, then save/reopen and export with expected results.
+Headless acceptance passes: reuse an enemy prefab across two scenes, apply an instance's edits to the definition while preserving the other instance's override, rename its texture, save/reopen, and verify the exported archive contains the renamed texture. Native visual acceptance of prefab and asset drag/drop is pending because this executor has no display server or Xvfb.
 
 ### 4. General gameplay scripting and Play workflow — PENDING
 
@@ -301,3 +301,10 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Scene and prefab Sprite texture references are rewritten together. Scene Editor picks the next sorted, not-yet-nested scene, and lists actual nested links with offset/additive controls and safe removal.
 - Regression tests cover file moves and invalid paths, reference rewrites in scenes/prefabs, project-wide Apply to Prefab, and nested-scene graph safeguards. `just check` passed; `just test`: 546 passed; `cargo build -p kiln-editor` passed.
 - Task 3 remains IN PROGRESS: stable asset IDs/import settings/resource pickers/cache reimport tracking, texture-clear overrides, and full two-level GUI/save/reopen/export acceptance remain outstanding. Task 4 has not started.
+
+### 2026-11-04 — Task 3 implementation complete
+
+- Added serde-defaulted stable path-to-ID and ID-to-import-settings project metadata. Asset import assigns IDs and persists filtering/mipmap/sprite settings into both the project and hash cache. Cache settings survive reload and migrate with a rename; asset scans exclude caches/build/VCS trees and do not follow symlinks.
+- Added explicit texture-clear prefab overrides while retaining deserialization of legacy string overrides. Inspector already provides asset/material/animation pickers and missing-reference diagnostics; Asset Browser now moves images and updates project references and import cache records.
+- Added full two-scene prefab/rename/save/reopen/export acceptance. `just check` passed; `just test`: 552 passed, zero failed/skipped; editor build passed. Native visual drag/drop remains unverified without a display server or Xvfb.
+- Task 3 implementation is complete. Keep Task 4 pending until graphical acceptance is recorded in a GUI-capable environment.

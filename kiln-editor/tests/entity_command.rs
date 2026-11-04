@@ -3,7 +3,8 @@ use kiln_core::{
 };
 use kiln_editor::{
     editing::{
-        apply_prefab_instance_to_definition, attach_prefab_instances, propagate_prefab_in_scenes,
+        apply_prefab_instance_to_definition, attach_prefab_instances, pack_project,
+        propagate_prefab_in_scenes, rewrite_asset_references,
     },
     entity_command::{EntityCommand, EntityEdit},
     project_files,
@@ -631,6 +632,116 @@ fn applying_instance_overrides_updates_definition_and_other_saved_instances() {
     assert_eq!(other.name, "crate-b name");
     assert!(
         matches!(other.components.first(), Some(Component::Transform { x, y, .. }) if *x == 8.0 && *y == 20.0)
+    );
+}
+
+#[test]
+fn two_scene_prefab_override_rename_save_reopen_and_export_acceptance() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("game");
+    std::fs::create_dir_all(root.join("art")).unwrap();
+    std::fs::write(root.join("art/enemy.png"), b"texture-bytes").unwrap();
+    std::fs::create_dir(root.join("assets")).unwrap();
+    let mut project = project();
+    let sprite = || Component::Sprite {
+        color: [1.0; 4],
+        width: 24.0,
+        height: 24.0,
+        texture: Some("art/enemy.png".into()),
+        layer: 0.0,
+        material: None,
+        animation_clip: None,
+    };
+    project.prefabs.insert(
+        "enemy".into(),
+        Prefab {
+            id: "enemy".into(),
+            name: "Enemy".into(),
+            root_entity: Entity {
+                id: "enemy-template".into(),
+                name: "Enemy".into(),
+                components: vec![
+                    Component::Transform {
+                        x: 0.0,
+                        y: 0.0,
+                        rotation: 0.0,
+                        scale: 1.0,
+                    },
+                    sprite(),
+                ],
+            },
+        },
+    );
+    for (scene_id, entity_id) in [("main", "enemy-a"), ("other", "enemy-b")] {
+        project
+            .scenes
+            .get_mut(scene_id)
+            .unwrap()
+            .entities
+            .push(Entity {
+                id: entity_id.into(),
+                name: entity_id.into(),
+                components: vec![
+                    Component::Transform {
+                        x: 0.0,
+                        y: 0.0,
+                        rotation: 0.0,
+                        scale: 1.0,
+                    },
+                    sprite(),
+                    Component::PrefabInstance {
+                        prefab_id: "enemy".into(),
+                        overrides: PrefabOverride::new(entity_id.into()),
+                    },
+                ],
+            });
+    }
+    if let Component::Sprite { color, .. } =
+        &mut project.scenes.get_mut("main").unwrap().entities[2].components[1]
+    {
+        *color = [0.8, 0.3, 0.2, 1.0];
+    }
+    apply_prefab_instance_to_definition(&mut project, "main", "enemy-a").unwrap();
+    assert!(
+        matches!(project.scenes["main"].entities[2].components.last(), Some(Component::PrefabInstance { overrides, .. }) if overrides.overrides.is_empty())
+    );
+
+    project
+        .asset_ids
+        .insert("art/enemy.png".into(), "asset-enemy".into());
+    project
+        .asset_import_settings
+        .insert("asset-enemy".into(), Default::default());
+    let manifest = root.join("kiln.toml");
+    project_files::save(&project, &manifest).unwrap();
+    let mut browser = kiln_editor::AssetBrowser::new();
+    browser.scan(&root);
+    browser
+        .rename_asset("art/enemy.png", "assets/enemy.png")
+        .unwrap();
+    rewrite_asset_references(&mut project, "art/enemy.png", "assets/enemy.png");
+    let id = project.asset_ids.remove("art/enemy.png").unwrap();
+    project.asset_ids.insert("assets/enemy.png".into(), id);
+    project_files::save(&project, &manifest).unwrap();
+
+    let reopened = project_files::load(&root).unwrap().project;
+    assert_eq!(reopened.asset_ids["assets/enemy.png"], "asset-enemy");
+    assert_eq!(
+        reopened.asset_import_settings["asset-enemy"],
+        Default::default()
+    );
+    for scene in reopened.scenes.values() {
+        assert!(scene.entities.iter().filter(|entity| entity.components.iter().any(|component| matches!(component, Component::PrefabInstance { prefab_id, .. } if prefab_id == "enemy"))).all(|entity| entity.components.iter().any(|component| matches!(component, Component::Sprite { texture: Some(path), .. } if path == "assets/enemy.png"))));
+    }
+    assert!(
+        matches!(&reopened.prefabs["enemy"].root_entity.components[1], Component::Sprite { color, texture: Some(path), .. } if *color == [0.8, 0.3, 0.2, 1.0] && path == "assets/enemy.png")
+    );
+    let archive = temp.path().join("game.kilnpack");
+    pack_project(&root, &archive).unwrap();
+    let packed = kiln_assets::Archive::load(&archive).unwrap();
+    assert_eq!(
+        packed.extract("assets/enemy.png").unwrap(),
+        b"texture-bytes"
     );
 }
 

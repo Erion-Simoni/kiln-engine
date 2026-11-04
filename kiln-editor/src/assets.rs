@@ -278,7 +278,19 @@ fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
 
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_dir() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_symlink() {
+            continue;
+        }
+        if file_type.is_dir() {
+            if matches!(
+                path.file_name().and_then(|name| name.to_str()),
+                Some(".git" | ".kiln-cache" | "target")
+            ) {
+                continue;
+            }
             collect_files(&path, out);
         } else if path.is_file() {
             out.push(path);
@@ -325,5 +337,21 @@ mod tests {
             .entries()
             .iter()
             .any(|entry| entry.path == "art/renamed.png"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn asset_scan_does_not_follow_project_symlinks() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::write(outside.path().join("secret.png"), b"outside").unwrap();
+        symlink(outside.path(), root.path().join("linked")).unwrap();
+        let mut browser = AssetBrowser::new();
+        browser.scan(root.path());
+        assert!(!browser
+            .entries()
+            .iter()
+            .any(|entry| entry.path.contains("secret")));
     }
 }
