@@ -2740,12 +2740,7 @@ impl TabViewer<'_> {
         }
     }
 
-    fn preview_group_translation(
-        &mut self,
-        source_id: &str,
-        selected: &[(String, Transform)],
-        delta: kiln_core::Vec2,
-    ) {
+    fn preview_group_transforms(&mut self, source_id: &str, targets: &[(String, Transform)]) {
         if self.editing_locked() || self.project_blocked {
             return;
         }
@@ -2766,11 +2761,9 @@ impl TabViewer<'_> {
         let mut after = before.clone();
         let scene_id = after.id.clone();
         let mut updated = false;
-        for (entity_id, initial) in selected {
-            let mut target = *initial;
-            target.position += delta;
+        for (entity_id, target) in targets {
             let Ok(local) =
-                kiln_core::hierarchy_transform::local_from_world(&after, entity_id, target)
+                kiln_core::hierarchy_transform::local_from_world(&after, entity_id, *target)
             else {
                 continue;
             };
@@ -3013,18 +3006,14 @@ impl TabViewer<'_> {
             ) {
                 let grid = (*self.grid_snap_enabled).then_some(*self.grid_snap_size);
                 let world_value = session.drag.at(pointer, grid);
-                if self.gizmo.mode == GizmoMode::Translate && session.selected.len() > 1 {
-                    let initial = session
-                        .selected
-                        .iter()
-                        .find(|(id, _)| id == &session.source)
-                        .map(|(_, transform)| *transform)
-                        .unwrap_or(world_value);
-                    self.preview_group_translation(
+                if session.selected.len() > 1 {
+                    let targets = crate::transform_gizmo::apply_group_transform(
+                        self.gizmo.mode,
                         &session.source,
+                        world_value,
                         &session.selected,
-                        world_value.position - initial.position,
                     );
+                    self.preview_group_transforms(&session.source, &targets);
                 } else {
                     let local_value = crate::scene_document::snapshot_for_scene(
                         self.world,

@@ -17,6 +17,46 @@ pub enum GizmoMode {
     Scale,
 }
 
+/// Apply a primary gizmo result to every selected world transform around the primary entity.
+pub fn apply_group_transform(
+    mode: GizmoMode,
+    primary_id: &str,
+    primary_result: Transform,
+    selected: &[(String, Transform)],
+) -> Vec<(String, Transform)> {
+    let Some((_, pivot)) = selected.iter().find(|(id, _)| id == primary_id) else {
+        return selected.to_vec();
+    };
+    let translation = primary_result.position - pivot.position;
+    let rotation = primary_result.rotation - pivot.rotation;
+    let scale = primary_result.scale.x / pivot.scale.x;
+    let (sin, cos) = rotation.sin_cos();
+    selected
+        .iter()
+        .map(|(id, initial)| {
+            let mut target = *initial;
+            match mode {
+                GizmoMode::None => {}
+                GizmoMode::Translate => target.position += translation,
+                GizmoMode::Rotate => {
+                    let relative = initial.position - pivot.position;
+                    target.position = pivot.position
+                        + Vec2::new(
+                            relative.x * cos - relative.y * sin,
+                            relative.x * sin + relative.y * cos,
+                        );
+                    target.rotation += rotation;
+                }
+                GizmoMode::Scale => {
+                    target.position = pivot.position + (initial.position - pivot.position) * scale;
+                    target.scale *= scale;
+                }
+            }
+            (id.clone(), target)
+        })
+        .collect()
+}
+
 /// One pointer gesture evaluated from its press state, independent of frame rate.
 #[derive(Debug, Clone)]
 pub struct GizmoDrag {
@@ -123,6 +163,37 @@ mod tests {
         .unwrap();
         let value = drag.at(Pos2::new(12.0, 8.0), Some(2.0));
         assert_eq!(value.position, Vec2::new(6.0, 8.0));
+    }
+
+    #[test]
+    fn group_rotation_and_scale_keep_primary_pivot_and_relative_offsets() {
+        let selected = vec![
+            ("pivot".into(), Transform::new(10.0, 20.0)),
+            (
+                "other".into(),
+                Transform::new(20.0, 20.0).with_scale(Vec2::splat(2.0)),
+            ),
+        ];
+        let rotated = apply_group_transform(
+            GizmoMode::Rotate,
+            "pivot",
+            Transform::new(10.0, 20.0).with_rotation(std::f32::consts::FRAC_PI_2),
+            &selected,
+        );
+        assert_eq!(rotated[0].1.position, Vec2::new(10.0, 20.0));
+        assert!((rotated[1].1.position.x - 10.0).abs() < 0.0001);
+        assert!((rotated[1].1.position.y - 30.0).abs() < 0.0001);
+        assert!((rotated[1].1.rotation - std::f32::consts::FRAC_PI_2).abs() < 0.0001);
+
+        let scaled = apply_group_transform(
+            GizmoMode::Scale,
+            "pivot",
+            Transform::new(10.0, 20.0).with_scale(Vec2::splat(2.0)),
+            &selected,
+        );
+        assert_eq!(scaled[0].1.position, Vec2::new(10.0, 20.0));
+        assert_eq!(scaled[1].1.position, Vec2::new(30.0, 20.0));
+        assert_eq!(scaled[1].1.scale, Vec2::splat(4.0));
     }
 
     #[test]

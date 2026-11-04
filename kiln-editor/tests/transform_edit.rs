@@ -3,6 +3,7 @@ use kiln_core::{Component, Entity, Project, Scene, Transform};
 use kiln_editor::{
     project_files, scene_view,
     transform_edit::{SetTransform, TransformTransaction, TranslationDrag},
+    transform_gizmo::{apply_group_transform, GizmoMode},
     SceneHistory,
 };
 use kiln_runtime::{GameWorld, SourceId, Sprite};
@@ -197,6 +198,61 @@ fn translating_parent_and_child_selection_keeps_their_world_offset() {
         global(&world, "hero").position,
         original_child.position + delta
     );
+}
+
+#[test]
+fn group_rotation_and_scale_preserve_parented_world_targets() {
+    let selection = |world: &GameWorld| {
+        vec![
+            ("marker".into(), global(world, "marker")),
+            ("hero".into(), global(world, "hero")),
+        ]
+    };
+
+    let mut scene = sample();
+    let mut world = spawn(&scene);
+    let initial = selection(&world);
+    let primary = initial[0].1;
+    let result = Transform {
+        rotation: std::f32::consts::FRAC_PI_2,
+        ..primary
+    };
+    let targets = apply_group_transform(GizmoMode::Rotate, "marker", result, &initial);
+    for (id, target) in &targets {
+        let local = kiln_core::hierarchy_transform::local_from_world(&scene, id, *target).unwrap();
+        SetTransform {
+            scene_id: "main",
+            entity_id: id,
+            value: local,
+        }
+        .apply(&mut scene, &mut world)
+        .unwrap();
+    }
+    assert!((global(&world, "hero").position.x + 20.0).abs() < 0.0001);
+    assert!((global(&world, "hero").position.y - 10.0).abs() < 0.0001);
+    assert!((global(&world, "hero").rotation - (std::f32::consts::FRAC_PI_2 + 0.3)).abs() < 0.0001);
+
+    let mut scene = sample();
+    let mut world = spawn(&scene);
+    let initial = selection(&world);
+    let mut result = initial[0].1;
+    result.scale = kiln_core::Vec2::splat(2.0);
+    let targets = apply_group_transform(GizmoMode::Scale, "marker", result, &initial);
+    for (id, target) in &targets {
+        let local = kiln_core::hierarchy_transform::local_from_world(&scene, id, *target).unwrap();
+        SetTransform {
+            scene_id: "main",
+            entity_id: id,
+            value: local,
+        }
+        .apply(&mut scene, &mut world)
+        .unwrap();
+    }
+    assert_eq!(
+        global(&world, "hero").position,
+        kiln_core::Vec2::new(20.0, 40.0)
+    );
+    assert!((global(&world, "hero").scale.x - 3.0).abs() < 0.0001);
 }
 
 #[test]

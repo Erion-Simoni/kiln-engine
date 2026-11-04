@@ -12,7 +12,7 @@
 - Sprite rendering supports entity rotation/scale and authored dimensions. Parent links compose local translation/rotation/scale into runtime `GlobalTransform`; editor/player/web/mobile/sample renderers consume refreshed global poses. Viewport drags convert to local space; reparent/delete preserve child world poses and nested scene offsets survive propagation.
 - Scene viewport now has visible move axes, a rotation ring, and a scale handle. Drag gestures preview local Transform edits, commit one undo step on release, and cancel through the existing Escape path. Rotation angle wrap, uniform scaling, hit targets, and translation snap math have unit coverage.
 - Hierarchy and scene-list selection now support Ctrl/Cmd additive toggling while preserving a primary inspector target. The scene view's Frame Selection button and `F` shortcut center and fit selected entity positions.
-- Translate gizmo drags now move all selected entities by a shared world-space offset, convert each result back to local space, and keep the entire gesture in one undo transaction. Rotation and scale gizmos still act on the primary entity only.
+- All gizmo modes now apply to multi-selection around the primary entity: translation shares a world-space offset, rotation turns positions and orientations around the pivot, and scale changes offsets and sizes. Each resulting world transform converts back to local space, and the gesture is one undo transaction.
 
 ## Validation
 
@@ -20,6 +20,7 @@
 - Current gizmo checkpoint: `just check` passed; `just test`: 518 passed, zero failed/skipped. `cargo build -p kiln-editor` passed.
 - Multi-selection/framing checkpoint: `just check` passed; `just test`: 519 passed, zero failed/skipped. Additive selection state has a unit test.
 - Group-translation checkpoint: `just check` passed; `just test`: 520 passed, zero failed/skipped. A regression test moves a selected parent and child together while preserving world spacing. Runtime GUI drag behavior remains to be exercised in the native editor.
+- Group rotation/scale checkpoint: `just check` passed; `just test`: 522 passed, zero failed/skipped. Unit and integration tests cover pivot behavior and parented world targets.
 - Native app GUI confirmation of parented transforms and gizmo dragging remains outstanding. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
 
 ## Next
