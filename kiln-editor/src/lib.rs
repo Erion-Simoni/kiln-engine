@@ -16,6 +16,7 @@ pub mod input_rebind_panel;
 pub mod inspector;
 pub mod panels;
 pub mod physics_editor;
+pub mod play_changes;
 pub mod plugin_manager_panel;
 pub mod prefab_editor;
 pub mod prefab_editor_panel;

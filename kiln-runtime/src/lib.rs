@@ -4,6 +4,7 @@
 pub mod input;
 pub mod jobs;
 pub mod loop_;
+pub mod play_clock;
 pub mod scene;
 pub mod schedule;
 pub mod settings;

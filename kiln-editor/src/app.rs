@@ -72,6 +72,11 @@ struct RecoveryPrompt {
 }
 
 enum ProjectRequest {
+    PausePlay,
+    StepPlay,
+    RestartPlay,
+    PlayProject,
+    ApplyPlayTransforms,
     Component(ComponentCommand),
     Entity(crate::entity_command::EntityCommand),
     ApplyPrefabInstance(String),
@@ -120,6 +125,8 @@ struct PlaySession {
     scene_id: String,
     /// The last error of the script, shown in the status bar.
     error: Option<String>,
+    clock: kiln_runtime::play_clock::PlayClock,
+    last_tick: Instant,
 }
 
 impl PlaySession {
@@ -530,15 +537,13 @@ impl UIDesignerState {
 /// same session, so a project behaves the same in both.
 fn start_play_session(
     project: &Project,
+    scene_id: &str,
     root: &Path,
     textures: &SceneTextures,
 ) -> Result<(kiln_runtime::SliceSession, String, GameWorld), String> {
-    let scene_id = project
-        .default_scene_id()
-        .ok_or("The project has no scenes")?;
     let scene = project
         .scenes
-        .get(&scene_id)
+        .get(scene_id)
         .ok_or_else(|| format!("Scene '{scene_id}' not found"))?;
 
     let path = scene.script.as_ref().ok_or("The scene has no script")?;
@@ -548,13 +553,13 @@ fn start_play_session(
     let slice = kiln_runtime::SliceSession::with_action_map(&source, project.action_map.clone())
         .map_err(|d| {
             d.iter()
-                .map(|d| d.message.clone())
+                .map(|d| d.with_source_location(path, &source))
                 .collect::<Vec<_>>()
                 .join("; ")
         })?;
 
-    let (world, _spawned) = spawn_editor_scene(project, &scene_id, textures);
-    Ok((slice, scene_id, world))
+    let (world, _spawned) = spawn_editor_scene(project, scene_id, textures);
+    Ok((slice, scene_id.to_owned(), world))
 }
 
 /// Build the scene data of a world.
@@ -1043,6 +1048,11 @@ impl EditorApp {
     /// The game runs the scene's script against a fresh world, exactly like
     /// the standalone player does.
     fn start_play(&mut self) -> Result<(), String> {
+        let scene_id = self.scenes.active_id().ok_or("No active scene")?.to_owned();
+        self.start_play_scene(&scene_id)
+    }
+
+    fn start_play_scene(&mut self, scene_id: &str) -> Result<(), String> {
         self.finish_transform_edit();
         self.capture_active_scene()?;
         let project = self
@@ -1062,7 +1072,7 @@ impl EditorApp {
             .as_ref()
             .map(|gpu| gpu.scene_textures.clone())
             .unwrap_or_default();
-        let (slice, scene_id, world) = start_play_session(&project, &root, &textures)?;
+        let (slice, scene_id, world) = start_play_session(&project, scene_id, &root, &textures)?;
 
         // The played scene replaces the edited one, so the scene view shows
         // the running game.
@@ -1074,10 +1084,11 @@ impl EditorApp {
             slice,
             scene_id,
             error: None,
+            clock: kiln_runtime::play_clock::PlayClock::default(),
+            last_tick: Instant::now(),
         });
+        self.is_playing = true;
 
-        // Resume the game from its save, if there is one.
-        self.load_game();
         Ok(())
     }
 
@@ -1086,6 +1097,35 @@ impl EditorApp {
         self.play = None;
         self.is_playing = false;
         self.reset_scene_view();
+    }
+
+    fn apply_play_transforms(&mut self) -> Result<(), String> {
+        let play = self.play.as_ref().ok_or("No running game")?;
+        if !play.clock.paused() {
+            return Err("Pause the game before applying runtime transforms".into());
+        }
+        if self.scenes.active_id() != Some(play.scene_id.as_str()) {
+            return Err(
+                "Runtime transforms can only be applied when playing the active scene".into(),
+            );
+        }
+        let project = self.current_project.as_ref().ok_or("No project loaded")?;
+        let authored = project
+            .scenes
+            .get(&play.scene_id)
+            .ok_or("Authored scene is missing")?
+            .clone();
+        let runtime = crate::scene_document::snapshot_for_scene(
+            &self.world,
+            &self.entity_textures,
+            &self.entity_roles,
+            Some(project),
+            Some(&play.scene_id),
+        );
+        let applied = crate::play_changes::apply_transforms(&authored, &runtime)?;
+        self.stop_play();
+        self.scenes.history.record(authored);
+        self.apply_scene(applied)
     }
 
     /// The size of the world the scene view shows, in world units.
@@ -1201,22 +1241,46 @@ impl EditorApp {
     }
 
     /// Advance the running game by one frame.
-    fn update_play(&mut self, dt: f32) {
+    fn update_play(&mut self) {
         let axis = self.play_axis();
+        let text_input = self.egui_winit.egui_ctx().wants_keyboard_input();
+        let keys = self.egui_winit.egui_ctx().input(|input| {
+            if text_input {
+                Vec::new()
+            } else {
+                input
+                    .keys_down
+                    .iter()
+                    .map(|key| format!("{key:?}"))
+                    .collect::<Vec<_>>()
+            }
+        });
         let EditorApp { world, play, .. } = self;
         let Some(play) = play.as_mut() else {
             return;
         };
-        let result = play.slice.step(world, axis, dt as f64);
-        play.error = match result {
-            Ok(()) => None,
-            Err(e) => Some(e.to_string()),
-        };
+        let elapsed = play.last_tick.elapsed().as_secs_f64();
+        play.last_tick = Instant::now();
+        play.slice.host_mut().set_pressed_keys(&keys);
+        for _ in 0..play.clock.advance(elapsed) {
+            if let Err(error) = play
+                .slice
+                .step(world, axis, kiln_runtime::play_clock::PLAY_STEP)
+            {
+                play.error = Some(format!("Scene '{}': {error}", play.scene_id));
+                play.clock.set_paused(true);
+                break;
+            }
+            play.error = None;
+        }
     }
 
     /// The movement axis from the keys held down in the editor.
     fn play_axis(&self) -> (f64, f64) {
         let ctx = self.egui_winit.egui_ctx();
+        if ctx.wants_keyboard_input() {
+            return (0.0, 0.0);
+        }
         let mut x = 0.0;
         let mut y = 0.0;
         ctx.input(|i| {
@@ -1872,7 +1936,12 @@ impl winit::application::ApplicationHandler for EditorApp {
                     }
                 }
             }
-            WindowEvent::Focused(false) => self.finish_transform_edit(),
+            WindowEvent::Focused(false) => {
+                self.finish_transform_edit();
+                if let Some(play) = self.play.as_mut() {
+                    play.clock.set_paused(true);
+                }
+            }
             _ => {}
         }
 
@@ -1954,6 +2023,41 @@ impl EditorApp {
                 continue;
             }
             let result = match request {
+                ProjectRequest::ApplyPlayTransforms => self.apply_play_transforms(),
+                ProjectRequest::PausePlay => {
+                    if let Some(play) = self.play.as_mut() {
+                        play.clock.set_paused(!play.clock.paused());
+                        play.last_tick = Instant::now();
+                    }
+                    Ok(())
+                }
+                ProjectRequest::StepPlay => {
+                    if let Some(play) = self.play.as_mut() {
+                        play.clock.request_step();
+                    }
+                    Ok(())
+                }
+                ProjectRequest::RestartPlay => {
+                    if let Some(scene_id) = self.play.as_ref().map(|play| play.scene_id.clone()) {
+                        self.stop_play();
+                        self.start_play_scene(&scene_id)
+                    } else {
+                        Ok(())
+                    }
+                }
+                ProjectRequest::PlayProject => {
+                    if self.play.is_some() {
+                        self.stop_play();
+                    }
+                    match self
+                        .current_project
+                        .as_ref()
+                        .and_then(Project::default_scene_id)
+                    {
+                        Some(id) => self.start_play_scene(&id),
+                        None => Err("The project has no startup scene".into()),
+                    }
+                }
                 ProjectRequest::Component(command) => self.apply_component_command(command),
                 ProjectRequest::Entity(command) => self.apply_entity_command(command),
                 ProjectRequest::ApplyPrefabInstance(entity_id) => {
@@ -2049,7 +2153,7 @@ impl EditorApp {
 
         // Advance the running game, if the editor is in play mode.
         if self.play.is_some() {
-            self.update_play(1.0 / 60.0);
+            self.update_play();
         }
 
         // The world size and the scene view rectangle are read before the GPU
@@ -3856,6 +3960,37 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         };
                         if play_btn.clicked() {
                             *self.play_toggle_requested = true;
+                        }
+
+                        if let Some(play) = self.play.as_ref() {
+                            if ui
+                                .button(if play.clock.paused() {
+                                    "Resume"
+                                } else {
+                                    "Pause"
+                                })
+                                .clicked()
+                            {
+                                self.project_requests.push(ProjectRequest::PausePlay);
+                            }
+                            if ui.button("Step Frame").clicked() {
+                                self.project_requests.push(ProjectRequest::StepPlay);
+                            }
+                            if ui.button("Restart").clicked() {
+                                self.project_requests.push(ProjectRequest::RestartPlay);
+                            }
+                            if ui
+                                .add_enabled(
+                                    play.clock.paused(),
+                                    egui::Button::new("Apply Runtime Transforms and Stop"),
+                                )
+                                .clicked()
+                            {
+                                self.project_requests
+                                    .push(ProjectRequest::ApplyPlayTransforms);
+                            }
+                        } else if ui.button("Play Project Start").clicked() {
+                            self.project_requests.push(ProjectRequest::PlayProject);
                         }
 
                         if ui.button("Frame Selection (F)").clicked()
@@ -6099,5 +6234,44 @@ impl<'a> TabViewer<'a> {
                     self.ui_designer.remove_widget(widget_id);
                 }
             });
+    }
+}
+
+#[cfg(test)]
+mod play_tests {
+    use super::*;
+
+    #[test]
+    fn play_launch_uses_requested_scene_and_reports_script_location() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("first.ks"), "add_score(1);").unwrap();
+        std::fs::write(root.path().join("second.ks"), "add_score(7);").unwrap();
+        let mut project = Project::default();
+        for (id, script) in [("a", "first.ks"), ("b", "second.ks")] {
+            project.scenes.insert(
+                id.into(),
+                Scene {
+                    id: id.into(),
+                    name: id.into(),
+                    script: Some(script.into()),
+                    entities: vec![],
+                    nested_scenes: vec![],
+                },
+            );
+        }
+        let (mut session, id, mut world) =
+            start_play_session(&project, "b", root.path(), &SceneTextures::default()).unwrap();
+        assert_eq!(id, "b");
+        session
+            .step(&mut world, (0.0, 0.0), kiln_runtime::play_clock::PLAY_STEP)
+            .unwrap();
+        assert_eq!(session.state().score, 7);
+        std::fs::write(root.path().join("second.ks"), "\nunknown_call();").unwrap();
+        let error = match start_play_session(&project, "b", root.path(), &SceneTextures::default())
+        {
+            Ok(_) => panic!("Expected a compiler error"),
+            Err(error) => error,
+        };
+        assert!(error.contains("second.ks:2:1:"), "{error}");
     }
 }

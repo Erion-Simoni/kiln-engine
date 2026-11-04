@@ -1,29 +1,32 @@
 # Kiln Session Handoff
 
-**Active focus:** Task 3 implementation is complete; native graphical acceptance is pending.
+**Active focus:** Task 4, IN PROGRESS.
 **Branch:** `feat/2d-production-workflow`.
-**Scope:** Do not start Task 4 until the Task 3 GUI acceptance has been recorded. 3D remains paused.
+**Scope:** User explicitly authorized Task 4 despite pending Task 3 graphical acceptance. 3D remains paused.
 
-## Task 3 delivered
+## Delivered this checkpoint
 
-- Prefab definitions persist in the project. The editor creates from selection, places by toolbar or scene drag/drop, serializes instance links, captures supported overrides, reverts overrides, applies an instance to its definition with guarded undo/redo, and propagates definition changes across saved/live instances.
-- Nested scenes reject direct and indirect cycles, compose through the runtime loader, retain independent scene documents, and expose per-link offset/additive controls and removal.
-- Projects persist stable asset IDs and import settings. Asset import writes settings to a reloadable hash cache; moves retain IDs/settings and rewrite prefab and scene references. Asset scans avoid symlinks and generated cache/build/VCS folders. Inspector pickers and missing-resource diagnostics are available.
-- Texture overrides can explicitly clear inherited textures, and legacy serialized path overrides still load.
-- Headless acceptance creates two linked enemy instances across scenes, applies one instance to the definition while preserving the second instance's override, renames the texture, saves/reopens, and verifies the renamed texture in the exported archive.
+- Current-scene Play launches the active document; separate Play Project Start launches the default scene. Restart reconstructs clean runtime state rather than automatically loading a save slot.
+- Shared runtime PlayClock gives editor/player fixed 60 Hz gameplay, bounded catch-up, and pause/step semantics. Editor supports Pause/Resume, Step Frame, Restart, focus-loss pause, text-input isolation, and forwarding pressed keys to runtime input actions.
+- Paused Apply Runtime Transforms and Stop copies valid local transforms for existing authored entities in the active scene, preserves other authored data, and records scene undo. Ordinary Stop rebuilds the authored world.
+- Editor/player compiler diagnostics include filename and one-based Unicode line/column. Runtime failures pause editor Play and identify the scene.
+- ADR-0052 specifies entity-script ownership, state/properties/lifecycle, dispatch, module compatibility, and live-debugger requirements.
+
+## Still required for Task 4
+
+- Implement entity attachments, self references, independent persistent script state, exposed property editing, and lifecycle callbacks.
+- Implement user functions/modules and bounded collections while preserving existing scene-script behavior.
+- Add signal dispatch and collision callbacks in the entity scheduler; connect debugger controls to the VM actually running gameplay.
+- Complete runtime-error source maps and editor/player acceptance with two enemies, projectile, trigger, and scene transition.
+- Native GUI interaction remains unverified without a display server/Xvfb. Task 3 implementation/headless acceptance passed previously.
 
 ## Validation
 
-- `just check`: passed.
-- `just test`: 552 passed, zero failed/skipped.
-- `cargo build -p kiln-editor`: passed.
-- Focused checks passed for stable asset metadata round-trip, cache settings persistence/rename, texture-clear and legacy override deserialization, nested-scene cycles/configuration/removal, and two-scene export acceptance.
-- Native visual acceptance remains pending: this executor has no `DISPLAY` and no Xvfb, so actual GUI drag/drop cannot be exercised here.
+- `just check`: passed. Final `just test`: 556 passed, zero failed/skipped. Native editor and player builds passed.
+- Focused tests cover pause/step/resume/catch-up, Unicode diagnostics, non-default scene launch, and runtime-transform transfer isolation.
 
 ## Next
 
-1. Record native GUI acceptance for prefab and asset drag/drop in a GUI-capable runner.
-2. Only after that gate is recorded, begin Task 4 scripting and Play workflow.
+Implement the remaining entity scheduler and language features before marking Task 4 complete. Task 5 has not started.
 
-Source `/workspace/.kiln-tools/activate.sh` for cloud Cargo commands.
-Use `CHROMIUM_PATH=/usr/bin/chromium just web-smoke` for installed-browser validation.
+Source `/workspace/.kiln-tools/activate.sh` for Cargo. Git network operations require supported `require_escalated` network permission; this resolved prior proxy failures. Remote branch previously matched `704966b`.

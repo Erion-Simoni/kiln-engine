@@ -1241,3 +1241,44 @@ to the serialized project format.
 
 Functional override editing/revert, definition propagation to serialized
 instances, and drag/drop creation remain follow-up Task 3 work.
+
+## ADR-0052: Task 4 gameplay execution and Play isolation
+
+**Date:** 2026-11-04
+**Status:** accepted; entity attachment/language implementation pending
+
+Editor and player use the same runtime and fixed 60 Hz gameplay step. Pausing
+discards accumulated wall time; frame step advances exactly one gameplay tick;
+catch-up after a stalled host is bounded to 250 ms. Losing editor focus pauses
+Play and text fields consume gameplay keyboard input. Restart creates a fresh
+runtime world and state rather than automatically restoring a save slot.
+Current-scene Play uses the active authored scene; project-start Play uses the
+same default-scene selection as the player.
+
+Authoring scenes remain separate from runtime worlds. Stop reconstructs the
+authored world. Applying runtime changes is an explicit paused operation;
+the initial implementation copies valid local transforms for existing authored
+entities in the active scene only and records an undo entry. Runtime spawns,
+deletions, names, and resource changes are not applied by this action.
+
+The remaining entity-script contract is:
+
+- An authored attachment identifies an entity by stable scene/entity IDs and a
+  project-relative script resource; it stores typed exposed property overrides.
+- Each attachment has an independent persistent state store and `self` entity
+  reference. Runtime state never modifies its authored property defaults.
+- A script instance receives start once, update per gameplay tick, collision
+  enter/exit and queued signal callbacks, and stop before destruction. Dispatch
+  order is stable by entity/attachment ID; signals emitted during dispatch are
+  queued to avoid reentrant mutation and recursive callback loops.
+- Named functions, resource-relative modules, and bounded collections must be
+  added to the frontend/VM before enabling entity attachments in the inspector.
+  Existing top-level scene scripts continue running once per gameplay frame;
+  they must not silently change to callback-only execution.
+- Both editor and player must construct the same scene gameplay scheduler.
+  Breakpoints/stepping must operate on the VM that actually mutates the world,
+  and compile/runtime diagnostics must carry script source locations.
+
+These attachment, callback, module, signal, and VM-debugger requirements are
+design decisions, not completed capabilities. Keep Task 4 open until its
+two-enemy/projectile/trigger/transition acceptance passes in both hosts.

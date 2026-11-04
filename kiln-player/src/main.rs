@@ -400,7 +400,7 @@ impl PlayerApp {
             }
             Err(diagnostics) => {
                 for diagnostic in diagnostics {
-                    log::error!("scene script '{path}': {}", diagnostic.message);
+                    log::error!("{}", diagnostic.with_source_location(&path, &source));
                 }
             }
         }

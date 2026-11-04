@@ -44,7 +44,7 @@ Acceptance: headless two-scene acceptance now transforms/reparents/duplicates/de
 
 Headless acceptance passes: reuse an enemy prefab across two scenes, apply an instance's edits to the definition while preserving the other instance's override, rename its texture, save/reopen, and verify the exported archive contains the renamed texture. Native visual acceptance of prefab and asset drag/drop is pending because this executor has no display server or Xvfb.
 
-### 4. General gameplay scripting and Play workflow — PENDING
+### 4. General gameplay scripting and Play workflow — IN PROGRESS
 
 - [ ] Specify entity-attached scripts, self/entity references, per-instance persistent state, inspector-exposed properties, and lifecycle callbacks.
 - [ ] Add reusable functions/modules and collections as required by the reference games; preserve existing scripts or document migrations.
@@ -52,6 +52,13 @@ Headless acceptance passes: reuse an enemy prefab across two scenes, apply an in
 - [ ] Unify editor/player execution; add pause, step, restart, current-scene/project-start play, correct focus/timing, and explicit runtime-change application.
 
 Acceptance: two independently scripted enemies, a projectile, a trigger, and a level transition run identically in editor and player; stop restores authoring state; errors point to the correct script location.
+
+Current checkpoint: current-scene/project-start Play, pause/frame-step/restart,
+shared fixed-step timing, focus-loss pause, text-input isolation, explicit
+undoable runtime-transform application, and filename/line/column compiler
+diagnostics are implemented. ADR-0052 specifies the entity-script contract.
+Entity attachments/state/properties/lifecycle, functions/modules/collections,
+signals and live VM debugging remain outstanding; Task 4 is not complete.
 
 ### 5. Physics and cameras — PENDING
 
@@ -308,3 +315,10 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Added explicit texture-clear prefab overrides while retaining deserialization of legacy string overrides. Inspector already provides asset/material/animation pickers and missing-reference diagnostics; Asset Browser now moves images and updates project references and import cache records.
 - Added full two-scene prefab/rename/save/reopen/export acceptance. `just check` passed; `just test`: 552 passed, zero failed/skipped; editor build passed. Native visual drag/drop remains unverified without a display server or Xvfb.
 - Task 3 implementation is complete. Keep Task 4 pending until graphical acceptance is recorded in a GUI-capable environment.
+
+### 2026-11-04 — Task 4 Play controls and source diagnostics
+
+- User explicitly requested Task 4; the prior Task 3 graphical check remains separately pending. Added ADR-0052 to specify Play isolation and the remaining entity/language execution contract.
+- Current-scene Play uses the active scene; project-start Play is separate. Pause/resume, one-frame step, restart, focus-loss pause, text-input isolation, forwarded action keys, and guarded runtime-transform application are implemented. Editor/player now share the fixed-step clock with bounded catch-up.
+- Compiler diagnostics in editor/player include source file, line, and column. Tests cover Unicode/clamped spans, non-default scene launch, frame-step timing, and retaining authored metadata while applying runtime transforms.
+- `just check`: passed; `just test`: 556 passed, zero failed/skipped; editor/player builds passed. Native interaction remains unverified without a GUI runner. Entity attachments/lifecycle, functions/modules/collections, signals, live VM debugging, runtime source maps, and full gameplay acceptance remain pending. Task 4 remains IN PROGRESS.
