@@ -108,6 +108,7 @@ fn component_header_name(component: &Component) -> String {
         Component::Tilemap { .. } => "🗺 Tilemap".to_string(),
         Component::Role { .. } => "🎭 Role".to_string(),
         Component::Parent { .. } => "🔗 Parent".to_string(),
+        Component::PrefabInstance { .. } => "📦 Prefab Instance".to_string(),
     }
 }
 
@@ -313,6 +314,21 @@ fn render_component(ui: &mut egui::Ui, component: &mut Component, project: &Proj
                 }
                 ui.label("(parent entity source id)");
             });
+        }
+        Component::PrefabInstance {
+            prefab_id,
+            overrides,
+        } => {
+            let name = project
+                .prefabs
+                .get(prefab_id)
+                .map(|prefab| prefab.name.as_str())
+                .unwrap_or("Missing Prefab");
+            ui.label(format!("Prefab: {name} ({prefab_id})"));
+            ui.label(format!("Instance overrides: {}", overrides.overrides.len()));
+            if !project.prefabs.contains_key(prefab_id) {
+                ui.colored_label(egui::Color32::YELLOW, "Prefab definition is missing");
+            }
         }
     }
 

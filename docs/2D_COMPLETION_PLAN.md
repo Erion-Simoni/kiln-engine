@@ -265,4 +265,11 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Added optional `Project.prefabs`, keyed by prefab ID, so reusable definitions are saved in the project manifest. Project load hydrates the Prefab Editor state, the selection-based create action inserts definitions into the project, and panel edits/deletes sync back before project save.
 - Added ADR-0050 and tests for full TOML prefab definition round-trip, legacy manifests without a prefab map, and Prefab Editor selection behavior after project replacement.
 - Focused validation: `cargo nextest run -p kiln-core --lib` (50 passed) and `cargo nextest run -p kiln-editor --test project_roundtrip` (10 passed). Full `just check` passed; `just test` passed 538 tests; `cargo build -p kiln-editor` passed.
-- Task 3 remains PENDING. Persisted scene-instance links, drag/drop creation, functional apply/revert overrides, and propagation across save/reopen remain unimplemented.
+- Task 3 is IN PROGRESS. Persisted scene-instance links, drag/drop creation, functional apply/revert overrides, and propagation across save/reopen remain unimplemented.
+
+### 2026-11-04 — Task 3 serialized prefab instances
+
+- Added `Component::PrefabInstance` scene metadata containing prefab ID and overrides, and routed Instantiate Prefab through the validated document-first entity command. Instances use project-unique IDs, preserve authored components/references, start as scene roots at the requested position, and receive a correctly keyed empty override record.
+- Editor scene rebuilds restore runtime prefab links from authored markers by SourceId. Scene snapshots preserve those markers; duplicate updates the override record's entity ID. Inspector identifies linked prefabs and warns on missing definitions. ADR-0051 documents the serialization decision.
+- Regression covers instantiate, duplicate, undo/redo, save/reopen, relative texture/animation retention, runtime link restoration, and scene snapshot parity. `just check`: PASSED; `just test`: 539 passed, zero failed/skipped.
+- Task 3 remains IN PROGRESS: functional per-instance override editing/revert, propagation when a definition changes (including saved instance data), drag/drop instantiation, nested scenes, and asset workflows remain ahead.

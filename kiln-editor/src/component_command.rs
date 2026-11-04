@@ -21,6 +21,7 @@ impl ComponentKind {
             Component::Role { .. } => Some(Self::Role),
             Component::Tilemap { .. } => Some(Self::Tilemap),
             Component::Parent { .. } => None,
+            Component::PrefabInstance { .. } => None,
         }
     }
 
@@ -227,6 +228,9 @@ fn validate(component: &Component, project: &Project) -> Result<(), String> {
             Err("Choose an existing project tilemap".into())
         }
         Component::Parent { .. } => Err("Edit parent links through the hierarchy".into()),
+        Component::PrefabInstance { .. } => {
+            Err("Edit prefab links through the Prefab Editor".into())
+        }
         _ => Ok(()),
     }
 }

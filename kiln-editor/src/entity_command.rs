@@ -12,6 +12,11 @@ pub enum EntityEdit {
     Rename { entity_id: String, name: String },
     /// Create a default visible entity at a world position.
     Create { name: String, position: [f32; 2] },
+    /// Instantiate a project prefab as a new root entity at a scene position.
+    InstantiatePrefab {
+        prefab_id: String,
+        position: [f32; 2],
+    },
     /// Delete an entity and detach its direct children.
     Delete { entity_id: String },
     /// Duplicate an entity with its complete authored component list.
@@ -105,6 +110,52 @@ fn apply(
             });
             Ok(Some(id))
         }
+        EntityEdit::InstantiatePrefab {
+            prefab_id,
+            position,
+        } => {
+            if !position.iter().all(|value| value.is_finite()) {
+                return Err("Prefab instance position must be finite".into());
+            }
+            let prefab = project
+                .prefabs
+                .get(prefab_id)
+                .filter(|prefab| prefab.id == *prefab_id)
+                .ok_or("Choose an existing project prefab")?;
+            let id = next_id(project, scene);
+            let mut instance = prefab.root_entity.clone();
+            instance.id = id.clone();
+            instance.name = format!("{} Instance", prefab.name);
+            instance.components.retain(|component| {
+                !matches!(
+                    component,
+                    Component::Parent { .. } | Component::PrefabInstance { .. }
+                )
+            });
+            let mut has_transform = false;
+            for component in &mut instance.components {
+                if let Component::Transform { x, y, .. } = component {
+                    *x = position[0];
+                    *y = position[1];
+                    has_transform = true;
+                    break;
+                }
+            }
+            if !has_transform {
+                instance.components.push(Component::Transform {
+                    x: position[0],
+                    y: position[1],
+                    rotation: 0.0,
+                    scale: 1.0,
+                });
+            }
+            instance.components.push(Component::PrefabInstance {
+                prefab_id: prefab.id.clone(),
+                overrides: kiln_core::PrefabOverride::new(id.clone()),
+            });
+            scene.entities.push(instance);
+            Ok(Some(id))
+        }
         EntityEdit::Delete { entity_id } => {
             let index = unique_entity_index(scene, entity_id)?;
             let world = world_transforms(scene)?;
@@ -131,6 +182,11 @@ fn apply(
             let id = next_id(project, scene);
             copy.id = id.clone();
             copy.name = format!("{} Copy", copy.name);
+            for component in &mut copy.components {
+                if let Component::PrefabInstance { overrides, .. } = component {
+                    overrides.entity_id = id.clone();
+                }
+            }
             scene.entities.push(copy);
             Ok(Some(id))
         }

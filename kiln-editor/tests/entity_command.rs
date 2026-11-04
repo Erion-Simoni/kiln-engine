@@ -1,8 +1,12 @@
-use kiln_core::{Component, Entity, Project, Scene};
+use kiln_core::{Component, Entity, Prefab, PrefabInstance, Project, Scene};
 use kiln_editor::{
+    editing::attach_prefab_instances,
     entity_command::{EntityCommand, EntityEdit},
-    project_files, SceneHistory,
+    project_files,
+    scene_document::snapshot_for_scene,
+    SceneHistory,
 };
+use kiln_runtime::{GameWorld, SourceId, Sprite};
 
 fn project() -> Project {
     let mut project = Project::default();
@@ -247,6 +251,161 @@ fn reparent_rejects_cycles_and_noops_do_not_change_history() {
     )
     .is_err());
     assert_eq!(history.undo_depth(), 2);
+}
+
+#[test]
+fn prefab_instances_survive_duplicate_save_reopen_runtime_load_and_history() {
+    let mut project = project();
+    project.prefabs.insert(
+        "enemy_prefab".into(),
+        Prefab {
+            id: "enemy_prefab".into(),
+            name: "Enemy".into(),
+            root_entity: Entity {
+                id: "enemy_template".into(),
+                name: "Enemy".into(),
+                components: vec![
+                    Component::Transform {
+                        x: 5.0,
+                        y: 7.0,
+                        rotation: 0.2,
+                        scale: 1.5,
+                    },
+                    Component::Sprite {
+                        color: [0.8, 0.2, 0.1, 1.0],
+                        width: 40.0,
+                        height: 28.0,
+                        texture: Some("art/enemy.png".into()),
+                        layer: 3.0,
+                        material: None,
+                        animation_clip: Some("walk".into()),
+                    },
+                    Component::Parent {
+                        parent: "template_parent".into(),
+                    },
+                ],
+            },
+        },
+    );
+    let mut history = SceneHistory::new();
+    let instance_id = run(
+        &mut project,
+        EntityEdit::InstantiatePrefab {
+            prefab_id: "enemy_prefab".into(),
+            position: [64.0, 96.0],
+        },
+        &mut history,
+    )
+    .unwrap()
+    .unwrap();
+    let instance = project.scenes["main"]
+        .entities
+        .iter()
+        .find(|entity| entity.id == instance_id)
+        .unwrap();
+    assert_eq!(instance.name, "Enemy Instance");
+    assert!(instance.components.iter().any(|component| matches!(
+        component,
+        Component::Transform {
+            x: 64.0,
+            y: 96.0,
+            rotation: 0.2,
+            scale: 1.5
+        }
+    )));
+    assert!(!instance
+        .components
+        .iter()
+        .any(|component| matches!(component, Component::Parent { .. })));
+    assert!(
+        matches!(instance.components.last(), Some(Component::PrefabInstance { prefab_id, overrides })
+        if prefab_id == "enemy_prefab" && overrides.entity_id == instance_id)
+    );
+
+    let duplicate_id = run(
+        &mut project,
+        EntityEdit::Duplicate {
+            entity_id: instance_id.clone(),
+        },
+        &mut history,
+    )
+    .unwrap()
+    .unwrap();
+    let duplicate = project.scenes["main"]
+        .entities
+        .iter()
+        .find(|entity| entity.id == duplicate_id)
+        .unwrap();
+    assert!(
+        matches!(duplicate.components.last(), Some(Component::PrefabInstance { overrides, .. })
+        if overrides.entity_id == duplicate_id)
+    );
+
+    let restored = history.undo(project.scenes["main"].clone()).unwrap();
+    project.scenes.insert("main".into(), restored);
+    assert!(!project.scenes["main"]
+        .entities
+        .iter()
+        .any(|entity| entity.id == duplicate_id));
+    let directory = tempfile::tempdir().unwrap();
+    project_files::save(&project, &directory.path().join("kiln.toml")).unwrap();
+    let reopened = project_files::load(directory.path()).unwrap().project;
+    let reopened_instance = reopened.scenes["main"]
+        .entities
+        .iter()
+        .find(|entity| entity.id == instance_id)
+        .unwrap();
+    assert!(
+        matches!(reopened_instance.components.last(), Some(Component::PrefabInstance { prefab_id, overrides })
+        if prefab_id == "enemy_prefab" && overrides.entity_id == instance_id)
+    );
+    assert_eq!(
+        serde_json::to_value(snapshot_for_scene(
+            &spawn(&reopened),
+            &Default::default(),
+            &Default::default(),
+            Some(&reopened),
+            Some("main")
+        ))
+        .unwrap(),
+        serde_json::to_value(reopened.scenes["main"].clone()).unwrap()
+    );
+
+    let mut world = spawn(&reopened);
+    assert_eq!(
+        attach_prefab_instances(&mut world, &reopened.scenes["main"]),
+        1
+    );
+    assert!(world
+        .world_ref()
+        .query::<(hecs::Entity, &SourceId, &PrefabInstance)>()
+        .iter()
+        .any(|(_, source, instance)| source.0 == instance_id
+            && instance.prefab_id == "enemy_prefab"
+            && instance.entity_id == instance_id));
+    let restored = history.undo(project.scenes["main"].clone()).unwrap();
+    assert!(!restored
+        .entities
+        .iter()
+        .any(|entity| entity.id == instance_id));
+    let redone = history.redo(restored).unwrap();
+    assert!(redone
+        .entities
+        .iter()
+        .any(|entity| entity.id == instance_id));
+}
+
+fn spawn(project: &Project) -> GameWorld {
+    let mut world = GameWorld::new();
+    kiln_runtime::spawn_scene(
+        &mut world,
+        project,
+        "main",
+        &mut |_: &Entity, color: [f32; 4], _: Option<&str>| {
+            Sprite::new(color[0], color[1], color[2], color[3])
+        },
+    );
+    world
 }
 
 #[test]

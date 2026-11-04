@@ -159,6 +159,7 @@ fn reconcile(
                         .map(|_| component.clone())
                 }),
                 Component::Parent { .. } => Some(component.clone()),
+                Component::PrefabInstance { .. } => Some(component.clone()),
             };
             if let Some(updated) = updated {
                 components.push(updated);

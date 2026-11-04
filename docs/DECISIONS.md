@@ -1219,4 +1219,25 @@ those definitions; successful project load replaces the view, and panel
 create/edit/delete operations synchronize back into the project document so
 ordinary Save/Save As persists them. Existing manifests without the field load
 with an empty prefab library. Scene instance links and override serialization
-are separate Task 3 work and must not be inferred from definition persistence.
+are handled separately as documented in ADR-0051; they must not be inferred
+from definition persistence alone.
+
+## ADR-0051: Prefab instance links belong to authored scene entities
+
+**Date:** 2026-11-04
+**Status:** accepted
+
+Represent each scene instance with a serialized `Component::PrefabInstance`
+containing its stable project prefab ID and override record. The enclosing
+scene entity ID is the instance identity; the override record's entity ID must
+match it. Instantiate through the document-first entity command, allocate a
+project-unique ID, copy the prefab's authored components, place it as a root,
+and append the link marker. Rebuilding an editor scene attaches the runtime
+`PrefabInstance` projection by SourceId, while scene snapshots preserve the
+authored marker. Duplicating an instance copies its link and retargets the
+override record to the new entity ID; deleting the entity naturally removes its
+link. This preserves save/reopen and history without adding runtime-only state
+to the serialized project format.
+
+Functional override editing/revert, definition propagation to serialized
+instances, and drag/drop creation remain follow-up Task 3 work.

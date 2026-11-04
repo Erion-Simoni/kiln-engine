@@ -207,6 +207,52 @@ pub fn prefab_from_entity(entity: &kiln_core::project::Entity, name: &str) -> ki
     kiln_core::Prefab::new(name.to_string(), entity.clone())
 }
 
+/// Attach runtime prefab links to scene entities carrying authored prefab markers.
+pub fn attach_prefab_instances(world: &mut GameWorld, scene: &kiln_core::Scene) -> usize {
+    let handles: HashMap<String, hecs::Entity> = world
+        .world_ref()
+        .query::<(hecs::Entity, &SourceId)>()
+        .iter()
+        .map(|(entity, source)| (source.0.clone(), entity))
+        .collect();
+    let markers: Vec<_> = scene
+        .entities
+        .iter()
+        .filter_map(|entity| {
+            entity
+                .components
+                .iter()
+                .find_map(|component| match component {
+                    kiln_core::Component::PrefabInstance {
+                        prefab_id,
+                        overrides,
+                    } => Some((entity.id.clone(), prefab_id.clone(), overrides.clone())),
+                    _ => None,
+                })
+        })
+        .collect();
+    let mut attached = 0;
+    for (entity_id, prefab_id, overrides) in markers {
+        if let Some(handle) = handles.get(&entity_id) {
+            if world
+                .world_mut()
+                .insert_one(
+                    *handle,
+                    PrefabInstance {
+                        prefab_id,
+                        entity_id,
+                        overrides,
+                    },
+                )
+                .is_ok()
+            {
+                attached += 1;
+            }
+        }
+    }
+    attached
+}
+
 /// Add an instance of a prefab to the world.
 ///
 /// The instance keeps the components of the prefab and gets its own source

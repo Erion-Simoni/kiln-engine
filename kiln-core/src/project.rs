@@ -3,7 +3,7 @@
 use crate::clip::Clip;
 use crate::input::ActionMap;
 use crate::next_id;
-use crate::prefab::Prefab;
+use crate::prefab::{Prefab, PrefabOverride};
 use crate::tilemap::{TileMap, TileSet};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -260,6 +260,14 @@ pub enum Component {
     Role {
         /// Role name, e.g. `"player"` or `"coin"`.
         role: String,
+    },
+    /// Link a scene entity to a reusable prefab definition.
+    PrefabInstance {
+        /// Stable id of the definition in [`Project::prefabs`].
+        prefab_id: String,
+        /// Per-instance property overrides.
+        #[serde(default)]
+        overrides: PrefabOverride,
     },
     /// Parent-child relationship for entity hierarchy.
     Parent {

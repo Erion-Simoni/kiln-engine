@@ -573,6 +573,7 @@ fn spawn_editor_scene(
         .ok();
     let spawned = kiln_runtime::spawn_scene(&mut world, project, scene_id, &mut make_sprite);
     if let Some(scene) = scene {
+        crate::editing::attach_prefab_instances(&mut world, scene);
         let mut resolve = |tileset_id: &str| textures.get(tileset_id).map(|tex| tex.id);
         kiln_runtime::spawn_tilemaps(
             &mut world,
@@ -3446,29 +3447,35 @@ impl TabViewer<'_> {
     /// Add an instance of the selected prefab to the scene.
     fn instantiate_selected_prefab(&mut self) {
         self.finish_transform_edit();
+        if self.editing_locked() || self.project_blocked {
+            return;
+        }
         let Some(prefab) = self.prefab_editor.state.selected_prefab().cloned() else {
             self.log("[INFO] Select a prefab to instantiate it");
             return;
         };
-
-        let before = crate::scene_document::snapshot_for_scene(
-            self.world,
-            self.entity_textures,
-            self.entity_roles,
-            self.current_project.as_ref(),
-            self.scenes.active_id(),
-        );
-        let existing: Vec<String> = self.entity_textures.keys().cloned().collect();
-        let size = self.world_size();
-        let position = [size.0 / 2.0, size.1 / 2.0];
-        let id = crate::editing::instantiate_prefab(self.world, &prefab, &existing, position);
-        match id {
-            Some(id) => {
-                self.scenes.history.record(before);
-                self.log(&format!("[INFO] Instantiated the prefab as {id}"));
-            }
-            None => self.log("[ERROR] The prefab could not be instantiated"),
+        let Some(scene_id) = self.scenes.active_id().map(str::to_owned) else {
+            self.log("[INFO] Open a scene before instantiating a prefab");
+            return;
+        };
+        if !self
+            .current_project
+            .as_ref()
+            .is_some_and(|project| project.prefabs.contains_key(&prefab.id))
+        {
+            self.log("[ERROR] The selected prefab is not stored in the current project");
+            return;
         }
+        let size = self.world_size();
+        self.project_requests.push(ProjectRequest::Entity(
+            crate::entity_command::EntityCommand {
+                scene_id,
+                edit: crate::entity_command::EntityEdit::InstantiatePrefab {
+                    prefab_id: prefab.id,
+                    position: [size.0 / 2.0, size.1 / 2.0],
+                },
+            },
+        ));
     }
 
     /// Create and activate a real scene after this UI pass.

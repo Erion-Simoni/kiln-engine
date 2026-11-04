@@ -14,7 +14,7 @@ pub struct Prefab {
 }
 
 /// Override values for a specific prefab instance
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PrefabOverride {
     pub entity_id: String,
     pub overrides: HashMap<String, ComponentOverride>,
