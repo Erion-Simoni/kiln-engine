@@ -165,6 +165,7 @@ pub struct EditorApp {
     dock_state: egui_dock::DockState<Tab>,
     world: GameWorld,
     selected_entity: Option<hecs::Entity>,
+    rename_input: Option<(String, String)>,
     is_playing: bool,
     /// The running game session, present while playing.
     play: Option<PlaySession>,
@@ -640,6 +641,7 @@ impl EditorApp {
             dock_state,
             world,
             selected_entity: None,
+            rename_input: None,
             is_playing: false,
             play: None,
             console_log: Vec::new(),
@@ -1437,6 +1439,7 @@ impl EditorApp {
 
     fn reset_scene_view(&mut self) {
         self.selected_entity = None;
+        self.rename_input = None;
         self.hierarchy_panel.clear_selection();
         self.gizmo = GizmoState::default();
         self.load_project_scene();
@@ -2197,6 +2200,7 @@ impl EditorApp {
                     let mut tab_viewer = TabViewer {
                         world: &mut self.world,
                         selected_entity: &mut self.selected_entity,
+                        rename_input: &mut self.rename_input,
                         is_playing: &mut self.is_playing,
                         graph: &mut self.graph,
                         render_tier: &mut self.render_tier,
@@ -2821,6 +2825,7 @@ impl EditorApp {
 struct TabViewer<'a> {
     world: &'a mut GameWorld,
     selected_entity: &'a mut Option<hecs::Entity>,
+    rename_input: &'a mut Option<(String, String)>,
     is_playing: &'a mut bool,
     graph: &'a mut Graph,
     render_tier: &'a mut RenderTier,
@@ -3850,7 +3855,65 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         let has_sprite = has(ComponentKind::Sprite);
                         let has_role = has(ComponentKind::Role);
                         let has_tilemap = has(ComponentKind::Tilemap);
-                        ui.label(format!("{} ({})", authored.name, authored.id));
+                        if self
+                            .rename_input
+                            .as_ref()
+                            .is_some_and(|(id, _)| id != &authored.id)
+                        {
+                            *self.rename_input = None;
+                        }
+                        if self
+                            .rename_input
+                            .as_ref()
+                            .is_some_and(|(id, _)| id == &authored.id)
+                        {
+                            let mut apply_rename = false;
+                            let mut cancel_rename = false;
+                            let can_rename = !self.editing_locked() && !self.project_blocked;
+                            ui.horizontal(|ui| {
+                                if let Some((_, name)) = self.rename_input.as_mut() {
+                                    ui.add_enabled(
+                                        can_rename,
+                                        egui::TextEdit::singleline(name),
+                                    );
+                                    apply_rename = ui
+                                        .add_enabled(can_rename, egui::Button::new("Apply"))
+                                        .clicked();
+                                    cancel_rename = ui.button("Cancel").clicked();
+                                }
+                            });
+                            if apply_rename {
+                                if let Some((entity_id, name)) = self.rename_input.take() {
+                                    if let Some(scene_id) = self.scenes.active_id().map(str::to_owned) {
+                                        self.project_requests.push(ProjectRequest::Entity(
+                                            crate::entity_command::EntityCommand {
+                                                scene_id,
+                                                edit: crate::entity_command::EntityEdit::Rename {
+                                                    entity_id,
+                                                    name,
+                                                },
+                                            },
+                                        ));
+                                    }
+                                }
+                            } else if cancel_rename {
+                                *self.rename_input = None;
+                            }
+                        } else {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("{} ({})", authored.name, authored.id));
+                                if ui
+                                    .add_enabled(
+                                        !self.editing_locked() && !self.project_blocked,
+                                        egui::Button::new("Rename"),
+                                    )
+                                    .clicked()
+                                {
+                                    *self.rename_input =
+                                        Some((authored.id.clone(), authored.name.clone()));
+                                }
+                            });
+                        }
                         ui.add_space(8.0);
 
                         // Read current values once

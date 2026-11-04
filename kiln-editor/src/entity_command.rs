@@ -8,6 +8,8 @@ use crate::{editing::next_entity_id, history::SceneHistory};
 /// A single authored entity or hierarchy operation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum EntityEdit {
+    /// Rename an entity without changing its stable identity.
+    Rename { entity_id: String, name: String },
     /// Create a default visible entity at a world position.
     Create { name: String, position: [f32; 2] },
     /// Delete an entity and detach its direct children.
@@ -60,6 +62,18 @@ fn apply(
     edit: &EntityEdit,
 ) -> Result<Option<String>, String> {
     match edit {
+        EntityEdit::Rename { entity_id, name } => {
+            let index = unique_entity_index(scene, entity_id)?;
+            let name = name.trim();
+            if name.is_empty() {
+                return Err("Entity name cannot be empty".into());
+            }
+            if scene.entities[index].name == name {
+                return Ok(None);
+            }
+            scene.entities[index].name = name.to_owned();
+            Ok(None)
+        }
         EntityEdit::Create { name, position } => {
             if name.trim().is_empty() || !position.iter().all(|value| value.is_finite()) {
                 return Err("Entity name and position must be valid".into());

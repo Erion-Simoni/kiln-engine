@@ -7,8 +7,8 @@
 ## Done
 
 - Earlier checkpoints cover native/WASM baseline repair, project lifecycle and atomic writes, authored metadata preservation, multi-scene tabs/history, project Save/Discard/Cancel, transform/property commands, component presence commands, and hierarchy entity commands. ADR-0039–0048 record the architecture.
-- Hierarchy create/delete/duplicate/reparent are document-first commands with ID validation, cycle prevention, metadata preservation, and undo. Native GUI previously verified those operations and saved undo/redo of Parent.
-- Inspector edits for Transform position/rotation/uniform-scale and Sprite tint/layer/dimensions update authored and runtime state with one undo step per field gesture. Sprite dimensions default to 32×32 in old projects.
+- Hierarchy create/delete/duplicate/reparent and inspector rename are document-first commands with ID validation, cycle prevention, metadata preservation, and undo. Native GUI previously verified hierarchy create/delete/duplicate/reparent and saved undo/redo of Parent.
+- Inspector edits for Transform position/rotation/uniform-scale and Sprite tint/layer/dimensions update authored and runtime state with one undo step per field gesture. Sprite dimensions default to 32×32 in old projects. Entity rename trims whitespace, rejects empty names, preserves stable identity, and records one history entry.
 - Sprite rendering supports entity rotation/scale and authored dimensions. Parent links compose local translation/rotation/scale into runtime `GlobalTransform`; editor/player/web/mobile/sample renderers consume refreshed global poses. Viewport drags convert to local space; reparent/delete preserve child world poses and nested scene offsets survive propagation.
 - Scene viewport has move, rotation, and scale gizmos. Drags preview local Transform edits, commit one undo step on release, and cancel through Escape. Rotation wrap, uniform scaling, hit targets, and translation snapping have coverage.
 - Hierarchy and scene-list selection support Ctrl/Cmd additive toggling while preserving a primary inspector target. **Frame Selection** and `F` fit selected sprite bounds after global rotation and scale, with position-only bounds for nonvisual entities.
@@ -20,18 +20,18 @@
 ## Validation
 
 - Earlier parent/local checkpoint: `just check` passed; `just test`: 514 passed. Editor build, WASM check, Chromium smoke, nested-offset, runtime propagation, editor descendant update, and reparent/delete pose-preservation checks passed.
-- Earlier gizmo checkpoint: `just check` passed; `just test`: 518 passed. Multi-selection/framing: 519 passed. Group translation: 520 passed. Group rotation/scale: 522 passed. Sprite-aware framing: 523 passed. Dirty tab close: 524 passed. Autosave/recovery: 527 passed. Combined two-scene acceptance: 528 passed.
-- Current group-order checkpoint: `just check` passed; `just test`: 529 passed, zero failed/skipped. Parent-first target ordering is tested with child-first selection for rotation and scale.
-- Native GUI confirmation of the latest gizmo, scene-close, and recovery workflows remains outstanding. This environment has no display, Xvfb, or desktop automation tool. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
+- Earlier gizmo checkpoint: `just check` passed; `just test`: 518 passed. Multi-selection/framing: 519 passed. Group translation: 520 passed. Group rotation/scale: 522 passed. Sprite-aware framing: 523 passed. Dirty tab close: 524 passed. Autosave/recovery: 527 passed. Combined two-scene acceptance: 528 passed. Parent-first group order: 529 passed.
+- Current inspector rename checkpoint: `just check` passed; `just test`: 530 passed, zero failed/skipped. Tests cover trimmed rename, stable IDs/components, undo, no-op, and validation.
+- Native GUI confirmation of the latest inspector, gizmo, scene-close, and recovery workflows remains outstanding. This environment has no display, Xvfb, or desktop automation tool. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
 
 ## Next
 
-1. Run the scene-close, recovery, gizmo, and full two-scene acceptance in a native GUI environment with a virtual display.
-2. Complete any acceptance failures, then continue Task 2 review. Tasks 3–9 remain pending.
+1. Continue routing supported inspector values through validated, undoable commands; then verify inspector and lifecycle workflows in a native GUI environment with a virtual display.
+2. Complete remaining Task 2 authoring acceptance before starting Tasks 3–9.
 
 ## Known limits and environment
 
-`Transform` is local; call `kiln_runtime::update_global_transforms` after direct gameplay changes when a world-space read is needed. Built-in sprite render loops refresh `GlobalTransform` before drawing. Physics systems still consume local Transform and do not yet account for parent relationships; tilemap cell instances retain identity transforms. The command model covers transform properties, Sprite visuals/size, component presence, and hierarchy entities; other panels retain transitional direct-mutation paths. Undo is session-only; recovery snapshots are periodic (30 seconds), not continuous. Native visuals cover software GL/Low tier only.
+`Transform` is local; call `kiln_runtime::update_global_transforms` after direct gameplay changes when a world-space read is needed. Built-in sprite render loops refresh `GlobalTransform` before drawing. Physics systems still consume local Transform and do not yet account for parent relationships; tilemap cell instances retain identity transforms. Other panels retain transitional direct-mutation paths. Undo is session-only; recovery snapshots are periodic (30 seconds), not continuous. Native visuals cover software GL/Low tier only.
 
 Save As stays within the asset directory; relocation is rejected. Dialogs accept typed paths. Platformer/Top-down templates remain empty starters; only Empty 2D has been exercised. Other render tiers, audible audio, complete exports, budgets, clean-machine packaging, cross-platform runs, physical devices, and remote CI remain separate gates. Optional audio/WASM warnings remain outside strict default-native lint. Plugin ABI v2 requires creator-matched destruction; loader/dispatch remains future work.
 

@@ -143,6 +143,54 @@ fn create_duplicate_and_delete_are_undoable_and_preserve_authored_data() {
 }
 
 #[test]
+fn rename_is_trimmed_undoable_and_keeps_identity_and_components() {
+    let mut project = project();
+    let original = project.scenes["main"].entities[0].clone();
+    let mut history = SceneHistory::new();
+    run(
+        &mut project,
+        EntityEdit::Rename {
+            entity_id: "root".into(),
+            name: "  Renamed Root  ".into(),
+        },
+        &mut history,
+    )
+    .unwrap();
+    let renamed = &project.scenes["main"].entities[0];
+    assert_eq!(renamed.name, "Renamed Root");
+    assert_eq!(renamed.id, original.id);
+    assert_eq!(
+        serde_json::to_value(&renamed.components).unwrap(),
+        serde_json::to_value(&original.components).unwrap()
+    );
+    assert_eq!(history.undo_depth(), 1);
+
+    run(
+        &mut project,
+        EntityEdit::Rename {
+            entity_id: "root".into(),
+            name: "Renamed Root".into(),
+        },
+        &mut history,
+    )
+    .unwrap();
+    assert_eq!(history.undo_depth(), 1);
+    assert!(run(
+        &mut project,
+        EntityEdit::Rename {
+            entity_id: "root".into(),
+            name: "  ".into(),
+        },
+        &mut history,
+    )
+    .is_err());
+
+    let restored = history.undo(project.scenes["main"].clone()).unwrap();
+    assert_eq!(restored.entities[0].name, original.name);
+    assert_eq!(restored.entities[0].id, original.id);
+}
+
+#[test]
 fn reparent_rejects_cycles_and_noops_do_not_change_history() {
     let mut project = project();
     let mut history = SceneHistory::new();
