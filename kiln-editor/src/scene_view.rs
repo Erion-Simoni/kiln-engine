@@ -13,7 +13,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use kiln_core::Project;
+use kiln_core::{Project, Transform};
 use kiln_render::{camera::Camera, sprite_renderer::SpriteInstance, SpriteRenderer, TextureId};
 use wgpu::{Device, Queue};
 
@@ -82,6 +82,21 @@ pub fn letterbox(panel_w: u32, panel_h: u32, world_w: f32, world_h: f32) -> View
 /// and world Y grows upward.
 pub fn world_camera(world_w: f32, world_h: f32) -> Camera {
     Camera::new(world_w, world_h)
+}
+
+/// Axis-aligned world bounds for a centered sprite after entity rotation and scale.
+pub fn transformed_sprite_bounds(transform: Transform, size: [f32; 2]) -> [f32; 4] {
+    let (sin, cos) = transform.rotation.sin_cos();
+    let half_width = size[0].abs() * transform.scale.x.abs() * 0.5;
+    let half_height = size[1].abs() * transform.scale.y.abs() * 0.5;
+    let extent_x = cos.abs() * half_width + sin.abs() * half_height;
+    let extent_y = sin.abs() * half_width + cos.abs() * half_height;
+    [
+        transform.position.x - extent_x,
+        transform.position.y - extent_y,
+        transform.position.x + extent_x,
+        transform.position.y + extent_y,
+    ]
 }
 
 /// The camera for the screen-space overlay drawn over the scene.
@@ -391,6 +406,20 @@ mod tests {
         let editor = world_camera(640.0, 480.0);
         let player = Camera::new(640.0, 480.0);
         assert_eq!(editor.projection_matrix(), player.projection_matrix());
+    }
+
+    #[test]
+    fn sprite_bounds_include_rotation_and_nonuniform_scale() {
+        let bounds = transformed_sprite_bounds(
+            Transform::new(10.0, 20.0)
+                .with_rotation(std::f32::consts::FRAC_PI_2)
+                .with_scale(kiln_core::Vec2::new(2.0, 1.0)),
+            [8.0, 4.0],
+        );
+        assert!((bounds[0] - 8.0).abs() < 0.0001);
+        assert!((bounds[1] - 12.0).abs() < 0.0001);
+        assert!((bounds[2] - 12.0).abs() < 0.0001);
+        assert!((bounds[3] - 28.0).abs() < 0.0001);
     }
 
     #[test]

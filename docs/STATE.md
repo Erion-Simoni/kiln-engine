@@ -11,7 +11,7 @@
 - Inspector edits for Transform position/rotation/uniform-scale and Sprite tint/layer/dimensions update authored and runtime state with one undo step per field gesture. Sprite dimensions default to 32×32 in old projects.
 - Sprite rendering supports entity rotation/scale and authored dimensions. Parent links compose local translation/rotation/scale into runtime `GlobalTransform`; editor/player/web/mobile/sample renderers consume refreshed global poses. Viewport drags convert to local space; reparent/delete preserve child world poses and nested scene offsets survive propagation.
 - Scene viewport now has visible move axes, a rotation ring, and a scale handle. Drag gestures preview local Transform edits, commit one undo step on release, and cancel through the existing Escape path. Rotation angle wrap, uniform scaling, hit targets, and translation snap math have unit coverage.
-- Hierarchy and scene-list selection now support Ctrl/Cmd additive toggling while preserving a primary inspector target. The scene view's Frame Selection button and `F` shortcut center and fit selected entity positions.
+- Hierarchy and scene-list selection now support Ctrl/Cmd additive toggling while preserving a primary inspector target. The scene view's Frame Selection button and `F` shortcut fit selected sprite bounds after rotation and scale, with position-only bounds for nonvisual entities.
 - All gizmo modes now apply to multi-selection around the primary entity: translation shares a world-space offset, rotation turns positions and orientations around the pivot, and scale changes offsets and sizes. Each resulting world transform converts back to local space, and the gesture is one undo transaction.
 
 ## Validation
@@ -21,13 +21,13 @@
 - Multi-selection/framing checkpoint: `just check` passed; `just test`: 519 passed, zero failed/skipped. Additive selection state has a unit test.
 - Group-translation checkpoint: `just check` passed; `just test`: 520 passed, zero failed/skipped. A regression test moves a selected parent and child together while preserving world spacing. Runtime GUI drag behavior remains to be exercised in the native editor.
 - Group rotation/scale checkpoint: `just check` passed; `just test`: 522 passed, zero failed/skipped. Unit and integration tests cover pivot behavior and parented world targets.
+- Sprite-aware framing checkpoint: `just check` passed; `just test`: 523 passed, zero failed/skipped. Bounds math covers rotated, nonuniformly scaled sprites.
 - Native app GUI confirmation of parented transforms and gizmo dragging remains outstanding. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
 
 ## Next
 
-1. Add multi-entity rotation/scale and frame by authored sprite bounds.
-2. Add dirty scene-tab Save/Discard/Cancel and autosave/recovery.
-3. Run full two-scene transform/reparent/duplicate/delete/save/restart acceptance before completing Task 2. Tasks 3–9 remain pending.
+1. Add dirty scene-tab Save/Discard/Cancel and autosave/recovery.
+2. Run full two-scene transform/reparent/duplicate/delete/save/restart acceptance before completing Task 2. Tasks 3–9 remain pending.
 
 ## Known limits and environment
 

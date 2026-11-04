@@ -5015,33 +5015,45 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
 impl<'a> TabViewer<'a> {
     fn frame_selection(&mut self) {
-        let selected = &self.hierarchy_panel.selected_ids;
-        let positions: Vec<[f32; 2]> = selected
-            .iter()
-            .filter_map(|id| {
-                let entity = *self.entity_id_to_hecs.get(id)?;
-                let transform = self
-                    .world
-                    .world_ref()
-                    .get::<&kiln_runtime::GlobalTransform>(entity)
-                    .ok()?;
-                Some([transform.0.position.x, transform.0.position.y])
-            })
-            .collect();
-        let Some(first) = positions.first().copied() else {
+        let mut bounds: Option<[f32; 4]> = None;
+        for id in self.hierarchy_panel.selected_ids.clone() {
+            let Some(entity) = self.entity_id_to_hecs.get(&id).copied() else {
+                continue;
+            };
+            let Ok(transform) = self
+                .world
+                .world_ref()
+                .get::<&kiln_runtime::GlobalTransform>(entity)
+            else {
+                continue;
+            };
+            let entity_bounds = if let Ok(sprite) = self.world.world_ref().get::<&Sprite>(entity) {
+                scene_view::transformed_sprite_bounds(transform.0, sprite.size)
+            } else {
+                [
+                    transform.0.position.x,
+                    transform.0.position.y,
+                    transform.0.position.x,
+                    transform.0.position.y,
+                ]
+            };
+            bounds = Some(match bounds {
+                Some([min_x, min_y, max_x, max_y]) => [
+                    min_x.min(entity_bounds[0]),
+                    min_y.min(entity_bounds[1]),
+                    max_x.max(entity_bounds[2]),
+                    max_y.max(entity_bounds[3]),
+                ],
+                None => entity_bounds,
+            });
+        }
+        let Some([min_x, min_y, max_x, max_y]) = bounds else {
             return;
         };
         self.camera_state.target = None;
-        let (mut min_x, mut max_x, mut min_y, mut max_y) = (first[0], first[0], first[1], first[1]);
-        for [x, y] in positions.iter().copied().skip(1) {
-            min_x = min_x.min(x);
-            max_x = max_x.max(x);
-            min_y = min_y.min(y);
-            max_y = max_y.max(y);
-        }
         let base = scene_view::world_camera(self.scene_world_size.0, self.scene_world_size.1);
-        let width = (max_x - min_x).max(32.0) * 1.25;
-        let height = (max_y - min_y).max(32.0) * 1.25;
+        let width = (max_x - min_x).max(1.0) * 1.2;
+        let height = (max_y - min_y).max(1.0) * 1.2;
         self.camera_state.zoom = (base.viewport_size[0] / width)
             .min(base.viewport_size[1] / height)
             .clamp(0.1, 10.0);
