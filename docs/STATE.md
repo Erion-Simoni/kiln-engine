@@ -13,6 +13,7 @@
 - Scene viewport now has visible move axes, a rotation ring, and a scale handle. Drag gestures preview local Transform edits, commit one undo step on release, and cancel through the existing Escape path. Rotation angle wrap, uniform scaling, hit targets, and translation snap math have unit coverage.
 - Hierarchy and scene-list selection now support Ctrl/Cmd additive toggling while preserving a primary inspector target. The scene view's Frame Selection button and `F` shortcut fit selected sprite bounds after rotation and scale, with position-only bounds for nonvisual entities.
 - All gizmo modes now apply to multi-selection around the primary entity: translation shares a world-space offset, rotation turns positions and orientations around the pivot, and scale changes offsets and sizes. Each resulting world transform converts back to local space, and the gesture is one undo transaction.
+- Closing a dirty scene tab now offers Save, Discard, or Cancel. Save writes the project before closing; Discard restores the saved scene or removes a never-saved scene, while preserving other open-scene edits.
 
 ## Validation
 
@@ -22,11 +23,12 @@
 - Group-translation checkpoint: `just check` passed; `just test`: 520 passed, zero failed/skipped. A regression test moves a selected parent and child together while preserving world spacing. Runtime GUI drag behavior remains to be exercised in the native editor.
 - Group rotation/scale checkpoint: `just check` passed; `just test`: 522 passed, zero failed/skipped. Unit and integration tests cover pivot behavior and parented world targets.
 - Sprite-aware framing checkpoint: `just check` passed; `just test`: 523 passed, zero failed/skipped. Bounds math covers rotated, nonuniformly scaled sprites.
+- Dirty scene-tab close checkpoint: `just check` passed; `just test`: 524 passed, zero failed/skipped. Workspace coverage includes discarding saved edits and removing an unsaved new scene. Autosave/recovery is still pending.
 - Native app GUI confirmation of parented transforms and gizmo dragging remains outstanding. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
 
 ## Next
 
-1. Add dirty scene-tab Save/Discard/Cancel and autosave/recovery.
+1. Add autosave/recovery and exercise the scene-close dialog in the native GUI.
 2. Run full two-scene transform/reparent/duplicate/delete/save/restart acceptance before completing Task 2. Tasks 3–9 remain pending.
 
 ## Known limits and environment

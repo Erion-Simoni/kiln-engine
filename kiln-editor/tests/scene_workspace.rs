@@ -206,6 +206,29 @@ fn dirty_tab_close_is_blocked_without_dropping_document_or_history() {
 }
 
 #[test]
+fn discard_close_restores_saved_scene_and_removes_unsaved_new_scene() {
+    let mut project = project();
+    let original_a = project.scenes["a"].clone();
+    let mut tabs = SceneWorkspace::open(&project);
+    let mut edited_a = original_a.clone();
+    edited_a.name = "discard me".into();
+    tabs.history.record(original_a.clone());
+    tabs.discard_and_close(&mut project, edited_a, 0).unwrap();
+    assert_eq!(json(&project.scenes["a"]), json(&original_a));
+    assert_eq!(tabs.active_id(), Some("b"));
+    assert!(tabs.tabs.iter().all(|tab| tab.scene_id != "a"));
+
+    let current_b = project.scenes["b"].clone();
+    tabs.create(&mut project, Some(current_b.clone())).unwrap();
+    let new_id = tabs.active_id().unwrap().to_owned();
+    let current_new = project.scenes[&new_id].clone();
+    tabs.discard_and_close(&mut project, current_new, 1)
+        .unwrap();
+    assert!(!project.scenes.contains_key(&new_id));
+    assert_eq!(tabs.active_id(), Some("b"));
+}
+
+#[test]
 fn creating_scene_preserves_edits_and_avoids_closed_scene_id_collisions() {
     let mut project = project();
     project

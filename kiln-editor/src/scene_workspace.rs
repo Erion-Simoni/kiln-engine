@@ -201,4 +201,43 @@ impl SceneWorkspace {
         }
         Ok(())
     }
+
+    /// Discard a tab's edits to its last saved baseline and close it.
+    /// Newly created scenes with no saved baseline are removed from the project.
+    pub fn discard_and_close(
+        &mut self,
+        project: &mut Project,
+        current: Scene,
+        index: usize,
+    ) -> Result<(), String> {
+        if index >= self.tabs.len() {
+            return Err("Unknown scene tab".into());
+        }
+        if self.tabs.len() == 1 {
+            return Err("Keep at least one scene tab open".into());
+        }
+        let scene_id = self.tabs[index].scene_id.clone();
+        let active_index = self.active.ok_or("No active scene")?;
+        if active_index == index {
+            let target = if index == 0 { 1 } else { index - 1 };
+            self.switch(project, current, target)?;
+        } else {
+            self.capture(project, current)?;
+        }
+
+        if let Some(saved) = self.saved.get(&scene_id).cloned() {
+            project.scenes.insert(scene_id.clone(), saved);
+        } else {
+            project.scenes.remove(&scene_id);
+            self.saved.remove(&scene_id);
+        }
+        self.histories.remove(&scene_id);
+        self.tabs.remove(index);
+        if let Some(active) = self.active.as_mut() {
+            if *active > index {
+                *active -= 1;
+            }
+        }
+        Ok(())
+    }
 }

@@ -60,12 +60,19 @@ enum SceneAction {
     Close(usize),
 }
 
+#[derive(Debug, Clone)]
+struct SceneClosePrompt {
+    index: usize,
+    save_error: Option<String>,
+}
+
 enum ProjectRequest {
     Component(ComponentCommand),
     Entity(crate::entity_command::EntityCommand),
     CancelTransform,
     Leave(ProjectAction),
     Resolve(SaveDecision),
+    ResolveSceneClose(SaveDecision),
     Scene(SceneAction),
     Open(PathBuf),
     SaveAs(PathBuf),
@@ -225,6 +232,7 @@ pub struct EditorApp {
     scene_save_requested: bool,
     /// Set by the scene toolbar, handled after the UI pass.
     scene_load_requested: bool,
+    scene_close_prompt: Option<SceneClosePrompt>,
     /// Camera state for the scene view.
     camera: CameraState,
     /// Grid snap settings for the scene editor.
@@ -678,6 +686,7 @@ impl EditorApp {
             play_toggle_requested: false,
             scene_save_requested: false,
             scene_load_requested: false,
+            scene_close_prompt: None,
             gizmo: GizmoState::default(),
             transform_edit: None,
         })
@@ -1409,6 +1418,24 @@ impl EditorApp {
         self.finish_transform_edit();
         self.require_edit_mode()?;
         let current = self.scenes.active_id().map(|_| self.scene_from_world());
+        if let SceneAction::Close(index) = &action {
+            if *index >= self.scenes.tabs.len() {
+                return Err("Unknown scene tab".into());
+            }
+            if self.scenes.tabs.len() == 1 {
+                return Err("Keep at least one scene tab open".into());
+            }
+            if let Some(project) = self.current_project.as_ref() {
+                self.scenes.refresh_dirty(project, current.as_ref());
+            }
+            if self.scenes.tabs[*index].dirty {
+                self.scene_close_prompt = Some(SceneClosePrompt {
+                    index: *index,
+                    save_error: None,
+                });
+                return Ok(());
+            }
+        }
         let project = self.current_project.as_mut().ok_or("No project loaded")?;
         match action {
             SceneAction::Open(id) => {
@@ -1427,6 +1454,39 @@ impl EditorApp {
         }
         self.reset_scene_view();
         Ok(())
+    }
+
+    fn resolve_scene_close(&mut self, decision: SaveDecision) -> Result<(), String> {
+        let Some(prompt) = self.scene_close_prompt.clone() else {
+            return Ok(());
+        };
+        match decision {
+            SaveDecision::Cancel => {
+                self.scene_close_prompt = None;
+                Ok(())
+            }
+            SaveDecision::Save => {
+                if let Err(error) = self.save_project() {
+                    if let Some(prompt) = self.scene_close_prompt.as_mut() {
+                        prompt.save_error = Some(error);
+                    }
+                    return Ok(());
+                }
+                self.scene_close_prompt = None;
+                self.change_scene(SceneAction::Close(prompt.index))
+            }
+            SaveDecision::Discard => {
+                self.finish_transform_edit();
+                self.require_edit_mode()?;
+                let current = self.scene_from_world();
+                let project = self.current_project.as_mut().ok_or("No project loaded")?;
+                self.scenes
+                    .discard_and_close(project, current, prompt.index)?;
+                self.scene_close_prompt = None;
+                self.reset_scene_view();
+                Ok(())
+            }
+        }
     }
 }
 
@@ -1574,6 +1634,11 @@ impl EditorApp {
             {
                 continue;
             }
+            if self.scene_close_prompt.is_some()
+                && !matches!(request, ProjectRequest::ResolveSceneClose(_))
+            {
+                continue;
+            }
             let result = match request {
                 ProjectRequest::Component(command) => self.apply_component_command(command),
                 ProjectRequest::Entity(command) => self.apply_entity_command(command),
@@ -1583,6 +1648,7 @@ impl EditorApp {
                 }
                 ProjectRequest::Leave(action) => self.request_project_action(action),
                 ProjectRequest::Resolve(decision) => self.resolve_project_action(decision),
+                ProjectRequest::ResolveSceneClose(decision) => self.resolve_scene_close(decision),
                 ProjectRequest::Scene(action) => self.change_scene(action),
                 ProjectRequest::Open(path) => {
                     self.request_project_action(ProjectAction::Open(path))
@@ -2144,6 +2210,46 @@ impl EditorApp {
             if ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
                 self.project_requests
                     .push(ProjectRequest::Resolve(SaveDecision::Cancel));
+            }
+        }
+
+        if let Some(prompt) = &self.scene_close_prompt {
+            let scene_name = self
+                .scenes
+                .tabs
+                .get(prompt.index)
+                .map(|tab| tab.scene_id.as_str())
+                .unwrap_or("scene");
+            egui::Window::new("Unsaved scene changes")
+                .id(egui::Id::new("unsaved_scene_close_prompt"))
+                .order(egui::Order::Foreground)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    ui.label(format!(
+                        "Save changes to scene `{scene_name}` before closing it?"
+                    ));
+                    ui.label("Discard restores this scene to its last saved version.");
+                    if let Some(error) = &prompt.save_error {
+                        ui.colored_label(egui::Color32::LIGHT_RED, format!("Save failed: {error}"));
+                    }
+                    ui.horizontal(|ui| {
+                        for (label, decision) in [
+                            ("Save", SaveDecision::Save),
+                            ("Discard", SaveDecision::Discard),
+                            ("Cancel", SaveDecision::Cancel),
+                        ] {
+                            if ui.button(label).clicked() {
+                                self.project_requests
+                                    .push(ProjectRequest::ResolveSceneClose(decision));
+                            }
+                        }
+                    });
+                });
+            if ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+                self.project_requests
+                    .push(ProjectRequest::ResolveSceneClose(SaveDecision::Cancel));
             }
         }
 
