@@ -122,6 +122,10 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("event_entity", 67, 0),
     ("change_scene", 68, 1),
     ("array_new", 69, 0),
+    ("overlap_circle", 70, 4),
+    ("raycast_query", 71, 6),
+    ("get_mouse_world_x", 72, 0),
+    ("get_mouse_world_y", 73, 0),
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -169,8 +173,10 @@ pub struct SliceFacts {
     pub frame_count: u64,
     /// Current time scale.
     pub time_scale: f64,
-    /// Map of entity source_id -> (x, y) position for entities with Role component.
+    /// Map of entity source_id -> authored local (x, y) position.
     pub entity_positions: HashMap<String, (f64, f64)>,
+    /// World-space linear velocity for physics bodies or Velocity components.
+    pub entity_velocities: HashMap<String, (f64, f64)>,
     /// Map of entity source_id -> sprite color [r, g, b, a].
     pub entity_sprite_colors: HashMap<String, [f64; 4]>,
     /// Map of entity source_id -> sprite size [w, h].
@@ -346,6 +352,7 @@ pub type AudioPlayer = Box<dyn Fn(&str) + Send + Sync>;
 /// The script host: reads facts and records commands.
 #[derive(Default)]
 pub struct SliceHost {
+    mouse_world: [f64; 2],
     self_entity: String,
     script_state: HashMap<String, Value>,
     properties: HashMap<String, f64>,
@@ -414,6 +421,7 @@ impl SliceHost {
     /// A host with the given facts.
     pub fn new(facts: SliceFacts) -> Self {
         Self {
+            mouse_world: [0.0; 2],
             self_entity: String::new(),
             script_state: HashMap::new(),
             properties: HashMap::new(),
@@ -467,6 +475,11 @@ impl SliceHost {
         self.mouse_x = x;
         self.mouse_y = y;
         self.mouse_pressed = pressed;
+    }
+
+    /// Set the pointer position mapped through the active gameplay camera.
+    pub fn set_mouse_world(&mut self, point: [f64; 2]) {
+        self.mouse_world = point;
     }
 
     /// Whether a UI widget was clicked this frame.
@@ -862,6 +875,12 @@ impl SliceHost {
                 let source_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
                 let component = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
                 match component {
+                    "velocity" | "Velocity" => Ok(self
+                        .facts
+                        .entity_velocities
+                        .get(source_id)
+                        .map(|(x, y)| Value::Array(vec![Value::F64(*x), Value::F64(*y)]))
+                        .unwrap_or(Value::Bool(false))),
                     "transform" | "Transform" | "position" | "Position" => {
                         if let Some((x, y)) = self.facts.entity_positions.get(source_id) {
                             Ok(Value::Array(vec![Value::F64(*x), Value::F64(*y)]))
@@ -937,18 +956,19 @@ impl SliceHost {
                 #[cfg(feature = "physics")]
                 {
                     if let Some(physics) = &self.physics {
-                        if let Some((body_index, distance)) =
-                            physics.raycast([x as f32, y as f32], [dx as f32, dy as f32], 100.0)
-                        {
-                            // Find the entity source_id for this physics body handle
-                            for (sid, pb) in self.facts.entity_positions.iter() {
-                                // We can't easily map physics handle to source_id here without
-                                // storing it in facts. Return distance-based hit info instead.
-                                let _ = (sid, pb, body_index, distance);
-                            }
+                        if let Some(hit) = physics.raycast_hit(
+                            [x as f32, y as f32],
+                            [dx as f32, dy as f32],
+                            100.0,
+                            u16::MAX,
+                            Some(&self.self_entity),
+                            false,
+                        ) {
                             return Ok(Value::Array(vec![
-                                Value::F64(distance as f64),
-                                Value::I64(body_index as i64),
+                                Value::Str(hit.source_id),
+                                Value::F64(hit.distance as f64),
+                                Value::F64(hit.normal[0] as f64),
+                                Value::F64(hit.normal[1] as f64),
                             ]));
                         }
                     }
@@ -1309,6 +1329,51 @@ impl SliceHost {
                 Ok(Value::I64(0))
             }
             69 => Ok(Value::Array(Vec::new())),
+            70 => {
+                #[cfg(feature = "physics")]
+                if let Some(physics) = &self.physics {
+                    let x = args[0].to_f64().unwrap_or(0.0) as f32;
+                    let y = args[1].to_f64().unwrap_or(0.0) as f32;
+                    let radius = args[2].to_f64().unwrap_or(0.0) as f32;
+                    let mask = args[3].as_i64().unwrap_or(65535) as u16;
+                    return Ok(Value::Array(
+                        physics
+                            .overlap_circle([x, y], radius, mask)
+                            .into_iter()
+                            .map(Value::Str)
+                            .collect(),
+                    ));
+                }
+                Ok(Value::Array(Vec::new()))
+            }
+            71 => {
+                #[cfg(feature = "physics")]
+                if let Some(physics) = &self.physics {
+                    let values: Vec<_> = args
+                        .iter()
+                        .take(5)
+                        .map(|value| value.to_f64().unwrap_or(0.0) as f32)
+                        .collect();
+                    if let Some(hit) = physics.raycast_hit(
+                        [values[0], values[1]],
+                        [values[2], values[3]],
+                        values[4],
+                        args[5].as_i64().unwrap_or(65535) as u16,
+                        Some(&self.self_entity),
+                        false,
+                    ) {
+                        return Ok(Value::Array(vec![
+                            Value::Str(hit.source_id),
+                            Value::F64(hit.distance as f64),
+                            Value::F64(hit.normal[0] as f64),
+                            Value::F64(hit.normal[1] as f64),
+                        ]));
+                    }
+                }
+                Ok(Value::Bool(false))
+            }
+            72 => Ok(Value::F64(self.mouse_world[0])),
+            73 => Ok(Value::F64(self.mouse_world[1])),
             _ => Err(VmError::HostCallError(format!(
                 "unknown slice builtin id {func_id}"
             ))),
@@ -1368,6 +1433,7 @@ pub struct EntityScriptDebug {
 impl AttachedScript {
     fn run(
         &mut self,
+        _parent: &mut SliceHost,
         phase: &str,
         world: &mut GameWorld,
         input: (f64, f64),
@@ -1376,14 +1442,25 @@ impl AttachedScript {
     ) -> Result<(), VmError> {
         self.session.vm.host_mut().phase = phase.into();
         self.session.vm.host_mut().frame_count = self.frame.saturating_sub(1);
-        self.session
-            .step_program(world, input, dt, false, collisions.to_vec())
-            .map_err(|error| {
-                VmError::HostCallError(format!(
-                    "{} (entity {}, {phase}): {error}",
-                    self.path, self.entity_id
-                ))
-            })
+        #[cfg(feature = "physics")]
+        std::mem::swap(
+            &mut _parent.physics,
+            &mut self.session.vm.host_mut().physics,
+        );
+        let result = self
+            .session
+            .step_program(world, input, dt, false, collisions.to_vec());
+        #[cfg(feature = "physics")]
+        std::mem::swap(
+            &mut _parent.physics,
+            &mut self.session.vm.host_mut().physics,
+        );
+        result.map_err(|error| {
+            VmError::HostCallError(format!(
+                "{} (entity {}, {phase}): {error}",
+                self.path, self.entity_id
+            ))
+        })
     }
 }
 
@@ -1539,7 +1616,7 @@ impl SliceSession {
     pub fn stop(&mut self, world: &mut GameWorld) -> Result<(), VmError> {
         for attached in &mut self.attached {
             if attached.started {
-                attached.run("stop", world, (0.0, 0.0), 0.0, &[])?;
+                attached.run(self.vm.host_mut(), "stop", world, (0.0, 0.0), 0.0, &[])?;
                 attached.started = false;
             }
         }
@@ -1647,6 +1724,7 @@ impl SliceSession {
         let collisions = self.vm.host_mut().facts.collision_events.clone();
         let signals = std::mem::take(&mut self.signals);
         let keys = self.vm.host_mut().pressed_keys.clone();
+        let mouse_world = self.vm.host().mouse_world;
         let save_dir = self.vm.host_mut().save_dir.clone();
         let frame = self.vm.host().frame_count;
         self.signals.append(&mut self.vm.host_mut().emitted_signals);
@@ -1659,7 +1737,7 @@ impl SliceSession {
                 .any(|id| id.0 == attached.entity_id)
             {
                 if attached.started {
-                    attached.run("stop", world, input, 0.0, &collisions)?;
+                    attached.run(self.vm.host_mut(), "stop", world, input, 0.0, &collisions)?;
                     attached.started = false;
                     self.signals
                         .append(&mut attached.session.vm.host_mut().emitted_signals);
@@ -1667,15 +1745,16 @@ impl SliceSession {
                 continue;
             }
             attached.session.vm.host_mut().pressed_keys = keys.clone();
+            attached.session.vm.host_mut().mouse_world = mouse_world;
             attached.session.vm.host_mut().save_dir = save_dir.clone();
             if !attached.started {
                 attached.started = true;
-                attached.run("start", world, input, 0.0, &collisions)?;
+                attached.run(self.vm.host_mut(), "start", world, input, 0.0, &collisions)?;
             }
             for (name, value) in &signals {
                 attached.session.vm.host_mut().signal_name = name.clone();
                 attached.session.vm.host_mut().signal_value = Some(value.clone());
-                attached.run("signal", world, input, 0.0, &collisions)?;
+                attached.run(self.vm.host_mut(), "signal", world, input, 0.0, &collisions)?;
             }
             for (a, b, started) in &collisions {
                 let other = if a == &attached.entity_id {
@@ -1687,6 +1766,7 @@ impl SliceSession {
                 };
                 attached.session.vm.host_mut().event_entity = other.clone();
                 attached.run(
+                    self.vm.host_mut(),
                     if *started {
                         "collision_enter"
                     } else {
@@ -1698,7 +1778,7 @@ impl SliceSession {
                     &collisions,
                 )?;
             }
-            attached.run("update", world, input, dt, &collisions)?;
+            attached.run(self.vm.host_mut(), "update", world, input, dt, &collisions)?;
             self.ui_commands.append(&mut attached.session.ui_commands);
             self.signals
                 .append(&mut attached.session.vm.host_mut().emitted_signals);
@@ -1733,7 +1813,7 @@ impl SliceSession {
             use crate::physics::sync_physics_with_ecs;
             let host = self.vm.host_mut();
             if let Some(physics) = host.physics.as_mut().filter(|_| advance_systems) {
-                sync_physics_with_ecs(physics, world.world_mut())
+                sync_physics_with_ecs(physics, world)
             } else {
                 Vec::new()
             }
@@ -1851,7 +1931,7 @@ impl SliceSession {
 
         // Collect entity positions, velocities, and roles for script queries.
         let mut entity_positions = HashMap::new();
-        let _entity_velocities: HashMap<String, (f64, f64)> = HashMap::new();
+        let mut entity_velocities = HashMap::new();
         let mut entity_roles = HashMap::new();
         let mut entity_sprite_colors = HashMap::new();
         let mut entity_sprite_sizes = HashMap::new();
@@ -1865,6 +1945,29 @@ impl SliceSession {
             entity_positions.insert(
                 source_id.0.clone(),
                 (transform.position.x as f64, transform.position.y as f64),
+            );
+        }
+        for (source_id, velocity) in world
+            .world_ref()
+            .query::<(&SourceId, &crate::Velocity)>()
+            .iter()
+        {
+            entity_velocities.insert(
+                source_id.0.clone(),
+                (velocity.0[0] as f64, velocity.0[1] as f64),
+            );
+        }
+        for (source_id, body) in world
+            .world_ref()
+            .query::<(&SourceId, &crate::world::RigidBody2D)>()
+            .iter()
+        {
+            entity_velocities.insert(
+                source_id.0.clone(),
+                (
+                    body.linear_velocity[0] as f64,
+                    body.linear_velocity[1] as f64,
+                ),
             );
         }
 
@@ -1891,6 +1994,7 @@ impl SliceSession {
             frame_count: self.host_mut().frame_count,
             time_scale: self.host_mut().time_scale,
             entity_positions,
+            entity_velocities,
             entity_sprite_colors,
             entity_sprite_sizes,
             entity_roles,
@@ -1973,19 +2077,21 @@ impl SliceSession {
                 }
             }
             SliceCommand::SetEntityVel { source_id, vx, vy } => {
-                #[cfg(feature = "physics")]
-                {
-                    use crate::{SourceId, Velocity};
-                    for (eid, sid) in world.world_mut().query_mut::<(hecs::Entity, &SourceId)>() {
-                        if sid.0 == source_id {
-                            if let Ok(velocity) =
-                                world.world_mut().query_one_mut::<&mut Velocity>(eid)
-                            {
-                                velocity.0[0] = vx as f32;
-                                velocity.0[1] = vy as f32;
-                            }
-                            break;
+                use crate::{SourceId, Velocity};
+                for (eid, sid) in world.world_mut().query_mut::<(hecs::Entity, &SourceId)>() {
+                    if sid.0 == source_id {
+                        if let Ok(body) = world
+                            .world_mut()
+                            .query_one_mut::<&mut crate::world::RigidBody2D>(eid)
+                        {
+                            body.linear_velocity = [vx as f32, vy as f32];
                         }
+                        if let Ok(velocity) = world.world_mut().query_one_mut::<&mut Velocity>(eid)
+                        {
+                            velocity.0[0] = vx as f32;
+                            velocity.0[1] = vy as f32;
+                        }
+                        break;
                     }
                 }
             }
@@ -2026,6 +2132,9 @@ impl SliceSession {
                                             if let (Some(Value::F64(vx)), Some(Value::F64(vy))) =
                                                 (arr.first(), arr.get(1))
                                             {
+                                                if let Ok(body) = world.world_mut().query_one_mut::<&mut crate::world::RigidBody2D>(eid) {
+                                                    body.linear_velocity = [*vx as f32, *vy as f32];
+                                                }
                                                 if let Ok(velocity) = world
                                                     .world_mut()
                                                     .query_one_mut::<&mut Velocity>(eid)
@@ -2101,6 +2210,9 @@ impl SliceSession {
                                             if let (Some(Value::F64(vx)), Some(Value::F64(vy))) =
                                                 (arr.first(), arr.get(1))
                                             {
+                                                if let Ok(body) = world.world_mut().query_one_mut::<&mut crate::world::RigidBody2D>(eid) {
+                                                    body.linear_velocity = [*vx as f32, *vy as f32];
+                                                }
                                                 if let Ok(velocity) = world
                                                     .world_mut()
                                                     .query_one_mut::<&mut Velocity>(eid)
@@ -2143,7 +2255,9 @@ impl SliceSession {
                 source_id,
                 component_type,
             } => {
-                use crate::{SourceId, Sprite, Velocity};
+                #[cfg(feature = "physics")]
+                use crate::Velocity;
+                use crate::{SourceId, Sprite};
                 use kiln_core::Transform;
                 for (eid, sid) in world.world_mut().query_mut::<(hecs::Entity, &SourceId)>() {
                     if sid.0 == source_id {

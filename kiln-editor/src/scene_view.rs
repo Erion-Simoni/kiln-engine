@@ -150,6 +150,18 @@ pub fn canvas_viewport(
     }
 }
 
+/// Camera-aware viewport used by gameplay rendering, debug drawing and input.
+pub fn camera_viewport(panel: egui::Rect, pixels_per_point: f32, camera: &Camera) -> ViewportRect {
+    let panel = rect_to_pixels(panel, pixels_per_point);
+    let [x, y, width, height] = camera.fit_viewport([panel.x, panel.y, panel.width, panel.height]);
+    ViewportRect {
+        x,
+        y,
+        width,
+        height,
+    }
+}
+
 /// World units per logical pointer point, including DPI and camera zoom.
 pub fn units_per_point(
     viewport: ViewportRect,

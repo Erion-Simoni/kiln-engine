@@ -65,13 +65,29 @@ instance state. Source/instruction breakpoints and arbitrary watch evaluation
 are not exposed. Native visual interaction remains unverified without a GUI
 runner; see ADR-0052 and `docs/KILNSCRIPT.md` for the supported contract.
 
-### 5. Physics and cameras — PENDING
+### 5. Physics and cameras — IMPLEMENTATION COMPLETE; NATIVE ACCEPTANCE PENDING
 
-- [ ] Implement actual ray/shape queries, collision enter/exit events, sensors, masks, body removal, joints, and fixed-step synchronization.
-- [ ] Add reliable collider authoring and physics debug drawing.
-- [ ] Finish camera follow, smoothing, bounds, zoom, pixel-perfect settings, and viewport/input coordinate mapping.
+- [x] Implement actual ray/shape queries, collision enter/exit events, sensors, masks, body removal, joints, and fixed-step synchronization.
+- [x] Add reliable collider authoring and physics debug drawing.
+- [x] Finish camera follow, smoothing, bounds, zoom, pixel-perfect settings, and viewport/input coordinate mapping.
 
 Acceptance: platformer grounding, slopes/moving platforms, triggers, collision filtering, camera limits, and multiple frame rates have gameplay regression tests and visible editor validation.
+
+Headless regressions exercise real Rapier contacts, sensor transitions and
+geometry queries, all three joint types, moving platforms, hierarchy/offset
+conversion, body recreation/removal, command history and save/reopen. The
+checked-in `samples/physics2d_editor` scripts jump, cross a trigger and an
+excluded collision layer, and clamp the gameplay camera identically from source
+at 30 FPS and player assets at 144 FPS. Native visual acceptance is pending:
+the cloud runner has no display server. Follow `docs/PHYSICS_2D.md` to record it.
+
+2026-11-04 validation: `just check` passed; `just test` ran **577 cases, all
+passed, zero skipped**; `cargo build -p kiln-editor -p kiln-player` passed;
+`cargo clippy -p kiln-runtime --no-default-features --all-targets -- -D warnings`
+passed; `cargo build --target wasm32-unknown-unknown -p kiln-web` passed. Built
+editor startup was attempted and failed at window creation because DISPLAY and
+Wayland variables are absent. No native visual or browser physics gameplay
+acceptance is claimed.
 
 ### 6. Sprites, animation, tilemaps, and VFX — PENDING
 

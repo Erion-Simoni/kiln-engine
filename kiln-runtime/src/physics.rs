@@ -7,6 +7,11 @@ use rapier2d::prelude::*;
 /// Physics world wrapper
 #[cfg(feature = "physics")]
 pub struct PhysicsWorld {
+    pub(crate) tracked: std::collections::HashMap<hecs::Entity, crate::physics_sync::TrackedBody>,
+    pub(crate) source_ids: std::collections::HashMap<RigidBodyHandle, String>,
+    pub(crate) active_pairs: std::collections::BTreeSet<(String, String)>,
+    pub(crate) tracked_joints:
+        std::collections::HashMap<hecs::Entity, (ImpulseJointHandle, crate::world::Joint2D)>,
     pub rigid_body_set: RigidBodySet,
     pub collider_set: ColliderSet,
     gravity: Vec2,
@@ -14,7 +19,7 @@ pub struct PhysicsWorld {
     physics_pipeline: PhysicsPipeline,
     island_manager: IslandManager,
     broad_phase: BroadPhaseBvh,
-    narrow_phase: NarrowPhase,
+    pub(crate) narrow_phase: NarrowPhase,
     pub joint_set: ImpulseJointSet,
     multibody_joint_set: MultibodyJointSet,
     ccd_solver: CCDSolver,
@@ -54,6 +59,10 @@ impl PhysicsWorld {
     /// Create a new physics world with default gravity.
     pub fn new() -> Self {
         PhysicsWorld {
+            tracked: Default::default(),
+            source_ids: Default::default(),
+            active_pairs: Default::default(),
+            tracked_joints: Default::default(),
             rigid_body_set: RigidBodySet::new(),
             collider_set: ColliderSet::new(),
             gravity: Vec2::new(0.0, -9.81),
@@ -91,6 +100,7 @@ impl PhysicsWorld {
 
     /// Step the physics simulation
     pub fn step(&mut self) {
+        self.integration_parameters.dt = crate::play_clock::PLAY_STEP as f32;
         self.physics_pipeline.step(
             self.gravity,
             &self.integration_parameters,
@@ -128,14 +138,106 @@ impl PhysicsWorld {
     /// Raycast from origin in direction, returning the first hit body index and distance.
     pub fn raycast(
         &self,
-        _origin: [f32; 2],
-        _direction: [f32; 2],
-        _max_distance: f32,
+        origin: [f32; 2],
+        direction: [f32; 2],
+        max_distance: f32,
     ) -> Option<(u32, f32)> {
-        // TODO: Update to use the new rapier2d 0.36+ raycast API
-        // The old Point/Ray/cast_ray API has changed
-        None
+        self.raycast_hit(origin, direction, max_distance, u16::MAX, None, true)
+            .map(|hit| (hit.body_index, hit.distance))
     }
+
+    /// Raycast against real collider geometry, with normalized distance and
+    /// source identity, optional self exclusion, sensor control, and mask bits.
+    pub fn raycast_hit(
+        &self,
+        origin: [f32; 2],
+        direction: [f32; 2],
+        max_distance: f32,
+        mask: u16,
+        exclude: Option<&str>,
+        sensors: bool,
+    ) -> Option<PhysicsHit> {
+        if !origin
+            .iter()
+            .chain(direction.iter())
+            .all(|value| value.is_finite())
+            || !max_distance.is_finite()
+            || max_distance < 0.0
+        {
+            return None;
+        }
+        let direction = Vec2::new(direction[0], direction[1]).try_normalize()?;
+        let filter = |_: ColliderHandle, collider: &Collider| {
+            (sensors || !collider.is_sensor())
+                && collider.collision_groups().memberships.bits() & mask as u32 != 0
+                && exclude.is_none_or(|id| {
+                    collider
+                        .parent()
+                        .and_then(|body| self.source_ids.get(&body))
+                        .is_none_or(|source| source != id)
+                })
+        };
+        let query = self.broad_phase.as_query_pipeline(
+            self.narrow_phase.query_dispatcher(),
+            &self.rigid_body_set,
+            &self.collider_set,
+            QueryFilter::default().predicate(&filter),
+        );
+        let ray = Ray::new(Vec2::new(origin[0], origin[1]), direction);
+        let (handle, hit) = query.cast_ray_and_get_normal(&ray, max_distance, true)?;
+        let collider = self.collider_set.get(handle)?;
+        let body = collider.parent()?;
+        let point = ray.point_at(hit.time_of_impact);
+        Some(PhysicsHit {
+            source_id: self.source_ids.get(&body).cloned().unwrap_or_default(),
+            body_index: body.into_raw_parts().0,
+            distance: hit.time_of_impact,
+            normal: [hit.normal.x, hit.normal.y],
+            point: [point.x, point.y],
+        })
+    }
+
+    /// Return stable IDs overlapping a circle, using narrow geometric tests.
+    pub fn overlap_circle(&self, center: [f32; 2], radius: f32, mask: u16) -> Vec<String> {
+        if !radius.is_finite() || radius <= 0.0 || !center.iter().all(|value| value.is_finite()) {
+            return Vec::new();
+        }
+        let filter = |_: ColliderHandle, collider: &Collider| {
+            collider.collision_groups().memberships.bits() & mask as u32 != 0
+        };
+        let query = self.broad_phase.as_query_pipeline(
+            self.narrow_phase.query_dispatcher(),
+            &self.rigid_body_set,
+            &self.collider_set,
+            QueryFilter::default().predicate(&filter),
+        );
+        let shape = Ball::new(radius);
+        let mut ids: Vec<_> = query
+            .intersect_shape(
+                rapier2d::math::Pose::new(Vec2::new(center[0], center[1]), 0.0),
+                &shape,
+            )
+            .filter_map(|(_, collider)| {
+                collider
+                    .parent()
+                    .and_then(|body| self.source_ids.get(&body))
+                    .cloned()
+            })
+            .collect();
+        ids.sort();
+        ids.dedup();
+        ids
+    }
+}
+
+/// Geometry query result independent of Rapier's internal handles.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PhysicsHit {
+    pub source_id: String,
+    pub body_index: u32,
+    pub distance: f32,
+    pub normal: [f32; 2],
+    pub point: [f32; 2],
 }
 
 #[cfg(feature = "physics")]
@@ -180,112 +282,13 @@ pub struct CollisionEvent {
 
 /// Sync physics bodies with ECS transforms and collect collision events.
 ///
-/// Call this once per frame. Returns collision events detected this frame.
+/// Call once per fixed 60 Hz tick. Returns actual enter/exit transitions.
 #[cfg(feature = "physics")]
 pub fn sync_physics_with_ecs(
     physics: &mut PhysicsWorld,
-    world: &mut hecs::World,
+    world: &mut crate::GameWorld,
 ) -> Vec<CollisionEvent> {
-    use crate::world::{
-        Collider2D, ColliderShape, PhysicsBody, RigidBody2D, RigidBodyType, SourceId,
-    };
-    use kiln_core::Transform;
-
-    // Register new bodies: entities with RigidBody2D + Collider2D but no PhysicsBody
-    let to_register: Vec<(hecs::Entity, RigidBody2D, Collider2D, Option<SourceId>)> = {
-        let mut query =
-            world.query::<(hecs::Entity, &RigidBody2D, &Collider2D, Option<&SourceId>)>();
-        (&mut query)
-            .into_iter()
-            .filter_map(|(e, rb, col, sid)| {
-                if world.get::<&PhysicsBody>(e).is_err() {
-                    Some((e, *rb, *col, sid.cloned()))
-                } else {
-                    None
-                }
-            })
-            .collect()
-    };
-
-    for (entity, rb, col, _source_id) in to_register {
-        // Get the transform for this entity to set initial position
-        let transform = world.get::<&Transform>(entity).ok().map(|t| *t);
-        let pos = transform
-            .map(|t| [t.position.x, t.position.y])
-            .unwrap_or([0.0, 0.0]);
-
-        let body_builder = match rb.body_type {
-            RigidBodyType::Static => rapier2d::prelude::RigidBodyBuilder::fixed(),
-            RigidBodyType::Dynamic => rapier2d::prelude::RigidBodyBuilder::dynamic(),
-            RigidBodyType::Kinematic => {
-                rapier2d::prelude::RigidBodyBuilder::kinematic_position_based()
-            }
-        }
-        .translation(rapier2d::math::Vector::new(pos[0], pos[1]))
-        .linvel(rapier2d::math::Vector::new(
-            rb.linear_velocity[0],
-            rb.linear_velocity[1],
-        ))
-        .angvel(rb.angular_velocity)
-        .gravity_scale(rb.gravity_scale)
-        .can_sleep(rb.can_sleep);
-
-        let handle = physics.create_rigid_body(body_builder);
-
-        let collider_builder = match col.shape {
-            ColliderShape::Circle { radius } => rapier2d::prelude::ColliderBuilder::ball(radius)
-                .friction(col.friction)
-                .restitution(col.restitution)
-                .density(col.density)
-                .sensor(col.is_sensor),
-            ColliderShape::Rectangle {
-                half_width,
-                half_height,
-            } => rapier2d::prelude::ColliderBuilder::cuboid(half_width, half_height)
-                .friction(col.friction)
-                .restitution(col.restitution)
-                .density(col.density)
-                .sensor(col.is_sensor),
-        };
-
-        physics.create_collider(collider_builder, handle);
-
-        let _ = world.insert_one(
-            entity,
-            PhysicsBody {
-                handle: handle.into_raw_parts().0,
-                generation: handle.into_raw_parts().1,
-            },
-        );
-    }
-
-    // Create physics joints for entities with Joint2D components
-    // TODO: Update to use the new rapier2d 0.36+ joint API
-    // The old ImpulseJoint API has changed significantly
-    // For now, skip joint creation
-
-    // Step the simulation
-    physics.step();
-
-    // Collect collision events from the narrow phase
-    let collision_events = Vec::new();
-    // Note: rapier2d 0.36+ has changed the contact events API - this is a stub for now
-    // TODO: Update to use the new rapier2d contact events API when available
-
-    // Sync physics positions back to ECS transforms
-    for (physics_body, transform) in world.query_mut::<(&mut PhysicsBody, &mut Transform)>() {
-        let handle = rapier2d::prelude::RigidBodyHandle::from_raw_parts(
-            physics_body.handle,
-            physics_body.generation,
-        );
-        if let Some(body) = physics.rigid_body_set.get(handle) {
-            let pos = body.translation();
-            transform.position.x = pos.x;
-            transform.position.y = pos.y;
-        }
-    }
-
-    collision_events
+    crate::physics_sync::synchronize(physics, world)
 }
 
 #[cfg(test)]

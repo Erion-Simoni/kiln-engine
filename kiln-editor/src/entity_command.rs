@@ -249,6 +249,14 @@ fn apply(
             copy.id = id.clone();
             copy.name = format!("{} Copy", copy.name);
             for component in &mut copy.components {
+                if let Component::Joint { joint } = component {
+                    if joint.entity_a == *entity_id {
+                        joint.entity_a = id.clone();
+                    }
+                    if joint.entity_b == *entity_id {
+                        joint.entity_b = id.clone();
+                    }
+                }
                 if let Component::PrefabInstance { overrides, .. } = component {
                     overrides.entity_id = id.clone();
                 }

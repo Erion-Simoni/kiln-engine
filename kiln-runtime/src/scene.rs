@@ -114,7 +114,7 @@ pub fn update_global_transforms(world: &mut GameWorld) -> Result<(), String> {
     Ok(())
 }
 
-fn resolve_runtime_transform(
+pub(crate) fn resolve_runtime_transform(
     entity: hecs::Entity,
     locals: &std::collections::HashMap<hecs::Entity, Transform>,
     parents: &std::collections::HashMap<hecs::Entity, hecs::Entity>,
@@ -308,6 +308,17 @@ pub fn spawn_entities(
         let Some(child) = spawned_handles.get(&entity.id) else {
             continue;
         };
+        for component in &entity.components {
+            match component {
+                Component::Physics { body, collider } => {
+                    let _ = world.world_mut().insert(*child, (*body, *collider));
+                }
+                Component::Joint { joint } => {
+                    let _ = world.world_mut().insert_one(*child, joint.clone());
+                }
+                _ => {}
+            }
+        }
         let parent_id = entity
             .components
             .iter()

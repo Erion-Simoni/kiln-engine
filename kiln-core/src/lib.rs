@@ -2,6 +2,7 @@
 //! Math, time, shared types, ECS glue
 
 pub mod access;
+pub mod camera;
 pub mod clip;
 pub mod device_tier;
 pub mod hierarchy_transform;
@@ -10,6 +11,7 @@ pub mod input;
 pub mod math;
 pub mod mesh;
 pub mod paths;
+pub mod physics_data;
 pub mod prefab;
 pub mod project;
 pub mod tilemap;

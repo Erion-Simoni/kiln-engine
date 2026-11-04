@@ -24,6 +24,9 @@ pub struct Project {
     pub mobile: MobileSettings,
     #[serde(default)]
     pub scenes: HashMap<String, Scene>,
+    /// Gameplay camera configuration keyed by scene ID.
+    #[serde(default)]
+    pub cameras: HashMap<String, crate::camera::CameraSettings>,
     /// Tilemaps of the project, keyed by their id.
     #[serde(default)]
     pub tilemaps: HashMap<String, TileMap>,
@@ -243,6 +246,13 @@ pub struct Entity {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Component {
+    /// Authored physics body and its collision shape.
+    Physics {
+        body: crate::physics_data::RigidBody2D,
+        collider: crate::physics_data::Collider2D,
+    },
+    /// Authored physical joint between stable entity source IDs.
+    Joint { joint: crate::physics_data::Joint2D },
     /// Entity-attached gameplay program with per-instance numeric properties.
     Script {
         /// Project-relative script resource path.
@@ -346,6 +356,7 @@ impl Default for Project {
             window: WindowSettings::default(),
             mobile: MobileSettings::default(),
             scenes: HashMap::new(),
+            cameras: HashMap::new(),
             tilemaps: HashMap::new(),
             tilesets: HashMap::new(),
             animation_clips: HashMap::new(),

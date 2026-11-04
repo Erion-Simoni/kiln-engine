@@ -102,7 +102,9 @@ Builtins are host functions registered by the runtime. The standard slice builti
 | `get_entity_component(source_id, component_name)` | 2 (str, str) | value | Read a component value |
 | `set_entity_component(source_id, component_name, value)` | 3 (str, str, value) | — | Set a component value |
 | `find_nearest(x, y, role)` | 3 (f64, f64, str) | source_id or false | Find nearest entity with role |
-| `raycast(x, y, dx, dy)` | 4 (f64, f64, f64, f64) | [distance, body_index] or false | Raycast query |
+| `raycast(x, y, dx, dy)` | 4 (f64, f64, f64, f64) | [source_id, distance, normal_x, normal_y] or false | Solid geometry query, maximum distance 100 |
+| `raycast_query(x, y, dx, dy, distance, mask)` | 6 (numbers; integer mask) | [source_id, distance, normal_x, normal_y] or false | Ray query with range and membership bitset |
+| `overlap_circle(x, y, radius, mask)` | 4 (numbers; integer mask) | [source_id...] | Actual shape overlap; includes sensors, sorted unique IDs |
 | `get_frame_count()` | 0 | i64 | Current frame number |
 | `get_time_scale()` | 0 | f64 | Current time scale |
 | `set_entity_vel(source_id, vx, vy)` | 3 (str, f64, f64) | — | Set entity velocity |
@@ -135,6 +137,21 @@ Builtins are host functions registered by the runtime. The standard slice builti
 |----------|-----------|---------|-------------|
 | `get_action(action_name)` | 1 (str) | bool | Whether an action is pressed |
 | `get_action_axis(action_name)` | 1 (str) | f64 | Axis value -1 to 1 |
+| `get_mouse_world_x()` / `get_mouse_world_y()` | 0 | f64 | Pointer mapped through the gameplay camera and physical viewport |
+
+Physics queries use world coordinates. Directions are normalized, distances are
+in world units, and attached scripts exclude their own body from rays. Ray
+queries skip sensors. Membership/mask values are integer bitsets (1, 2, 4, …);
+zero matches nothing. Without the optional physics backend, rays return false
+and overlaps return an empty array. Task 5 replaces the old provisional ray
+result layout: use stable source ID at index 0 and distance at index 1.
+
+`get_entity_component(id, "velocity")` reads a body's world linear velocity as
+`[vx, vy]`. `set_entity_vel` changes the physics body for the next fixed tick;
+preserve its current Y velocity when changing horizontal movement. Position
+getters/setters address authored local transforms. The mouse world APIs are
+provided by the native editor/player; custom hosts must call `set_mouse_world`.
+See [Physics and cameras](PHYSICS_2D.md) and the checked-in editor sample.
 
 ### Localization builtins
 

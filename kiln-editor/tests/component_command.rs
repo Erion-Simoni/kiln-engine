@@ -109,7 +109,125 @@ fn components() -> Vec<Component> {
         Component::Tilemap {
             map: "level_map".into(),
         },
+        Component::Physics {
+            body: Default::default(),
+            collider: Default::default(),
+        },
+        Component::Joint { joint: joint() },
     ]
+}
+
+fn joint() -> kiln_core::physics_data::Joint2D {
+    kiln_core::physics_data::Joint2D {
+        entity_a: "hero".into(),
+        entity_b: "marker".into(),
+        joint_type: kiln_core::physics_data::JointType::Distance,
+        anchor_a: [1.0, 2.0],
+        anchor_b: [0.0; 2],
+        reference_angle: 0.0,
+        length: 5.0,
+        lower_translation: -2.0,
+        upper_translation: 2.0,
+        enable_limit: false,
+        motor_speed: 0.0,
+        max_motor_torque: 0.0,
+        enable_motor: false,
+    }
+}
+
+#[test]
+fn physics_edits_validate_undo_and_preserve_saved_camera_and_joint_settings() {
+    use kiln_core::physics_data::*;
+    let mut project = fixture();
+    let mut scene = project.scenes["main"].clone();
+    let mut history = SceneHistory::new();
+    command(ComponentEdit::Add(Component::Physics {
+        body: Default::default(),
+        collider: Default::default(),
+    }))
+    .execute(&mut scene, &project, &mut history)
+    .unwrap();
+    let before = scene.clone();
+    let body = RigidBody2D {
+        body_type: RigidBodyType::Kinematic,
+        linear_velocity: [4.0, 0.0],
+        ..Default::default()
+    };
+    let collider = Collider2D {
+        shape: ColliderShape::Circle { radius: 3.0 },
+        is_sensor: true,
+        layer: 2,
+        mask: 1,
+        ..Default::default()
+    };
+    command(ComponentEdit::SetPhysics { body, collider })
+        .execute(&mut scene, &project, &mut history)
+        .unwrap();
+    let edited = scene.clone();
+    scene = history.undo(scene).unwrap();
+    assert_eq!(json(&scene), json(&before));
+    scene = history.redo(scene).unwrap();
+    assert_eq!(json(&scene), json(&edited));
+    let depth = history.undo_depth();
+    let invalid = Collider2D {
+        shape: ColliderShape::Circle { radius: -1.0 },
+        ..collider
+    };
+    assert!(command(ComponentEdit::SetPhysics {
+        body,
+        collider: invalid
+    })
+    .execute(&mut scene, &project, &mut history)
+    .is_err());
+    assert_eq!(history.undo_depth(), depth);
+    assert_eq!(json(&scene), json(&edited));
+    command(ComponentEdit::Add(Component::Joint { joint: joint() }))
+        .execute(&mut scene, &project, &mut history)
+        .unwrap();
+    let mut constraint = joint();
+    constraint.length = 8.0;
+    command(ComponentEdit::SetJoint { joint: constraint })
+        .execute(&mut scene, &project, &mut history)
+        .unwrap();
+    project.scenes.insert("main".into(), scene);
+    project.cameras.insert(
+        "main".into(),
+        kiln_core::camera::CameraSettings {
+            target: Some("hero".into()),
+            zoom: 2.0,
+            smoothing: 3.0,
+            bounds: Some([-10.0, -20.0, 900.0, 700.0]),
+            pixel_perfect: true,
+            ..Default::default()
+        },
+    );
+    assert_disk(&project);
+    let projected = spawn(&project);
+    assert_eq!(
+        projected.world_ref().query::<&RigidBody2D>().iter().count(),
+        1
+    );
+    assert_eq!(
+        projected
+            .world_ref()
+            .query::<&Joint2D>()
+            .iter()
+            .next()
+            .unwrap()
+            .length,
+        8.0
+    );
+    let mut scene = project.scenes["main"].clone();
+    let copy = kiln_editor::entity_command::EntityCommand {
+        scene_id: "main".into(),
+        edit: kiln_editor::entity_command::EntityEdit::Duplicate {
+            entity_id: "hero".into(),
+        },
+    }
+    .execute(&mut scene, &project, &mut history)
+    .unwrap()
+    .unwrap();
+    assert!(scene.entities.last().unwrap().components.iter().any(|component| matches!(component, Component::Joint { joint } if joint.entity_a == copy && joint.entity_b == "marker")));
 }
 fn command(edit: ComponentEdit) -> ComponentCommand {
     ComponentCommand {

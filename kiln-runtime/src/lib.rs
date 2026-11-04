@@ -1,6 +1,7 @@
 //! Kiln runtime crate
 //! Frame loop, scene, input, audio hooks
 
+pub mod camera;
 pub mod input;
 pub mod jobs;
 pub mod loop_;
@@ -22,6 +23,8 @@ pub mod audio;
 
 #[cfg(feature = "physics")]
 pub mod physics;
+#[cfg(feature = "physics")]
+mod physics_sync;
 
 pub use input::*;
 pub use jobs::{load_file_async, JobHandle, TaskPool};

@@ -128,6 +128,8 @@ struct PlaySession {
     error: Option<String>,
     clock: kiln_runtime::play_clock::PlayClock,
     last_tick: Instant,
+    camera_controller: kiln_runtime::camera::CameraController,
+    game_camera: kiln_render::camera::Camera,
 }
 
 impl PlaySession {
@@ -1061,6 +1063,14 @@ impl EditorApp {
             .map(|gpu| gpu.scene_textures.clone())
             .unwrap_or_default();
         let (slice, scene_id, world) = start_play_session(&project, scene_id, &root, &textures)?;
+        let mut camera_controller = kiln_runtime::camera::CameraController::default();
+        let settings = project.cameras.get(&scene_id).cloned().unwrap_or_default();
+        let game_camera = camera_controller.update(
+            &settings,
+            &world,
+            [project.window.width as f32, project.window.height as f32],
+            0.0,
+        )?;
 
         // The played scene replaces the edited one, so the scene view shows
         // the running game.
@@ -1074,6 +1084,8 @@ impl EditorApp {
             error: None,
             clock: kiln_runtime::play_clock::PlayClock::default(),
             last_tick: Instant::now(),
+            camera_controller,
+            game_camera,
         });
         self.is_playing = true;
 
@@ -1131,6 +1143,9 @@ impl EditorApp {
             Some(project) => (project.window.width as f32, project.window.height as f32),
             None => (DEFAULT_WORLD_SIZE.0, DEFAULT_WORLD_SIZE.1),
         };
+        if self.play.is_some() {
+            return base;
+        }
         let mut max_x = base.0;
         let mut max_y = base.1;
         for (_, tilemap) in self
@@ -1147,6 +1162,9 @@ impl EditorApp {
     }
 
     fn scene_camera(&self) -> kiln_render::camera::Camera {
+        if let Some(play) = &self.play {
+            return play.game_camera.clone();
+        }
         let world = self.world_size();
         let mut camera = scene_view::world_camera(world.0, world.1);
         if let Some(target_id) = &self.camera.target {
@@ -1236,7 +1254,40 @@ impl EditorApp {
 
     /// Advance the running game by one frame.
     fn update_play(&mut self) {
+        let settings = self
+            .play
+            .as_ref()
+            .and_then(|play| {
+                self.current_project
+                    .as_ref()
+                    .and_then(|project| project.cameras.get(&play.scene_id))
+            })
+            .cloned()
+            .unwrap_or_default();
+        let size = self
+            .current_project
+            .as_ref()
+            .map(|project| [project.window.width as f32, project.window.height as f32])
+            .unwrap_or([1280.0, 720.0]);
         let axis = self.play_axis();
+        let mouse_mapping = self.scene_view_rect.and_then(|rect| {
+            let ppp = self.egui_winit.egui_ctx().pixels_per_point();
+            let viewport = scene_view::camera_viewport(rect, ppp, &self.scene_camera());
+            self.egui_winit
+                .egui_ctx()
+                .input(|input| input.pointer.hover_pos())
+                .map(|point| {
+                    (
+                        [point.x * ppp, point.y * ppp],
+                        [
+                            viewport.x as f32,
+                            viewport.y as f32,
+                            viewport.width as f32,
+                            viewport.height as f32,
+                        ],
+                    )
+                })
+        });
         let text_input = self.egui_winit.egui_ctx().wants_keyboard_input();
         let keys = self.egui_winit.egui_ctx().input(|input| {
             if text_input {
@@ -1262,6 +1313,13 @@ impl EditorApp {
         play.last_tick = Instant::now();
         play.slice.host_mut().set_pressed_keys(&keys);
         for _ in 0..play.clock.advance(elapsed) {
+            if let Some((point, viewport)) = mouse_mapping {
+                if let Some(position) = play.game_camera.screen_to_world(point, viewport) {
+                    play.slice
+                        .host_mut()
+                        .set_mouse_world(position.map(|value| value as f64));
+                }
+            }
             if let Err(error) = play
                 .slice
                 .step(world, axis, kiln_runtime::play_clock::PLAY_STEP)
@@ -1271,6 +1329,20 @@ impl EditorApp {
                 break;
             }
             play.error = None;
+            let _ = kiln_runtime::scene::update_global_transforms(world);
+            match play.camera_controller.update(
+                &settings,
+                world,
+                size,
+                kiln_runtime::play_clock::PLAY_STEP as f32,
+            ) {
+                Ok(camera) => play.game_camera = camera,
+                Err(error) => {
+                    play.error = Some(error);
+                    play.clock.set_paused(true);
+                    break;
+                }
+            }
             if let Some(id) = play.slice.take_scene_request() {
                 project_requests.push(ProjectRequest::TransitionPlay(id));
                 play.clock.set_paused(true);
@@ -2858,7 +2930,8 @@ impl EditorApp {
         // engine owns every pixel of the panel, so the editor shows what the
         // player shows.
         if let Some(panel) = self.scene_view_rect {
-            let viewport = scene_view::canvas_viewport(panel, full_output.pixels_per_point, world);
+            let viewport =
+                scene_view::camera_viewport(panel, full_output.pixels_per_point, &scene_camera);
             if !viewport.is_empty() {
                 let queue = gpu.renderer.queue();
                 let origin_x = viewport.x;
@@ -3519,7 +3592,7 @@ impl TabViewer<'_> {
             return;
         }
         let ppp = ui.ctx().pixels_per_point();
-        let viewport = scene_view::canvas_viewport(panel, ppp, self.world_size());
+        let viewport = scene_view::camera_viewport(panel, ppp, self.scene_camera);
         let Some(units) = scene_view::units_per_point(viewport, ppp, self.scene_camera) else {
             return;
         };
@@ -4038,6 +4111,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.separator();
 
                         // Grid snap controls
+                        ui.checkbox(&mut self.physics_editor.show_scene_colliders, "Colliders");
                         ui.label("Grid:");
                         ui.add_sized([60.0, 20.0], egui::DragValue::new(self.grid_snap_size));
                         if ui
@@ -4212,6 +4286,47 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 // with the engine's sprite renderer.
                 *self.scene_view_rect = Some(rect);
                 self.translation_canvas(ui, rect);
+                if self.physics_editor.show_scene_colliders {
+                    let ppp = ui.ctx().pixels_per_point();
+                    let viewport = scene_view::camera_viewport(rect, ppp, self.scene_camera);
+                    let canvas = egui::Rect::from_min_size(
+                        egui::pos2(viewport.x as f32 / ppp, viewport.y as f32 / ppp),
+                        egui::vec2(viewport.width as f32 / ppp, viewport.height as f32 / ppp),
+                    );
+                    let painter = ui.painter().with_clip_rect(canvas);
+                    for (collider, pose) in self
+                        .world
+                        .world_ref()
+                        .query::<(
+                            &kiln_runtime::world::Collider2D,
+                            &kiln_runtime::GlobalTransform,
+                        )>()
+                        .iter()
+                    {
+                        let points: Vec<_> =
+                            crate::physics_inspector::collider_outline(pose.0, collider.shape)
+                                .into_iter()
+                                .filter_map(|point| {
+                                    self.scene_camera.world_to_screen(
+                                        point,
+                                        [
+                                            canvas.left(),
+                                            canvas.top(),
+                                            canvas.width(),
+                                            canvas.height(),
+                                        ],
+                                    )
+                                })
+                                .map(|point| egui::pos2(point[0], point[1]))
+                                .collect();
+                        let color = if collider.is_sensor {
+                            egui::Color32::YELLOW
+                        } else {
+                            egui::Color32::LIGHT_GREEN
+                        };
+                        painter.add(egui::Shape::line(points, egui::Stroke::new(1.5_f32, color)));
+                    }
+                }
 
                 // Draw gizmo mode indicator in the top-left of the scene view
                 if self.gizmo.mode != GizmoMode::None {
@@ -4244,7 +4359,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         {
                             let ppp = ui.ctx().pixels_per_point();
                             let viewport =
-                                scene_view::canvas_viewport(rect, ppp, self.world_size());
+                                scene_view::camera_viewport(rect, ppp, self.scene_camera);
                             if let Some(units) =
                                 scene_view::units_per_point(viewport, ppp, self.scene_camera)
                             {
@@ -4334,6 +4449,31 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         let has_sprite = has(ComponentKind::Sprite);
                         let has_role = has(ComponentKind::Role);
                         let has_tilemap = has(ComponentKind::Tilemap);
+                        if let Some((mut body, mut collider)) = authored.components.iter().find_map(|component| match component {
+                            kiln_core::Component::Physics { body, collider } => Some((*body,*collider)), _=>None,
+                        }) {
+                            ui.group(|ui| {
+                                ui.strong("Physics Body / Collider");
+                                if crate::physics_inspector::body_ui(ui,&mut body,&mut collider) { self.queue_component(entity,ComponentEdit::SetPhysics {body,collider}); }
+                                if ui.button("Remove Physics").clicked() { self.remove_component(entity,ComponentKind::Physics); }
+                            });
+                        } else if ui.button("+ Physics Body / Collider").clicked() { self.add_component(entity,ComponentKind::Physics); }
+                        if let Some(mut joint)=authored.components.iter().find_map(|component| match component {kiln_core::Component::Joint {joint}=>Some(joint.clone()),_=>None}) {
+                            ui.group(|ui| {
+                                ui.strong("Physics Joint");
+                                if crate::physics_inspector::joint_ui(ui,&mut joint) {self.queue_component(entity,ComponentEdit::SetJoint {joint:joint.clone()});}
+                                if ui.button("Remove Joint").clicked() {self.remove_component(entity,ComponentKind::Joint);}
+                            });
+                        } else {
+                            let targets: Vec<_>=self.current_project.as_ref().and_then(|project| self.scenes.active_id().and_then(|id| project.scenes.get(id))).map(|scene| scene.entities.iter().filter(|candidate| candidate.id!=authored.id).map(|candidate| candidate.id.clone()).collect()).unwrap_or_default();
+                            ui.menu_button("+ Joint to Entity",|ui| {
+                                for target in targets {if ui.button(&target).clicked() {
+                                    self.queue_component(entity,ComponentEdit::Add(kiln_core::Component::Joint {joint:kiln_core::physics_data::Joint2D {
+                                        entity_a:authored.id.clone(),entity_b:target,joint_type:kiln_core::physics_data::JointType::Distance,anchor_a:[0.0;2],anchor_b:[0.0;2],reference_angle:0.0,length:32.0,lower_translation:-32.0,upper_translation:32.0,enable_limit:false,motor_speed:0.0,max_motor_torque:0.0,enable_motor:false,
+                                    }}));ui.close_menu();
+                                }}
+                            });
+                        }
                         if let Some((path, properties)) = authored.components.iter().find_map(|component| match component {
                             kiln_core::Component::Script { path, properties } => Some((path.clone(), properties.clone())), _ => None,
                         }) {
@@ -5648,6 +5788,37 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             ui.label("Scene Composition");
                         });
                     });
+
+                    let locked = self.editing_locked();
+                    let scene_id = self.scenes.active_id().map(str::to_owned);
+                    if let (Some(project), Some(id)) = (self.current_project.as_mut(), scene_id) {
+                        let mut settings = project.cameras.get(&id).cloned().unwrap_or_default();
+                        let mut ids: Vec<_> = project
+                            .scenes
+                            .get(&id)
+                            .map(|scene| {
+                                scene
+                                    .entities
+                                    .iter()
+                                    .map(|entity| entity.id.clone())
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        ids.sort();
+                        ui.collapsing("Gameplay Camera", |ui| {
+                            ui.add_enabled_ui(!locked, |ui| {
+                                if crate::physics_inspector::camera_ui(
+                                    ui,
+                                    &mut settings,
+                                    &ids,
+                                    [project.window.width as f32, project.window.height as f32],
+                                ) && settings.validate().is_ok()
+                                {
+                                    project.cameras.insert(id, settings);
+                                }
+                            });
+                        });
+                    }
 
                     ui.add_space(8.0);
 

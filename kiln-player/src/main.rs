@@ -202,6 +202,7 @@ struct GpuState {
 struct PlayerApp {
     gpu: Option<GpuState>,
     camera: Camera,
+    camera_controller: kiln_runtime::camera::CameraController,
     game_loop: GameLoop,
     world: GameWorld,
     #[allow(dead_code)]
@@ -265,6 +266,7 @@ impl PlayerApp {
         Self {
             gpu: None,
             camera: Camera::new(width as f32, height as f32),
+            camera_controller: Default::default(),
             game_loop: GameLoop::new(),
             world,
             input: InputState::new(),
@@ -341,6 +343,7 @@ impl PlayerApp {
         self.slice = None;
         self.world = GameWorld::new();
         self.game_loop = GameLoop::new();
+        self.camera_controller = Default::default();
 
         // Decode the project's PNG assets and upload them as GPU textures.
         let (textures, errors) = TextureLibrary::upload_for_project(
@@ -379,6 +382,25 @@ impl PlayerApp {
         }
 
         // The scene script needs the spawned entities, so it is loaded last.
+        let _ = kiln_runtime::update_global_transforms(&mut self.world);
+        let settings = self
+            .project
+            .cameras
+            .get(&self.scene_id)
+            .cloned()
+            .unwrap_or_default();
+        match self.camera_controller.update(
+            &settings,
+            &self.world,
+            [
+                self.project.window.width as f32,
+                self.project.window.height as f32,
+            ],
+            0.0,
+        ) {
+            Ok(camera) => self.camera = camera,
+            Err(error) => log::error!("Camera: {error}"),
+        }
         self.load_slice();
     }
 
@@ -590,18 +612,45 @@ impl PlayerApp {
         let mouse_x = self.mouse_x;
         let mouse_y = self.mouse_y;
         let mouse_pressed = self.mouse_pressed;
+        let mouse_area = self
+            .gpu
+            .as_ref()
+            .map(|gpu| {
+                let size = gpu.renderer.size();
+                [0, 0, size.0, size.1]
+            })
+            .unwrap_or([0, 0, self.window_width, self.window_height]);
+        let mouse_viewport = self
+            .camera
+            .fit_viewport(mouse_area)
+            .map(|value| value as f32);
         let world = &mut self.world;
         let slice = &mut self.slice;
         let ui_commands = &mut self.ui_commands;
         let action_map = &mut self.action_map;
         let pressed_keys = &mut self.pressed_keys;
         let ui_widgets = &mut self.ui_widgets;
+        let camera = &mut self.camera;
+        let controller = &mut self.camera_controller;
+        let camera_settings = self
+            .project
+            .cameras
+            .get(&self.scene_id)
+            .cloned()
+            .unwrap_or_default();
         let mut transition = None;
         self.game_loop.tick(|dt| {
             if transition.is_some() {
                 return;
             }
             if let Some(slice) = slice.as_mut() {
+                if let Some(position) =
+                    camera.screen_to_world([mouse_x as f32, mouse_y as f32], mouse_viewport)
+                {
+                    slice
+                        .host_mut()
+                        .set_mouse_world(position.map(|value| value as f64));
+                }
                 // Pass mouse state to the slice host for UI click detection.
                 slice
                     .host_mut()
@@ -616,6 +665,16 @@ impl PlayerApp {
                     log::error!("scene script failed: {e}");
                 }
                 transition = slice.take_scene_request();
+                let _ = kiln_runtime::scene::update_global_transforms(world);
+                match controller.update(
+                    &camera_settings,
+                    world,
+                    camera.viewport_size,
+                    dt.as_secs_f32(),
+                ) {
+                    Ok(updated) => *camera = updated,
+                    Err(error) => log::error!("Camera: {error}"),
+                }
                 // Collect UI commands from the last script frame and build widgets.
                 let commands = slice.take_ui_commands();
                 *ui_commands = commands.clone();
@@ -846,6 +905,9 @@ impl PlayerApp {
                 occlusion_query_set: None,
             });
 
+            let [x, y, width, height] = self.camera.fit_viewport([0, 0, size.width, size.height]);
+            pass.set_viewport(x as f32, y as f32, width as f32, height as f32, 0.0, 1.0);
+            pass.set_scissor_rect(x, y, width, height);
             gpu.sprite_renderer
                 .flush(&mut pass, &self.camera, gpu.renderer.queue());
         }
@@ -1187,8 +1249,9 @@ impl winit::application::ApplicationHandler for PlayerApp {
                 self.game_loop = GameLoop::new();
             }
             winit::event::WindowEvent::KeyboardInput { event, .. } => self.handle_key(event),
-            winit::event::WindowEvent::Resized(size) => {
-                self.camera = Camera::new(size.width as f32, size.height as f32);
+            winit::event::WindowEvent::Resized(_) => {
+                // Keep the configured world extent when the physical window
+                // changes. Rendering and input mapping use the same viewport.
             }
             winit::event::WindowEvent::CursorMoved { position, .. } => {
                 self.mouse_x = position.x;

@@ -1296,3 +1296,28 @@ Physics collision production remains the backend's responsibility (Task 5);
 the entity scheduler delivers backend events once per tick without stepping
 world systems again for each callback. Native graphical acceptance still
 requires a GUI-capable runner.
+
+## ADR-0053: Task 5 physics synchronization and query ownership
+
+**Date:** 2026-11-04
+**Status:** accepted
+
+Rapier owns physical world poses during fixed gameplay ticks. Authored/local
+transforms remain scene data; the bridge resolves hierarchy/world offsets before
+registration and converts physical poses back to local transforms afterward.
+The bridge tracks ECS entities and generational body handles, removes orphaned
+bodies/colliders/joints, and updates externally edited poses/velocities instead
+of re-registering a body every frame. Collision membership/filter values are
+bitsets, and sensor pairs and solid contacts feed deterministic enter/exit
+events into the existing script scheduler. Queries use Rapier's actual scene
+geometry and expose stable source IDs with distance/normals rather than arena
+indices. Optional physics builds remain supported.
+
+Physics components and per-scene camera settings live in `kiln-core` so their
+serialized data survives without the simulation feature. Inspector commands
+use scene history; camera settings use project-wide save/dirty tracking.
+Native editor/player share the camera controller and aspect-fit viewport,
+including integer physical upscaling in pixel-perfect mode (small panels
+downscale to fit). Joint anchors use authored local units, including entity
+scale. The prior standalone Physics panel is explicitly a sandbox preview;
+saved scene physics is authored through the Inspector.

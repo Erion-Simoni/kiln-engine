@@ -6,6 +6,8 @@ use kiln_core::{Component, Project, Scene};
 /// Components exposed by the entity inspector. Parent is edited by the hierarchy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComponentKind {
+    Physics,
+    Joint,
     Script,
     Transform,
     Sprite,
@@ -17,6 +19,8 @@ impl ComponentKind {
     /// Identify an inspector component, excluding hierarchy links.
     pub fn of(component: &Component) -> Option<Self> {
         match component {
+            Component::Physics { .. } => Some(Self::Physics),
+            Component::Joint { .. } => Some(Self::Joint),
             Component::Script { .. } => Some(Self::Script),
             Component::Transform { .. } => Some(Self::Transform),
             Component::Sprite { .. } => Some(Self::Sprite),
@@ -30,6 +34,11 @@ impl ComponentKind {
     /// Defaults for resource-free components; Tilemap needs an explicit map ID.
     pub fn default_component(self) -> Option<Component> {
         match self {
+            Self::Physics => Some(Component::Physics {
+                body: Default::default(),
+                collider: Default::default(),
+            }),
+            Self::Joint => None,
             Self::Script => None,
             Self::Transform => Some(Component::Transform {
                 x: 0.0,
@@ -57,6 +66,13 @@ impl ComponentKind {
 /// One component-presence edit. Add never overwrites an existing component.
 #[derive(Debug, Clone)]
 pub enum ComponentEdit {
+    SetPhysics {
+        body: kiln_core::physics_data::RigidBody2D,
+        collider: kiln_core::physics_data::Collider2D,
+    },
+    SetJoint {
+        joint: kiln_core::physics_data::Joint2D,
+    },
     SetScript {
         path: String,
         properties: std::collections::HashMap<String, f64>,
@@ -119,6 +135,8 @@ impl ComponentCommand {
             return Err("Select one root-scene entity to edit its components".into());
         };
         let kind = match &self.edit {
+            ComponentEdit::SetPhysics { .. } => ComponentKind::Physics,
+            ComponentEdit::SetJoint { .. } => ComponentKind::Joint,
             ComponentEdit::SetScript { .. } => ComponentKind::Script,
             ComponentEdit::Add(component) => {
                 validate(component, project)?;
@@ -140,6 +158,33 @@ impl ComponentCommand {
             return Err("Entity has ambiguous duplicate components".into());
         }
         match (&self.edit, matches.first()) {
+            (ComponentEdit::SetPhysics { body, collider }, Some(index)) => {
+                let replacement = Component::Physics {
+                    body: *body,
+                    collider: *collider,
+                };
+                validate(&replacement, project)?;
+                if serde_json::to_value(&components[*index]).ok()
+                    == serde_json::to_value(&replacement).ok()
+                {
+                    return Ok(false);
+                }
+                components[*index] = replacement;
+                Ok(true)
+            }
+            (ComponentEdit::SetJoint { joint }, Some(index)) => {
+                let replacement = Component::Joint {
+                    joint: joint.clone(),
+                };
+                validate(&replacement, project)?;
+                if serde_json::to_value(&components[*index]).ok()
+                    == serde_json::to_value(&replacement).ok()
+                {
+                    return Ok(false);
+                }
+                components[*index] = replacement;
+                Ok(true)
+            }
             (ComponentEdit::SetScript { path, properties }, Some(index)) => {
                 let replacement = Component::Script {
                     path: path.clone(),
@@ -233,6 +278,10 @@ impl ComponentCommand {
 
 fn validate(component: &Component, project: &Project) -> Result<(), String> {
     match component {
+        Component::Physics { body, collider } => {
+            kiln_core::physics_data::validate_body(body, collider)
+        }
+        Component::Joint { joint } => kiln_core::physics_data::validate_joint(joint),
         Component::Script { path, properties }
             if path.trim().is_empty()
                 || std::path::Path::new(path).is_absolute()

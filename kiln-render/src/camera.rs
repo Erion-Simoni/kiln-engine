@@ -2,10 +2,13 @@
 
 use glam::Mat4;
 
+#[derive(Debug, Clone)]
 pub struct Camera {
     pub position: [f32; 2],
     pub zoom: f32,
     pub viewport_size: [f32; 2],
+    /// Fit the reference viewport at integer physical scales when space permits.
+    pub pixel_perfect: bool,
     /// Whether the camera treats the projection origin as top-left.
     ///
     /// When false, world Y grows upward, matching tilemaps and gameplay. When
@@ -15,11 +18,94 @@ pub struct Camera {
 }
 
 impl Camera {
+    /// Center the reference aspect inside a physical [x,y,width,height] area.
+    /// Small windows downscale to fit; pixel-perfect mode uses whole-number
+    /// upscales so resizing cannot silently introduce fractional pixel scaling.
+    pub fn fit_viewport(&self, area: [u32; 4]) -> [u32; 4] {
+        if area[2] == 0
+            || area[3] == 0
+            || !self
+                .viewport_size
+                .iter()
+                .all(|value| value.is_finite() && *value > 0.0)
+        {
+            return [area[0], area[1], 0, 0];
+        }
+        let scale =
+            (area[2] as f32 / self.viewport_size[0]).min(area[3] as f32 / self.viewport_size[1]);
+        let scale = if self.pixel_perfect && scale >= 1.0 {
+            scale.floor()
+        } else {
+            scale
+        };
+        let width = ((self.viewport_size[0] * scale).round() as u32).clamp(1, area[2]);
+        let height = ((self.viewport_size[1] * scale).round() as u32).clamp(1, area[3]);
+        [
+            area[0] + (area[2] - width) / 2,
+            area[1] + (area[3] - height) / 2,
+            width,
+            height,
+        ]
+    }
+    /// Map a pixel/point coordinate through a viewport [x,y,width,height] into
+    /// world space. Both coordinates must use the same pixel/point unit.
+    pub fn screen_to_world(&self, point: [f32; 2], viewport: [f32; 4]) -> Option<[f32; 2]> {
+        if viewport[2] <= 0.0
+            || viewport[3] <= 0.0
+            || self.zoom <= 0.0
+            || !self.zoom.is_finite()
+            || !self
+                .viewport_size
+                .iter()
+                .all(|value| value.is_finite() && *value > 0.0)
+            || !self.position.iter().all(|value| value.is_finite())
+            || !point
+                .iter()
+                .chain(viewport.iter())
+                .all(|value| value.is_finite())
+        {
+            return None;
+        }
+        let x = (point[0] - viewport[0]) / viewport[2];
+        let y = (point[1] - viewport[1]) / viewport[3];
+        Some([
+            self.position[0] + x * self.viewport_size[0] / self.zoom,
+            self.position[1]
+                + (if self.top_left_origin { y } else { 1.0 - y }) * self.viewport_size[1]
+                    / self.zoom,
+        ])
+    }
+
+    /// Inverse of screen_to_world, including viewport offsets and Y direction.
+    pub fn world_to_screen(&self, point: [f32; 2], viewport: [f32; 4]) -> Option<[f32; 2]> {
+        if self.viewport_size[0] <= 0.0
+            || self.viewport_size[1] <= 0.0
+            || viewport[2] <= 0.0
+            || viewport[3] <= 0.0
+            || !self.zoom.is_finite()
+            || !self.viewport_size.iter().all(|value| value.is_finite())
+            || !self.position.iter().all(|value| value.is_finite())
+            || self.zoom <= 0.0
+            || !point
+                .iter()
+                .chain(viewport.iter())
+                .all(|value| value.is_finite())
+        {
+            return None;
+        }
+        let x = (point[0] - self.position[0]) * self.zoom / self.viewport_size[0];
+        let y = (point[1] - self.position[1]) * self.zoom / self.viewport_size[1];
+        Some([
+            viewport[0] + x * viewport[2],
+            viewport[1] + (if self.top_left_origin { y } else { 1.0 - y }) * viewport[3],
+        ])
+    }
     pub fn new(width: f32, height: f32) -> Self {
         Self {
             position: [0.0, 0.0],
             zoom: 1.0,
             viewport_size: [width, height],
+            pixel_perfect: false,
             top_left_origin: false,
         }
     }
@@ -30,6 +116,7 @@ impl Camera {
             position: [0.0, 0.0],
             zoom: 1.0,
             viewport_size: [width, height],
+            pixel_perfect: false,
             top_left_origin: true,
         }
     }
@@ -95,6 +182,42 @@ impl Camera {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn physical_viewport_preserves_aspect_and_integer_upscaling() {
+        let mut camera = Camera::new(320.0, 180.0);
+        assert_eq!(
+            camera.fit_viewport([20, 30, 1000, 700]),
+            [20, 98, 1000, 563]
+        );
+        camera.pixel_perfect = true;
+        assert_eq!(
+            camera.fit_viewport([20, 30, 1000, 700]),
+            [40, 110, 960, 540]
+        );
+        assert_eq!(camera.fit_viewport([0, 0, 160, 100]), [0, 5, 160, 90]);
+        assert_eq!(camera.fit_viewport([0; 4]), [0; 4]);
+    }
+
+    #[test]
+    fn input_mapping_matches_projection_with_letterbox_zoom_and_both_y_origins() {
+        for top_left_origin in [false, true] {
+            let mut camera = Camera::new(640.0, 480.0);
+            camera.position = [12.0, -30.0];
+            camera.zoom = 2.0;
+            camera.top_left_origin = top_left_origin;
+            let viewport = [80.0, 100.0, 960.0, 720.0];
+            let point = [120.0, 90.0];
+            let screen = camera.world_to_screen(point, viewport).unwrap();
+            let back = camera.screen_to_world(screen, viewport).unwrap();
+            assert!((back[0] - point[0]).abs() < 0.0001 && (back[1] - point[1]).abs() < 0.0001);
+            let ndc = camera.projection_matrix() * glam::Vec4::new(point[0], point[1], 0.0, 1.0);
+            assert!((screen[0] - (viewport[0] + (ndc.x + 1.0) * 0.5 * viewport[2])).abs() < 0.001);
+            assert!((screen[1] - (viewport[1] + (1.0 - ndc.y) * 0.5 * viewport[3])).abs() < 0.001);
+            assert!(camera.screen_to_world(point, [0.0; 4]).is_none());
+            assert!(camera.world_to_screen([f32::NAN, 0.0], viewport).is_none());
+        }
+    }
 
     fn approx_eq(a: f32, b: f32) -> bool {
         (a - b).abs() < 1e-4

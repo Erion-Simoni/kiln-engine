@@ -10,7 +10,7 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
 kiln-core = { workspace = true }
-kiln-runtime = { workspace = true }
+kiln-runtime = { workspace = true, features = ["physics"] }
 kiln-assets = { workspace = true }
 kiln-render = { workspace = true }
 kiln-ui = { workspace = true }

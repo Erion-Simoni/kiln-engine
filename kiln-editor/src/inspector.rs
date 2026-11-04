@@ -103,6 +103,8 @@ pub fn render_inspector_panel(
 
 fn component_header_name(component: &Component) -> String {
     match component {
+        Component::Physics { .. } => "Physics Body / Collider".into(),
+        Component::Joint { .. } => "Physics Joint".into(),
         Component::Script { .. } => "Script".into(),
         Component::Transform { .. } => "📍 Transform".to_string(),
         Component::Sprite { .. } => "🖼 Sprite".to_string(),
@@ -121,6 +123,15 @@ fn render_component(ui: &mut egui::Ui, component: &mut Component, project: &Proj
     let mut changed = false;
 
     match component {
+        Component::Physics { body, collider } => {
+            ui.label(format!(
+                "Body: {:?}, collider: {:?}",
+                body.body_type, collider.shape
+            ));
+        }
+        Component::Joint { joint } => {
+            ui.label(format!("Joint: {} → {}", joint.entity_a, joint.entity_b));
+        }
         Component::Script { path, properties } => {
             changed |= ui.text_edit_singleline(path).changed();
             for (key, value) in properties {
