@@ -24,6 +24,8 @@ fn scene(id: &str, x: f32) -> Scene {
                 },
                 Component::Sprite {
                     color: [0.2, 0.4, 0.8, 1.0],
+                    width: 32.0,
+                    height: 32.0,
                     texture: Some(format!("art/{id}.png")),
                     layer: 3.0,
                     material: Some("ink".into()),

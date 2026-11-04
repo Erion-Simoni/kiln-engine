@@ -136,6 +136,7 @@ impl SpriteEditorState {
                 layer,
                 material,
                 animation_clip,
+                ..
             } = component
             {
                 sprite_comp = Some((
@@ -338,11 +339,7 @@ impl SpriteEditorState {
             if let (_, Some(entity)) = self.find_entity(project, entity_id) {
                 for component in &entity.components {
                     if let Component::Sprite {
-                        color: _,
-                        texture,
-                        layer: _,
-                        material: _,
-                        animation_clip: _,
+                        color: _, texture, ..
                     } = component
                     {
                         self.spritesheet_path = texture.clone().unwrap_or_default();

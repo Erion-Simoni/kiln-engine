@@ -151,6 +151,7 @@ fn render_component(ui: &mut egui::Ui, component: &mut Component, project: &Proj
             layer,
             material,
             animation_clip,
+            ..
         } => {
             ui.add_space(4.0);
 

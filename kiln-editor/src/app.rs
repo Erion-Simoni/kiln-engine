@@ -2757,6 +2757,7 @@ impl TabViewer<'_> {
             entity_id: source_id,
             color: sprite.color,
             layer: sprite.layer,
+            size: sprite.size,
         })
         .apply(&mut after, self.world)
         {
@@ -3584,6 +3585,34 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                             egui::DragValue::new(&mut sprite.color[3])
                                                 .speed(0.01)
                                                 .range(0.0..=1.0),
+                                        );
+                                        if response.changed() {
+                                            self.sprite_visual_response(entity, &sprite, &response);
+                                        }
+                                    });
+
+                                    ui.horizontal(|ui| {
+                                        ui.label("Size");
+                                        ui.add_space(16.0);
+                                        ui.label("W:");
+                                        let response = ui.add_enabled(
+                                            !self.editing_locked(),
+                                            egui::DragValue::new(&mut sprite.size[0])
+                                                .speed(0.5)
+                                                .range(0.001..=8192.0)
+                                                .suffix(" px"),
+                                        );
+                                        if response.changed() {
+                                            self.sprite_visual_response(entity, &sprite, &response);
+                                        }
+                                        ui.add_space(8.0);
+                                        ui.label("H:");
+                                        let response = ui.add_enabled(
+                                            !self.editing_locked(),
+                                            egui::DragValue::new(&mut sprite.size[1])
+                                                .speed(0.5)
+                                                .range(0.001..=8192.0)
+                                                .suffix(" px"),
                                         );
                                         if response.changed() {
                                             self.sprite_visual_response(entity, &sprite, &response);

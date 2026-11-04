@@ -35,6 +35,8 @@ impl ComponentKind {
             }),
             Self::Sprite => Some(Component::Sprite {
                 color: [1.0; 4],
+                width: 32.0,
+                height: 32.0,
                 texture: None,
                 layer: 0.0,
                 material: None,

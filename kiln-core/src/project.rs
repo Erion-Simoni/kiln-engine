@@ -220,6 +220,12 @@ pub enum Component {
     },
     Sprite {
         color: [f32; 4],
+        /// Authored width in world units. Older projects default to 32.
+        #[serde(default = "default_sprite_dimension")]
+        width: f32,
+        /// Authored height in world units. Older projects default to 32.
+        #[serde(default = "default_sprite_dimension")]
+        height: f32,
         /// Asset path of the sprite texture (e.g. `"sprites/hero.png"`).
         ///
         /// `None` means the sprite is drawn with the built-in white texel and
@@ -256,6 +262,10 @@ pub enum Component {
         /// Parent entity's source id.
         parent: String,
     },
+}
+
+fn default_sprite_dimension() -> f32 {
+    32.0
 }
 
 impl Project {
@@ -403,6 +413,21 @@ mod tests {
 
         assert_eq!(loaded.publisher, "MyStudio");
         assert_eq!(loaded.icon, "icon.png");
+    }
+
+    #[test]
+    fn legacy_sprite_dimensions_default_to_thirty_two() {
+        let sprite: Component =
+            serde_json::from_str(r#"{"type":"Sprite","color":[1.0,1.0,1.0,1.0],"texture":null}"#)
+                .unwrap();
+        assert!(matches!(
+            sprite,
+            Component::Sprite {
+                width: 32.0,
+                height: 32.0,
+                ..
+            }
+        ));
     }
 
     #[test]

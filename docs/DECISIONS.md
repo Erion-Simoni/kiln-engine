@@ -1176,3 +1176,7 @@ Inspector edits for Transform and Sprite update the authored scene and runtime p
 ## ADR-0046: Sprite instances carry world rotation
 
 The shared sprite instance includes a per-instance rotation consumed by the default WGSL sprite shader. Sprite size is scaled on the CPU from the entity Transform before submission. Editor, player, web, mobile, and sample world-sprite paths use the same helper; UI, tilemap cells, and screen/world decoration default to zero rotation and unit scale. The instance buffer layout change is internal to this renderer crate; custom material shader authors must accept the added vertex attribute layout when they need rotation.
+
+## ADR-0047: Authored sprites carry dimensions
+
+Scene Sprite components store width and height as world-unit dimensions. Projects written before these fields existed deserialize with a 32×32 size. Inspector width/height edits share the validated Sprite property command and per-widget undo transaction with tint and layer, keeping the serialized scene and runtime Sprite synchronized.

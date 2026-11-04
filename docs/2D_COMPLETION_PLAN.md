@@ -231,3 +231,9 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Shared sprite instances now carry rotation, and the WGSL shader rotates quads around their centers. Entity scale multiplies sprite dimensions before submission in editor, player, browser, mobile, and sample paths; UI/tilemap cell instances keep identity transforms.
 - GPU readback regression confirms 32×8 baseline bounds, 8×32 at 90°, and 64×8 at 2× horizontal scale.
 - Validation: `just check`, `just test` (506 passed), focused renderer GPU test, editor build, WASM check, and Chromium browser smoke all passed. Native editor visual confirmation is still outstanding.
+
+### 2026-11-04 checkpoint — authored Sprite dimensions
+
+- Sprite components now serialize width/height with a backward-compatible 32×32 default; runtime loading, editor snapshots, component addition, and Inspector property edits preserve them.
+- Width/height use the same validated, undoable Sprite edit transaction as tint and sorting layer. Dimensions outside 0.001–8192 world units or nonfinite values are rejected atomically.
+- Validation: `just check`, `just test` (507 passed), legacy deserialization, project round-trip, Sprite transaction/save-reopen, invalid-value tests, editor build, WASM check, and Chromium browser smoke passed.

@@ -102,11 +102,16 @@ pub fn spawn_entities(
             s.animation_clip = animation_clip.clone();
             for component in &entity.components {
                 if let Component::Sprite {
-                    layer, material, ..
+                    layer,
+                    material,
+                    width,
+                    height,
+                    ..
                 } = component
                 {
                     s.layer = *layer;
                     s.material = material.clone();
+                    s.size = [*width, *height];
                 }
             }
             s

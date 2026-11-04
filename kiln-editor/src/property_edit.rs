@@ -11,6 +11,8 @@ pub struct SetSpriteVisual<'a> {
     pub entity_id: &'a str,
     /// Authored tint channels in the range 0 through 1.
     pub color: [f32; 4],
+    /// Authored sprite width and height in world units.
+    pub size: [f32; 2],
     /// Painter sorting layer.
     pub layer: f32,
 }
@@ -26,8 +28,12 @@ impl SetSpriteVisual<'_> {
             .iter()
             .all(|value| value.is_finite() && (0.0..=1.0).contains(value))
             || !self.layer.is_finite()
+            || !self
+                .size
+                .iter()
+                .all(|value| value.is_finite() && (0.001..=8192.0).contains(value))
         {
-            return Err("Sprite tint must be between 0 and 1 and layer must be finite".into());
+            return Err("Sprite tint must be between 0 and 1, layer finite, and dimensions between 0.001 and 8192".into());
         }
         let entities: Vec<_> = scene
             .entities
@@ -64,14 +70,25 @@ impl SetSpriteVisual<'_> {
         if authored.next().is_some() {
             return Err("Entity has ambiguous duplicate Sprite components".into());
         }
-        let Component::Sprite { color, layer, .. } = component else {
+        let Component::Sprite {
+            color,
+            layer,
+            width,
+            height,
+            ..
+        } = component
+        else {
             unreachable!()
         };
-        let changed = *color != self.color || *layer != self.layer;
+        let changed =
+            *color != self.color || *layer != self.layer || [*width, *height] != self.size;
         *color = self.color;
         *layer = self.layer;
+        *width = self.size[0];
+        *height = self.size[1];
         sprite.color = self.color;
         sprite.layer = self.layer;
+        sprite.size = self.size;
         Ok(changed)
     }
 }

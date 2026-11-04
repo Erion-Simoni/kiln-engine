@@ -6,43 +6,29 @@
 
 ## Done
 
-- Earlier checkpoints cover native/WASM baseline repair, project lifecycle and atomic writes, authored metadata preservation, multi-scene tabs/history, project Save/Discard/Cancel, position commands/gestures, component presence commands, and hierarchy entity commands. ADR-0039–0045 record the architecture.
-- Hierarchy create/delete/duplicate/reparent are document-first commands. They preserve authored components, use fresh project-wide IDs, detach children on delete, and reject invalid/cyclic links. egui drag-and-drop now reliably sends reparent commands. Native GUI verified create/selection, duplicate/selection, delete/undo, reparent/save, and saved undo/redo of Parent.
-- Added `SetSpriteVisual` to validate and update authored Sprite tint/layer and the runtime Sprite together. It preserves texture/material/animation references and fails atomically for invalid values or ambiguous identities.
-- Generalized `TransformTransaction` to `SceneTransaction` and applied it to Inspector edits. Rotation (shown in degrees and saved in radians), uniform scale, tint channels, and layer share widget-scoped undo gestures; separate widget edits form separate history entries. Existing position gestures keep their behavior.
-- Three property regressions cover document/runtime parity and metadata preservation, repeated preview history plus disk reopen, and invalid-value atomicity.
+- Earlier checkpoints cover native/WASM baseline repair, project lifecycle and atomic writes, authored metadata preservation, multi-scene tabs/history, project Save/Discard/Cancel, transform/property commands, component presence commands, and hierarchy entity commands. ADR-0039–0047 record the architecture.
+- Hierarchy create/delete/duplicate/reparent are document-first commands with ID validation, cycle prevention, metadata preservation, and undo. Native GUI verified create/selection, duplicate/selection, delete/undo, reparent/save, and saved undo/redo of Parent.
+- Inspector edits for Transform position/rotation/uniform-scale and Sprite tint/layer/dimensions update authored and runtime state with one undo step per field gesture. Sprite color/layer/size validation fails atomically.
+- Sprite dimensions are authored in world units and default to 32×32 when absent in older project files. Runtime scene loading and editor snapshots retain dimensions. GPU tests verify sprite shader rotation and scaling.
 
 ## Validation
 
-- `just check`: passed (format, strict native all-target Clippy, workspace check, standalone audio sample check).
-- `just test`: 504 passed, zero failed/skipped.
-- Focused property suite: 3 passed. Transform edit suite: 9 passed.
-- `cargo build -p kiln-editor` and `git diff --check`: passed.
-- Native GUI in Xvfb/software GL/Low tier showed and accepted typed tint, rotation, and scale values; Ctrl+Z restored the typed tint. The previous hierarchy acceptance separately verified create/duplicate/delete/reparent and saved Parent undo/redo. Browser smoke was not rerun; remote CI remains unverified.
+- Latest renderer checkpoint: `just check` passed; `just test`: 506 passed; focused GPU renderer test, editor build, WASM target check, and Chromium browser smoke passed.
+- Latest Sprite dimensions checkpoint: `just check` passed; `just test`: 507 passed, zero failed/skipped. Legacy 32×32 deserialization, project round-trip, Sprite property transaction, save/reopen, and invalid-value checks passed. Editor build, WASM check, and Chromium browser smoke also passed.
+- Native editor GUI has previously verified Inspector transforms/properties and hierarchy edits in Xvfb/software GL/Low tier. Native visual confirmation of the latest transformed sprite render remains outstanding. Physical devices, other render tiers, cross-platform runners, and remote CI are unverified.
 
 ## Next
 
-1. Finish remaining Sprite properties and history coverage, then add parent/local transform behavior and rotation/scale gizmos.
-3. Add multi-selection/framing, dirty scene-tab Save/Discard/Cancel, and autosave/recovery.
+1. Implement parent/local transform propagation consistently in runtime and editor projection, with nested/cycle/undo tests.
+2. Add rotation/scale viewport gizmos and multi-selection/framing.
+3. Add dirty scene-tab Save/Discard/Cancel and autosave/recovery.
 4. Run full two-scene transform/reparent/duplicate/delete/save/restart acceptance before completing Task 2. Tasks 3–9 remain pending.
 
 ## Known limits and environment
 
-The editor now authors Transform position/rotation/uniform-scale and Sprite tint/layer into scene documents with runtime updates and history. Shared `SpriteInstance` submissions carry rotation and apply entity scale across the editor, player, browser, mobile builds, and samples; the WGSL renderer consumes rotation and a GPU pixel-bound test verifies actual orientation and size. Other Sprite properties, complete multi-selection/gizmos, parent/local transforms, and recovery remain incomplete. Tilemap cell instances still use identity transform.
+Shared sprite submissions carry entity rotation and scale across editor, player, browser, mobile, and sample paths. Tilemap cell instances retain identity transforms. Parent links currently serialize and hierarchy edits work, but runtime/editor transform propagation through parents is not implemented. The command model now covers transform properties, Sprite visuals/size, component presence, and hierarchy entities; other panels still have transitional direct-mutation paths. Loader-created default Transforms remain projection-only until authored. Undo is session-only; crash recovery is absent. Native visuals cover software GL/Low tier only.
 
-The command model covers transform properties, Sprite tint/layer, component presence, and hierarchy entity edits. Other panels retain transitional snapshot/direct mutation paths. Loader-created default Transforms remain projection-only until authored. Undo is session-only. Scene reload rebuilds authoring state rather than rereading disk; startup selection uses sorted scene IDs. Project guards do not cover external script buffers or forced termination.
-
-Save As stays within the asset directory; relocation is rejected. Dialogs accept typed paths. Platformer/Top-down templates remain empty starters; only Empty 2D has been exercised.
-
-Native visuals cover software GL/Low tier. Other devices/tiers, audible audio, complete exports, budgets, clean-machine packaging, cross-platform runs, and remote CI remain separate gates. Optional audio/WASM warnings remain outside strict default-native lint. Plugin ABI v2 requires creator-matched destruction; loader/dispatch remains future work.
+Save As stays within the asset directory; relocation is rejected. Dialogs accept typed paths. Platformer/Top-down templates remain empty starters; only Empty 2D has been exercised. Other render tiers, audible audio, complete exports, budgets, clean-machine packaging, cross-platform runs, physical devices, and remote CI remain separate gates. Optional audio/WASM warnings remain outside strict default-native lint. Plugin ABI v2 requires creator-matched destruction; loader/dispatch remains future work.
 
 Source `/workspace/.kiln-tools/activate.sh` for cloud Cargo commands.
 Use `CHROMIUM_PATH=/usr/bin/chromium just web-smoke` for installed-browser validation.
-
-### 2026-11-04 — Task 2 sprite transform rendering checkpoint
-
-- Extended `SpriteInstance` and the shared WGSL shader with per-instance rotation; added a transform helper that applies entity scale to sprite dimensions. Updated all world-sprite submission paths in the editor, player (desktop/mobile), browser, and samples. UI and tilemap cell instances retain identity rotation/scale.
-- Added GPU readback regression checking rendered pixel bounds: 32×8 baseline, 8×32 after 90° rotation, and 64×8 after horizontal 2× scaling.
-- `just check`: PASSED. `just test`: 506 passed, zero failed/skipped. Focused renderer GPU test, `cargo build -p kiln-editor`, and WASM target check passed. Chromium browser smoke passed with moving sample pixels detected.
-- Native app build passed; native GUI transform visual confirmation remains incomplete in this environment. Physical devices, other render tiers, cross-platform runners, and remote CI remain unverified.
-- Task 2 continues with remaining Sprite properties, parent/local transforms and gizmos, multi-selection/framing, dirty-tab choices, and autosave/recovery. Tasks 3–9 remain pending.

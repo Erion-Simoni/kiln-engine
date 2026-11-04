@@ -234,11 +234,13 @@ pub fn instantiate_prefab(
             }
             kiln_core::project::Component::Sprite {
                 color,
+                width,
+                height,
                 animation_clip,
                 ..
             } => {
-                sprite = Sprite::new(color[0], color[1], color[2], color[3])
-                    .with_size(DEFAULT_SPRITE_SIZE[0], DEFAULT_SPRITE_SIZE[1]);
+                sprite =
+                    Sprite::new(color[0], color[1], color[2], color[3]).with_size(*width, *height);
                 if let Some(clip) = animation_clip {
                     sprite = sprite.with_animation_clip(clip);
                 }
@@ -308,11 +310,12 @@ pub fn update_prefab_instances(world: &mut GameWorld, prefab: &kiln_core::Prefab
                     color,
                     texture,
                     layer,
-                    material: _,
-                    animation_clip: _,
+                    width,
+                    height,
+                    ..
                 } => {
                     sprite = Sprite::new(color[0], color[1], color[2], color[3])
-                        .with_size(DEFAULT_SPRITE_SIZE[0], DEFAULT_SPRITE_SIZE[1])
+                        .with_size(*width, *height)
                         .with_layer(*layer);
                     if let Some(path) = texture {
                         // Texture override would need asset loading; skip for now

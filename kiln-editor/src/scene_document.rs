@@ -116,6 +116,8 @@ fn reconcile(
         });
     let sprite = ecs.get::<&Sprite>(entity).ok().map(|s| Component::Sprite {
         color: s.color,
+        width: s.size[0],
+        height: s.size[1],
         texture: textures.get(id).cloned().or_else(|| {
             original.and_then(|e| {
                 e.components.iter().find_map(|c| {

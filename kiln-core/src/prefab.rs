@@ -151,6 +151,8 @@ mod tests {
                 },
                 Component::Sprite {
                     color: [1.0, 0.0, 0.0, 1.0],
+                    width: 32.0,
+                    height: 32.0,
                     texture: None,
                     layer: 0.0,
                     material: None,
@@ -228,6 +230,8 @@ mod tests {
             name: "TestEntity".to_string(),
             components: vec![Component::Sprite {
                 layer: 0.0,
+                width: 32.0,
+                height: 32.0,
                 material: None,
                 animation_clip: None,
                 color: [1.0, 0.0, 0.0, 1.0],
@@ -293,6 +297,8 @@ mod tests {
                 },
                 Component::Sprite {
                     color: [1.0, 0.0, 0.0, 1.0],
+                    width: 32.0,
+                    height: 32.0,
                     texture: None,
                     layer: 0.0,
                     material: None,

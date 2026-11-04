@@ -59,6 +59,8 @@ fn components() -> Vec<Component> {
         },
         Component::Sprite {
             color: [0.2, 0.4, 0.8, 1.0],
+            width: 32.0,
+            height: 32.0,
             texture: Some("art/hero.png".into()),
             layer: 7.0,
             material: Some("ink".into()),
@@ -224,6 +226,8 @@ fn empty_or_unknown_map_and_invalid_component_values_preserve_document_and_redo(
         },
         Component::Sprite {
             color: [f32::INFINITY; 4],
+            width: 32.0,
+            height: 32.0,
             texture: None,
             layer: 0.0,
             material: None,
