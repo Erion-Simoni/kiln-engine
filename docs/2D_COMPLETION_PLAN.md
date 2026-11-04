@@ -209,3 +209,10 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - `just check`: PASSED. `just test`: 501 passed, zero failed/skipped. Focused entity command suite: 2 passed.
 - This editor-only checkpoint did not rerun native GUI or browser smoke. Previous GUI evidence does not cover the newly integrated hierarchy command path. Remote CI remains unverified.
 - Task 2 remains IN PROGRESS. Manually verify hierarchy create/delete/duplicate/reparent and two-scene save/restart behavior next. Full property editing, parent/local transforms, rotation/scale parity, multi-selection/framing, dirty scene-tab choice prompts, and recovery/autosave remain pending. Tasks 3–9 have not started.
+
+### 2026-11-04 — Task 2 native hierarchy drag-and-drop verification
+
+- Native Xvfb testing first showed that hierarchy rows used a click-only interaction, so the old `drag_started` branch never generated reparent actions. Replaced it with egui's drag source/release payload API; dropping an entity on another row now queues the validated scene command.
+- Exercised create and selection, duplicate and selection, delete followed by Ctrl+Z, then reparent by dropping `Created` onto `Hero`. Saved the Parent link, undid and saved to verify it disappeared from disk, then redid and saved to verify it returned. The GUI was software GL/Low tier; no panic or GPU validation errors.
+- Added a positive reparent test that verifies an actual root-to-child link and history entry, while retaining cycle and no-op checks.
+- The hierarchy path is now manually verified. Continue Task 2 with property-edit commands and one-step history, then parent/local transform parity, gizmo and multi-selection work, dirty-tab decisions, and recovery/autosave. Two-scene full acceptance is still pending.

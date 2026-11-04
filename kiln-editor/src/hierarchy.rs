@@ -52,8 +52,6 @@ pub struct HierarchyPanel {
     pub show_add_dialog: bool,
     /// Name typed for the new entity.
     pub new_entity_name: String,
-    /// Currently dragged entity id (for drag-and-drop reparenting).
-    pub drag_source: Option<String>,
 }
 
 impl HierarchyPanel {
@@ -183,22 +181,21 @@ pub fn render_hierarchy_panel(
 
                 // Entity select button
                 let response = ui
-                    .selectable_label(selected, &node.name)
+                    .dnd_drag_source(
+                        ui.id().with(("hierarchy-entity", &node.entity_id)),
+                        node.entity_id.clone(),
+                        |ui| ui.selectable_label(selected, &node.name),
+                    )
+                    .inner
                     .on_hover_text(&node.entity_id);
 
-                // Drag-and-drop: start drag on mouse press
-                if response.drag_started() {
-                    state.drag_source = Some(node.entity_id.clone());
-                }
-
-                // Handle drop: reparent the dragged entity onto this entity
-                if let Some(drag_source) = &state.drag_source {
-                    if response.hovered() && drag_source != &node.entity_id {
+                // Reparent only when an entity ID is actually dropped here.
+                if let Some(source) = response.dnd_release_payload::<String>() {
+                    if source.as_str() != node.entity_id {
                         action = Some(HierarchyAction::Reparent {
-                            child_id: drag_source.clone(),
+                            child_id: source.as_str().to_owned(),
                             parent_id: Some(node.entity_id.clone()),
                         });
-                        state.drag_source = None;
                     }
                 }
 

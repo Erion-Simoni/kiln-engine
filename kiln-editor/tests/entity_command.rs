@@ -176,6 +176,20 @@ fn reparent_rejects_cycles_and_noops_do_not_change_history() {
     )
     .unwrap();
     assert_eq!(history.undo_depth(), 1);
+    run(
+        &mut project,
+        EntityEdit::Reparent {
+            entity_id: "child".into(),
+            parent_id: Some("root".into()),
+        },
+        &mut history,
+    )
+    .unwrap();
+    assert!(project.scenes["main"].entities[1]
+        .components
+        .iter()
+        .any(|component| matches!(component, Component::Parent { parent } if parent == "root")));
+    assert_eq!(history.undo_depth(), 2);
     assert!(run(
         &mut project,
         EntityEdit::Delete {
@@ -184,5 +198,5 @@ fn reparent_rejects_cycles_and_noops_do_not_change_history() {
         &mut history
     )
     .is_err());
-    assert_eq!(history.undo_depth(), 1);
+    assert_eq!(history.undo_depth(), 2);
 }
