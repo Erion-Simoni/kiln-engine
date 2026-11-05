@@ -6,7 +6,7 @@ check:
     cargo fmt --all -- --check
     cargo clippy --workspace --all-targets -- -D warnings
     cargo check --workspace
-    # Native editor/player enable audio by default (Linux: libasound2-dev).
+    # Native editor/player enable audio/fonts/gamepad (Linux: libasound2-dev libudev-dev).
     # The standalone audible device sample remains a separate workspace.
     cargo check --manifest-path samples/audio/Cargo.toml
 

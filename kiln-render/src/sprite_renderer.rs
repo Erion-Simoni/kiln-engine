@@ -371,6 +371,13 @@ impl SpriteRenderer {
         id
     }
 
+    /// Release asset textures, retaining the built-in white texel. All other
+    /// texture IDs are invalidated; call only when replacing the owning resource library.
+    pub fn clear_asset_textures(&mut self) {
+        self.pending.clear();
+        self.textures.truncate(1);
+    }
+
     /// Texture size for UV helpers.
     pub fn texture_size(&self, id: TextureId) -> Option<(u32, u32)> {
         self.textures

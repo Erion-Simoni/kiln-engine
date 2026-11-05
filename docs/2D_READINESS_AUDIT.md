@@ -7,7 +7,7 @@ behavior; it does not establish Unity/Godot/GameMaker feature parity.
 
 Reviewed the feature branch at `20291fa` and GitHub master at `76da93f`
 (merge PR #17). Their source trees were identical. The original audit was
-documentation only; the Task 7 audio checkpoint below updates the resolved finding.
+documentation only; subsequent Task 7 audio/UI checkpoints update the resolved findings.
 
 ## Fresh verification
 
@@ -26,15 +26,26 @@ The subsequent native audio/settings implementation passes `just check` and
 no-audio package checks, WASM build and Chromium rendering/input smoke. The
 standalone audible sample also opens/plays/completes through ALSA's null output;
 that is device-path execution, not audible listening evidence. See STATE.md and
-AUDIO_AUTHORING_2D.md. Saved runtime UI, generic game restoration and browser
-mixer/preferences parity remain unfinished.
+AUDIO_AUTHORING_2D.md. The following saved-UI checkpoint extends that implementation;
+generic game restoration and browser mixer/preferences parity remain unfinished.
+
+## Task 7 saved native UI checkpoint
+
+Project-backed screens/widgets/fonts, responsive anchors/parent clipping, native
+editor/player rendering, focus/keyboard/controller tokens, script UI callbacks,
+paused gameplay scheduling and player settings integration are implemented.
+`just check` and **622 workspace tests with zero skipped** pass. Real author/
+save/reopen/KAR tests compare geometry/colors/UVs/events and frozen/resumed worlds. Xvfb native player mouse/keyboard flows pass, including custom
+font rendering, dynamic text, persisted volume and Escape preserving the session;
+see UI_AUTHORING_2D.md and retained PNGs. Full editor GUI click-through and physical
+controller acceptance remain pending. Browser saved UI is still not integrated.
 
 ## Remaining planned work
 
 | Area | Current result | Required before calling it finished |
 | --- | --- | --- |
 | Tasks 1–6: foundation and authoring | Local build/tests pass; scene, asset/prefab, native scripting, physics/cameras and visual authoring implementations exist | Complete native workflow acceptance and address the limits below |
-| Task 7: audio, UI, saves/settings | Native decoded/overlapping audio, looping music, project mixer and versioned player settings implemented | Audible/GUI acceptance, browser parity, editor-authored runtime UI with navigation/events, general versioned game saves |
+| Task 7: audio, UI, saves/settings | Native audio/mixer/player settings and saved runtime UI/screens/fonts/navigation/events implemented | Audible/full editor GUI/controller acceptance, browser parity, general versioned game saves |
 | Task 8: editor export/distribution | Real archive packing/player loading works; editor build UI still simulates completion | Real asynchronous build process, actual failures/logs/cancellation, project-specific assets/player packaging and clean-machine launches |
 | Task 9: games/release gate | Small vertical-slice/physics/visual fixtures exist | Complete top-down action, platformer and puzzle games; unaided tutorial, recovery/long-session/large-project and hardware/export validation |
 
@@ -55,12 +66,14 @@ mixer/preferences parity remain unfinished.
    pending. See AUDIO_AUTHORING_2D.md. Typed player preferences now persist
    independently of sample saves; this does not resolve finding 4.
 
-3. **Visual UI authoring is not a saved runtime workflow.**
-   `kiln-editor/src/ui_layout_editor.rs:17` stores plain editor-only widgets;
-   its render call at `kiln-editor/src/app.rs:6279` receives no project/runtime
-   document. Script-driven UI and built-in player menus exist, but do not prove
-   that a developer can author, save/reopen and export custom menus through this
-   designer, including focus/controller navigation and script callbacks.
+3. **Saved native UI implemented; broader interaction acceptance remains.**
+   Both UI editor tabs edit Project.ui with document undo/redo. Native Play and
+   player share layout, clipping, focus, input, script events and alpha-atlas font
+   rendering. A title/pause/settings/game-over fixture survives disk/archive
+   roundtrips and runs in a real native player window on Xvfb. Full native editor
+   panel/drag/save/Play interaction remains pending: the editor launched, but its
+   automated toolbar/menu click-through was inconclusive. Physical-controller,
+   browser UI and richer controls are not certified by these results.
 
 4. **Gameplay saves remain tied to the vertical slice.**
    `SliceState` at `kiln-runtime/src/slice.rs:311` contains score, elapsed/status,

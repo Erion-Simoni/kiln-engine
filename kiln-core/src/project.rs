@@ -51,6 +51,9 @@ pub struct Project {
     /// Saved author defaults for master and named mixer buses.
     #[serde(default)]
     pub audio_mixer: crate::audio::AudioMixerSettings,
+    /// Saved in-game screens and UI font resources.
+    #[serde(default)]
+    pub ui: crate::ui::UiDocument,
     /// SDF font assets of the project, keyed by their id.
     #[serde(default)]
     pub sdf_fonts: HashMap<String, SdfFont>,
@@ -431,6 +434,7 @@ impl Default for Project {
             materials: HashMap::new(),
             audio_assets: vec![],
             audio_mixer: Default::default(),
+            ui: Default::default(),
             sdf_fonts: HashMap::new(),
             prefabs: HashMap::new(),
             asset_ids: HashMap::new(),

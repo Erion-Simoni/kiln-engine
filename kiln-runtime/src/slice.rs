@@ -9,6 +9,8 @@
 //! The same runtime drives the standalone player and the editor, so a game
 //! behaves identically in both.
 
+mod authored_ui;
+
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -132,6 +134,15 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("get_bus_volume", 77, 1),
     ("setting_get", 78, 2),
     ("setting_set", 79, 2),
+    ("ui_show_screen", 80, 1),
+    ("ui_close_screen", 81, 0),
+    ("ui_screen", 82, 0),
+    ("ui_event_name", 83, 0),
+    ("ui_event_widget", 84, 0),
+    ("ui_set_text", 85, 2),
+    ("ui_set_visible", 86, 2),
+    ("ui_set_enabled", 87, 2),
+    ("ui_event_screen", 88, 0),
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -359,6 +370,13 @@ pub type AudioPlayer = Box<dyn Fn(&str) + Send + Sync>;
 #[derive(Default)]
 pub struct SliceHost {
     animation_event: (String, String),
+    ui: kiln_ui::authored::UiRuntime,
+    ui_event: Option<kiln_ui::authored::UiEvent>,
+    ui_pointer: Option<[f32; 2]>,
+    ui_pointer_down: bool,
+    ui_size: [f32; 2],
+    ui_key_edges: Vec<String>,
+    ui_pointer_edges: Vec<(Option<[f32; 2]>, bool)>,
     mouse_world: [f64; 2],
     self_entity: String,
     script_state: HashMap<String, Value>,
@@ -431,6 +449,13 @@ impl SliceHost {
     pub fn new(facts: SliceFacts) -> Self {
         Self {
             animation_event: Default::default(),
+            ui: Default::default(),
+            ui_event: None,
+            ui_pointer: None,
+            ui_pointer_down: false,
+            ui_size: [0.0; 2],
+            ui_key_edges: Vec::new(),
+            ui_pointer_edges: Vec::new(),
             mouse_world: [0.0; 2],
             self_entity: String::new(),
             script_state: HashMap::new(),
@@ -496,7 +521,7 @@ impl SliceHost {
 
     /// Whether a UI widget was clicked this frame.
     pub fn ui_widget_clicked(&self, id: &str) -> bool {
-        self.ui_widgets.get(id).copied().unwrap_or(false)
+        self.ui_widgets.get(id).copied().unwrap_or(false) || self.ui.clicked(id)
     }
 
     /// Set the input action map (called by the host before each step).
@@ -1287,7 +1312,7 @@ impl SliceHost {
                     x,
                     y,
                 });
-                let clicked = self.ui_widgets.get(&id).copied().unwrap_or(false);
+                let clicked = self.ui_widget_clicked(&id);
                 Ok(Value::Bool(clicked))
             }
             47 => {
@@ -1328,7 +1353,7 @@ impl SliceHost {
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
-                let clicked = self.ui_widgets.get(&id).copied().unwrap_or(false);
+                let clicked = self.ui_widget_clicked(&id);
                 Ok(Value::Bool(clicked))
             }
             // Input actions (50-51)
@@ -1577,6 +1602,7 @@ impl SliceHost {
                 self.set_player_setting(key, args[1].clone())?;
                 Ok(args[1].clone())
             }
+            80..=88 => self.call_ui(func_id, args),
             _ => Err(VmError::HostCallError(format!(
                 "unknown slice builtin id {func_id}"
             ))),
@@ -1669,9 +1695,11 @@ impl AttachedScript {
         );
         #[cfg(feature = "audio")]
         std::mem::swap(&mut _parent.audio, &mut self.session.vm.host_mut().audio);
+        std::mem::swap(&mut _parent.ui, &mut self.session.vm.host_mut().ui);
         let result = self
             .session
             .step_program(world, input, dt, false, collisions.to_vec());
+        std::mem::swap(&mut _parent.ui, &mut self.session.vm.host_mut().ui);
         #[cfg(feature = "audio")]
         std::mem::swap(&mut _parent.audio, &mut self.session.vm.host_mut().audio);
         std::mem::swap(
@@ -1845,6 +1873,7 @@ impl SliceSession {
                 });
             }
         }
+        session.vm.host_mut().ui = kiln_ui::authored::UiRuntime::new(&project.ui, scene_id)?;
         Ok(session)
     }
 
@@ -1960,8 +1989,31 @@ impl SliceSession {
         if let Some(audio) = &mut self.vm.host_mut().audio {
             audio.advance_silent(dt);
         }
-        self.step_program(world, input, dt, true, Vec::new())?;
-        let collisions = self.vm.host_mut().facts.collision_events.clone();
+        self.dispatch_saved_ui(world)?;
+        let paused = self.vm.host().ui.pauses_game();
+        let input = if self.vm.host().ui.captures_input() {
+            (0.0, 0.0)
+        } else {
+            input
+        };
+        let captures = self.vm.host().ui.captures_input();
+        if !paused {
+            let keys = if captures {
+                Some(std::mem::take(&mut self.vm.host_mut().pressed_keys))
+            } else {
+                None
+            };
+            let result = self.step_program(world, input, dt, true, Vec::new());
+            if let Some(keys) = keys {
+                self.vm.host_mut().pressed_keys = keys;
+            }
+            result?;
+        }
+        let collisions = if paused {
+            Vec::new()
+        } else {
+            self.vm.host_mut().facts.collision_events.clone()
+        };
         let animation_events: Vec<_> = world
             .world_mut()
             .query_mut::<(&SourceId, &mut crate::AnimationPlayer)>()
@@ -1975,7 +2027,11 @@ impl SliceSession {
             })
             .collect();
         let signals = std::mem::take(&mut self.signals);
-        let keys = self.vm.host_mut().pressed_keys.clone();
+        let keys = if captures {
+            Default::default()
+        } else {
+            self.vm.host_mut().pressed_keys.clone()
+        };
         let mouse_world = self.vm.host().mouse_world;
         let save_dir = self.vm.host_mut().save_dir.clone();
         let frame = self.vm.host().frame_count;
@@ -2047,7 +2103,9 @@ impl SliceSession {
                     &collisions,
                 )?;
             }
-            attached.run(self.vm.host_mut(), "update", world, input, dt, &collisions)?;
+            if !self.vm.host().ui.pauses_game() {
+                attached.run(self.vm.host_mut(), "update", world, input, dt, &collisions)?;
+            }
             self.ui_commands.append(&mut attached.session.ui_commands);
             self.signals
                 .append(&mut attached.session.vm.host_mut().emitted_signals);

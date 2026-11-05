@@ -129,15 +129,16 @@ the exact supported contract and graphical acceptance procedure.
 
 - [x] Implement native audio import/playback/preview, simultaneous effects, looping music, named buses, and persisted volume settings. Shared decoded PCM is verified through real project save/reopen and packed-player loading; audible native/device acceptance and browser parity remain pending.
 - [x] Add versioned player preferences and typed `setting_get`/`setting_set`, shared by scene/entity scripts and independent of sample score/coins. Failed/corrupt preference files report errors and are preserved.
-- [ ] Complete UI layout, anchors, text/fonts, buttons, focus/controller navigation, and script events.
+- [x] Implement native saved UI layout/anchors, bitmap and TTF/OTF text, buttons, focus/keyboard/controller navigation and root/entity script events. Native player mouse/keyboard rendering/events/settings passed on Xvfb; full editor interaction and physical-controller acceptance remain pending.
 - [ ] Provide save/load APIs, versioned game data, and player settings independent of engine sample-specific score/coin concepts.
 
 Acceptance: title/pause/settings/game-over screens, music and overlapping effects, controller navigation, and save/resume work in editor and exported game.
 
 Audio checkpoint: see [AUDIO_AUTHORING_2D.md](AUDIO_AUTHORING_2D.md), ADR-0055 and
 `kiln-player/tests/audio_workflow.rs`. Native editor/player enable audio by default;
-no-audio builds remain supported. This checkpoint leaves saved UI and generic
-game/scene/entity/script restoration unfinished; do not mark Task 7 complete.
+no-audio builds remain supported. The saved UI checkpoint is documented in [UI_AUTHORING_2D.md](UI_AUTHORING_2D.md).
+Generic game/scene/entity/script restoration and browser parity remain unfinished;
+do not mark Task 7 complete.
 
 ### 8. Real build/export and distribution — PENDING
 
@@ -400,3 +401,22 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
   invalid imports, future/corrupt/unwritable settings, integer precision and
   callback context restoration. Native listening/GUI and browser parity remain
   separate pending acceptance. See STATE.md for this session's executed checks.
+
+### 2026-11-05 — Task 7 saved native UI screens
+
+- Added project-backed screens/widgets/fonts with stable IDs, responsive anchors/
+  pivots/stretch, hierarchical clipping, focus/navigation, back/pause state and
+  edge-triggered input. Both UI editor tabs now edit one saved document, with UI
+  document undo/redo. Native editor/player use the same session/layout/quads.
+- Added real font atlas sampling/metrics, script events and dynamic labels, input
+  capture, paused gameplay scheduling, context restoration and draw/data bounds.
+  Native apps enable existing fonts/controller backends by default; CI installs
+  ALSA/udev headers before checks/builds. No new external runtime dependency.
+- Real native player verification on Xvfb caught and fixed launcher Escape
+  interception. Mouse/keyboard title/settings/pause/game-over now pass, including
+  script events, persisted volume, one retained scene session and captured PNGs.
+  Automated editor toolbar/menu interaction remained inconclusive; full editor
+  interaction and physical controller acceptance remain pending.
+- Added `samples/ui2d_editor`, real save/reopen/KAR/runtime parity tests and a
+  repeatable `tests/native/ui_smoke.py`. General world saves, browser integration
+  and Tasks 8–9 are not completed by this checkpoint. See STATE.md for checks.

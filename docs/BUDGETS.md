@@ -2,6 +2,26 @@
 
 All budgets are enforced via `just size`. Exceeding a budget requires an ADR entry with justification.
 
+## Task 7 local saved-UI observations — 2026-11-05
+
+The four-screen fixture uses a 22,352-byte renamed TTF subset; the font's 1024²
+RGBA atlas costs 4 MiB on the GPU. Metrics are retained, while the native upload
+buffer is temporary. The atlas is rebuilt at session startup, not per frame, and
+prior UI atlas textures are released on reload. The document caps fonts at 16,
+widgets at 1024/screen and quads at 16384; bitmap text has conservative startup
+budget validation to prevent oversized screens.
+
+A 1000-tick CPU-only title update/layout/draw observation (26 quads, 1280×720
+viewport, dev build without debug symbols) measured 0.016422 ms mean / 0.016425 ms
+p95 on this cloud runner. Reproduce with `KILN_UI_PROFILE=1 cargo test -p kiln-player
+--test ui_workflow authored_screens_survive_restart_archive_and_editor_player_gameplay
+-- --nocapture`. These numbers exclude VM/audio/physics, GPU upload and GPU frame
+time; they are not reference-hardware release performance evidence.
+
+Real native rendering and mouse/keyboard menu flows also passed on Xvfb/software
+graphics. Full editor interaction, physical controller/audio hardware and release
+size/performance acceptance remain open.
+
 ## Task 7 local audio observations — 2026-11-05
 
 The generated native audio fixture contains 62,488 bytes of WAV data, decoded to

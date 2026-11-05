@@ -18,6 +18,7 @@ pub mod project;
 pub mod tilemap;
 pub mod time;
 pub mod transform;
+pub mod ui;
 
 pub use access::{any_conflicts, AccessKind, AccessSet, ComponentAccess};
 pub use clip::{Clip, ClipError, Frame, FrameEvent};

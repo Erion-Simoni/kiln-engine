@@ -578,7 +578,7 @@ pub fn apply_prefab_instance_to_definition(
     Ok(updated)
 }
 
-/// Update authored Sprite and audio paths after a project-relative asset move.
+/// Update authored Sprite, audio and UI font paths after a project-relative asset move.
 pub fn rewrite_asset_references(project: &mut Project, old: &str, new: &str) -> usize {
     fn rewrite(entity: &mut kiln_core::Entity, old: &str, new: &str) -> usize {
         entity
@@ -602,6 +602,12 @@ pub fn rewrite_asset_references(project: &mut Project, old: &str, new: &str) -> 
     }
     for prefab in project.prefabs.values_mut() {
         changed += rewrite(&mut prefab.root_entity, old, new);
+    }
+    for font in project.ui.fonts.values_mut() {
+        if font.path == old {
+            font.path = new.into();
+            changed += 1;
+        }
     }
     for audio in &mut project.audio_assets {
         if audio.path == old {

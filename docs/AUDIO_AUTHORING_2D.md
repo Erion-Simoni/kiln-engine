@@ -1,8 +1,8 @@
 # 2D audio and player settings
 
 Task 7's native audio checkpoint implements import, project persistence, preview,
-real decoding/mixing, music, effects, buses and player preferences. Saved runtime
-UI and general scene/entity/script game saves are still unfinished. The browser
+real decoding/mixing, music, effects, buses and player preferences. Saved native runtime UI is covered in [UI authoring](UI_AUTHORING_2D.md).
+General scene/entity/script game saves are still unfinished. The browser
 continues to use its older WebAudio callback; native mixer/settings parity there
 is pending.
 

@@ -332,3 +332,21 @@ of this debugger surface.
 - `kiln-script/src/` — lexer, parser, compiler source
 - `kiln-ir/src/vm.rs` — bytecode VM
 - `kiln-runtime/src/slice.rs` — slice runtime and builtins
+
+## Saved native UI screens
+
+Author screens through UI Layout Editor/UI Designer, then handle buttons in
+`script_phase() == "ui_event"` separately from normal `"update"` gameplay.
+`ui_event_name()`, `ui_event_widget()` and `ui_event_screen()` identify the callback.
+`ui_show_screen(id)`, `ui_close_screen()`, `ui_screen()` and `ui_clicked(id)` manage
+or inspect state. `ui_set_text(id, value)` formats an active-screen label/button;
+`ui_set_visible(id, bool)` and `ui_set_enabled(id, bool)` change flags and repair
+focus. Missing widgets/invalid text changes return false; invalid argument types
+or unknown screens produce script diagnostics.
+
+An initially paused title starts attached controllers once. UI callbacks continue
+while gameplay/physics/animation are paused; their delta is zero. Guard ordinary
+gameplay with the update phase so menu events cannot run movement twice. Screen
+actions apply before callbacks, whose event screen still names the originating
+screen. See [Saved UI](UI_AUTHORING_2D.md) and `samples/ui2d_editor` for the full
+native contract, limits, fonts, navigation and remaining browser/save acceptance.

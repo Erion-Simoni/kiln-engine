@@ -196,6 +196,7 @@ struct GpuState {
     sprite_renderer: SpriteRenderer,
     /// A second renderer for the screen-space HUD, which uses its own camera.
     hud_sprite_renderer: SpriteRenderer,
+    ui_fonts: kiln_ui::authored::UiFonts,
 }
 
 /// The player application: owns the world, the camera and the GPU state.
@@ -325,6 +326,7 @@ impl PlayerApp {
             renderer,
             sprite_renderer,
             hud_sprite_renderer,
+            ui_fonts: Default::default(),
         });
         self.gpu_initialized = true;
     }
@@ -406,6 +408,32 @@ impl PlayerApp {
 
     /// Compile the scene's gameplay script, if it has one.
     fn load_slice(&mut self) {
+        if let Some(gpu) = &mut self.gpu {
+            gpu.hud_sprite_renderer.clear_asset_textures();
+            let (fonts, errors) = kiln_ui::authored::UiFonts::load(
+                &self.project.ui,
+                |path| {
+                    self.assets
+                        .get(path)
+                        .cloned()
+                        .ok_or_else(|| format!("Missing font resource: {path}"))
+                },
+                |id, size, rgba| {
+                    gpu.hud_sprite_renderer.create_texture_rgba_with_options(
+                        gpu.renderer.device(),
+                        gpu.renderer.queue(),
+                        id,
+                        size,
+                        rgba,
+                        [false, false],
+                    )
+                },
+            );
+            gpu.ui_fonts = fonts;
+            for error in errors {
+                log::error!("{error}");
+            }
+        }
         match SliceSession::with_scene_sources(&self.project, &self.scene_id, |path| {
             let bytes = self.assets.get(path).ok_or("Script resource is missing")?;
             String::from_utf8(bytes.clone()).map_err(|error| error.to_string())
@@ -484,9 +512,38 @@ impl PlayerApp {
         }
     }
 
+    fn queue_ui_pointer(&mut self, down: bool) {
+        let area = self
+            .gpu
+            .as_ref()
+            .map(|gpu| {
+                let size = gpu.window.inner_size();
+                [0, 0, size.width, size.height]
+            })
+            .unwrap_or([0, 0, self.window_width, self.window_height]);
+        let viewport = self.camera.fit_viewport(area).map(|v| v as f32);
+        if let Some(slice) = &mut self.slice {
+            slice.host_mut().queue_ui_pointer(
+                viewport,
+                [self.mouse_x as f32, self.mouse_y as f32],
+                down,
+            );
+        }
+    }
     fn handle_key(&mut self, event: KeyEvent) {
         let key_name = key_name_string(&event.logical_key);
         if event.state.is_pressed() {
+            if !event.repeat {
+                if let Some(slice) = &mut self.slice {
+                    let token =
+                        if key_name == "Tab" && self.pressed_keys.iter().any(|k| k == "Shift") {
+                            "BackTab"
+                        } else {
+                            &key_name
+                        };
+                    slice.host_mut().queue_ui_key(token);
+                }
+            }
             if !self.held.contains(&event.logical_key) {
                 self.held.push(event.logical_key.clone());
             }
@@ -598,14 +655,18 @@ impl PlayerApp {
     /// Handle key input when playing the game.
     fn handle_playing_keys(&mut self, key: Key) {
         match key {
-            Key::Named(NamedKey::Escape) => {
+            Key::Named(NamedKey::Escape) if self.project.ui.screens.is_empty() => {
                 self.menu_state = MenuState::Main;
                 self.menu_selected = 0;
             }
             Key::Named(NamedKey::F5) => self.save_game(),
             Key::Named(NamedKey::F9) => self.load_game(),
-            Key::Named(NamedKey::Space) => self.camera.zoom(1.1),
-            Key::Named(NamedKey::Shift) => self.camera.zoom(1.0 / 1.1),
+            Key::Named(NamedKey::Space) if self.project.ui.screens.is_empty() => {
+                self.camera.zoom(1.1)
+            }
+            Key::Named(NamedKey::Shift) if self.project.ui.screens.is_empty() => {
+                self.camera.zoom(1.0 / 1.1)
+            }
             _ => {}
         }
     }
@@ -625,6 +686,14 @@ impl PlayerApp {
         }
         // The scene script drives the game: it reads the input axis and
         // moves the player, collects pickups and keeps the score.
+        #[cfg(feature = "gamepad")]
+        {
+            self.pressed_keys.retain(|key| !key.starts_with("Gamepad"));
+            if let Some(gamepad) = &mut self.gamepad_manager {
+                let _ = gamepad.update();
+                self.pressed_keys.extend(gamepad.pressed_tokens());
+            }
+        }
         let axis = self.axis();
         let save_dir = self.save_dir.clone();
         let mouse_x = self.mouse_x;
@@ -669,6 +738,11 @@ impl PlayerApp {
                         .host_mut()
                         .set_mouse_world(position.map(|value| value as f64));
                 }
+                slice.host_mut().set_ui_pointer(
+                    mouse_viewport,
+                    Some([mouse_x as f32, mouse_y as f32]),
+                    mouse_pressed,
+                );
                 // Pass mouse state to the slice host for UI click detection.
                 slice
                     .host_mut()
@@ -741,69 +815,6 @@ impl PlayerApp {
             }
             // Step physics (if the physics feature is enabled)
             // Physics stepping happens inside slice.step() via sync_physics_with_ecs().
-
-            // Poll gamepad state (gamepad feature only).
-            #[cfg(feature = "gamepad")]
-            {
-                if let Some(gp) = &mut self.gamepad_manager {
-                    let _ = gp.update();
-                    // Check connected gamepads for button/axis state
-                    let gilrs = gp.gilrs();
-                    for (_id, gamepad) in gilrs.gamepads() {
-                        // Map gamepad buttons to pressed_keys
-                        use gilrs::ev::code::*;
-                        // Button::South = A/Cross (index 0)
-                        // Button::East = B/Circle (index 1)
-                        // Button::North = X/Square (index 2)
-                        // Button::West = Y/Triangle (index 3)
-                        // Button::LeftTrigger = LT (index 4)
-                        // Button::RightTrigger = RT (index 5)
-                        // Button::LeftBumper = LB (index 6)
-                        // Button::RightBumper = RB (index 7)
-                        // Button::LeftStick = L3 (index 8)
-                        // Button::RightStick = R3 (index 9)
-                        // Button::DpadUp = D-pad up (index 10)
-                        // Button::DpadDown = D-pad down (index 11)
-                        // Button::DpadLeft = D-pad left (index 12)
-                        // Button::DpadRight = D-pad right (index 13)
-                        // Button::Start = Start (index 14)
-                        // Button::Select = Select/Back (index 15)
-                        // Button::Home = Home (index 16)
-                        for btn_idx in 0..17u8 {
-                            if gamepad.is_pressed(Button::from_index(btn_idx)) {
-                                pressed_keys.push(format!("GamepadBtn{}", btn_idx));
-                            }
-                        }
-                        // Left stick axis
-                        let lx = gamepad.value(Axis::LeftStickX);
-                        let ly = gamepad.value(Axis::LeftStickY);
-                        if lx.abs() > 0.1 {
-                            pressed_keys.push(format!("GamepadAxis0:{:.2}", lx));
-                        }
-                        if ly.abs() > 0.1 {
-                            pressed_keys.push(format!("GamepadAxis1:{:.2}", ly));
-                        }
-                        // Right stick axis
-                        let rx = gamepad.value(Axis::RightStickX);
-                        let ry = gamepad.value(Axis::RightStickY);
-                        if rx.abs() > 0.1 {
-                            pressed_keys.push(format!("GamepadAxis2:{:.2}", rx));
-                        }
-                        if ry.abs() > 0.1 {
-                            pressed_keys.push(format!("GamepadAxis3:{:.2}", ry));
-                        }
-                        // Left/right triggers
-                        let lt = gamepad.value(Axis::LeftTrigger);
-                        let rt = gamepad.value(Axis::RightTrigger);
-                        if lt.abs() > 0.1 {
-                            pressed_keys.push(format!("GamepadAxis4:{:.2}", lt));
-                        }
-                        if rt.abs() > 0.1 {
-                            pressed_keys.push(format!("GamepadAxis5:{:.2}", rt));
-                        }
-                    }
-                }
-            }
         });
         if let Some(id) = transition {
             if self.project.scenes.contains_key(&id) {
@@ -911,12 +922,21 @@ impl PlayerApp {
                 .flush(&mut pass, &self.camera, gpu.renderer.queue());
         }
 
+        if has_post {
+            gpu.renderer.apply_post(&mut encoder, &view);
+        }
+
         // Render UI widgets using UiRenderer (screen-space, top-left origin).
-        if !self.ui_widgets.is_empty() {
+        if !self.ui_widgets.is_empty()
+            || self
+                .slice
+                .as_ref()
+                .is_some_and(|slice| !slice.host_ui().active_screen().is_empty())
+        {
             let mut ui_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("ui_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: gpu.renderer.scene_target().unwrap_or(&view),
+                    view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
@@ -998,12 +1018,20 @@ impl PlayerApp {
                 }
             }
 
+            if let Some(slice) = &self.slice {
+                let ui = slice.host_ui();
+                let area = self
+                    .camera
+                    .fit_viewport([0, 0, size.width, size.height])
+                    .map(|v| v as f32);
+                let viewport =
+                    kiln_ui::authored::UiViewport::new(area, ui.document().reference_size);
+                for q in ui.draw(&gpu.ui_fonts, viewport) {
+                    gpu.hud_sprite_renderer.push_textured(q.texture, q.instance);
+                }
+            }
             gpu.hud_sprite_renderer
                 .flush(&mut ui_pass, &ui_camera, gpu.renderer.queue());
-        }
-
-        if has_post {
-            gpu.renderer.apply_post(&mut encoder, &view);
         }
 
         // The HUD is drawn in screen space (top-left origin) on top of the
@@ -1042,6 +1070,9 @@ impl PlayerApp {
     /// Returns `None` when the project has no gameplay script, so nothing is
     /// drawn for non-game projects.
     fn hud_text(&self) -> Option<Vec<SpriteInstance>> {
+        if !self.project.ui.screens.is_empty() {
+            return None;
+        }
         let slice = self.slice.as_ref()?;
         let text = TextRenderer::new();
 
@@ -1225,6 +1256,9 @@ impl winit::application::ApplicationHandler for PlayerApp {
         );
         // Initialize GPU only (for menu rendering). Scene is spawned when user starts game.
         pollster::block_on(self.init_gpu_only(window));
+        if !self.project.ui.screens.is_empty() {
+            self.start_game();
+        }
     }
 
     fn window_event(
@@ -1242,6 +1276,9 @@ impl winit::application::ApplicationHandler for PlayerApp {
             }
             winit::event::WindowEvent::Focused(focused) => {
                 self.focused = focused;
+                if let Some(slice) = self.slice.as_mut() {
+                    slice.host_mut().reset_ui_input();
+                }
                 self.held.clear();
                 self.pressed_keys.clear();
                 self.mouse_pressed = false;
@@ -1261,13 +1298,17 @@ impl winit::application::ApplicationHandler for PlayerApp {
                     self.mouse_x = touch.location.x;
                     self.mouse_y = touch.location.y;
                     self.mouse_pressed = true;
+                    self.queue_ui_pointer(true);
                 }
                 winit::event::TouchPhase::Moved => {
                     self.mouse_x = touch.location.x;
                     self.mouse_y = touch.location.y;
                 }
                 winit::event::TouchPhase::Ended | winit::event::TouchPhase::Cancelled => {
+                    self.mouse_x = touch.location.x;
+                    self.mouse_y = touch.location.y;
                     self.mouse_pressed = false;
+                    self.queue_ui_pointer(false);
                 }
             },
             winit::event::WindowEvent::MouseInput {
@@ -1276,6 +1317,7 @@ impl winit::application::ApplicationHandler for PlayerApp {
                 ..
             } => {
                 self.mouse_pressed = state.is_pressed();
+                self.queue_ui_pointer(self.mouse_pressed);
             }
             _ => {}
         }
@@ -1284,5 +1326,37 @@ impl winit::application::ApplicationHandler for PlayerApp {
     fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
         self.update();
         self.render();
+    }
+}
+
+#[cfg(test)]
+mod saved_ui_host_tests {
+    use super::*;
+    #[test]
+    fn authored_menus_receive_escape_and_space_without_launcher_or_camera_side_effects() {
+        let mut project = Project::default();
+        project
+            .ui
+            .screens
+            .insert("title".into(), kiln_core::ui::UiScreen::default());
+        let mut app = PlayerApp::new(
+            GameWorld::new(),
+            640,
+            360,
+            project,
+            "main".into(),
+            HashMap::new(),
+            std::env::temp_dir(),
+        );
+        app.menu_state = MenuState::Playing;
+        let before = app.camera.zoom;
+        app.handle_playing_keys(Key::Named(NamedKey::Escape));
+        assert_eq!(app.menu_state, MenuState::Playing);
+        app.handle_playing_keys(Key::Named(NamedKey::Space));
+        assert_eq!(app.camera.zoom, before);
+        // Legacy games keep the existing launcher shortcut.
+        app.project.ui.screens.clear();
+        app.handle_playing_keys(Key::Named(NamedKey::Escape));
+        assert_eq!(app.menu_state, MenuState::Main);
     }
 }

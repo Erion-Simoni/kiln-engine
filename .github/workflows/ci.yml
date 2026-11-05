@@ -31,14 +31,14 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Check formatting
         run: cargo fmt --all -- --check
-      - name: Install Linux audio development headers
+      - name: Install Linux audio/controller development headers
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Check
         run: cargo check --workspace
-      - name: Check native audio opt-out
+      - name: Check native feature opt-out
         run: |
           cargo check -p kiln-editor --no-default-features
           cargo check -p kiln-player --no-default-features
@@ -64,9 +64,9 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Install cargo-nextest
         run: cargo install cargo-nextest
-      - name: Install Linux audio development headers
+      - name: Install Linux audio/controller development headers
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: Run tests
         run: cargo nextest run --workspace
 
@@ -87,9 +87,9 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Install Linux audio development headers
+      - name: Install Linux audio/controller development headers
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: Build release
         run: cargo build --workspace --release
 
@@ -150,9 +150,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-dist
         run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.33.0/installer.sh | sh
-      - name: Install Linux audio development headers
+      - name: Install Linux audio/controller development headers
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: Run cargo-dist
         run: cargo dist build --artifacts=all --target=${{ matrix.target }}
       - name: Upload artifacts
@@ -165,6 +165,30 @@ jobs:
         run: cargo dist upload --target=${{ matrix.target }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  native-ui-smoke:
+    name: Native saved UI smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install native test dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libgl1-mesa-dri mesa-vulkan-drivers xvfb xdotool imagemagick
+      - name: Build the native player
+        env:
+          CARGO_PROFILE_DEV_DEBUG: 0
+        run: cargo build -p kiln-player --bin kiln-player
+      - name: Exercise saved menus and settings
+        env:
+          KILN_UI_EVIDENCE_DIR: target/native-ui-evidence
+        run: python3 tests/native/ui_smoke.py
+      - name: Upload native UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ui-evidence
+          path: target/native-ui-evidence/
+          retention-days: 7
 
   web-smoke:
     name: Browser WASM smoke test

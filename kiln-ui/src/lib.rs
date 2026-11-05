@@ -1,5 +1,6 @@
 //! Kiln UI crate — in-game UI system (separate from editor's egui).
 
+pub mod authored;
 pub mod font;
 pub mod layout;
 pub mod localization;

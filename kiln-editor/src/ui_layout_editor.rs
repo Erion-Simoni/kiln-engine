@@ -1,574 +1,549 @@
-//! UI Layout Editor panel — visual canvas for kiln-ui widgets.
+//! Saved screen authoring. Both UI tabs use this single project-backed model.
+mod fonts;
+mod inspector;
+use egui::{Color32, Pos2, Rect, Sense, Vec2};
+pub use fonts::import_font;
+use kiln_core::{
+    ui::{UiDocument, UiKind, UiScreen, UiWidget},
+    Project,
+};
+use kiln_ui::authored::{UiFonts, UiInput, UiRuntime, UiViewport};
+use std::{collections::HashMap, path::Path};
 
-use egui::{Align2, Color32, DragValue, Pos2, Sense, Stroke, Ui, Vec2};
-use kiln_ui::{Anchor, NineSlice, Rect, Size, WidgetId};
-
-/// UI widget types for the editor.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum WidgetType {
-    #[default]
-    Panel,
-    Label,
-    Button,
-    List,
-}
-
-/// A widget instance in the editor.
-#[derive(Debug, Clone)]
-pub struct EditorWidget {
-    pub id: WidgetId,
-    pub widget_type: WidgetType,
-    pub layout: kiln_ui::Layout,
-    pub bounds: kiln_ui::Rect,
-    pub visible: bool,
-    // Type-specific properties
-    pub label_text: String,
-    pub button_normal: Option<NineSlice>,
-    pub button_hovered: Option<NineSlice>,
-    pub button_pressed: Option<NineSlice>,
-    pub list_items: Vec<String>,
-    pub list_selected: Option<usize>,
-    pub panel_background: Option<NineSlice>,
-}
-
-/// State of the UI Layout Editor panel.
-#[derive(Debug, Default)]
+/// Transient selection/preview/history. Authored widgets live only in Project.ui.
+#[derive(Default)]
 pub struct UiLayoutEditorState {
-    /// All widgets in the canvas.
-    pub widgets: Vec<EditorWidget>,
-    /// Selected widget index.
-    pub selected_widget: Option<usize>,
-    /// Canvas size.
-    pub canvas_size: Size,
-    /// Preview mode (play mode).
-    pub preview_mode: bool,
-    /// Grid snapping enabled.
-    pub snap_to_grid: bool,
-    /// Grid size.
-    grid_size: f32,
-    /// Show add widget dialog.
-    pub show_add_widget_dialog: bool,
-    /// New widget type to add.
-    /// Show widget properties panel.
-    pub show_properties: bool,
-    /// Drag state.
-    pub dragging_widget: Option<usize>,
-    pub drag_offset: Vec2,
+    owner: String,
+    pub selected_screen: String,
+    pub selected_widget: String,
+    new_screen: String,
+    font_id: String,
+    font_source: String,
+    error: Option<String>,
+    undo: Vec<UiDocument>,
+    redo: Vec<UiDocument>,
+    edit_base: Option<UiDocument>,
+    last_document: Option<UiDocument>,
+    preview_mode: bool,
+    preview: UiRuntime,
+    preview_source: Option<(UiDocument, String)>,
+    fonts: UiFonts,
+    font_images: HashMap<kiln_render::TextureId, egui::TextureHandle>,
+    font_stamp: String,
+    canvas_size: [f32; 2],
+    snap: f32,
+    drag_base: Option<[f32; 2]>,
 }
-
 impl UiLayoutEditorState {
     pub fn new() -> Self {
         Self {
-            widgets: Vec::new(),
-            selected_widget: None,
-            canvas_size: Size::new(800.0, 600.0),
-            preview_mode: false,
-            snap_to_grid: true,
-            grid_size: 10.0,
-            show_add_widget_dialog: false,
-            show_properties: true,
-            dragging_widget: None,
-            drag_offset: Vec2::ZERO,
+            canvas_size: [640.0, 360.0],
+            snap: 8.0,
+            ..Default::default()
         }
     }
-
-    /// Add a new widget to the canvas.
-    pub fn add_widget(&mut self, widget_type: WidgetType) -> usize {
-        let _id = WidgetId::new();
-        let widget = match widget_type {
-            WidgetType::Panel => EditorWidget {
-                id: WidgetId::new(),
-                widget_type: WidgetType::Panel,
-                layout: kiln_ui::Layout::new(),
-                bounds: kiln_ui::Rect::new(100.0, 100.0, 200.0, 150.0),
-                visible: true,
-                label_text: String::new(),
-                button_normal: None,
-                button_hovered: None,
-                button_pressed: None,
-                list_items: Vec::new(),
-                list_selected: None,
-                panel_background: None,
-            },
-            WidgetType::Label => EditorWidget {
-                id: WidgetId::new(),
-                widget_type: WidgetType::Label,
-                layout: kiln_ui::Layout::new(),
-                bounds: kiln_ui::Rect::new(100.0, 100.0, 200.0, 30.0),
-                visible: true,
-                label_text: "Label".to_string(),
-                button_normal: None,
-                button_hovered: None,
-                button_pressed: None,
-                list_items: Vec::new(),
-                list_selected: None,
-                panel_background: None,
-            },
-            WidgetType::Button => EditorWidget {
-                id: WidgetId::new(),
-                widget_type: WidgetType::Button,
-                layout: kiln_ui::Layout::new(),
-                bounds: kiln_ui::Rect::new(100.0, 100.0, 120.0, 40.0),
-                visible: true,
-                label_text: "Button".to_string(),
-                button_normal: Some(NineSlice::new(1, 8.0)),
-                button_hovered: Some(NineSlice::new(2, 8.0)),
-                button_pressed: Some(NineSlice::new(3, 8.0)),
-                list_items: Vec::new(),
-                list_selected: None,
-                panel_background: None,
-            },
-            WidgetType::List => EditorWidget {
-                id: WidgetId::new(),
-                widget_type: WidgetType::List,
-                layout: kiln_ui::Layout::new(),
-                bounds: kiln_ui::Rect::new(100.0, 100.0, 200.0, 200.0),
-                visible: true,
-                label_text: String::new(),
-                button_normal: None,
-                button_hovered: None,
-                button_pressed: None,
-                list_items: vec![
-                    "Item 1".to_string(),
-                    "Item 2".to_string(),
-                    "Item 3".to_string(),
-                ],
-                list_selected: Some(0),
-                panel_background: None,
-            },
-        };
-        self.widgets.push(widget);
-        let idx = self.widgets.len() - 1;
-        self.selected_widget = Some(idx);
-        idx
+    fn remember(&mut self, before: UiDocument) {
+        self.undo.push(before);
+        if self.undo.len() > 100 {
+            self.undo.remove(0);
+        }
+        self.redo.clear();
     }
-
-    /// Update the preview (for play mode).
-    pub fn update_preview(&mut self, _dt: f32) {
-        // In play mode, could animate or update widget states
+    /// Shared authoring transaction for UI controls and disk/archive acceptance tests.
+    pub fn edit<T>(
+        &mut self,
+        project: &mut Project,
+        apply: impl FnOnce(&mut UiDocument) -> Result<T, String>,
+    ) -> Result<T, String> {
+        self.finish_edit(project);
+        let before = project.ui.clone();
+        let mut candidate = before.clone();
+        let value = apply(&mut candidate)?;
+        candidate.validate()?;
+        if candidate != before {
+            self.remember(before);
+            project.ui = candidate;
+        }
+        self.last_document = Some(project.ui.clone());
+        Ok(value)
     }
-
-    /// Render the UI Layout Editor panel.
-    pub fn render(&mut self, ui: &mut Ui) {
-        ui.heading("UI Layout Editor");
-        ui.add_space(8.0);
-
-        // Toolbar
+    fn finish_edit(&mut self, project: &Project) {
+        if let Some(before) = self.edit_base.take() {
+            if before != project.ui {
+                self.remember(before);
+            }
+        }
+    }
+    pub fn undo(&mut self, project: &mut Project) -> bool {
+        self.finish_edit(project);
+        if let Some(doc) = self.undo.pop() {
+            self.redo.push(std::mem::replace(&mut project.ui, doc));
+            self.last_document = Some(project.ui.clone());
+            true
+        } else {
+            false
+        }
+    }
+    pub fn redo(&mut self, project: &mut Project) -> bool {
+        self.finish_edit(project);
+        if let Some(doc) = self.redo.pop() {
+            self.undo.push(std::mem::replace(&mut project.ui, doc));
+            self.last_document = Some(project.ui.clone());
+            true
+        } else {
+            false
+        }
+    }
+    fn sync(&mut self, project: &Project) {
+        if self.owner != project.id
+            || self
+                .last_document
+                .as_ref()
+                .is_some_and(|doc| *doc != project.ui)
+        {
+            self.undo.clear();
+            self.redo.clear();
+            self.edit_base = None;
+            self.preview_source = None;
+            self.selected_widget.clear();
+            self.font_stamp.clear();
+        }
+        self.owner.clone_from(&project.id);
+        if !project.ui.screens.contains_key(&self.selected_screen) {
+            self.selected_screen = project
+                .ui
+                .screens
+                .keys()
+                .next()
+                .cloned()
+                .unwrap_or_default();
+        }
+    }
+    pub fn render(&mut self, ui: &mut egui::Ui, project: &mut Project, root: Option<&Path>) {
+        self.sync(project);
+        ui.heading("Saved UI Screens");
+        ui.label("Save Project preserves these screens. Preview tests navigation; script events run in Play.");
+        let mut action = 0;
         ui.horizontal(|ui| {
             if ui
-                .button(if self.preview_mode {
-                    "⏸ Stop Preview"
-                } else {
-                    "▶ Preview"
-                })
+                .add_enabled(
+                    !self.undo.is_empty() || self.edit_base.is_some(),
+                    egui::Button::new("Undo UI"),
+                )
                 .clicked()
             {
-                self.preview_mode = !self.preview_mode;
+                action = 1;
             }
-            ui.separator();
-            ui.checkbox(&mut self.snap_to_grid, "Snap to Grid");
-            ui.add(
-                egui::DragValue::new(&mut self.grid_size)
-                    .speed(1.0)
-                    .suffix("px")
-                    .range(1.0..=100.0),
-            );
-            ui.separator();
-            if ui.button("🗑 Clear Canvas").clicked() {
-                self.widgets.clear();
-                self.selected_widget = None;
+            if ui
+                .add_enabled(!self.redo.is_empty(), egui::Button::new("Redo UI"))
+                .clicked()
+            {
+                action = 2;
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(format!("Widgets: {}", self.widgets.len()));
-            });
+            ui.checkbox(&mut self.preview_mode, "Preview");
+            if ui.button("Restart preview").clicked() {
+                self.preview_source = None;
+            }
+            if ui.button("Reload fonts").clicked() {
+                self.font_stamp.clear();
+            }
         });
-
-        ui.add_space(8.0);
-
-        // Widget palette
+        if action == 1 {
+            self.undo(project);
+            return;
+        }
+        if action == 2 {
+            self.redo(project);
+            return;
+        }
+        let before = project.ui.clone();
+        self.document_controls(ui, &mut project.ui, &project.scenes);
+        self.font_controls(ui, &mut project.ui, root);
+        let mut delete = None;
+        if let Some(screen) = project.ui.screens.get_mut(&self.selected_screen) {
+            ui.horizontal(|ui| {
+                ui.label("Screen name");
+                ui.text_edit_singleline(&mut screen.name);
+                ui.checkbox(&mut screen.pause_game, "Pause gameplay");
+                ui.checkbox(&mut screen.modal, "Capture input");
+                ui.checkbox(&mut screen.allow_cancel, "Back allowed");
+            });
+            ui.horizontal(|ui| {
+                ui.label("Add:");
+                for kind in [UiKind::Panel, UiKind::Label, UiKind::Button] {
+                    if ui.button(format!("{kind:?}")).clicked() {
+                        self.selected_widget = add_widget(screen, kind);
+                    }
+                }
+                egui::ComboBox::from_id_salt("ui_default_focus")
+                    .selected_text(format!("Default focus: {}", screen.default_focus))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut screen.default_focus, String::new(), "Automatic");
+                        for w in screen.widgets.iter().filter(|w| w.kind == UiKind::Button) {
+                            ui.selectable_value(&mut screen.default_focus, w.id.clone(), &w.id);
+                        }
+                    });
+            });
+            ui.horizontal_wrapped(|ui| {
+                for w in &screen.widgets {
+                    if ui
+                        .selectable_label(
+                            w.id == self.selected_widget,
+                            format!("{} ({:?})", w.id, w.kind),
+                        )
+                        .clicked()
+                    {
+                        self.selected_widget = w.id.clone();
+                    }
+                }
+            });
+            if ui.button("Delete selected widget and children").clicked() {
+                delete = Some(self.selected_widget.clone());
+            }
+        }
+        if let Some(id) = delete {
+            if let Some(screen) = project.ui.screens.get_mut(&self.selected_screen) {
+                delete_widget(screen, &id);
+                self.selected_widget.clear();
+            }
+        }
+        self.inspect(ui, &mut project.ui);
+        self.prepare_fonts(ui.ctx(), &project.ui, root);
+        self.canvas(ui, &mut project.ui);
+        if let Err(error) = project.ui.validate() {
+            ui.colored_label(Color32::LIGHT_RED, error);
+        }
+        if let Some(error) = &self.error {
+            ui.colored_label(Color32::LIGHT_RED, error);
+        }
+        if before != project.ui && self.edit_base.is_none() {
+            self.edit_base = Some(before);
+        }
+        if !ui.input(|i| i.pointer.any_down()) && !ui.ctx().wants_keyboard_input() {
+            self.finish_edit(project);
+        }
+        self.last_document = Some(project.ui.clone());
+    }
+    fn document_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+        doc: &mut UiDocument,
+        scenes: &std::collections::HashMap<String, kiln_core::Scene>,
+    ) {
         ui.horizontal(|ui| {
-            ui.heading("Widget Palette");
-            for &widget_type in &[
-                WidgetType::Panel,
-                WidgetType::Label,
-                WidgetType::Button,
-                WidgetType::List,
-            ] {
-                if ui.button(format!("{:?}", widget_type)).clicked() {
-                    self.add_widget(widget_type);
+            egui::ComboBox::from_id_salt("ui_screen")
+                .selected_text(&self.selected_screen)
+                .show_ui(ui, |ui| {
+                    for (id, s) in &doc.screens {
+                        ui.selectable_value(
+                            &mut self.selected_screen,
+                            id.clone(),
+                            format!("{} [{id}]", s.name),
+                        );
+                    }
+                });
+            ui.text_edit_singleline(&mut self.new_screen);
+            if ui.button("Add screen").clicked() {
+                match add_screen(doc, &self.new_screen) {
+                    Ok(id) => {
+                        self.selected_screen = id;
+                        self.new_screen.clear();
+                    }
+                    Err(error) => self.error = Some(error),
                 }
             }
+            if ui.button("Delete screen").clicked() {
+                delete_screen(doc, &self.selected_screen);
+                self.selected_screen = doc.screens.keys().next().cloned().unwrap_or_default();
+                self.selected_widget.clear();
+            }
         });
-
-        ui.add_space(8.0);
-
-        // Main area: canvas + properties
-        ui.columns(2, |cols| {
-            // Left: Canvas
-            cols[0].vertical(|ui| {
-                ui.heading("Canvas");
-                ui.add_space(4.0);
-
-                let canvas_size = Vec2::new(self.canvas_size.width, self.canvas_size.height);
-                let (canvas_rect, canvas_response) =
-                    ui.allocate_exact_size(canvas_size, Sense::click_and_drag());
-                let canvas_rect_kiln = kiln_ui::Rect::new(
-                    canvas_rect.min.x,
-                    canvas_rect.min.y,
-                    canvas_rect.width(),
-                    canvas_rect.height(),
+        ui.horizontal(|ui| {
+            screen_choice(ui, "Initial screen", &mut doc.initial_screen, &doc.screens);
+            screen_choice(ui, "Pause screen", &mut doc.pause_screen, &doc.screens);
+            ui.label("Reference W/H");
+            for v in &mut doc.reference_size {
+                ui.add(egui::DragValue::new(v).range(1.0..=16384.0));
+            }
+        });
+        ui.collapsing("Initial screen per scene", |ui| {
+            let mut ids: Vec<_> = scenes.keys().collect();
+            ids.sort();
+            for id in ids {
+                ui.horizontal(|ui| {
+                    ui.label(id);
+                    let mut value = doc
+                        .scene_screens
+                        .get(id)
+                        .unwrap_or(&doc.initial_screen)
+                        .clone();
+                    let before = value.clone();
+                    screen_choice(ui, id, &mut value, &doc.screens);
+                    if value != before {
+                        doc.scene_screens.insert(id.clone(), value);
+                    }
+                });
+            }
+        });
+    }
+    fn canvas(&mut self, ui: &mut egui::Ui, doc: &mut UiDocument) {
+        ui.horizontal(|ui| {
+            ui.label("Preview size");
+            for v in &mut self.canvas_size {
+                ui.add(egui::DragValue::new(v).range(100.0..=3840.0));
+            }
+            ui.label("Snap");
+            ui.add(egui::DragValue::new(&mut self.snap).range(0.0..=128.0));
+        });
+        let scale = (ui.available_width() / self.canvas_size[0]).clamp(0.1, 1.0);
+        let size = Vec2::new(self.canvas_size[0] * scale, self.canvas_size[1] * scale);
+        let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
+        let area = [rect.min.x, rect.min.y, rect.width(), rect.height()];
+        let viewport = UiViewport::new(area, doc.reference_size);
+        let mut source = doc.clone();
+        source.initial_screen = self.selected_screen.clone();
+        source.scene_screens.clear();
+        let key = (source.clone(), self.selected_screen.clone());
+        if self.preview_source.as_ref() != Some(&key) {
+            self.preview = UiRuntime::new(&source, "").unwrap_or_default();
+            self.preview_source = Some(key);
+        }
+        let pointer = ui.input(|i| i.pointer.interact_pos());
+        if self.preview_mode {
+            let mut input = ui.input(|i| {
+                let keys: Vec<_> = i.keys_down.iter().map(|k| format!("{k:?}")).collect();
+                let mut input = UiInput::from_keys(keys.iter().map(String::as_str));
+                if i.modifiers.shift && input.next {
+                    input.next = false;
+                    input.previous = true;
+                }
+                input
+            });
+            if response.clicked() {
+                response.request_focus();
+            }
+            if !response.has_focus() {
+                input = UiInput::default();
+            }
+            ui.input(|i| {
+                for event in &i.events {
+                    match event {
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            ..
+                        } => input
+                            .pointer_events
+                            .push((viewport.logical_point([pos.x, pos.y]), *pressed)),
+                        egui::Event::Key {
+                            key,
+                            pressed: true,
+                            repeat: false,
+                            modifiers,
+                            ..
+                        } if response.has_focus() => {
+                            input
+                                .pressed_keys
+                                .push(if *key == egui::Key::Tab && modifiers.shift {
+                                    "BackTab".into()
+                                } else {
+                                    format!("{key:?}")
+                                })
+                        }
+                        _ => {}
+                    }
+                }
+            });
+            input.pointer = pointer.and_then(|p| viewport.logical_point([p.x, p.y]));
+            input.pointer_down = ui.input(|i| i.pointer.primary_down());
+            if let Err(error) = self.preview.update(input, viewport.logical_size) {
+                self.error = Some(error);
+            }
+        }
+        let painter = ui.painter().with_clip_rect(rect);
+        painter.rect_filled(rect, 0.0, color([0.08, 0.08, 0.10, 1.0]));
+        for q in self.preview.draw(&self.fonts, viewport) {
+            let i = q.instance;
+            let r = Rect::from_center_size(
+                Pos2::new(i.position[0], i.position[1]),
+                Vec2::new(i.size[0], i.size[1]),
+            );
+            let color = color(i.color);
+            if let Some(image) = self.font_images.get(&q.texture) {
+                painter.image(
+                    image.id(),
+                    r,
+                    Rect::from_min_max(
+                        Pos2::new(i.uv_rect[0], i.uv_rect[1]),
+                        Pos2::new(i.uv_rect[2], i.uv_rect[3]),
+                    ),
+                    color,
                 );
-
-                // Canvas background
-                ui.painter()
-                    .rect_filled(canvas_rect, 4.0, Color32::from_rgb(30, 30, 40));
-
-                // Grid
-                if self.snap_to_grid {
-                    self.draw_grid(ui.painter(), canvas_rect_kiln);
-                }
-
-                // Draw widgets
-                let mut clicked_widget = None;
-                let mut drag_started = None;
-
-                for (idx, widget) in self.widgets.clone().iter().enumerate() {
-                    if !widget.visible {
-                        continue;
-                    }
-
-                    let widget_rect_kiln = self.widget_rect_to_canvas(widget, canvas_rect_kiln);
-                    let widget_rect = egui::Rect::from_min_size(
-                        egui::pos2(widget_rect_kiln.x, widget_rect_kiln.y),
-                        egui::vec2(widget_rect_kiln.width, widget_rect_kiln.height),
-                    );
-
-                    // Widget background
-                    let bg_color = if self.selected_widget == Some(idx) {
-                        Color32::from_rgb(60, 100, 180)
-                    } else {
-                        Color32::from_rgb(50, 50, 70)
-                    };
-                    ui.painter().rect_filled(widget_rect, 4.0, bg_color);
-                    ui.painter().rect_stroke(
-                        widget_rect,
-                        4.0,
-                        if self.selected_widget == Some(idx) {
-                            Stroke::new(2.0_f32, Color32::from_rgb(100, 200, 255))
-                        } else {
-                            Stroke::new(1.0_f32, Color32::from_gray(100))
-                        },
-                    );
-
-                    // Widget label
-                    let label = match widget.widget_type {
-                        WidgetType::Panel => "Panel",
-                        WidgetType::Label => &widget.label_text,
-                        WidgetType::Button => &widget.label_text,
-                        WidgetType::List => "List",
-                    };
-                    ui.painter().text(
-                        widget_rect.center(),
-                        Align2::CENTER_CENTER,
-                        label,
-                        egui::FontId::proportional(12.0),
-                        Color32::WHITE,
-                    );
-
-                    // Interaction
-                    let widget_response = ui.interact(
-                        widget_rect,
-                        ui.id().with(widget.id.as_u64()),
-                        Sense::click_and_drag(),
-                    );
-
-                    if widget_response.clicked() {
-                        clicked_widget = Some(idx);
-                    }
-                    if widget_response.drag_started() {
-                        drag_started = Some((
-                            idx,
-                            widget_response.interact_pointer_pos().unwrap_or(Pos2::ZERO),
-                        ));
-                    }
-                    if widget_response.dragged() && self.dragging_widget == Some(idx) {
-                        if let Some(pos) = widget_response.interact_pointer_pos() {
-                            let new_bounds = self.snap_bounds(
-                                self.canvas_pos_to_widget_bounds(pos - self.drag_offset),
-                            );
-                            if let Some(widget) = self.widgets.get_mut(idx) {
-                                widget.bounds = new_bounds;
-                            }
-                        }
-                    }
-                }
-
-                if let Some((idx, _)) = drag_started {
-                    clicked_widget = Some(idx);
-                }
-
-                // Handle selection
-                if let Some(idx) = clicked_widget {
-                    self.selected_widget = Some(idx);
-                    self.dragging_widget = Some(idx);
-                    if let Some(pos) = canvas_response.interact_pointer_pos() {
-                        if let Some(widget) = self.widgets.get(idx) {
-                            let widget_rect_kiln =
-                                self.widget_rect_to_canvas(widget, canvas_rect_kiln);
-                            let widget_rect = egui::Rect::from_min_size(
-                                egui::pos2(widget_rect_kiln.x, widget_rect_kiln.y),
-                                egui::vec2(widget_rect_kiln.width, widget_rect_kiln.height),
-                            );
-                            self.drag_offset = pos - widget_rect.min;
-                        }
-                    }
-                }
-
-                // Clear drag on mouse release
-                if canvas_response.drag_stopped() {
-                    self.dragging_widget = None;
-                }
-
-                // Click on empty space deselects
-                if canvas_response.clicked() && clicked_widget.is_none() {
-                    self.selected_widget = None;
-                }
-            });
-
-            // Right: Properties panel
-            cols[1].vertical(|ui| {
-                ui.heading("Properties");
-                ui.add_space(8.0);
-
-                if let Some(idx) = self.selected_widget {
-                    if let Some(widget) = self.widgets.get_mut(idx) {
-                        ui.label(format!("Widget: {:?}", widget.widget_type));
-                        ui.add_space(4.0);
-
-                        // ID
-                        ui.horizontal(|ui| {
-                            ui.label("ID:");
-                            ui.label(format!("{:?}", widget.id.as_u64()));
-                        });
-
-                        // Visibility
-                        ui.checkbox(&mut widget.visible, "Visible");
-
-                        ui.add_space(8.0);
-
-                        // Position & Size
-                        ui.separator();
-                        ui.label("Transform");
-                        ui.horizontal(|ui| {
-                            ui.label("X:");
-                            ui.add(DragValue::new(&mut widget.bounds.x).speed(1.0).suffix("px"));
-                            ui.label("Y:");
-                            ui.add(DragValue::new(&mut widget.bounds.y).speed(1.0).suffix("px"));
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("W:");
-                            ui.add(
-                                DragValue::new(&mut widget.bounds.width)
-                                    .speed(1.0)
-                                    .suffix("px"),
-                            );
-                            ui.label("H:");
-                            ui.add(
-                                DragValue::new(&mut widget.bounds.height)
-                                    .speed(1.0)
-                                    .suffix("px"),
-                            );
-                        });
-
-                        ui.add_space(8.0);
-
-                        // Layout properties
-                        ui.separator();
-                        ui.label("Layout");
-
-                        // Anchor
-                        ui.horizontal(|ui| {
-                            ui.label("Anchor:");
-                            egui::ComboBox::from_label("")
-                                .selected_text(format!("{:?}", widget.layout.anchor))
-                                .show_ui(ui, |ui| {
-                                    for &anchor in &[
-                                        Anchor::TopLeft,
-                                        Anchor::TopCenter,
-                                        Anchor::TopRight,
-                                        Anchor::CenterLeft,
-                                        Anchor::Center,
-                                        Anchor::CenterRight,
-                                        Anchor::BottomLeft,
-                                        Anchor::BottomCenter,
-                                        Anchor::BottomRight,
-                                    ] {
-                                        ui.selectable_value(
-                                            &mut widget.layout.anchor,
-                                            anchor,
-                                            format!("{:?}", anchor),
-                                        );
-                                    }
-                                });
-                        });
-
-                        // Flex
-                        ui.horizontal(|ui| {
-                            ui.label("Flex Grow:");
-                            ui.add(
-                                DragValue::new(&mut widget.layout.flex_grow)
-                                    .speed(0.1)
-                                    .range(0.0..=10.0),
-                            );
-                            ui.label("Flex Shrink:");
-                            ui.add(
-                                DragValue::new(&mut widget.layout.flex_shrink)
-                                    .speed(0.1)
-                                    .range(0.0..=10.0),
-                            );
-                        });
-
-                        // Constraints
-                        ui.add_space(4.0);
-                        ui.label("Constraints");
-                        ui.horizontal(|ui| {
-                            ui.label("Min W:");
-                            ui.add(
-                                DragValue::new(
-                                    widget.layout.constraints.min_width.get_or_insert(0.0),
-                                )
-                                .speed(1.0)
-                                .suffix("px"),
-                            );
-                            ui.label("Max W:");
-                            ui.add(
-                                DragValue::new(
-                                    widget.layout.constraints.max_width.get_or_insert(1000.0),
-                                )
-                                .speed(1.0)
-                                .suffix("px"),
-                            );
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("Min H:");
-                            ui.add(
-                                DragValue::new(
-                                    widget.layout.constraints.min_height.get_or_insert(0.0),
-                                )
-                                .speed(1.0)
-                                .suffix("px"),
-                            );
-                            ui.label("Max H:");
-                            ui.add(
-                                DragValue::new(
-                                    widget.layout.constraints.max_height.get_or_insert(1000.0),
-                                )
-                                .speed(1.0)
-                                .suffix("px"),
-                            );
-                        });
-
-                        // Type-specific properties
-                        ui.add_space(8.0);
-                        ui.separator();
-                        match widget.widget_type {
-                            WidgetType::Label => {
-                                ui.label("Label Properties");
-                                ui.text_edit_singleline(&mut widget.label_text);
-                            }
-                            WidgetType::Button => {
-                                ui.label("Button Properties");
-                                ui.text_edit_singleline(&mut widget.label_text);
-                                ui.label("Normal:");
-                                ui.label("Hovered:");
-                                ui.label("Pressed:");
-                            }
-                            WidgetType::List => {
-                                ui.label("List Items");
-                                // Would show list editor
-                            }
-                            WidgetType::Panel => {
-                                ui.label("Panel Properties");
-                                // Background nine-slice
-                            }
-                        }
-                    }
-                } else {
-                    ui.label("Select a widget to edit its properties.");
-                }
-
-                ui.add_space(8.0);
-
-                // Add widget button
-                if ui.button("➕ Add Widget").clicked() {
-                    // Show dialog
-                }
-            });
-        });
-
-        // Update preview
-        self.update_preview(1.0 / 60.0);
-    }
-
-    /// Draw grid on canvas.
-    fn draw_grid(&self, painter: &egui::Painter, canvas_rect: Rect) {
-        let grid_size = self.grid_size;
-        let start_x = (canvas_rect.left() / grid_size).floor() * grid_size;
-        let start_y = (canvas_rect.top() / grid_size).floor() * grid_size;
-
-        let mut x = start_x;
-        while x <= canvas_rect.right() {
-            painter.line_segment(
-                [
-                    Pos2::new(x, canvas_rect.top()),
-                    Pos2::new(x, canvas_rect.bottom()),
-                ],
-                Stroke::new(0.5_f32, Color32::from_rgba_premultiplied(100, 100, 120, 50)),
-            );
-            x += grid_size;
+            } else {
+                painter.rect_filled(r, 0.0, color);
+            }
         }
-
-        let mut y = start_y;
-        while y <= canvas_rect.bottom() {
-            painter.line_segment(
-                [
-                    Pos2::new(canvas_rect.left(), y),
-                    Pos2::new(canvas_rect.right(), y),
-                ],
-                Stroke::new(0.5_f32, Color32::from_rgba_premultiplied(100, 100, 120, 50)),
-            );
-            y += grid_size;
+        if self.preview_mode {
+            return;
         }
-    }
-
-    /// Convert widget bounds to canvas coordinates.
-    fn widget_rect_to_canvas(&self, widget: &EditorWidget, canvas_rect: Rect) -> Rect {
-        Rect::new(
-            canvas_rect.x + widget.bounds.x,
-            canvas_rect.y + widget.bounds.y,
-            widget.bounds.width,
-            widget.bounds.height,
-        )
-    }
-
-    /// Convert canvas position to widget bounds.
-    fn canvas_pos_to_widget_bounds(&self, pos: Pos2) -> kiln_ui::Rect {
-        kiln_ui::Rect::new(pos.x, pos.y, 100.0, 50.0)
-    }
-
-    /// Snap bounds to grid.
-    fn snap_bounds(&self, bounds: kiln_ui::Rect) -> kiln_ui::Rect {
-        if !self.snap_to_grid {
-            return bounds;
+        let rows = doc
+            .screens
+            .get(&self.selected_screen)
+            .map(|s| kiln_ui::authored::layout::resolve(s, viewport.logical_size))
+            .unwrap_or_default();
+        if response.clicked() || response.drag_started() {
+            if let Some(point) = pointer.and_then(|p| viewport.logical_point([p.x, p.y])) {
+                if let Some(screen) = doc.screens.get(&self.selected_screen) {
+                    if let Some(row) = rows
+                        .iter()
+                        .rev()
+                        .find(|row| row.visible && row.clip.contains_point(point[0], point[1]))
+                    {
+                        let w = &screen.widgets[row.index];
+                        self.selected_widget = w.id.clone();
+                        self.drag_base = Some(w.layout.offset);
+                    }
+                }
+            }
         }
-        let grid = self.grid_size;
-        kiln_ui::Rect::new(
-            (bounds.x / grid).round() * grid,
-            (bounds.y / grid).round() * grid,
-            (bounds.width / grid).round() * grid,
-            (bounds.height / grid).round() * grid,
-        )
+        if let Some(screen) = doc.screens.get_mut(&self.selected_screen) {
+            if let Some(row) = rows
+                .iter()
+                .find(|r| screen.widgets[r.index].id == self.selected_widget)
+            {
+                let b = row.bounds;
+                let r = Rect::from_min_size(
+                    Pos2::new(
+                        area[0] + b.x * viewport.scale,
+                        area[1] + b.y * viewport.scale,
+                    ),
+                    Vec2::new(b.width, b.height) * viewport.scale,
+                );
+                painter.rect_stroke(r, 0.0, egui::Stroke::new(1.0_f32, Color32::YELLOW));
+                if response.dragged() {
+                    if let Some(base) = self.drag_base {
+                        let delta = response.drag_delta() / viewport.scale;
+                        let w = &mut screen.widgets[row.index];
+                        w.layout.offset = [base[0] + delta.x, base[1] + delta.y].map(|v| {
+                            if self.snap > 0.0 {
+                                (v / self.snap).round() * self.snap
+                            } else {
+                                v
+                            }
+                        });
+                    }
+                }
+            }
+        }
+        if response.drag_stopped() {
+            self.drag_base = None;
+        }
     }
 }
 
-// Add missing methods to Grid
+fn color(value: [f32; 4]) -> Color32 {
+    egui::Rgba::from_rgba_unmultiplied(value[0], value[1], value[2], value[3]).into()
+}
+fn screen_choice(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: &mut String,
+    screens: &std::collections::BTreeMap<String, UiScreen>,
+) {
+    egui::ComboBox::from_id_salt(label)
+        .selected_text(format!("{label}: {value}"))
+        .show_ui(ui, |ui| {
+            ui.selectable_value(value, String::new(), "None");
+            for (id, s) in screens {
+                ui.selectable_value(value, id.clone(), format!("{} [{id}]", s.name));
+            }
+        });
+}
+/// Create a stable screen ID; duplicate names receive a numeric suffix.
+pub fn add_screen(doc: &mut UiDocument, name: &str) -> Result<String, String> {
+    if name.trim().is_empty() {
+        return Err("Choose a screen name".into());
+    }
+    let base: String = name
+        .trim()
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let mut id = base.clone();
+    let mut n = 2;
+    while doc.screens.contains_key(&id) {
+        id = format!("{base}_{n}");
+        n += 1;
+    }
+    doc.screens.insert(
+        id.clone(),
+        UiScreen {
+            name: name.trim().into(),
+            ..Default::default()
+        },
+    );
+    Ok(id)
+}
+pub fn add_widget(screen: &mut UiScreen, kind: UiKind) -> String {
+    let id = format!("widget_{}", kiln_core::next_id());
+    let mut w = UiWidget {
+        id: id.clone(),
+        kind,
+        text: format!("{kind:?}"),
+        ..Default::default()
+    };
+    if kind == UiKind::Panel {
+        w.layout.size = [280.0, 160.0];
+        w.color = [0.05, 0.07, 0.12, 0.95];
+    }
+    if kind == UiKind::Label {
+        w.blocks_pointer = false;
+    }
+    screen.widgets.push(w);
+    id
+}
+pub fn delete_widget(screen: &mut UiScreen, id: &str) {
+    let mut removed = std::collections::HashSet::from([id.to_owned()]);
+    loop {
+        let count = removed.len();
+        for w in &screen.widgets {
+            if removed.contains(&w.parent) {
+                removed.insert(w.id.clone());
+            }
+        }
+        if count == removed.len() {
+            break;
+        }
+    }
+    screen.widgets.retain(|w| !removed.contains(&w.id));
+    for w in &mut screen.widgets {
+        w.navigation.retain(|_, target| !removed.contains(target));
+    }
+    if removed.contains(&screen.default_focus) {
+        screen.default_focus.clear();
+    }
+}
+pub fn delete_screen(doc: &mut UiDocument, id: &str) {
+    doc.screens.remove(id);
+    if doc.initial_screen == id {
+        doc.initial_screen.clear();
+    }
+    if doc.pause_screen == id {
+        doc.pause_screen.clear();
+    }
+    doc.scene_screens.retain(|_, target| target != id);
+    for screen in doc.screens.values_mut() {
+        for w in &mut screen.widgets {
+            if matches!(&w.action,kiln_core::ui::UiAction::ShowScreen(target) if target==id) {
+                w.action = kiln_core::ui::UiAction::Event;
+            }
+        }
+    }
+}

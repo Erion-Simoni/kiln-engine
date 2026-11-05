@@ -1381,3 +1381,49 @@ corrupt/unsupported data is reported and never silently overwritten. Generic
 game data and saved UI are separate Task 7 checkpoints; this audio checkpoint
 does not certify world/script restoration, UI, browser audio parity or audible
 device acceptance.
+
+## ADR-0056: Saved UI screens and shared native interaction
+
+**Date:** 2026-11-05
+**Status:** accepted
+
+Store screens, stable widget IDs, parent-relative anchors/pivots/stretch, styles,
+navigation links, button actions and font resource paths in Project.ui in
+kiln-core. kiln-ui resolves and clips this data, manages edge-triggered pointer/
+keyboard/controller focus and generates the same quads for author preview,
+native editor Play and player. Both editor UI tabs edit this document; retire
+their unsaved parallel widget models. Changes use project dirty tracking and
+document-level undo/redo within the UI panel, without touching scene histories.
+
+Use a responsive logical canvas scaled into the actual gameplay viewport. Input
+uses the inverse of that same mapping, excluding letterbox bars and other editor
+panels. Hidden/disabled ancestors affect children; topmost hit testing, release
+activation, focus repair and held-key suppression survive screen transitions.
+Screens may pause gameplay, but UI callbacks continue. Existing projects without
+saved screens retain their scheduling. New scripts guard gameplay with
+script_phase()=="update" and handle "ui_event" separately; root and attached
+callbacks receive event/widget/screen IDs. Screen changes do not reset worlds.
+
+Retain the built-in bitmap font and add real alpha-atlas TTF/OTF text through the
+existing optional fontdue dependency. Native applications enable fonts by
+default; no new external dependency. Atlases contain ASCII, authored text and
+explicit extra characters; missing dynamic characters use a fallback glyph.
+Clipped textured glyph quads share the ordinary sprite renderer. UI-only renderers
+release prior atlas textures before reloading them, so Play restarts do not
+accumulate font allocations. This does not
+extend the older SDF renderer's unimplemented sampling path. Controller polling
+uses the existing gilrs dependency through kiln-input; native apps enable it by
+default, with no-default-features builds retained. Linux CI installs ALSA/udev
+development headers before checking/building native packages.
+
+Validate documents before Play (duplicate/missing IDs, parent cycles/depth,
+invalid geometry/actions/fonts/navigation). Bound widgets, glyphs and draw
+quads. The player acceptance target uses the existing workspace egui crate only as a
+dev-dependency to verify that opening the authoring panel does not dirty data.
+Tests author/save/reopen/pack the actual document, execute the shared
+session, compare editor/player geometry/events and exercise a real font atlas.
+A Linux native-player smoke job uses test-only Xvfb/xdotool/ImageMagick and
+software graphics, retaining screenshots/logs as CI artifacts. The same script
+is executed locally. Full editor GUI and physical-controller acceptance remain
+separately recorded; generic world saves, browser parity and export UI are
+subsequent checkpoints.

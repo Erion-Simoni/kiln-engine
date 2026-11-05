@@ -24,14 +24,15 @@ winit = { workspace = true }
 pollster = { workspace = true }
 ron = { workspace = true }
 thiserror = { workspace = true }
-gilrs = { workspace = true, optional = true }
 
 [features]
-default = ["audio"]
+default = ["audio", "fonts", "gamepad"]
+fonts = ["kiln-ui/fonts"]
 audio = ["kiln-runtime/audio"]
-gamepad = ["gilrs", "kiln-input/gamepad"]
+gamepad = ["kiln-input/gamepad"]
 
 [dev-dependencies]
+egui = { workspace = true }
 kiln-editor = { workspace = true }
 tempfile = "3.14"
 serde = { workspace = true }
