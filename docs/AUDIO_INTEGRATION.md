@@ -1,4 +1,10 @@
-# Audio Integration — Design Doc
+# Audio Integration — Historical Design Doc
+
+> Superseded for native authoring/playback by the 2026-11-05 Task 7 checkpoint.
+> See [2D Audio Authoring and Player Settings](AUDIO_AUTHORING_2D.md) and ADR-0055
+> for the implemented API, tests and remaining device/browser acceptance. The
+> original design below is retained as history; its source-status table and
+> decoder/version/no-op API claims are not current implementation evidence.
 
 **Problem:** `kiln-runtime/src/audio.rs` is a feature-gated stub. It opens the default audio device via rodio and can `play_file(path)`, but it is not connected to:
 - the slice runtime (no `play_sound`/`stop_sound` host calls for KilnScript),

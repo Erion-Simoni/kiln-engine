@@ -2,6 +2,16 @@
 
 All budgets are enforced via `just size`. Exceeding a budget requires an ADR entry with justification.
 
+## Task 7 local audio observations — 2026-11-05
+
+The generated native audio fixture contains 62,488 bytes of WAV data, decoded to
+124,800 bytes of mono f32 PCM shared by overlapping voices. The voice pool is
+capped at 128, including music; long clips still decode fully into memory.
+No device latency/frame-time or release-size claim is established by offline
+mixing and ALSA null-output checks. Native desktop debug binaries built with
+debug symbols disabled for cloud disk limits; these are not release-budget
+measurements. Real device, GUI and release performance acceptance remains open.
+
 ## Task 6 local observations — 2026-11-04
 
 The visual authoring sample runs in Chromium WebGL with SwiftShader at 640×480.
@@ -53,13 +63,16 @@ wasm-bindgen; this runner also uses `CHROMIUM_PATH=/usr/bin/chromium`.
 
 ## Audio device management (R0)
 
-**Current implementation:** M11 stub using rodio's high-level API
+**Current implementation:** Task 7 decoded PCM mixer using Rodio (ADR-0055)
 
-**Status:** Basic playback works (default device only). Full device management deferred to M49 audio v2 per ADR-0014.
+**Status:** Offline decoding/mixing and packed-player integration tested. Real audible device acceptance is pending. Full device management remains deferred to M49.
 
 **Current capabilities:**
 - Opens default audio output device via `DeviceSinkBuilder::open_default_sink()`
-- Plays audio files (OGG/Opus via symphonia decoder)
+- Decodes WAV/OGG Vorbis/MP3/FLAC via Symphonia; independent SFX voices and optional looping music
+- At most 128 active voices; replaces the oldest effect on overflow
+- Shared decoded buffers cost 4 bytes per sample; long music currently decodes fully into memory
+- Headless playback advances silently when no device is available
 - No device selection (always uses OS default)
 - No hot-plug detection
 - No sample-rate change handling

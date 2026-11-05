@@ -1353,3 +1353,31 @@ translation and removal synchronize with the existing fixed tick, stable source
 IDs, contact transitions and ray queries. Automatic map colliders use membership
 bit 1 and accept all body memberships. Axis-aligned map rendering and physics
 share the same translation/world-tile-size convention.
+
+## ADR-0055: Task 7 audio and player data boundaries
+
+**Date:** 2026-11-05
+**Status:** accepted
+
+Persist audio assets and named mixer buses in kiln-core's Project. The Audio
+Editor edits that data directly; it has no second asset library. Import validates
+and copies project-relative resources. Preview owns its output independently of
+Play. Native editor/player enable the existing optional audio backend by default;
+headless/no-audio builds remain available with --no-default-features. No new
+external dependency is introduced.
+
+Decode each registered resource once into a shared PCM buffer. Each SFX trigger
+creates a separate voice; music has one replaceable voice and an explicit loop
+flag. A bounded voice pool prevents unbounded script allocation. Rodio's same
+mixer feeds either an explicitly opened device or offline sample tests. Creating
+a script session must never open a device. Child entity scripts borrow the same
+audio context as their scene script, including error paths. Resources in packed
+players are decoded from archive bytes without temporary file extraction.
+
+Keep versioned player preferences outside the authored project and game save
+slots. Project mixer values are author defaults; per-player overrides survive
+scene transitions/restart. Settings writes replace a complete temporary file;
+corrupt/unsupported data is reported and never silently overwritten. Generic
+game data and saved UI are separate Task 7 checkpoints; this audio checkpoint
+does not certify world/script restoration, UI, browser audio parity or audible
+device acceptance.

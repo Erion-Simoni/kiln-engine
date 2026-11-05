@@ -128,6 +128,10 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("get_mouse_world_y", 73, 0),
     ("animation_event_name", 74, 0),
     ("animation_event_value", 75, 0),
+    ("set_bus_volume", 76, 2),
+    ("get_bus_volume", 77, 1),
+    ("setting_get", 78, 2),
+    ("setting_set", 79, 2),
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -381,6 +385,8 @@ pub struct SliceHost {
     localization: Option<kiln_ui::Localization>,
     /// Directory where save slots are written.
     save_dir: Option<std::path::PathBuf>,
+    preferences: crate::preferences::PlayerPreferences,
+    preference_fault: Option<String>,
     /// Current persistent state (synced from SliceSession each frame).
     state: SliceState,
     /// Current mouse position (screen space, top-left origin).
@@ -438,7 +444,7 @@ impl SliceHost {
             facts,
             commands: Vec::new(),
             #[cfg(feature = "audio")]
-            audio: AudioEngine::new().ok(),
+            audio: None,
             #[cfg(feature = "physics")]
             physics: Some(PhysicsWorld::new()),
             ui_widgets: HashMap::new(),
@@ -446,6 +452,8 @@ impl SliceHost {
             action_map: kiln_input::ActionMap::new(),
             localization: None,
             save_dir: None,
+            preferences: Default::default(),
+            preference_fault: None,
             state: SliceState::default(),
             mouse_x: 0.0,
             mouse_y: 0.0,
@@ -503,16 +511,155 @@ impl SliceHost {
 
     /// Set the save directory (called by the host before each step).
     pub fn set_save_dir(&mut self, dir: &std::path::Path) {
+        if self.save_dir.as_deref() == Some(dir) {
+            return;
+        }
         self.save_dir = Some(dir.to_path_buf());
+        match crate::preferences::PlayerPreferences::load(dir) {
+            Ok(preferences) => {
+                #[cfg(feature = "audio")]
+                if let (Some(audio), Some(settings)) = (&mut self.audio, &preferences.audio) {
+                    audio.set_settings(settings.clone());
+                }
+                self.preferences = preferences;
+                self.preference_fault = None;
+            }
+            Err(error) => {
+                log::error!("Could not load player preferences: {error}");
+                self.preference_fault = Some(error);
+            }
+        }
     }
 
-    /// Register an audio file for playback by name (called by editor before each step).
+    /// Configure project assets once from disk or packed resource bytes.
+    /// Decode failures are reported individually; valid clips remain usable.
+    #[cfg(feature = "audio")]
+    pub fn configure_audio(
+        &mut self,
+        project: &kiln_core::Project,
+        mut resource: impl FnMut(&str) -> Result<Vec<u8>, String>,
+    ) -> Vec<String> {
+        let mut audio = AudioEngine::default();
+        audio.set_settings(
+            self.preferences
+                .audio
+                .as_ref()
+                .unwrap_or(&project.audio_mixer)
+                .clone(),
+        );
+        let mut errors = Vec::new();
+        let mut names = std::collections::HashSet::new();
+        for asset in &project.audio_assets {
+            if !names.insert(&asset.name) {
+                errors.push(format!("Duplicate audio name: {}", asset.name));
+                continue;
+            }
+            if let Err(error) =
+                resource(&asset.path).and_then(|bytes| audio.register_bytes(asset, bytes))
+            {
+                errors.push(format!("Audio '{}': {error}", asset.name));
+            }
+        }
+        self.audio = Some(audio);
+        errors
+    }
+
+    /// Open a native device only when the editor/player actually starts playback.
+    #[cfg(feature = "audio")]
+    pub fn open_audio_output(&mut self) -> Result<(), String> {
+        self.audio
+            .get_or_insert_with(AudioEngine::default)
+            .open_output()
+    }
+
+    /// Inspect or offline-render the same audio used by gameplay.
+    #[cfg(feature = "audio")]
+    pub fn audio_mut(&mut self) -> Option<&mut AudioEngine> {
+        self.audio.as_mut()
+    }
+
+    /// Last preferences failure; a failed load blocks writes to preserve that file.
+    pub fn preferences_error(&self) -> Option<&str> {
+        self.preference_fault.as_deref()
+    }
+
+    /// Read an arbitrary game-specific player setting.
+    pub fn player_setting(&self, key: &str) -> Option<Value> {
+        self.preferences
+            .values
+            .get(key)
+            .and_then(crate::preferences::decode_value)
+    }
+
+    fn write_preferences(
+        &mut self,
+        candidate: crate::preferences::PlayerPreferences,
+    ) -> Result<(), VmError> {
+        if let Some(error) = &self.preference_fault {
+            return Err(VmError::HostCallError(format!(
+                "Preferences unchanged: {error}"
+            )));
+        }
+        let dir = self.save_dir.as_ref().ok_or_else(|| {
+            VmError::HostCallError("Player settings directory is not configured".into())
+        })?;
+        candidate.save(dir).map_err(|error| {
+            VmError::HostCallError(format!("Could not save preferences: {error}"))
+        })?;
+        self.preferences = candidate;
+        Ok(())
+    }
+
+    /// Persist a player setting immediately. Failure keeps the previous value.
+    pub fn set_player_setting(&mut self, key: &str, value: Value) -> Result<(), VmError> {
+        if key.is_empty()
+            || key.len() > 256
+            || (self.preferences.values.len() >= 4096 && !self.preferences.values.contains_key(key))
+        {
+            return Err(VmError::HostCallError(
+                "Player setting limit reached".into(),
+            ));
+        }
+        let json = crate::preferences::encode_value(&value).map_err(VmError::HostCallError)?;
+        let mut candidate = self.preferences.clone();
+        candidate.values.insert(key.into(), json);
+        if candidate == self.preferences && self.preference_fault.is_none() {
+            return Ok(());
+        }
+        self.write_preferences(candidate)
+    }
+
+    #[cfg(feature = "audio")]
+    fn persist_audio_settings(&mut self) -> Result<(), VmError> {
+        if self.save_dir.is_none() {
+            return Ok(());
+        }
+        let mut candidate = self.preferences.clone();
+        if let Some(audio) = &self.audio {
+            candidate.audio = Some(audio.settings().clone());
+        }
+        if candidate == self.preferences && self.preference_fault.is_none() {
+            return Ok(());
+        }
+        self.write_preferences(candidate)
+    }
+
+    /// Legacy one-time file registration. Prefer configure_audio for authored assets.
     #[cfg(feature = "audio")]
     pub fn register_audio(&mut self, name: &str, path: &str) {
-        self.registered_audio
-            .insert(name.to_string(), path.to_string());
-        if let Some(audio) = &mut self.audio {
-            audio.register_sound(name, crate::audio::AudioCategory::Sfx, path);
+        if self
+            .registered_audio
+            .get(name)
+            .is_some_and(|old| old == path)
+        {
+            return;
+        }
+        let audio = self.audio.get_or_insert_with(AudioEngine::default);
+        match audio.register_sound(name, crate::audio::AudioCategory::Sfx, path) {
+            Ok(()) => {
+                self.registered_audio.insert(name.into(), path.into());
+            }
+            Err(error) => log::error!("Audio '{name}': {error}"),
         }
     }
 
@@ -533,7 +680,7 @@ impl SliceHost {
     #[cfg(feature = "audio")]
     pub fn stop_audio_preview(&mut self) {
         if let Some(audio) = &mut self.audio {
-            audio.stop_music();
+            audio.stop_all();
         }
     }
 
@@ -704,6 +851,7 @@ impl SliceHost {
                     if let Some(audio) = &mut self.audio {
                         audio.set_master_volume(volume);
                     }
+                    self.persist_audio_settings()?;
                 }
                 Ok(Value::I64(0))
             }
@@ -715,6 +863,7 @@ impl SliceHost {
                     if let Some(audio) = &mut self.audio {
                         audio.set_sfx_volume(volume);
                     }
+                    self.persist_audio_settings()?;
                 }
                 Ok(Value::I64(0))
             }
@@ -726,6 +875,7 @@ impl SliceHost {
                     if let Some(audio) = &mut self.audio {
                         audio.set_music_volume(volume);
                     }
+                    self.persist_audio_settings()?;
                 }
                 Ok(Value::I64(0))
             }
@@ -1380,6 +1530,53 @@ impl SliceHost {
             73 => Ok(Value::F64(self.mouse_world[1])),
             74 => Ok(Value::Str(self.animation_event.0.clone())),
             75 => Ok(Value::Str(self.animation_event.1.clone())),
+            76 => {
+                #[cfg(feature = "audio")]
+                {
+                    let name = args[0]
+                        .as_str()
+                        .ok_or_else(|| VmError::HostCallError("Expected a bus name".into()))?;
+                    let volume = args[1]
+                        .to_f64()
+                        .ok_or_else(|| VmError::HostCallError("Expected a volume".into()))?
+                        as f32;
+                    if let Some(audio) = &mut self.audio {
+                        audio.set_bus_volume(name, volume);
+                    }
+                    self.persist_audio_settings()?;
+                }
+                Ok(Value::I64(0))
+            }
+            77 => {
+                #[cfg(feature = "audio")]
+                if let Some(audio) = &self.audio {
+                    let name = args[0].as_str().unwrap_or_default();
+                    let volume = if name == "Master" {
+                        audio.master_volume()
+                    } else {
+                        audio
+                            .settings()
+                            .buses
+                            .get(name)
+                            .map_or(1.0, |bus| kiln_core::audio::gain(bus.volume))
+                    };
+                    return Ok(Value::F64(volume as f64));
+                }
+                Ok(Value::F64(1.0))
+            }
+            78 => {
+                let key = args[0].as_str().ok_or_else(|| {
+                    VmError::HostCallError("setting_get expects a string key".into())
+                })?;
+                Ok(self.player_setting(key).unwrap_or_else(|| args[1].clone()))
+            }
+            79 => {
+                let key = args[0].as_str().ok_or_else(|| {
+                    VmError::HostCallError("setting_set expects a string key".into())
+                })?;
+                self.set_player_setting(key, args[1].clone())?;
+                Ok(args[1].clone())
+            }
             _ => Err(VmError::HostCallError(format!(
                 "unknown slice builtin id {func_id}"
             ))),
@@ -1453,9 +1650,42 @@ impl AttachedScript {
             &mut _parent.physics,
             &mut self.session.vm.host_mut().physics,
         );
+        self.session
+            .vm
+            .host_mut()
+            .save_dir
+            .clone_from(&_parent.save_dir);
+        std::mem::swap(
+            &mut _parent.audio_player,
+            &mut self.session.vm.host_mut().audio_player,
+        );
+        std::mem::swap(
+            &mut _parent.preferences,
+            &mut self.session.vm.host_mut().preferences,
+        );
+        std::mem::swap(
+            &mut _parent.preference_fault,
+            &mut self.session.vm.host_mut().preference_fault,
+        );
+        #[cfg(feature = "audio")]
+        std::mem::swap(&mut _parent.audio, &mut self.session.vm.host_mut().audio);
         let result = self
             .session
             .step_program(world, input, dt, false, collisions.to_vec());
+        #[cfg(feature = "audio")]
+        std::mem::swap(&mut _parent.audio, &mut self.session.vm.host_mut().audio);
+        std::mem::swap(
+            &mut _parent.audio_player,
+            &mut self.session.vm.host_mut().audio_player,
+        );
+        std::mem::swap(
+            &mut _parent.preferences,
+            &mut self.session.vm.host_mut().preferences,
+        );
+        std::mem::swap(
+            &mut _parent.preference_fault,
+            &mut self.session.vm.host_mut().preference_fault,
+        );
         #[cfg(feature = "physics")]
         std::mem::swap(
             &mut _parent.physics,
@@ -1726,6 +1956,10 @@ impl SliceSession {
         input: (f64, f64),
         dt: f64,
     ) -> Result<(), VmError> {
+        #[cfg(feature = "audio")]
+        if let Some(audio) = &mut self.vm.host_mut().audio {
+            audio.advance_silent(dt);
+        }
         self.step_program(world, input, dt, true, Vec::new())?;
         let collisions = self.vm.host_mut().facts.collision_events.clone();
         let animation_events: Vec<_> = world

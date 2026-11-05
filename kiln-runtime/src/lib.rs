@@ -6,6 +6,7 @@ pub mod input;
 pub mod jobs;
 pub mod loop_;
 pub mod play_clock;
+pub mod preferences;
 pub mod scene;
 pub mod schedule;
 mod script_source;

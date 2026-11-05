@@ -410,7 +410,25 @@ impl PlayerApp {
             let bytes = self.assets.get(path).ok_or("Script resource is missing")?;
             String::from_utf8(bytes.clone()).map_err(|error| error.to_string())
         }) {
-            Ok(session) => {
+            Ok(mut session) => {
+                #[cfg(feature = "audio")]
+                {
+                    for error in session.host_mut().configure_audio(&self.project, |path| {
+                        self.assets
+                            .get(path)
+                            .cloned()
+                            .ok_or_else(|| format!("Missing audio resource: {path}"))
+                    }) {
+                        log::error!("{error}");
+                    }
+                }
+                session.host_mut().set_save_dir(&self.save_dir);
+                #[cfg(feature = "audio")]
+                if !self.project.audio_assets.is_empty() {
+                    if let Err(error) = session.host_mut().open_audio_output() {
+                        log::warn!("Audio output unavailable: {error}");
+                    }
+                }
                 info!("Loaded gameplay for scene '{}'", self.scene_id);
                 self.slice = Some(session);
             }

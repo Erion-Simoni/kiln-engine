@@ -6,8 +6,8 @@ check:
     cargo fmt --all -- --check
     cargo clippy --workspace --all-targets -- -D warnings
     cargo check --workspace
-    # The audio sample is its own workspace, because it needs a system audio
-    # backend. It is checked on its own so the main workspace builds everywhere.
+    # Native editor/player enable audio by default (Linux: libasound2-dev).
+    # The standalone audible device sample remains a separate workspace.
     cargo check --manifest-path samples/audio/Cargo.toml
 
 # run tests with cargo-nextest

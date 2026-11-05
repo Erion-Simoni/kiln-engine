@@ -21,6 +21,11 @@ M29 (3D foundation) is in progress — see `ROADMAP_FULL_M14_PLUS.md`.
 
 - **Rust 1.87+** — `rustup` to install
 - **just** — `cargo install just`
+- **Linux native audio:** ALSA development headers (`sudo apt-get install libasound2-dev` on Debian/Ubuntu). Native editor/player enable audio by default. Build either package with `--no-default-features` for a no-audio build.
+
+See [2D audio authoring](AUDIO_AUTHORING_2D.md) for imports, preview, buses and
+player settings. Saved runtime UI and general game saves remain in progress in
+[the 2D completion plan](2D_COMPLETION_PLAN.md).
 
 The engine is a Rust workspace. Build it once to verify:
 

@@ -1,0 +1,117 @@
+id = "audio-authoring-2d"
+name = "Audio authoring"
+version = "0.1.0"
+publisher = ""
+icon = ""
+features = []
+
+[window]
+width = 1280
+height = 720
+fullscreen = false
+borderless = false
+vsync = true
+high_dpi = true
+resizable = true
+monitor = 0
+
+[mobile]
+orientation = "landscape"
+
+[mobile.ios]
+bundle_identifier = "com.example.game"
+permissions = []
+supports_notch = true
+
+[mobile.ios.privacy_descriptions]
+camera = ""
+microphone = ""
+photo_library = ""
+location = ""
+
+[mobile.ios.launch_screen]
+image = ""
+background_color = "#000000"
+
+[mobile.android]
+package_name = "com.example.game"
+permissions = []
+target_sdk = 33
+
+[scenes.main]
+id = "main"
+name = "Main"
+nested_scenes = []
+script = "scripts/main.ks"
+
+[[scenes.main.entities]]
+id = "emitter"
+name = "Emitter"
+
+[[scenes.main.entities.components]]
+type = "Script"
+path = "scripts/emitter.ks"
+
+[scenes.main.entities.components.properties]
+
+[cameras]
+
+[tilemaps]
+
+[terrains]
+
+[tilesets]
+
+[animation_clips]
+
+[shaders]
+
+[materials]
+
+[[audio_assets]]
+id = "2"
+name = "hit"
+path = "assets/audio/hit.wav"
+is_music = false
+volume = 0.800000011920929
+bus = "Combat"
+looped = false
+
+[[audio_assets]]
+id = "3"
+name = "theme"
+path = "assets/audio/theme.wav"
+is_music = true
+volume = 1.0
+bus = ""
+looped = true
+
+[audio_mixer]
+master_volume = 1.0
+
+[audio_mixer.buses.Combat]
+volume = 0.699999988079071
+muted = false
+solo = false
+
+[audio_mixer.buses.Music]
+volume = 1.0
+muted = false
+solo = false
+
+[audio_mixer.buses.SFX]
+volume = 1.0
+muted = false
+solo = false
+
+[sdf_fonts]
+
+[prefabs]
+
+[asset_ids]
+"assets/audio/theme.wav" = "3"
+"assets/audio/hit.wav" = "2"
+
+[asset_import_settings]
+
+[action_map.actions]

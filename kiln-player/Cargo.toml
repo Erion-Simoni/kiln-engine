@@ -27,7 +27,8 @@ thiserror = { workspace = true }
 gilrs = { workspace = true, optional = true }
 
 [features]
-default = []
+default = ["audio"]
+audio = ["kiln-runtime/audio"]
 gamepad = ["gilrs", "kiln-input/gamepad"]
 
 [dev-dependencies]

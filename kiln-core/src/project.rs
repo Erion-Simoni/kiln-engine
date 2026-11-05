@@ -48,6 +48,9 @@ pub struct Project {
     /// Audio assets of the project, keyed by their name.
     #[serde(default)]
     pub audio_assets: Vec<AudioAsset>,
+    /// Saved author defaults for master and named mixer buses.
+    #[serde(default)]
+    pub audio_mixer: crate::audio::AudioMixerSettings,
     /// SDF font assets of the project, keyed by their id.
     #[serde(default)]
     pub sdf_fonts: HashMap<String, SdfFont>,
@@ -99,7 +102,7 @@ impl Project {
 }
 
 /// An audio asset reference in the project.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AudioAsset {
     /// Unique audio identifier.
     pub id: String,
@@ -113,6 +116,45 @@ pub struct AudioAsset {
     /// Volume (0.0 to 1.0).
     #[serde(default = "default_volume")]
     pub volume: f32,
+    /// Empty selects Music or SFX according to is_music.
+    #[serde(default)]
+    pub bus: String,
+    /// Repeat on completion. Missing legacy values retain looping music.
+    #[serde(default = "default_audio_loop")]
+    pub looped: bool,
+}
+
+fn default_audio_loop() -> bool {
+    true
+}
+
+impl Default for AudioAsset {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            path: String::new(),
+            is_music: false,
+            volume: 1.0,
+            bus: String::new(),
+            looped: true,
+        }
+    }
+}
+
+impl AudioAsset {
+    /// Effective routing for legacy and newly authored assets.
+    pub fn bus_name(&self) -> &str {
+        if self.bus.is_empty() {
+            if self.is_music {
+                "Music"
+            } else {
+                "SFX"
+            }
+        } else {
+            &self.bus
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -388,6 +430,7 @@ impl Default for Project {
             shaders: HashMap::new(),
             materials: HashMap::new(),
             audio_assets: vec![],
+            audio_mixer: Default::default(),
             sdf_fonts: HashMap::new(),
             prefabs: HashMap::new(),
             asset_ids: HashMap::new(),

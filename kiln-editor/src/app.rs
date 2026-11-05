@@ -133,26 +133,6 @@ struct PlaySession {
     game_camera: kiln_render::camera::Camera,
 }
 
-impl PlaySession {
-    /// Play an audio preview by name.
-    #[cfg(feature = "audio")]
-    pub fn play_audio_preview(&mut self, name: &str) {
-        self.slice.host_mut().play_audio_preview(name);
-    }
-
-    /// Stop audio playback preview.
-    #[cfg(feature = "audio")]
-    pub fn stop_audio_preview(&mut self) {
-        self.slice.host_mut().stop_audio_preview();
-    }
-
-    /// Register an audio asset with the slice session.
-    #[cfg(feature = "audio")]
-    pub fn register_audio(&mut self, name: &str, path: &str) {
-        self.slice.host_mut().register_audio(name, path);
-    }
-}
-
 /// The world size the scene view falls back to when no project is open.
 const DEFAULT_WORLD_SIZE: (f32, f32) = (1280.0, 720.0);
 
@@ -545,10 +525,17 @@ fn start_play_session(
     root: &Path,
     textures: &SceneTextures,
 ) -> Result<(kiln_runtime::SliceSession, String, GameWorld), String> {
-    let slice = kiln_runtime::SliceSession::with_scene_sources(project, scene_id, |path| {
+    let mut slice = kiln_runtime::SliceSession::with_scene_sources(project, scene_id, |path| {
         std::fs::read_to_string(root.join(path)).map_err(|error| error.to_string())
     })?;
 
+    #[cfg(feature = "audio")]
+    for error in slice.host_mut().configure_audio(project, |path| {
+        std::fs::read(root.join(path)).map_err(|error| error.to_string())
+    }) {
+        log::error!("{error}");
+    }
+    slice.host_mut().set_save_dir(&root.join(".kiln-save"));
     let (world, _spawned) = spawn_editor_scene(project, scene_id, textures);
     Ok((slice, scene_id.to_owned(), world))
 }
@@ -848,6 +835,7 @@ impl EditorApp {
         self.lifecycle.mark_saved(&project);
         self.current_project = Some(project);
         if let Some(root) = path.parent() {
+            self.audio_editor.stop_preview();
             self.project_root = Some(root.to_path_buf());
             self.asset_browser.scan(root);
         }
@@ -902,6 +890,7 @@ impl EditorApp {
 
         // Scan the project directory so the asset browser lists its files.
         if let Some(dir) = path.parent() {
+            self.audio_editor.stop_preview();
             self.project_root = Some(dir.to_path_buf());
             self.asset_browser.scan(dir);
         }
@@ -1064,7 +1053,19 @@ impl EditorApp {
             .as_ref()
             .map(|gpu| gpu.scene_textures.clone())
             .unwrap_or_default();
+        self.audio_editor.stop_preview();
         let (slice, scene_id, world) = start_play_session(&project, scene_id, &root, &textures)?;
+        #[cfg(feature = "audio")]
+        let slice = {
+            let mut slice = slice;
+            if !project.audio_assets.is_empty() {
+                if let Err(error) = slice.host_mut().open_audio_output() {
+                    self.console_log
+                        .push(format!("[WARN] Audio output unavailable: {error}"));
+                }
+            }
+            slice
+        };
         let mut camera_controller = kiln_runtime::camera::CameraController::default();
         let settings = project.cameras.get(&scene_id).cloned().unwrap_or_default();
         let game_camera = camera_controller.update(
@@ -6227,38 +6228,21 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 });
             }
             Tab::AudioEditor => {
-                ui.vertical(|ui| {
-                    self.audio_editor.render(ui);
-                    #[cfg(not(feature = "audio"))]
-                    ui.label("Audio preview requires an audio-enabled build.");
-                    // Connect audio editor to the slice's audio engine
-                    #[cfg(feature = "audio")]
-                    if let Some(play) = self.play.as_mut() {
-                        let slice = &mut play.slice;
-                        // Handle preview playback
-                        if let Some(name) = self.audio_editor.preview_asset.clone() {
-                            if self.audio_editor.preview_playing {
-                                slice.host_mut().play_audio_preview(&name);
-                            } else {
-                                slice.host_mut().stop_audio_preview();
-                            }
-                        }
-                        // Register all project audio assets with the slice host
-                        for (name, path) in self
-                            .current_project
-                            .as_ref()
-                            .map(|p| {
-                                p.audio_assets
-                                    .iter()
-                                    .map(|a| (a.name.clone(), a.path.clone()))
-                                    .collect::<Vec<_>>()
-                            })
-                            .unwrap_or_default()
-                        {
-                            slice.host_mut().register_audio(&name, &path);
+                if self.editing_locked() {
+                    ui.disable();
+                }
+                if let Some(project) = self.current_project.as_mut() {
+                    let before = project.audio_assets.len();
+                    self.audio_editor
+                        .render(ui, project, self.asset_browser.root());
+                    if before != project.audio_assets.len() {
+                        if let Some(root) = self.asset_browser.root().map(Path::to_path_buf) {
+                            self.asset_browser.scan(&root);
                         }
                     }
-                });
+                } else {
+                    ui.label("Open a project to author audio.");
+                }
             }
             Tab::PhysicsEditor => {
                 ui.vertical(|ui| {

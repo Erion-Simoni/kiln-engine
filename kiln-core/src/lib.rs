@@ -2,6 +2,7 @@
 //! Math, time, shared types, ECS glue
 
 pub mod access;
+pub mod audio;
 pub mod camera;
 pub mod clip;
 pub mod device_tier;

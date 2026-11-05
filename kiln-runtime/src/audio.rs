@@ -1,362 +1,328 @@
-//! Audio playback module (feature-gated)
-//! Uses rodio for OS audio output and symphonia for OGG/Opus decoding
-//! Provides a mixer with separate SFX and music channels, volume controls,
-//! and per-source playback management.
+//! Decoded, polyphonic audio. Device output is opened explicitly, never by tests.
 
-#[cfg(feature = "audio")]
+use kiln_core::{
+    audio::{gain, AudioMixerSettings},
+    project::AudioAsset,
+};
 use rodio::{
-    source::{Buffered, SeekError},
+    buffer::SamplesBuffer,
+    mixer::{mixer, Mixer, MixerSource},
+    source::Zero,
     Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, Source,
 };
-#[cfg(feature = "audio")]
-use std::collections::HashMap;
-#[cfg(feature = "audio")]
-use std::fs::File;
-#[cfg(feature = "audio")]
-use std::io::{BufReader, Cursor};
-#[cfg(feature = "audio")]
-use std::sync::{Arc, Mutex};
+use std::{collections::HashMap, io::Cursor};
 
-/// Audio category for volume management
-/// Available even when audio feature is disabled for API compatibility.
+/// Legacy category API; assets may route through any named bus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AudioCategory {
-    /// Sound effects - short, can overlap
     Sfx,
-    /// Background music - long, single instance, loops
     Music,
 }
 
-/// Configuration for a sound source
-#[cfg(feature = "audio")]
-struct SoundSource {
+struct Clip {
+    samples: SamplesBuffer,
+    bus: String,
+    volume: f32,
+    music: bool,
+    looped: bool,
+}
+
+struct Voice {
     name: String,
-    category: AudioCategory,
-    sink: Player,
-    loops: bool,
-    paused: bool,
+    bus: String,
+    volume: f32,
+    music: bool,
+    player: Player,
 }
 
-/// Audio mixer with separate SFX and music channels
-#[cfg(feature = "audio")]
+/// Bounds simultaneous voices even when scripts trigger a sound every tick.
+pub const MAX_AUDIO_VOICES: usize = 128;
+
+/// A PCM mixer shared by native preview, gameplay and offline acceptance tests.
 pub struct AudioEngine {
-    master_sink: MixerDeviceSink,
-    master_volume: f32,
-    sfx_volume: f32,
-    music_volume: f32,
-    sources: Arc<Mutex<HashMap<String, SoundSource>>>,
-    music_handle: Option<String>,
+    mixer: Mixer,
+    offline: Option<MixerSource>,
+    output: Option<MixerDeviceSink>,
+    clips: HashMap<String, Clip>,
+    voices: Vec<Voice>,
+    settings: AudioMixerSettings,
 }
 
-#[cfg(feature = "audio")]
+impl Default for AudioEngine {
+    fn default() -> Self {
+        let (mixer, source) = mixer(2.try_into().unwrap(), 48_000.try_into().unwrap());
+        // Keep the mixer alive between sounds; an empty MixerSource terminates.
+        mixer.add(Zero::new(2.try_into().unwrap(), 48_000.try_into().unwrap()));
+        Self {
+            mixer,
+            offline: Some(source),
+            output: None,
+            clips: HashMap::new(),
+            voices: Vec::new(),
+            settings: AudioMixerSettings::default(),
+        }
+    }
+}
+
 impl AudioEngine {
-    /// Create a new audio engine with default volumes
+    /// Create a device-independent mixer. Call open_output for audible playback.
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let master_sink = DeviceSinkBuilder::open_default_sink()?;
-        Ok(AudioEngine {
-            master_sink,
-            master_volume: 1.0,
-            sfx_volume: 1.0,
-            music_volume: 0.5,
-            sources: Arc::new(Mutex::new(HashMap::new())),
-            music_handle: None,
-        })
+        Ok(Self::default())
     }
 
-    /// Register a sound by name, category, and file path
-    pub fn register_sound(&mut self, name: &str, category: AudioCategory, _path: &str) {
-        let mut sources = self.sources.lock().unwrap();
-        let sink = Player::connect_new(self.master_sink.mixer());
-        sink.set_volume(0.0);
-        sink.pause();
-        sources.insert(
-            name.to_string(),
-            SoundSource {
-                name: name.to_string(),
-                category,
-                sink,
-                loops: category == AudioCategory::Music,
-                paused: true,
+    /// Open output once; failure leaves decoding and offline mixing available.
+    pub fn open_output(&mut self) -> Result<(), String> {
+        if self.output.is_none() {
+            let mut output =
+                DeviceSinkBuilder::open_default_sink().map_err(|error| error.to_string())?;
+            output.log_on_drop(false);
+            if let Some(source) = self.offline.take() {
+                output.mixer().add(source);
+            }
+            self.output = Some(output);
+        }
+        Ok(())
+    }
+
+    /// Decode bytes from disk or an archive. Failure leaves an existing clip intact.
+    pub fn register_bytes(&mut self, asset: &AudioAsset, bytes: Vec<u8>) -> Result<(), String> {
+        if asset.name.trim().is_empty() {
+            return Err("Audio name is empty".into());
+        }
+        let decoder =
+            Decoder::new(Cursor::new(bytes)).map_err(|error| format!("{}: {error}", asset.path))?;
+        let channels = decoder.channels();
+        let sample_rate = decoder.sample_rate();
+        let data: Vec<f32> = decoder.collect();
+        if data.is_empty() || data.iter().any(|sample| !sample.is_finite()) {
+            return Err(format!("{}: audio has no valid samples", asset.path));
+        }
+        let clip = Clip {
+            samples: SamplesBuffer::new(channels, sample_rate, data),
+            bus: asset.bus_name().into(),
+            volume: gain(asset.volume),
+            music: asset.is_music,
+            looped: asset.is_music && asset.looped,
+        };
+        self.clips.insert(asset.name.clone(), clip);
+        Ok(())
+    }
+
+    /// Register a file with the legacy API. Missing/invalid files are errors.
+    pub fn register_sound(
+        &mut self,
+        name: &str,
+        category: AudioCategory,
+        path: &str,
+    ) -> Result<(), String> {
+        self.register_bytes(
+            &AudioAsset {
+                name: name.into(),
+                path: path.into(),
+                is_music: category == AudioCategory::Music,
+                ..Default::default()
             },
-        );
+            std::fs::read(path).map_err(|error| format!("{path}: {error}"))?,
+        )
     }
 
-    /// Play a sound effect by name (SFX category)
+    /// Apply all authored or player mixer controls, including already playing voices.
+    pub fn set_settings(&mut self, mut settings: AudioMixerSettings) {
+        settings.master_volume = gain(settings.master_volume);
+        for bus in settings.buses.values_mut() {
+            bus.volume = gain(bus.volume);
+        }
+        self.settings = settings;
+        for voice in &self.voices {
+            voice
+                .player
+                .set_volume(voice.volume * self.settings.bus_gain(&voice.bus));
+        }
+    }
+
+    pub fn settings(&self) -> &AudioMixerSettings {
+        &self.settings
+    }
+
+    /// A new voice for every trigger; repeated effects overlap.
     pub fn play_sound(&mut self, name: &str) {
-        let mut sources = self.sources.lock().unwrap();
-        if let Some(sound) = sources.get_mut(name) {
-            if sound.category == AudioCategory::Sfx {
-                sound.sink.set_volume(self.master_volume * self.sfx_volume);
-                sound.sink.play();
-                sound.paused = false;
-            }
-        }
+        self.play_sound_with_volume(name, 1.0);
     }
 
-    /// Play a sound effect with custom volume
     pub fn play_sound_with_volume(&mut self, name: &str, volume: f32) {
-        let mut sources = self.sources.lock().unwrap();
-        if let Some(sound) = sources.get_mut(name) {
-            if sound.category == AudioCategory::Sfx {
-                let effective_volume =
-                    self.master_volume * self.sfx_volume * volume.clamp(0.0, 1.0);
-                sound.sink.set_volume(effective_volume);
-                sound.sink.play();
-                sound.paused = false;
-            }
-        }
+        self.start_voice(name, volume, false);
     }
 
-    /// Stop a sound by name
-    pub fn stop_sound(&mut self, name: &str) {
-        let mut sources = self.sources.lock().unwrap();
-        if let Some(sound) = sources.get_mut(name) {
-            sound.sink.stop();
-            sound.paused = true;
-            if self.music_handle.as_ref() == Some(&name.to_string()) {
-                self.music_handle = None;
-            }
-        }
-    }
-
-    /// Pause a sound by name
-    pub fn pause_sound(&mut self, name: &str) {
-        let mut sources = self.sources.lock().unwrap();
-        if let Some(sound) = sources.get_mut(name) {
-            sound.sink.pause();
-            sound.paused = true;
-        }
-    }
-
-    /// Resume a paused sound by name
-    pub fn resume_sound(&mut self, name: &str) {
-        let mut sources = self.sources.lock().unwrap();
-        if let Some(sound) = sources.get_mut(name) {
-            sound.sink.play();
-            sound.paused = false;
-        }
-    }
-
-    /// Play music by name (Music category - single instance, loops)
+    /// Replace previous music, using the asset's explicit loop setting.
     pub fn play_music(&mut self, name: &str) {
-        if let Some(current) = self.music_handle.take() {
-            self.stop_sound(&current);
+        if !self.clips.get(name).is_some_and(|clip| clip.music) {
+            return;
         }
+        self.stop_music();
+        self.start_voice(name, 1.0, true);
+    }
 
-        let mut sources = self.sources.lock().unwrap();
-        if let Some(sound) = sources.get_mut(name) {
-            if sound.category == AudioCategory::Music {
-                sound
-                    .sink
-                    .set_volume(self.master_volume * self.music_volume);
-                sound.sink.play();
-                sound.paused = false;
-                self.music_handle = Some(name.to_string());
-            }
+    fn start_voice(&mut self, name: &str, volume: f32, music: bool) {
+        let Some(clip) = self.clips.get(name) else {
+            return;
+        };
+        if clip.music != music {
+            return;
         }
-    }
-
-    /// Stop music
-    pub fn stop_music(&mut self) {
-        if let Some(name) = self.music_handle.take() {
-            self.stop_sound(&name);
+        self.voices.retain(|voice| !voice.player.empty());
+        if self.voices.len() >= MAX_AUDIO_VOICES {
+            let Some(index) = self.voices.iter().position(|voice| !voice.music) else {
+                return;
+            };
+            self.voices.remove(index).player.stop();
         }
-    }
-
-    /// Pause music
-    pub fn pause_music(&mut self) {
-        if let Some(name) = self.music_handle.clone() {
-            self.pause_sound(&name);
-        }
-    }
-
-    /// Resume music
-    pub fn resume_music(&mut self) {
-        if let Some(name) = self.music_handle.clone() {
-            self.resume_sound(&name);
-        }
-    }
-
-    /// Set master volume (0.0 to 1.0)
-    pub fn set_master_volume(&mut self, volume: f32) {
-        self.master_volume = volume.clamp(0.0, 1.0);
-        self.update_all_volumes();
-    }
-
-    /// Set SFX volume (0.0 to 1.0)
-    pub fn set_sfx_volume(&mut self, volume: f32) {
-        self.sfx_volume = volume.clamp(0.0, 1.0);
-        self.update_sfx_volumes();
-    }
-
-    /// Set music volume (0.0 to 1.0)
-    pub fn set_music_volume(&mut self, volume: f32) {
-        self.music_volume = volume.clamp(0.0, 1.0);
-        self.update_music_volumes();
-    }
-
-    /// Get master volume
-    pub fn master_volume(&self) -> f32 {
-        self.master_volume
-    }
-
-    /// Get SFX volume
-    pub fn sfx_volume(&self) -> f32 {
-        self.sfx_volume
-    }
-
-    /// Get music volume
-    pub fn music_volume(&self) -> f32 {
-        self.music_volume
-    }
-
-    fn update_all_volumes(&self) {
-        self.update_sfx_volumes();
-        self.update_music_volumes();
-    }
-
-    fn update_sfx_volumes(&self) {
-        let volume = self.master_volume * self.sfx_volume;
-        let sources = self.sources.lock().unwrap();
-        for sound in sources.values() {
-            if sound.category == AudioCategory::Sfx {
-                sound.sink.set_volume(volume);
-            }
-        }
-    }
-
-    fn update_music_volumes(&self) {
-        let volume = self.master_volume * self.music_volume;
-        let sources = self.sources.lock().unwrap();
-        for sound in sources.values() {
-            if sound.category == AudioCategory::Music {
-                sound.sink.set_volume(volume);
-            }
-        }
-    }
-
-    /// Check if a sound is playing
-    pub fn is_playing(&self, name: &str) -> bool {
-        let sources = self.sources.lock().unwrap();
-        sources
-            .get(name)
-            .map(|s| !s.paused && !s.sink.is_paused())
-            .unwrap_or(false)
-    }
-
-    /// Check if music is playing
-    pub fn is_music_playing(&self) -> bool {
-        if let Some(name) = &self.music_handle {
-            self.is_playing(name)
+        let player = Player::connect_new(&self.mixer);
+        let volume = gain(volume) * clip.volume;
+        player.set_volume(volume * self.settings.bus_gain(&clip.bus));
+        if clip.looped {
+            player.append(clip.samples.clone().repeat_infinite());
         } else {
-            false
+            player.append(clip.samples.clone());
         }
+        self.voices.push(Voice {
+            name: name.into(),
+            bus: clip.bus.clone(),
+            volume,
+            music,
+            player,
+        });
     }
 
-    /// Stop all sounds
+    pub fn stop_sound(&mut self, name: &str) {
+        self.voices.retain(|voice| {
+            if voice.name == name {
+                voice.player.stop();
+                false
+            } else {
+                true
+            }
+        });
+    }
+    pub fn pause_sound(&mut self, name: &str) {
+        for voice in &self.voices {
+            if voice.name == name {
+                voice.player.pause();
+            }
+        }
+    }
+    pub fn resume_sound(&mut self, name: &str) {
+        for voice in &self.voices {
+            if voice.name == name {
+                voice.player.play();
+            }
+        }
+    }
+    pub fn stop_music(&mut self) {
+        self.voices.retain(|voice| {
+            if voice.music {
+                voice.player.stop();
+                false
+            } else {
+                true
+            }
+        });
+    }
+    pub fn pause_music(&mut self) {
+        for voice in &self.voices {
+            if voice.music {
+                voice.player.pause();
+            }
+        }
+    }
+    pub fn resume_music(&mut self) {
+        for voice in &self.voices {
+            if voice.music {
+                voice.player.play();
+            }
+        }
+    }
     pub fn stop_all(&mut self) {
-        let mut sources = self.sources.lock().unwrap();
-        for sound in sources.values_mut() {
-            sound.sink.stop();
-            sound.paused = true;
+        for voice in self.voices.drain(..) {
+            voice.player.stop();
         }
-        self.music_handle = None;
     }
-
-    /// Get number of active sources
+    pub fn is_playing(&self, name: &str) -> bool {
+        self.voices
+            .iter()
+            .any(|voice| voice.name == name && !voice.player.empty() && !voice.player.is_paused())
+    }
+    pub fn is_music_playing(&self) -> bool {
+        self.voices
+            .iter()
+            .any(|voice| voice.music && !voice.player.empty() && !voice.player.is_paused())
+    }
     pub fn active_source_count(&self) -> usize {
-        let sources = self.sources.lock().unwrap();
-        sources
-            .values()
-            .filter(|s| !s.paused && !s.sink.is_paused())
+        self.voices
+            .iter()
+            .filter(|voice| !voice.player.empty() && !voice.player.is_paused())
             .count()
     }
-}
-
-#[cfg(feature = "audio")]
-impl Default for AudioEngine {
-    fn default() -> Self {
-        Self::new().expect("Failed to initialize audio engine")
+    pub fn registered_count(&self) -> usize {
+        self.clips.len()
     }
-}
-
-#[cfg(not(feature = "audio"))]
-/// No-op audio engine stub when audio feature is disabled
-pub struct AudioEngine;
-
-#[cfg(not(feature = "audio"))]
-impl AudioEngine {
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        Ok(AudioEngine)
+    pub fn set_master_volume(&mut self, volume: f32) {
+        let mut settings = self.settings.clone();
+        settings.master_volume = gain(volume);
+        self.set_settings(settings);
     }
-
-    pub fn register_sound(&mut self, _name: &str, _category: AudioCategory, _path: &str) {}
-    pub fn play_sound(&mut self, _name: &str) {}
-    pub fn play_sound_with_volume(&mut self, _name: &str, _volume: f32) {}
-    pub fn stop_sound(&mut self, _name: &str) {}
-    pub fn pause_sound(&mut self, _name: &str) {}
-    pub fn resume_sound(&mut self, _name: &str) {}
-    pub fn play_music(&mut self, _name: &str) {}
-    pub fn stop_music(&mut self) {}
-    pub fn pause_music(&mut self) {}
-    pub fn resume_music(&mut self) {}
-    pub fn set_master_volume(&mut self, _volume: f32) {}
-    pub fn set_sfx_volume(&mut self, _volume: f32) {}
-    pub fn set_music_volume(&mut self, _volume: f32) {}
+    pub fn set_bus_volume(&mut self, name: &str, volume: f32) {
+        if name == "Master" {
+            self.set_master_volume(volume);
+            return;
+        }
+        let mut settings = self.settings.clone();
+        settings.buses.entry(name.into()).or_default().volume = gain(volume);
+        self.set_settings(settings);
+    }
+    pub fn set_sfx_volume(&mut self, volume: f32) {
+        self.set_bus_volume("SFX", volume);
+    }
+    pub fn set_music_volume(&mut self, volume: f32) {
+        self.set_bus_volume("Music", volume);
+    }
     pub fn master_volume(&self) -> f32 {
-        1.0
+        gain(self.settings.master_volume)
     }
     pub fn sfx_volume(&self) -> f32 {
-        1.0
+        self.settings
+            .buses
+            .get("SFX")
+            .map_or(1.0, |bus| gain(bus.volume))
     }
     pub fn music_volume(&self) -> f32 {
-        0.5
+        self.settings
+            .buses
+            .get("Music")
+            .map_or(1.0, |bus| gain(bus.volume))
     }
-    pub fn is_playing(&self, _name: &str) -> bool {
-        false
-    }
-    pub fn is_music_playing(&self) -> bool {
-        false
-    }
-    pub fn stop_all(&mut self) {}
-    pub fn active_source_count(&self) -> usize {
-        0
-    }
-}
 
-#[cfg(not(feature = "audio"))]
-impl Default for AudioEngine {
-    fn default() -> Self {
-        AudioEngine
+    /// Advance headless playback so unavailable devices cannot accumulate voices
+    /// or pending mixer sources forever. Device output advances itself.
+    pub fn advance_silent(&mut self, seconds: f64) {
+        if seconds.is_finite() && seconds > 0.0 {
+            if let Some(source) = &mut self.offline {
+                for _ in 0..(seconds.min(1.0) * 96_000.0) as usize {
+                    let _ = source.next();
+                }
+            }
+            self.voices.retain(|voice| !voice.player.empty());
+        }
+    }
+
+    /// Pull real mixed samples without a device. Unavailable after open_output.
+    pub fn render_samples(&mut self, count: usize) -> Result<Vec<f32>, String> {
+        let source = self
+            .offline
+            .as_mut()
+            .ok_or("Audio is running on a device")?;
+        Ok(source.by_ref().take(count).collect())
     }
 }
 
 #[cfg(test)]
-#[cfg(feature = "audio")]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_audio_engine_creation() {
-        let engine = AudioEngine::new();
-        assert!(engine.is_ok());
-    }
-
-    #[test]
-    fn test_volume_controls() {
-        let mut engine = AudioEngine::new().unwrap();
-        engine.set_master_volume(0.5);
-        assert_eq!(engine.master_volume(), 0.5);
-        engine.set_sfx_volume(0.25);
-        assert_eq!(engine.sfx_volume(), 0.25);
-        engine.set_music_volume(0.75);
-        assert_eq!(engine.music_volume(), 0.75);
-    }
-
-    #[test]
-    fn test_register_and_play_sfx() {
-        let mut engine = AudioEngine::new().unwrap();
-        engine.register_sound("test_sfx", AudioCategory::Sfx, "nonexistent.ogg");
-        engine.play_sound("test_sfx");
-    }
-}
+mod tests;

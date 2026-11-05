@@ -1,34 +1,40 @@
 # Kiln Session Handoff
 
-**Active focus:** 2D readiness audit completed on 2026-11-05; the full 2D engine is unfinished.
-**Branch:** `feat/2d-production-workflow`. 3D remains paused. Tasks 7–9 have not been implemented.
+**Active focus:** Task 7 native audio and player preferences checkpoint completed on 2026-11-05. Task 7 as a whole and the complete 2D engine remain unfinished.
+**Branch:** `feat/2d-production-workflow`. 3D remains paused. Tasks 8–9 were not started.
 
 ## Done
 
-- Audited feature commit `20291fa` and fetched current GitHub master `76da93f` (merge PR #17). Their source trees are identical, so the audit includes the latest merged Task 6 work.
-- Recorded code-backed findings in `docs/2D_READINESS_AUDIT.md` and linked them from the completion plan. This session changes documentation only.
-- Tasks 1–6 provide local build stability, scene/project/prefab/asset authoring, native entity scripting/Play, physics/cameras and visual authoring within their documented contracts. Native interaction acceptance for Tasks 2–6 remains pending.
-- Task 6 includes real image/clip preview, sprite layout/sorting/filtering, terrain/layer/paint tools, saved VFX and automatic static physics for painted solids. Its generated sample and real archive/native-player parity acceptance remain available. See VISUAL_AUTHORING_2D.md, PHYSICS_2D.md and ADR-0054.
+- Replaced empty audio registrations with real decoded PCM, shared among independent SFX voices and one replaceable music voice. Loop/completion, pause/resume, stop/replay, named buses, gain, mute/solo, bounded polyphony and headless advancement are implemented. Malformed gains are normalized before persistence.
+- Audio Editor edits `Project.audio_assets` and saved mixer defaults directly. Imports decode/validate, copy external files to project-relative paths, preserve collisions, and register stable asset IDs. Asset moves update audio references. Preview opens its own output outside Play and reports errors; project replacement/Play stops it.
+- Native editor/player enable the existing audio feature by default, configure resources once from project files/archive bytes, and open output explicitly. Session creation and all automated mixer tests require no device. Audio opt-out builds remain available.
+- Scene/entity callbacks share audio, platform sound callbacks and player preferences, restoring their context even after VM failure.
+- Added versioned `preferences.json`, typed `setting_get`/`setting_set`, named-bus volume APIs and persisted audio overrides. Writes flush a temporary file before replacement. Corrupt/newer data blocks writes; failed writes retain previous settings. Preferences are independent of sample score/coins and save slots.
+- Added reproducible `samples/audio2d_editor`, real direct/packed-player PCM acceptance, import/move/error/settings tests, ADR-0055 and `docs/AUDIO_AUTHORING_2D.md`. Reconciled the completion plan/readiness audit; marked the old audio design as historical. CI installs ALSA headers before native builds/tests and checks audio opt-out.
 
-## Fresh validation
+## Executed validation
 
-- `just check`: passed (formatting, strict native workspace/all-target Clippy, workspace and standalone audio sample compilation).
-- `just test`: **592 passed, zero failed/skipped**.
-- No implementation changes were made. Browser smoke, native/WASM builds and CLI packing passed in the Task 6 checkpoint; they were not rerun for this source audit.
-- Audible audio, complete native GUI authoring, clean-machine distribution and full device/release performance acceptance remain unverified. Test success does not certify these workflows.
-
-## Confirmed remaining work
-
-- Task 7: native sound registration ignores its file path and does not append decoded audio; audio/editor mixer persistence is incomplete. Visual UI authoring remains editor-only. The current gameplay save API serializes sample score/pickups/player coordinates, excluding general entity/scene/attached-script state. Complete the runtime/authoring/settings workflow.
-- Task 8: Build/Export still appends simulated success without executing a build. Implement actual process execution, logs/failure/cancellation, project resources and player packaging, and clean-machine launches. Real KAR packing/player loading already works but is not this complete workflow.
-- Task 9: finish the top-down action/platformer/puzzle reference games, unaided tutorial and recovery/scale/device/release gates.
-- Earlier-work follow-ups: KilnScript lacks for/while grammar, scripted spawning discards its texture argument, and debugger support is frame-level. Browser hosting still loads the older scene-script path, lacks the native entity/module/transition/camera workflow and does not enable physics.
-- Full native drag/drop/gizmo/panel/Play/save/reopen and graphical packed-player acceptance remains pending without a display server. Browser sprite/input checks do not establish physics/script gameplay parity.
+- `just check`: passed (formatting, strict native workspace/all-target Clippy, workspace check and standalone audio sample check).
+- `just test`: **603 passed, zero failed/skipped**. Includes decoded PCM overlap/live gain/mute/solo, looping/replacement/completion, pause/resume/stop/replay, voice limits and headless completion; actual import/save/reopen/KAR/player-VM parity; preferences restart/integer precision/corrupt/future/unwritable files; callback context restoration on errors.
+- Native editor and player binary builds: passed. Both individual `--no-default-features` package checks: passed.
+- `cargo build -p kiln-web --target wasm32-unknown-unknown`: passed with two existing kiln-assets warnings. Regenerated WASM bindings and ran Chromium/WebGL smoke: passed (392 drawn elements; movement changed x 119.5 → 131.5 and stopped after release).
+- Standalone audio sample through ALSA's **null** output: passed. A real native output stream opened, decoded/played the generated WAV and completed without an error. This is not a listening test.
+- Generated the audio sample through its acceptance test. Both synthesized WAV files total 62,488 bytes; decoded mono PCM totals 124,800 bytes and is shared among voices. Full-file music decoding remains a memory consideration.
+- The first full builds exhausted the runner's 63 GB disk with old/new debug artifacts. Removed only regenerable target/debug artifacts and reran successfully with `CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0`. No source/check was excluded. The local ALSA development symlink also needed its target linked to the installed system runtime library.
 
 ## Next
 
-- Task 7 is the next planned implementation step when the user requests continuation, followed by Tasks 8 and 9.
-- Treat scripting/spawn and browser parity as explicit release blockers; do not infer completion from earlier checked boxes or old roadmap claims.
-- Do not start 3D or claim the complete 2D engine is production ready.
+- Continue Task 7: persist and run editor-authored UI screens/widgets, anchors/fonts/buttons, keyboard/controller focus/navigation and script events in editor/player.
+- Add general versioned game data and game/scene/entity/attached-script save/restore; validate title/pause/settings/game-over and save/resume acceptance. The older `save_game`/`load_game` path still uses sample-specific SliceState and is not general restoration.
+- Complete browser audio/mixer/settings parity and a localStorage adapter. Browser currently has its older WebAudio sound callback.
+- Perform real audible device and native GUI preview/authoring acceptance on a graphical machine. Then proceed to Task 8's actual export process and Task 9's reference games/release gate.
 
-Source `/workspace/.kiln-tools/activate.sh` for Cargo. GitHub operations use the supported `require_escalated` permission in this runner. This audit's source baseline is `20291fa` / merged master `76da93f`.
+## Known issues and boundaries
+
+- Full 2D release readiness is not established. Tasks 1–6 retain documented native workflow acceptance and earlier scripting/spawn/debugger/browser follow-ups; see `2D_READINESS_AUDIT.md`.
+- No display server or real audio device is available here. Null-output/offline tests do not certify speakers/headphones, native clicks, saved custom UI/controller screens or clean-machine distribution. Remote CI/platform execution is pending.
+- Music decodes fully into memory; spatial audio, device selection/hot-plug and streaming are deferred. A new scene session reinitializes playback, retaining saved preferences.
+- The native player's existing default `--game-name KilnGame` shares a save/settings profile; supply a distinct name per game. Preview uses authored mixer defaults; gameplay uses persisted player overrides.
+- Build/Export still simulates success (Task 8); do not represent real KAR acceptance as a finished editor export workflow. Do not start 3D or claim Unity/Godot/GameMaker parity.
+
+Source `/workspace/.kiln-tools/activate.sh` for Cargo. In this runner, use the three build-profile variables above to limit regenerable disk usage. GitHub and browser loopback operations use the supported `require_escalated` permission. The prior pushed baseline was `01fd40f`; this checkpoint belongs on the same feature branch.

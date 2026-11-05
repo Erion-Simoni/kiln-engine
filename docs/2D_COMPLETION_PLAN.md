@@ -125,13 +125,19 @@ acceptance remain unverified. Real archive export is exercised; automating the
 editor's Build/Export panel remains Task 8. See `docs/VISUAL_AUTHORING_2D.md` for
 the exact supported contract and graphical acceptance procedure.
 
-### 7. Audio, UI, saving, and settings — PENDING
+### 7. Audio, UI, saving, and settings — IN PROGRESS
 
-- [ ] Wire real audio import/playback/preview, simultaneous effects, looping music, buses, and persisted volume settings.
+- [x] Implement native audio import/playback/preview, simultaneous effects, looping music, named buses, and persisted volume settings. Shared decoded PCM is verified through real project save/reopen and packed-player loading; audible native/device acceptance and browser parity remain pending.
+- [x] Add versioned player preferences and typed `setting_get`/`setting_set`, shared by scene/entity scripts and independent of sample score/coins. Failed/corrupt preference files report errors and are preserved.
 - [ ] Complete UI layout, anchors, text/fonts, buttons, focus/controller navigation, and script events.
 - [ ] Provide save/load APIs, versioned game data, and player settings independent of engine sample-specific score/coin concepts.
 
 Acceptance: title/pause/settings/game-over screens, music and overlapping effects, controller navigation, and save/resume work in editor and exported game.
+
+Audio checkpoint: see [AUDIO_AUTHORING_2D.md](AUDIO_AUTHORING_2D.md), ADR-0055 and
+`kiln-player/tests/audio_workflow.rs`. Native editor/player enable audio by default;
+no-audio builds remain supported. This checkpoint leaves saved UI and generic
+game/scene/entity/script restoration unfinished; do not mark Task 7 complete.
 
 ### 8. Real build/export and distribution — PENDING
 
@@ -378,3 +384,19 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Added non-recursive named functions with isolated locals, project-relative modules with import-cycle/path/size limits, IR source offsets, and source-mapped runtime errors. Existing scene scripts keep their top-level per-frame behavior; reserved-name migration and limits are documented in KILNSCRIPT.md.
 - Replaced the detached instruction-debugger UI with actual Play pause/frame-step/restart controls and live entity-state inspection. Player restarts/transitions rebuild worlds and reset timing.
 - Shared acceptance covers independent enemy state/properties/arrays, projectile/collision/trigger/signal/transition, source-vs-player-asset parity, authoring isolation, and stop callbacks. Negative tests cover module cycles, recursive functions, and imported runtime errors. `just check`, full `just test` (560 passed), native editor/player builds, and focused physics-enabled acceptance pass. GUI interaction remains pending on a graphical runner.
+
+### 2026-11-05 — Task 7 native audio and player preferences
+
+- Replaced empty-player registration with real resource decoding. SFX triggers
+  overlap, music loops or completes per asset, and playback supports live master/
+  bus gain, mute/solo, pause/resume/stop/replay and bounded voices.
+- Audio Editor authors the Project library and mixer, imports project-relative
+  files without overwriting collisions, and previews outside Play. Native editor
+  and player configure the same assets once, including archive bytes.
+- Scene/entity scripts share audio and player settings through success and VM
+  error paths. Versioned preferences preserve typed game-specific options and
+  volume overrides across restart, separately from sample save slots.
+- Tests cover decoded/mixed PCM, real author/save/reopen/KAR/player parity,
+  invalid imports, future/corrupt/unwritable settings, integer precision and
+  callback context restoration. Native listening/GUI and browser parity remain
+  separate pending acceptance. See STATE.md for this session's executed checks.

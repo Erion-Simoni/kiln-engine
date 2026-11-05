@@ -89,6 +89,33 @@ Builtins are host functions registered by the runtime. The standard slice builti
 | `stop_all_sounds()` | 0 | — | Stop all sounds |
 | `sound_playing(name)` | 1 (str) | bool | Whether a sound is playing |
 | `music_playing()` | 0 | bool | Whether music is playing |
+| `set_bus_volume(name, volume)` | 2 (str, number) | — | Set named bus or Master gain; persist native player override |
+| `get_bus_volume(name)` | 1 (str) | f64 | Current configured bus or Master gain |
+
+Native audio assets and buses are authored in the Audio Editor and saved with
+Project. Repeated `play_sound` calls create overlapping voices; `play_music`
+replaces the previous track and respects its Loop option. Master/bus volume
+setters persist to player preferences when a settings directory is configured.
+A preferences write failure produces a script error. Browser audio parity is
+still pending; see [Audio authoring](AUDIO_AUTHORING_2D.md).
+
+### Player settings
+
+`setting_get(key, fallback)` returns a saved setting or the fallback.
+`setting_set(key, value)` persists an integer, finite float, boolean, string or
+array and returns that value. These settings are shared across scene/entity
+scripts and survive restart. They are separate from `state_get`/`state_set`,
+which remain per-instance memory, and from game save slots. Setters require a
+configured writable directory; failures are reported as script errors. Corrupt
+or unsupported preferences files block writes until repaired and reloaded.
+
+```ks
+setting_set("language", "sq");
+let language = setting_get("language", "en");
+```
+
+Native hosts configure the directory before the first script callback. The
+browser localStorage adapter remains unfinished.
 
 ### Entity builtins
 

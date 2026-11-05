@@ -32,6 +32,7 @@
 ## Audio
 
 * [Audio Integration](AUDIO_INTEGRATION.md)
+* [2D Audio Authoring and Player Settings](AUDIO_AUTHORING_2D.md)
 
 ## Animation
 
