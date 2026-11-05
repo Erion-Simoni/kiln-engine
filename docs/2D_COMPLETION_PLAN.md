@@ -12,6 +12,14 @@ Each task needs implementation, meaningful regression tests, and an exercised ed
 
 ## Ordered work
 
+2026-11-05 readiness audit: **2D is not release-complete.** GitHub master
+`76da93f` has the same source tree as feature commit `20291fa`. Fresh `just check`
+and all 592 tests pass, but Tasks 7–9, native workflow acceptance and additional
+scripting/spawn/browser integration gaps remain. See
+[`2D_READINESS_AUDIT.md`](2D_READINESS_AUDIT.md) for source evidence. Earlier
+implementation checkboxes describe their tested contracts, not full traditional
+engine feature parity. This audit does not start a new implementation task.
+
 ### 1. Build and test baseline — COMPLETE (local Linux validation; remote CI pending)
 
 - [x] Repair native workspace syntax/API/test-fixture blockers; subsequent browser checkpoint repaired the actual WASM target.
