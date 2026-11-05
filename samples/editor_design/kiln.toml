@@ -1,0 +1,54 @@
+id = "kiln-editor-design"
+name = "Editor Design Showcase"
+version = "0.1.0"
+features = []
+
+[window]
+width = 760
+height = 420
+
+[scenes.main]
+id = "main"
+name = "Design Showcase"
+script = "scripts/main.ks"
+
+[[scenes.main.entities]]
+id = "player"
+name = "Player"
+components = [
+  { type = "Transform", x = 165.0, y = 145.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [1.0, 1.0, 1.0, 1.0], texture = "art/player.png", width = 30.0, height = 50.0, layer = 10.0 },
+  { type = "Role", role = "player" },
+]
+
+[[scenes.main.entities]]
+id = "ground"
+name = "Ground"
+components = [
+  { type = "Transform", x = 380.0, y = 88.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [1.0, 1.0, 1.0, 1.0], texture = "art/ground.png", width = 680.0, height = 64.0, layer = 0.0 },
+]
+
+[[scenes.main.entities]]
+id = "coin1"
+name = "Coin_01"
+components = [
+  { type = "Transform", x = 300.0, y = 170.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [1.0, 1.0, 1.0, 1.0], texture = "art/coin.png", width = 18.0, height = 18.0, layer = 5.0 },
+]
+
+[[scenes.main.entities]]
+id = "coin2"
+name = "Coin_02"
+components = [
+  { type = "Transform", x = 352.0, y = 194.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [1.0, 1.0, 1.0, 1.0], texture = "art/coin.png", width = 18.0, height = 18.0, layer = 5.0 },
+]
+
+[[scenes.main.entities]]
+id = "rock"
+name = "Rock"
+components = [
+  { type = "Transform", x = 552.0, y = 152.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [1.0, 1.0, 1.0, 1.0], texture = "art/rock.png", width = 64.0, height = 64.0, layer = 1.0 },
+]

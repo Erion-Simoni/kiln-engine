@@ -2,12 +2,14 @@
 
 pub mod anim_editor;
 pub mod app;
+mod asset_shelf;
 pub mod assets;
 pub mod audio_editor;
 pub mod build_panel;
 pub mod component_command;
 pub mod debugger_panel;
 pub mod editing;
+pub mod editor_shell;
 pub mod entity_command;
 pub mod graph_editor;
 pub mod hierarchy;
@@ -22,6 +24,7 @@ pub mod plugin_manager_panel;
 pub mod prefab_editor;
 pub mod prefab_editor_panel;
 pub mod preferences;
+pub mod preview_3d;
 pub mod profiler_panel;
 pub mod project_files;
 pub mod project_hub;

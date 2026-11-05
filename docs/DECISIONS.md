@@ -1427,3 +1427,33 @@ software graphics, retaining screenshots/logs as CI artifacts. The same script
 is executed locally. Full editor GUI and physical-controller acceptance remain
 separately recorded; generic world saves, browser parity and export UI are
 subsequent checkpoints.
+
+## ADR-0057: Native editor design and isolated 3D visual preview
+
+**Date:** 2026-11-05
+**Status:** accepted
+
+Apply the user's uploaded Kiln Editor HTML as a visual reference for the existing
+Rust/egui editor: compact charcoal chrome, a global authoring/transport toolbar,
+a central scene workspace, hierarchy/inspector sidebars and an assets/console/
+profiler shelf. Keep existing commands, histories and project persistence behind
+these controls. Use DockArea::show_inside inside the application's CentralPanel;
+a second nested CentralPanel conflicts with layout and input. Reserve status and
+toolbar panels before laying out the dock. Hierarchy rows use one click/drag
+response so a drag wrapper cannot intercept selection. Collect Play input edges
+with a precomputed display scale: re-entering Context from its input closure
+deadlocks the native editor on the first frame after pressing Play.
+
+The user's explicit request also authorizes an editor-only 3D visual preview.
+Draw bounded, lit perspective primitives with egui's existing triangle painter;
+allow orbit/zoom, selection and transient preview properties. Clearly label the
+mode and properties as preview-only. Keep this state separate from Project,
+scene history, runtime Play and exports. No 3D scene serialization, mesh import,
+physics or gameplay is claimed. Switching back must retain real 2D data and
+selection; Play continues to use the actual 2D scene. No dependency is added.
+
+Retain egui's standard color-format handling: some fallback adapters cannot use
+alternate swapchain views. Verify the palette and interaction with native
+screenshots and input smoke checks, alongside the workspace quality gate.
+Task 7 gameplay save/load work remains paused for this explicitly requested UI
+checkpoint.

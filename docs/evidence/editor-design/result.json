@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "saved_x": 215.0,
+  "player_pixels": {
+    "initial": 191.75089514066497,
+    "edited": 249.75089514066497,
+    "reopened": 249.75089514066497,
+    "playing": 315.0,
+    "paused": 315.0,
+    "stepped": 318.0,
+    "stopped": 250.0
+  },
+  "preview_does_not_modify_project": true
+}

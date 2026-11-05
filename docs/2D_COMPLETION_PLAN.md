@@ -420,3 +420,22 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Added `samples/ui2d_editor`, real save/reopen/KAR/runtime parity tests and a
   repeatable `tests/native/ui_smoke.py`. General world saves, browser integration
   and Tasks 8–9 are not completed by this checkpoint. See STATE.md for checks.
+
+### 2026-11-05 — Requested editor design and 3D visual preview
+
+- Paused Task 7 for the user's supplied native editor design: charcoal chrome,
+  global toolbar, docked hierarchy/inspector/workspace and thumbnail asset shelf.
+  Existing authoring/history/project commands remain in use. See ADR-0057,
+  [EDITOR_DESIGN.md](EDITOR_DESIGN.md) and `samples/editor_design`.
+- Added isolated orbitable 3D demonstration geometry with transient inspector
+  properties. It is clearly labeled preview-only and never modifies 2D project
+  data; this does not complete or resume full 3D engine implementation.
+- Fixed hierarchy click/drag conflicts, nested dock layout and an actual native
+  Play deadlock caused by re-entering egui Context from an input-lock closure.
+- Native inspector edit/undo/redo/save/restart, 3D orbit/lighting/project isolation
+  and actual Play/movement/pause/frame-step/Stop now pass on Xvfb/software
+  graphics. Added repeatable `tests/native/editor_smoke.py`, CI integration and
+  inspected screenshots in `docs/evidence/editor-design/`. The full two-scene,
+  specialist-panel, saved-UI authoring and device gates remain separate.
+- `just check` and all **631 tests** passed. Task 7's generic game restoration,
+  browser parity and Tasks 8–9 remain unfinished; resume Task 7 next.

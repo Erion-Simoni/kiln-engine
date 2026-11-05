@@ -167,17 +167,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   native-ui-smoke:
-    name: Native saved UI smoke test
+    name: Native editor and saved UI smoke tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Install native test dependencies
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libgl1-mesa-dri mesa-vulkan-drivers xvfb xdotool imagemagick
-      - name: Build the native player
+      - name: Build the native editor and player
         env:
           CARGO_PROFILE_DEV_DEBUG: 0
-        run: cargo build -p kiln-player --bin kiln-player
+        run: cargo build -p kiln-player -p kiln-editor --bins
+      - name: Exercise editor authoring, preview isolation and Play controls
+        env:
+          KILN_EDITOR_EVIDENCE_DIR: target/editor-design-evidence
+        run: python3 tests/native/editor_smoke.py
       - name: Exercise saved menus and settings
         env:
           KILN_UI_EVIDENCE_DIR: target/native-ui-evidence
@@ -187,7 +191,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: native-ui-evidence
-          path: target/native-ui-evidence/
+          path: |
+            target/native-ui-evidence/
+            target/editor-design-evidence/
           retention-days: 7
 
   web-smoke:

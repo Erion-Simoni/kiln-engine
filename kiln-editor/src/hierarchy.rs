@@ -167,17 +167,12 @@ pub fn render_hierarchy_panel(
 ) -> Option<HierarchyAction> {
     let mut action = None;
 
-    ui.heading("Hierarchy");
-
-    // Filter bar
-    ui.horizontal(|ui| {
-        ui.label("Filter:");
-        ui.text_edit_singleline(&mut state.filter);
-        if ui.button("Clear").clicked() {
-            state.filter = "".to_string();
-        }
-    });
-
+    ui.add(
+        egui::TextEdit::singleline(&mut state.filter)
+            .hint_text("Search hierarchy")
+            .desired_width(f32::INFINITY),
+    );
+    ui.weak(format!("SCENE  {scene_id}"));
     ui.separator();
 
     // Entity tree
@@ -206,13 +201,17 @@ pub fn render_hierarchy_panel(
 
                 // Entity select button
                 let response = ui
-                    .dnd_drag_source(
-                        ui.id().with(("hierarchy-entity", &node.entity_id)),
-                        node.entity_id.clone(),
-                        |ui| ui.selectable_label(selected, &node.name),
+                    .add_sized(
+                        [ui.available_width() - 50.0, 22.0],
+                        egui::Button::new(&node.name)
+                            .selected(selected)
+                            .frame(false)
+                            .sense(egui::Sense::click_and_drag()),
                     )
-                    .inner
                     .on_hover_text(&node.entity_id);
+                if response.drag_started() {
+                    response.dnd_set_drag_payload(node.entity_id.clone());
+                }
 
                 // Reparent only when an entity ID is actually dropped here.
                 if let Some(source) = response.dnd_release_payload::<String>() {
@@ -249,11 +248,11 @@ pub fn render_hierarchy_panel(
     ui.separator();
 
     // Add entity button
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         if ui.button("+ Add Entity").clicked() {
             state.show_add_dialog = true;
         }
-        if ui.button("- Remove Selected").clicked() {
+        if ui.button("Delete").clicked() {
             if let Some(id) = &state.selected_id {
                 action = Some(HierarchyAction::RemoveEntity(id.clone()));
             }
@@ -308,6 +307,92 @@ fn get_entity_role(project: &Project, scene_id: &str, entity_id: &str) -> Option
 #[cfg(test)]
 mod selection_tests {
     use super::*;
+
+    #[test]
+    fn hierarchy_click_selects_and_drag_reparents_through_the_real_widgets() {
+        let ctx = egui::Context::default();
+        crate::editor_shell::apply_theme(&ctx);
+        let mut project = Project::default();
+        project.scenes.insert(
+            "main".into(),
+            Scene {
+                id: "main".into(),
+                name: "Main".into(),
+                script: None,
+                nested_scenes: vec![],
+                entities: ["Player", "Box"]
+                    .into_iter()
+                    .map(|name| kiln_core::project::Entity {
+                        id: name.into(),
+                        name: name.into(),
+                        components: vec![],
+                    })
+                    .collect(),
+            },
+        );
+        let mut panel = HierarchyPanel::new();
+        panel.rebuild(&project, "main");
+        let mut frame = |events| {
+            let mut action = None;
+            let output = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(240.0, 600.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        action = render_hierarchy_panel(ui, &mut panel, &mut project, "main");
+                    });
+                },
+            );
+            (action, output)
+        };
+        fn text_center(shapes: &[egui::epaint::ClippedShape], name: &str) -> egui::Pos2 {
+            fn find(shape: &egui::Shape, name: &str) -> Option<egui::Pos2> {
+                match shape {
+                    egui::Shape::Text(text) if text.galley.job.text == name => {
+                        Some(text.pos + text.galley.size() * 0.5)
+                    }
+                    egui::Shape::Vec(shapes) => shapes.iter().find_map(|s| find(s, name)),
+                    _ => None,
+                }
+            }
+            shapes
+                .iter()
+                .find_map(|shape| find(&shape.shape, name))
+                .expect("Entity row text is visible")
+        }
+        frame(vec![]);
+        let (_, output) = frame(vec![]);
+        let player = text_center(&output.shapes, "Player");
+        let target = text_center(&output.shapes, "Box");
+        let button = |pos, pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame(vec![egui::Event::PointerMoved(player)]);
+        frame(vec![button(player, true)]);
+        let (action, _) = frame(vec![button(player, false)]);
+        assert_eq!(action, Some(HierarchyAction::SelectEntity("Player".into())));
+        frame(vec![button(player, true)]);
+        frame(vec![egui::Event::PointerMoved(target)]);
+        frame(vec![]);
+        let (action, _) = frame(vec![button(target, false)]);
+        assert_eq!(
+            action,
+            Some(HierarchyAction::Reparent {
+                child_id: "Player".into(),
+                parent_id: Some("Box".into())
+            })
+        );
+        assert_eq!(panel.selected_entity_id(), Some("Player"));
+    }
 
     #[test]
     fn additive_selection_tracks_members_and_primary() {
