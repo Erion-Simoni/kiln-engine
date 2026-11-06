@@ -71,6 +71,7 @@ struct RecoveryPrompt {
 }
 
 enum ProjectRequest {
+    Export(crate::build_panel::BuildConfig),
     RefreshVisuals,
     PausePlay,
     StepPlay,
@@ -2153,6 +2154,7 @@ impl winit::application::ApplicationHandler for EditorApp {
 
 impl EditorApp {
     fn render_frame(&mut self) {
+        self.build_panel.poll();
         if !self
             .project_requests
             .iter()
@@ -2182,6 +2184,20 @@ impl EditorApp {
                 continue;
             }
             let result = match request {
+                ProjectRequest::Export(config) => {
+                    let result = self.save_project().and_then(|_| {
+                        let path = self.project_path.as_ref().ok_or("Save the project first")?;
+                        let project = self
+                            .current_project
+                            .as_ref()
+                            .ok_or("Open a project first")?;
+                        self.build_panel.start(config, path, &project.id)
+                    });
+                    if let Err(error) = &result {
+                        self.build_panel.fail(error.clone());
+                    }
+                    result
+                }
                 ProjectRequest::RefreshVisuals => self.require_edit_mode().and_then(|_| {
                     let scene = self
                         .scenes
@@ -5882,7 +5898,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::BuildPanel => {
                 ui.vertical(|ui| {
                     if let Some(project) = self.current_project.as_mut() {
-                        crate::build_panel::BuildPanel::render(self.build_panel, ui, project);
+                        if let Some(config) = self.build_panel.render(ui, project) {
+                            self.project_requests.push(ProjectRequest::Export(config));
+                        }
                     } else {
                         ui.heading("Build / Export");
                         ui.add_space(8.0);

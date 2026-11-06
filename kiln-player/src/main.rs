@@ -50,7 +50,11 @@ enum MenuState {
 struct Args {
     /// Path to the game archive (.kar file) or project directory
     #[arg(short, long)]
-    archive: PathBuf,
+    archive: Option<PathBuf>,
+
+    /// Print the export runtime protocol without opening a window or audio device.
+    #[arg(long)]
+    runtime_info: bool,
 
     /// Scene to start (defaults to the first scene in the project)
     #[arg(long)]
@@ -65,10 +69,26 @@ fn main() -> Result<()> {
     env_logger::init();
 
     let args = Args::parse();
-    info!("Loading game from: {}", args.archive.display());
+    if args.runtime_info {
+        let runtime = kiln_core::export::RuntimeInfo {
+            protocol: kiln_core::export::EXPORT_PROTOCOL,
+            version: env!("CARGO_PKG_VERSION").into(),
+            platform: std::env::consts::OS.into(),
+            arch: std::env::consts::ARCH.into(),
+            audio: cfg!(feature = "audio"),
+            fonts: cfg!(feature = "fonts"),
+            gamepad: cfg!(feature = "gamepad"),
+        };
+        println!("{}", serde_json::to_string(&runtime)?);
+        return Ok(());
+    }
+    let archive = args
+        .archive
+        .unwrap_or(std::env::current_exe()?.with_file_name("assets.kar"));
+    info!("Loading game from: {}", archive.display());
 
     // Scope defaults to the actual project; explicit names select an alternate profile.
-    let game = loader::load(&args.archive, args.scene.as_deref())?;
+    let game = loader::load(&archive, args.scene.as_deref())?;
     let profile = args.game_name.as_deref().unwrap_or(&game.project.id);
     let save_path = save_dir(profile);
     let settings_path = settings_dir(profile);

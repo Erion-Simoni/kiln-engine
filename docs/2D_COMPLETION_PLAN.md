@@ -151,14 +151,19 @@ saves and browser quota failures preserve the old slot/live world. Software
 acceptance is complete; physical-controller, audible-device and remote CI checks
 remain explicitly separate. Real editor export/distribution is Task 8.
 
-### 8. Real build/export and distribution — PENDING
+### 8. Real build/export and distribution — IN PROGRESS (native export checkpoint)
 
-- [ ] Replace the build panel's simulated success with a real asynchronous CLI export process, actual exit status, streamed diagnostics, output validation, and cancellation.
-- [ ] Make export preserve project-relative resources and include the correct player/runtime without requiring end users to install Rust.
-- [ ] Deliver one clean-machine desktop export first, then browser export with loading, input, audio-unlock, and save behavior verified.
+- [x] Replace simulated Build/Export with a real asynchronous host-native CLI process, bounded streamed stdout/stderr, actual exit status, job-specific receipt/archive validation and cancellation/cleanup. Real editor Save & Export and UI Cancel pass on Linux/Xvfb. Unsupported targets/options fail explicitly.
+- [ ] Finish resource/runtime bundling across supported targets. Native checkpoint preserves project-relative resources, packs/verifies a KAR and includes a matching prebuilt player; export/play run without Cargo. Browser runtime bundling remains pending.
+- [ ] Deliver clean-machine desktop acceptance, then browser export with loading/input/audio-unlock/save behavior. Relocated Linux export passes menus/settings/save/restart/Continue with no archive argument or Rust on PATH; a separate clean-machine dependency/OS test remains pending.
 - [ ] Add portable editor distribution and document supported OS/GPU requirements; validate other platforms on appropriate machines.
 
 Acceptance: author and export from the editor, move the artifact outside the repository to a machine without Rust, and play the full game. A failing exporter produces failure, never a success message.
+
+Native checkpoint: [NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md), ADR-0059 and
+[evidence/task8-native/README.md](evidence/task8-native/README.md). Task 8 remains
+open for clean-machine/other-platform checks, browser export and portable editor
+distribution. Task 9 is not started.
 
 ### 9. Reference games and release gate — PENDING
 
@@ -471,3 +476,23 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Retained inspected evidence in `docs/evidence/task7-complete/`. Physical-controller,
   audible-device and remote CI results remain unverified. Task 8's real editor
   export/distribution workflow was not started; all of 2D is not release-complete.
+
+
+### 2026-11-06 — Task 8 native export transaction
+
+- Replaced simulated UI export and source-tree-dependent CLI scaffolds with a
+  real saved-project/native-runtime transaction. Added runtime handshake, bounded
+  diagnostics, real status, job-specific receipts, staged verified archives,
+  cancellation/fallback/reaping and previous-output preservation. No Cargo runs
+  during export/play. Unsupported platforms/installer flags report failure.
+- Real editor Save & Export saves an unsaved X=88 scene edit, honors the output
+  field, verifies output and preserves it after a failing rebuild. Actual UI Cancel
+  cleans an active handshake. The editor exports with an empty tools PATH.
+- Relocated game runs directly from /tmp without --archive or Rust on PATH;
+  menus/fonts/audio commands/settings and fresh-process save/resume pass. This is
+  software/cloud-runner evidence, not clean-machine or physical-device proof.
+- `just check`, **649 tests (zero skipped)**, native binary builds, minimal native
+  checks and strict WASM Clippy pass. CI runs editor export plus relocated-game
+  acceptance. Debug runtime size is recorded separately from release budgets.
+- Browser exporter, portable editor packages, installers/signing, other-platform
+  and actual clean-machine dependency acceptance remain Task 8 follow-up.

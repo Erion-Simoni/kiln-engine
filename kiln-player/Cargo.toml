@@ -19,6 +19,7 @@ log = { workspace = true }
 env_logger = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 wgpu = { workspace = true }
 winit = { workspace = true }
 pollster = { workspace = true }
@@ -36,5 +37,4 @@ egui = { workspace = true }
 kiln-editor = { workspace = true }
 tempfile = "3.14"
 serde = { workspace = true }
-serde_json = { workspace = true }
 kiln-ir = { workspace = true }

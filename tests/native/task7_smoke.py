@@ -65,8 +65,10 @@ def main():
         wait_for(socket.exists, server, server_log)
         binary = os.environ.get('KILN_PLAYER_PATH', str(REPO/'target/debug/kiln-player'))
         archive = os.environ.get('KILN_TASK7_ARCHIVE', str(REPO/'samples/ui2d_editor'))
-        player = subprocess.Popen([binary, '--archive', archive,
-                                   '--game-name', 'task7-native-check'], env=env,
+        binary = str(Path(binary).resolve())
+        archive = str(Path(archive).resolve())
+        args = [binary] + ([] if os.environ.get('KILN_TASK7_NO_ARCHIVE') else ['--archive', archive]) + ['--game-name', 'task7-native-check']
+        player = subprocess.Popen(args, cwd=tempfile.gettempdir(), env=env,
                                   stdout=player_log.open('w'), stderr=subprocess.STDOUT)
         xdo = executable('xdotool')
 
@@ -123,8 +125,7 @@ def main():
         player.terminate()
         player.wait(timeout=10)
         # Relaunch with the same profile, then Continue from the actual title menu.
-        player = subprocess.Popen([binary, '--archive', archive,
-                                   '--game-name', 'task7-native-check'], env=env,
+        player = subprocess.Popen(args, cwd=tempfile.gettempdir(), env=env,
                                   stdout=player_log.open('a'), stderr=subprocess.STDOUT)
         window = wait_for(search, player, player_log)
         subprocess.run([xdo, 'windowfocus', '--sync', window], env=env, check=True)

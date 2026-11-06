@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "health": 66,
+  "script_starts": 1,
+  "saved_x": 216.0,
+  "resumed_x": 262.0,
+  "fresh_process_resume": true,
+  "corrupt_slot_preserved": true,
+  "no_archive_argument": true,
+  "no_rust_on_path": true,
+  "source_project_not_required": true
+}

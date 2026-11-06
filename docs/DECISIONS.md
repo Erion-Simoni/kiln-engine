@@ -1496,3 +1496,40 @@ looping music and named gain buses on the browser thread. Runtime commands expos
 this backend without enabling native audio devices in WASM. Validate real native
 and browser menus/settings/save/resume and saved UI authoring, while recording
 hardware/device and remote CI acceptance separately. Task 8 remains unstarted.
+
+## ADR-0059: Task 8 native export transaction and editor process supervision
+
+**Date:** 2026-11-06
+**Status:** accepted (native checkpoint; browser/distribution follow)
+
+Replace simulated Build/Export with a supervised `kiln-cli export` process. Start
+with the host desktop platform, a saved project and a matching prebuilt player.
+Locate exporter/player beside the editor by default; allow explicit paths. Export
+and playing the result must not invoke Cargo or require the player's Rust toolchain.
+Other targets and installer/signing options must report unsupported until their
+real implementation/target-machine acceptance exists.
+
+The editor queues Save & Export through its existing project-save transaction,
+including scene tabs, then starts a nonblocking child. Drain bounded stdout/stderr,
+poll actual exit status even when the panel closes, and validate a job-specific
+receipt and output before showing success. Cancellation uses a private marker
+observed by the CLI, with bounded kill/reap fallback and cleanup of job staging.
+No shell command interpolation. Drop/exit cancels/reaps active work.
+
+CLI export snapshots visible project resources with relative paths, excludes
+editor saves/caches/build outputs, rejects escaping/symlink resources, validates
+scene/scripts/UI/resource references, packs and verifies a real KAR and copies a
+compatible prebuilt runtime. A no-GPU `--runtime-info` handshake identifies the
+runtime's host/version/features. Publish a complete staged directory with receipt
+by rename; refuse a nonempty existing destination. Retain existing output after
+failure or cancellation. The player defaults to `assets.kar` beside its executable,
+so a moved export launches directly from another working directory.
+
+Use existing serde/serde_json/uuid and standard process/filesystem APIs. Add the
+existing internal kiln-runtime crate to CLI for shared scene/module validation
+and device-free audio decoding; use the existing CPU font/image decoders too;
+no new third-party dependency. Shared versioned runtime/receipt types belong to
+kiln-core. Native editor UI and exported-game execution on Xvfb are required;
+no-Rust PATH and relocation checks are evidence, not a claim of clean-machine,
+other-OS/GPU or installer certification. Browser export, portable editor bundles
+and clean-machine/physical target checks remain Task 8 follow-up work.

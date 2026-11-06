@@ -197,6 +197,12 @@ jobs:
           KILN_TASK7_EVIDENCE_DIR: target/task7-native-evidence
           KILN_TASK7_ARCHIVE: target/task7-game.kar
         run: python3 tests/native/task7_smoke.py
+      - name: Exercise real editor export and output validation
+        env:
+          KILN_EXPORT_EVIDENCE_DIR: target/task8-export-evidence
+        run: python3 tests/native/export_smoke.py
+      - name: Play relocated export without Rust or archive arguments
+        run: python3 tests/native/relocated_export.py
       - name: Upload native UI evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -207,6 +213,8 @@ jobs:
             target/editor-design-evidence/
             target/task7-native-evidence/
             target/task7-editor-evidence/
+            target/task8-export-evidence/
+            target/task8-relocated-evidence/
           retention-days: 7
 
   web-smoke:

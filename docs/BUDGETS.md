@@ -2,6 +2,23 @@
 
 All budgets are enforced via `just size`. Exceeding a budget requires an ADR entry with justification.
 
+## Task 8 native export observations — 2026-11-06
+
+The real editor-exported saved-UI fixture contains a **86,627,928-byte debug
+player** (CARGO_PROFILE_DEV_DEBUG=0) and **109,324-byte KAR**, plus a small JSON
+receipt. These are development profile observations, not release budget results.
+The selected prebuilt runtime's profile/features determine executable size; the
+exporter does not invoke Cargo or silently optimize it. A release runtime and
+clean-machine dependency/ABI closure still need separate measurement/acceptance.
+No release budget was waived. Export adds no gameplay rendering pass or draw-call
+budget; no new game frame-time claim is made.
+
+Export caps copied resources at 2 GiB and 100,000 files. Editor diagnostics keep
+at most 2,000 lines of up to 4,096 characters through a bounded channel. Archive
+verification/media decoding runs in the CLI process. Selected GUI/relocated-game
+acceptance is retained in evidence/task8-native; Xvfb/software graphics and ALSA
+null output do not establish physical target performance.
+
 ## Task 7 local saved-UI observations — 2026-11-05
 
 The four-screen fixture uses a 22,352-byte renamed TTF subset; the font's 1024²
