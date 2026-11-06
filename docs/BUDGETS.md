@@ -2,6 +2,53 @@
 
 All budgets are enforced via `just size`. Exceeding a budget requires an ADR entry with justification.
 
+## Task 8 native export observations — 2026-11-06
+
+The real editor-exported saved-UI fixture contains a **86,627,928-byte debug
+player** (CARGO_PROFILE_DEV_DEBUG=0) and **109,324-byte KAR**, plus a small JSON
+receipt. These are development profile observations, not release budget results.
+The selected prebuilt runtime's profile/features determine executable size; the
+exporter does not invoke Cargo or silently optimize it. A release runtime and
+clean-machine dependency/ABI closure still need separate measurement/acceptance.
+No release budget was waived. Export adds no gameplay rendering pass or draw-call
+budget; no new game frame-time claim is made.
+
+Export caps copied resources at 2 GiB and 100,000 files. Editor diagnostics keep
+at most 2,000 lines of up to 4,096 characters through a bounded channel. Archive
+verification/media decoding runs in the CLI process. Selected GUI/relocated-game
+acceptance is retained in evidence/task8-native; Xvfb/software graphics and ALSA
+null output do not establish physical target performance.
+
+## Task 7 local saved-UI observations — 2026-11-05
+
+The four-screen fixture uses a 22,352-byte renamed TTF subset; the font's 1024²
+RGBA atlas costs 4 MiB on the GPU. Metrics are retained, while the native upload
+buffer is temporary. The atlas is rebuilt at session startup, not per frame, and
+prior UI atlas textures are released on reload. The document caps fonts at 16,
+widgets at 1024/screen and quads at 16384; bitmap text has conservative startup
+budget validation to prevent oversized screens.
+
+A 1000-tick CPU-only title update/layout/draw observation (26 quads, 1280×720
+viewport, dev build without debug symbols) measured 0.016422 ms mean / 0.016425 ms
+p95 on this cloud runner. Reproduce with `KILN_UI_PROFILE=1 cargo test -p kiln-player
+--test ui_workflow authored_screens_survive_restart_archive_and_editor_player_gameplay
+-- --nocapture`. These numbers exclude VM/audio/physics, GPU upload and GPU frame
+time; they are not reference-hardware release performance evidence.
+
+Real native rendering and mouse/keyboard menu flows also passed on Xvfb/software
+graphics. Full editor interaction, physical controller/audio hardware and release
+size/performance acceptance remain open.
+
+## Task 7 local audio observations — 2026-11-05
+
+The generated native audio fixture contains 62,488 bytes of WAV data, decoded to
+124,800 bytes of mono f32 PCM shared by overlapping voices. The voice pool is
+capped at 128, including music; long clips still decode fully into memory.
+No device latency/frame-time or release-size claim is established by offline
+mixing and ALSA null-output checks. Native desktop debug binaries built with
+debug symbols disabled for cloud disk limits; these are not release-budget
+measurements. Real device, GUI and release performance acceptance remains open.
+
 ## Task 6 local observations — 2026-11-04
 
 The visual authoring sample runs in Chromium WebGL with SwiftShader at 640×480.
@@ -53,13 +100,16 @@ wasm-bindgen; this runner also uses `CHROMIUM_PATH=/usr/bin/chromium`.
 
 ## Audio device management (R0)
 
-**Current implementation:** M11 stub using rodio's high-level API
+**Current implementation:** Task 7 decoded PCM mixer using Rodio (ADR-0055)
 
-**Status:** Basic playback works (default device only). Full device management deferred to M49 audio v2 per ADR-0014.
+**Status:** Offline decoding/mixing and packed-player integration tested. Real audible device acceptance is pending. Full device management remains deferred to M49.
 
 **Current capabilities:**
 - Opens default audio output device via `DeviceSinkBuilder::open_default_sink()`
-- Plays audio files (OGG/Opus via symphonia decoder)
+- Decodes WAV/OGG Vorbis/MP3/FLAC via Symphonia; independent SFX voices and optional looping music
+- At most 128 active voices; replaces the oldest effect on overflow
+- Shared decoded buffers cost 4 bytes per sample; long music currently decodes fully into memory
+- Headless playback advances silently when no device is available
 - No device selection (always uses OS default)
 - No hot-plug detection
 - No sample-rate change handling

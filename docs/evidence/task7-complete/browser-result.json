@@ -1,0 +1,24 @@
+{
+  "passed": true,
+  "controller_navigation": true,
+  "touch_once": true,
+  "audio": {
+    "music": true,
+    "sounds": 1,
+    "contexts": [
+      "running",
+      "running"
+    ],
+    "gains": [
+      0.25,
+      0.25
+    ]
+  },
+  "health": 66,
+  "saved_actor_x": 118,
+  "resumed_actor_x": 144,
+  "script_starts": 1,
+  "preferences_independent": true,
+  "quota_preserves_slot": true,
+  "corrupt_load_preserves_slot": true
+}

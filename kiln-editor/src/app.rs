@@ -12,7 +12,6 @@ use kiln_render::{
     PostPipeline, RenderTier, SpriteRenderer,
 };
 use kiln_runtime::{GameWorld, SourceId, Sprite, Tilemap};
-use kiln_ui::{Button, Label, List, Panel, Widget, WidgetId};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -26,7 +25,7 @@ use winit::{
 };
 
 use crate::anim_editor::AnimationEditorState;
-use crate::assets::{AssetBrowser, AssetKind};
+use crate::assets::AssetBrowser;
 use crate::audio_editor::AudioEditorState;
 use crate::build_panel::BuildPanel;
 use crate::component_command::{ComponentCommand, ComponentEdit, ComponentKind};
@@ -72,6 +71,7 @@ struct RecoveryPrompt {
 }
 
 enum ProjectRequest {
+    Export(crate::build_panel::BuildConfig),
     RefreshVisuals,
     PausePlay,
     StepPlay,
@@ -133,37 +133,17 @@ struct PlaySession {
     game_camera: kiln_render::camera::Camera,
 }
 
-impl PlaySession {
-    /// Play an audio preview by name.
-    #[cfg(feature = "audio")]
-    pub fn play_audio_preview(&mut self, name: &str) {
-        self.slice.host_mut().play_audio_preview(name);
-    }
-
-    /// Stop audio playback preview.
-    #[cfg(feature = "audio")]
-    pub fn stop_audio_preview(&mut self) {
-        self.slice.host_mut().stop_audio_preview();
-    }
-
-    /// Register an audio asset with the slice session.
-    #[cfg(feature = "audio")]
-    pub fn register_audio(&mut self, name: &str, path: &str) {
-        self.slice.host_mut().register_audio(name, path);
-    }
-}
-
 /// The world size the scene view falls back to when no project is open.
 const DEFAULT_WORLD_SIZE: (f32, f32) = (1280.0, 720.0);
 
 /// The spacing of the scene view's grid, in world units.
-const GRID_SPACING: f32 = 50.0;
+const GRID_SPACING: f32 = 32.0;
 
 /// The colour of the scene view's grid lines.
-const GRID_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.06];
+const GRID_COLOR: [f32; 4] = [0.016, 0.016, 0.016, 1.0];
 
 /// The colour behind the scene view.
-const BACKGROUND_COLOR: [f32; 4] = [0.07, 0.07, 0.08, 1.0];
+const BACKGROUND_COLOR: [f32; 4] = [0.01, 0.01, 0.01, 1.0];
 
 /// The default size of a sprite without a texture, in world units.
 const DEFAULT_SPRITE_SIZE: [f32; 2] = [32.0, 32.0];
@@ -197,6 +177,7 @@ pub struct EditorApp {
     gpu: Option<GpuState>,
     egui_winit: egui_winit::State,
     dock_state: egui_dock::DockState<Tab>,
+    shell: crate::editor_shell::EditorShell,
     world: GameWorld,
     selected_entity: Option<hecs::Entity>,
     rename_input: Option<(String, String)>,
@@ -222,7 +203,7 @@ pub struct EditorApp {
     show_welcome: bool,
     /// Whether the about window is open.
     show_about: bool,
-    /// The measured frame rate, in frames per second.
+    /// Measured frame rate displayed in the editor status bar.
     fps: f32,
     /// The time the previous frame was rendered, used to measure the frame
     /// rate.
@@ -231,7 +212,6 @@ pub struct EditorApp {
     frame_count: u32,
     /// The history of scene edits, used by undo and redo.
     scenes: SceneWorkspace,
-    ui_designer: UIDesignerState,
     gameplay_editor: GameplayEditorState,
     tilemap_editor: TilemapEditorState,
     hierarchy_panel: HierarchyPanel,
@@ -246,6 +226,8 @@ pub struct EditorApp {
     audio_editor: AudioEditorState,
     physics_editor: PhysicsEditorState,
     ui_layout_editor: UiLayoutEditorState,
+    #[cfg(feature = "gamepad")]
+    gamepad: Option<kiln_input::GamepadManager>,
     preferences: PreferencesPanel,
     prefab_editor: PrefabEditorPanel,
     prefab_apply_undo: Vec<PrefabApplyHistoryEntry>,
@@ -338,6 +320,7 @@ struct GizmoDragSession {
 #[allow(dead_code)]
 enum Tab {
     SceneView,
+    GameView,
     Inspector,
     GraphEditor,
     Assets,
@@ -366,6 +349,63 @@ enum Tab {
     InputRebind,
     SpriteEditor,
 }
+
+fn play_input_edges(
+    input: &egui::InputState,
+    pixels_per_point: f32,
+    text_input: bool,
+) -> (Vec<String>, Vec<([f32; 2], bool)>) {
+    let mut keys = Vec::new();
+    let mut points = Vec::new();
+    for event in &input.events {
+        match event {
+            egui::Event::Key {
+                key,
+                pressed: true,
+                repeat: false,
+                modifiers,
+                ..
+            } if !text_input => {
+                let key = match key {
+                    egui::Key::ArrowUp => "ArrowUp".into(),
+                    egui::Key::ArrowDown => "ArrowDown".into(),
+                    egui::Key::ArrowLeft => "ArrowLeft".into(),
+                    egui::Key::ArrowRight => "ArrowRight".into(),
+                    egui::Key::Tab if modifiers.shift => "BackTab".into(),
+                    _ => format!("{key:?}"),
+                };
+                keys.push(key);
+            }
+            egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                ..
+            } => {
+                points.push((
+                    [pos.x * pixels_per_point, pos.y * pixels_per_point],
+                    *pressed,
+                ));
+            }
+            _ => {}
+        }
+    }
+    (keys, points)
+}
+
+fn default_dock_layout() -> egui_dock::DockState<Tab> {
+    let mut dock =
+        egui_dock::DockState::new(vec![Tab::SceneView, Tab::GameView, Tab::AnimationEditor]);
+    let tree = dock.main_surface_mut();
+    let [workspace, _] = tree.split_below(
+        egui_dock::NodeIndex::root(),
+        0.75,
+        vec![Tab::Assets, Tab::Console, Tab::ProfilerPanel],
+    );
+    let [center, _] = tree.split_left(workspace, 0.167, vec![Tab::Hierarchy]);
+    tree.split_right(center, 0.75, vec![Tab::Inspector]);
+    dock
+}
 struct GpuState {
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
@@ -380,6 +420,7 @@ struct GpuState {
     scene_view_overlay_renderer: SpriteRenderer,
     /// Textures of the open project, uploaded to the scene view renderer.
     scene_textures: SceneTextures,
+    ui_fonts: kiln_ui::authored::UiFonts,
     /// Post-processing framebuffer for the scene view (separate from main renderer).
     scene_view_post_framebuffer: Option<PostFramebuffer>,
     /// Post-processing pipeline for the scene view.
@@ -387,51 +428,6 @@ struct GpuState {
 }
 
 /// UI designer state for the visual UI editor.
-#[derive(Debug, Clone)]
-enum UiWidget {
-    Panel(Panel),
-    Button(Button),
-    Label(Label),
-    List(List),
-}
-
-impl UiWidget {
-    fn as_widget(&self) -> &dyn Widget {
-        match self {
-            UiWidget::Panel(p) => p,
-            UiWidget::Button(b) => b,
-            UiWidget::Label(l) => l,
-            UiWidget::List(l) => l,
-        }
-    }
-
-    fn as_widget_mut(&mut self) -> &mut dyn Widget {
-        match self {
-            UiWidget::Panel(p) => p,
-            UiWidget::Button(b) => b,
-            UiWidget::Label(l) => l,
-            UiWidget::List(l) => l,
-        }
-    }
-
-    fn name(&self) -> &str {
-        match self {
-            UiWidget::Panel(_) => "Panel",
-            UiWidget::Button(_) => "Button",
-            UiWidget::Label(_) => "Label",
-            UiWidget::List(_) => "List",
-        }
-    }
-}
-
-/// Hierarchy node for UI designer tree.
-#[derive(Debug, Clone)]
-struct UiNode {
-    widget: UiWidget,
-    children: Vec<WidgetId>,
-    parent: Option<WidgetId>,
-}
-
 /// Gameplay editor state for dialogue, quests, and data tables.
 struct GameplayEditorState {
     dialogues: HashMap<String, Dialogue>,
@@ -467,73 +463,6 @@ impl GameplayEditorState {
     }
 }
 
-struct UIDesignerState {
-    root_nodes: Vec<WidgetId>,
-    widgets: HashMap<WidgetId, UiNode>,
-    selected_widget: Option<WidgetId>,
-}
-
-impl UIDesignerState {
-    fn new() -> Self {
-        Self {
-            root_nodes: Vec::new(),
-            widgets: HashMap::new(),
-            selected_widget: None,
-        }
-    }
-
-    fn add_widget(&mut self, widget: UiWidget, parent: Option<WidgetId>) -> WidgetId {
-        let id = widget.as_widget().id();
-        let node = UiNode {
-            widget,
-            children: Vec::new(),
-            parent,
-        };
-
-        self.widgets.insert(id, node);
-
-        if let Some(parent_id) = parent {
-            if let Some(parent_node) = self.widgets.get_mut(&parent_id) {
-                parent_node.children.push(id);
-            }
-        } else {
-            self.root_nodes.push(id);
-        }
-
-        id
-    }
-
-    fn remove_widget(&mut self, id: WidgetId) {
-        if let Some(node) = self.widgets.remove(&id) {
-            // Remove from parent's children
-            if let Some(parent_id) = node.parent {
-                if let Some(parent_node) = self.widgets.get_mut(&parent_id) {
-                    parent_node.children.retain(|child_id| *child_id != id);
-                }
-            } else {
-                self.root_nodes.retain(|root_id| *root_id != id);
-            }
-
-            // Recursively remove children
-            for child_id in node.children {
-                self.remove_widget(child_id);
-            }
-        }
-
-        if self.selected_widget == Some(id) {
-            self.selected_widget = None;
-        }
-    }
-
-    fn get_widget(&self, id: WidgetId) -> Option<&UiWidget> {
-        self.widgets.get(&id).map(|node| &node.widget)
-    }
-
-    fn get_widget_mut(&mut self, id: WidgetId) -> Option<&mut UiWidget> {
-        self.widgets.get_mut(&id).map(|node| &mut node.widget)
-    }
-}
-
 /// Start a game session for a project.
 ///
 /// The scene's script is read from the project directory, compiled and
@@ -545,10 +474,17 @@ fn start_play_session(
     root: &Path,
     textures: &SceneTextures,
 ) -> Result<(kiln_runtime::SliceSession, String, GameWorld), String> {
-    let slice = kiln_runtime::SliceSession::with_scene_sources(project, scene_id, |path| {
+    let mut slice = kiln_runtime::SliceSession::with_scene_sources(project, scene_id, |path| {
         std::fs::read_to_string(root.join(path)).map_err(|error| error.to_string())
     })?;
 
+    #[cfg(feature = "audio")]
+    for error in slice.host_mut().configure_audio(project, |path| {
+        std::fs::read(root.join(path)).map_err(|error| error.to_string())
+    }) {
+        log::error!("{error}");
+    }
+    slice.host_mut().set_save_dir(&root.join(".kiln-save"));
     let (world, _spawned) = spawn_editor_scene(project, scene_id, textures);
     Ok((slice, scene_id.to_owned(), world))
 }
@@ -608,41 +544,11 @@ fn spawn_editor_scene(
     (world, spawned)
 }
 
-impl Default for UIDesignerState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl EditorApp {
     pub fn new(event_loop: &EventLoop<()>) -> Result<Self, EditorError> {
         let egui_ctx = egui::Context::default();
 
-        // Apply dark theme similar to Unity/Unreal
-        let mut style = egui::Style {
-            visuals: egui::Visuals::dark(),
-            ..Default::default()
-        };
-        style.visuals.panel_fill = egui::Color32::from_rgb(30, 30, 35);
-        style.visuals.window_fill = egui::Color32::from_rgb(35, 35, 40);
-        style.visuals.faint_bg_color = egui::Color32::from_rgb(40, 40, 45);
-        style.visuals.extreme_bg_color = egui::Color32::from_rgb(25, 25, 30);
-        style.visuals.code_bg_color = egui::Color32::from_rgb(28, 28, 32);
-        style.visuals.window_rounding = 4.0.into();
-        style.visuals.window_shadow = egui::epaint::Shadow {
-            offset: egui::vec2(0.0, 2.0),
-            blur: 8.0,
-            spread: 0.0,
-            color: egui::Color32::from_rgba_premultiplied(0, 0, 0, 40),
-        };
-        style.visuals.widgets.open.rounding = 4.0.into();
-        style.visuals.widgets.inactive.rounding = 4.0.into();
-        style.visuals.widgets.hovered.rounding = 4.0.into();
-        style.visuals.widgets.active.rounding = 4.0.into();
-        style.visuals.selection.bg_fill = egui::Color32::from_rgb(66, 135, 245);
-        style.visuals.selection.stroke =
-            egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(66, 135, 245));
-        egui_ctx.set_style(style);
+        crate::editor_shell::apply_theme(&egui_ctx);
 
         let egui_winit = egui_winit::State::new(
             egui_ctx.clone(),
@@ -652,7 +558,7 @@ impl EditorApp {
             None,
             None,
         );
-        let dock_state = egui_dock::DockState::new(vec![Tab::SceneView]);
+        let dock_state = default_dock_layout();
 
         let mut world = GameWorld::new();
 
@@ -671,6 +577,7 @@ impl EditorApp {
             gpu: None,
             egui_winit,
             dock_state,
+            shell: crate::editor_shell::EditorShell::default(),
             world,
             selected_entity: None,
             rename_input: None,
@@ -692,7 +599,6 @@ impl EditorApp {
             last_frame: Instant::now(),
             frame_count: 0,
             scenes: SceneWorkspace::default(),
-            ui_designer: UIDesignerState::new(),
             gameplay_editor: GameplayEditorState::new(),
             tilemap_editor: TilemapEditorState::new(),
             hierarchy_panel: HierarchyPanel::new(),
@@ -707,6 +613,8 @@ impl EditorApp {
             audio_editor: AudioEditorState::new(),
             physics_editor: PhysicsEditorState::new(),
             ui_layout_editor: UiLayoutEditorState::new(),
+            #[cfg(feature = "gamepad")]
+            gamepad: kiln_input::GamepadManager::new().ok(),
             preferences: PreferencesPanel::new(),
             prefab_editor: PrefabEditorPanel::new(),
             prefab_apply_undo: Vec::new(),
@@ -793,6 +701,7 @@ impl EditorApp {
             scene_view_sprite_renderer,
             scene_view_overlay_renderer,
             scene_textures: SceneTextures::default(),
+            ui_fonts: Default::default(),
             scene_view_post_framebuffer,
             scene_view_post_pipeline,
         });
@@ -848,6 +757,7 @@ impl EditorApp {
         self.lifecycle.mark_saved(&project);
         self.current_project = Some(project);
         if let Some(root) = path.parent() {
+            self.audio_editor.stop_preview();
             self.project_root = Some(root.to_path_buf());
             self.asset_browser.scan(root);
         }
@@ -902,6 +812,7 @@ impl EditorApp {
 
         // Scan the project directory so the asset browser lists its files.
         if let Some(dir) = path.parent() {
+            self.audio_editor.stop_preview();
             self.project_root = Some(dir.to_path_buf());
             self.asset_browser.scan(dir);
         }
@@ -1044,6 +955,7 @@ impl EditorApp {
     }
 
     fn start_play_scene(&mut self, scene_id: &str) -> Result<(), String> {
+        self.shell.set_preview(false);
         self.finish_transform_edit();
         self.capture_active_scene()?;
         self.upload_scene_textures();
@@ -1064,7 +976,41 @@ impl EditorApp {
             .as_ref()
             .map(|gpu| gpu.scene_textures.clone())
             .unwrap_or_default();
+        self.audio_editor.stop_preview();
+        if let Some(gpu) = self.gpu.as_mut() {
+            gpu.scene_view_overlay_renderer.clear_asset_textures();
+            let (fonts, errors) = kiln_ui::authored::UiFonts::load(
+                &project.ui,
+                |path| std::fs::read(root.join(path)).map_err(|e| e.to_string()),
+                |id, size, rgba| {
+                    gpu.scene_view_overlay_renderer
+                        .create_texture_rgba_with_options(
+                            gpu.renderer.device(),
+                            gpu.renderer.queue(),
+                            id,
+                            size,
+                            rgba,
+                            [false, false],
+                        )
+                },
+            );
+            gpu.ui_fonts = fonts;
+            for error in errors {
+                self.console_log.push(format!("[ERROR] {error}"));
+            }
+        }
         let (slice, scene_id, world) = start_play_session(&project, scene_id, &root, &textures)?;
+        #[cfg(feature = "audio")]
+        let slice = {
+            let mut slice = slice;
+            if !project.audio_assets.is_empty() {
+                if let Err(error) = slice.host_mut().open_audio_output() {
+                    self.console_log
+                        .push(format!("[WARN] Audio output unavailable: {error}"));
+                }
+            }
+            slice
+        };
         let mut camera_controller = kiln_runtime::camera::CameraController::default();
         let settings = project.cameras.get(&scene_id).cloned().unwrap_or_default();
         let game_camera = camera_controller.update(
@@ -1096,15 +1042,21 @@ impl EditorApp {
 
     /// Stop playing and return to editing the scene.
     fn stop_play(&mut self) {
+        let _ = self.stop_play_with_progress();
+    }
+
+    fn stop_play_with_progress(&mut self) -> Option<kiln_runtime::GameProgress> {
         if let Some(play) = self.play.as_mut() {
             if let Err(error) = play.slice.stop(&mut self.world) {
                 self.console_log
                     .push(format!("[ERROR] Stop callback: {error}"));
             }
         }
+        let progress = self.play.as_ref().map(|play| play.slice.game_progress());
         self.play = None;
         self.is_playing = false;
         self.reset_scene_view();
+        progress
     }
 
     fn apply_play_transforms(&mut self) -> Result<(), String> {
@@ -1256,6 +1208,9 @@ impl EditorApp {
 
     /// Advance the running game by one frame.
     fn update_play(&mut self) {
+        if !self.egui_winit.egui_ctx().input(|i| i.focused) {
+            return;
+        }
         let settings = self
             .play
             .as_ref()
@@ -1291,36 +1246,101 @@ impl EditorApp {
                 })
         });
         let text_input = self.egui_winit.egui_ctx().wants_keyboard_input();
-        let keys = self.egui_winit.egui_ctx().input(|input| {
+        let mut keys = self.egui_winit.egui_ctx().input(|input| {
             if text_input {
                 Vec::new()
             } else {
-                input
+                let mut keys = input
                     .keys_down
                     .iter()
                     .map(|key| format!("{key:?}"))
-                    .collect::<Vec<_>>()
+                    .collect::<Vec<_>>();
+                if input.modifiers.shift {
+                    keys.push("Shift".into());
+                }
+                keys
             }
         });
+        #[cfg(feature = "gamepad")]
+        if !text_input {
+            if let Some(gamepad) = &mut self.gamepad {
+                let _ = gamepad.update();
+                keys.extend(gamepad.pressed_tokens());
+            }
+        }
+        // Egui names arrows Up/Down/Left/Right; scripts and UI use winit tokens.
+        for key in &mut keys {
+            *key = match key.as_str() {
+                "Up" => "ArrowUp".into(),
+                "Down" => "ArrowDown".into(),
+                "Left" => "ArrowLeft".into(),
+                "Right" => "ArrowRight".into(),
+                _ => key.clone(),
+            };
+        }
+        let pointer_down = self
+            .egui_winit
+            .egui_ctx()
+            .input(|i| i.pointer.primary_down());
+        let ui_area = self.scene_view_rect.map(|rect| {
+            let ppp = self.egui_winit.egui_ctx().pixels_per_point();
+            let view = scene_view::camera_viewport(rect, ppp, &self.scene_camera());
+            [
+                view.x as f32,
+                view.y as f32,
+                view.width as f32,
+                view.height as f32,
+            ]
+        });
+        // Context::input holds egui's context lock. Query display scale before
+        // entering it; re-entering Context here freezes the first Play frame.
+        let pixels_per_point = self.egui_winit.egui_ctx().pixels_per_point();
+        let (key_edges, pointer_edges) = self
+            .egui_winit
+            .egui_ctx()
+            .input(|input| play_input_edges(input, pixels_per_point, text_input));
         let EditorApp {
             world,
             play,
             project_requests,
+            current_project,
+            project_root,
+            gpu,
             ..
         } = self;
         let Some(play) = play.as_mut() else {
             return;
         };
+        if play.clock.paused() {
+            play.slice.host_mut().reset_ui_input();
+        } else {
+            for key in key_edges {
+                play.slice.host_mut().queue_ui_key(&key);
+            }
+            if let Some(area) = ui_area {
+                for (point, down) in pointer_edges {
+                    play.slice.host_mut().queue_ui_pointer(area, point, down);
+                }
+            }
+        }
         let elapsed = play.last_tick.elapsed().as_secs_f64();
         play.last_tick = Instant::now();
         play.slice.host_mut().set_pressed_keys(&keys);
         for _ in 0..play.clock.advance(elapsed) {
             if let Some((point, viewport)) = mouse_mapping {
+                play.slice
+                    .host_mut()
+                    .set_ui_pointer(viewport, Some(point), pointer_down);
                 if let Some(position) = play.game_camera.screen_to_world(point, viewport) {
                     play.slice
                         .host_mut()
                         .set_mouse_world(position.map(|value| value as f64));
                 }
+            }
+            if mouse_mapping.is_none() {
+                play.slice
+                    .host_mut()
+                    .set_ui_pointer([0.0, 0.0, size[0], size[1]], None, false);
             }
             if let Err(error) = play
                 .slice
@@ -1330,7 +1350,42 @@ impl EditorApp {
                 play.clock.set_paused(true);
                 break;
             }
+            if let (Some(project), Some(root), Some(gpu)) = (
+                current_project.as_ref(),
+                project_root.as_ref(),
+                gpu.as_ref(),
+            ) {
+                match play.slice.service_saves(
+                    world,
+                    project,
+                    |path| std::fs::read_to_string(root.join(path)).map_err(|e| e.to_string()),
+                    |path| {
+                        gpu.scene_textures
+                            .get(path)
+                            .map(|t| (t.id, [t.width, t.height]))
+                    },
+                ) {
+                    Ok(true) => {
+                        play.scene_id = play.slice.scene_id().unwrap_or(&play.scene_id).to_owned();
+                        play.camera_controller = Default::default();
+                        let settings = project
+                            .cameras
+                            .get(&play.scene_id)
+                            .cloned()
+                            .unwrap_or_default();
+                        if let Ok(camera) =
+                            play.camera_controller.update(&settings, world, size, 0.0)
+                        {
+                            play.game_camera = camera;
+                        }
+                        return;
+                    }
+                    Ok(false) => {}
+                    Err(error) => log::warn!("Gameplay storage: {error}"),
+                }
+            }
             play.error = None;
+            let _ = play.slice.take_ui_commands();
             let _ = kiln_runtime::scene::update_global_transforms(world);
             match play.camera_controller.update(
                 &settings,
@@ -1773,45 +1828,60 @@ impl EditorApp {
 
     /// Save the running game to its save slot.
     fn save_game(&mut self) {
-        let Some(play) = self.play.as_ref() else {
-            return;
-        };
-        let Some(dir) = self.save_dir() else {
-            return;
-        };
-        match kiln_runtime::save_state(&dir, 0, play.slice.state()) {
-            Ok(()) => self.console_log.push("[INFO] Game saved".to_string()),
-            Err(e) => {
-                let message = format!("[ERROR] Could not save the game: {e}");
-                log::error!("{message}");
-                self.console_log.push(message);
-            }
-        }
-    }
-
-    /// Load the running game from its save slot.
-    fn load_game(&mut self) {
-        let Some(dir) = self.save_dir() else {
-            return;
-        };
-        let state = match kiln_runtime::load_state(&dir, 0) {
-            Ok(state) => state,
-            // No save yet is not an error; the game just starts fresh.
-            Err(_) => return,
-        };
         let Some(play) = self.play.as_mut() else {
             return;
         };
-        play.slice.set_state(state);
-        play.slice.sync_world(&mut self.world);
-        self.console_log.push("[INFO] Game loaded".to_string());
+        match play.slice.save_game(&self.world, 0) {
+            Ok(()) => self.console_log.push("[INFO] Game saved".into()),
+            Err(error) => self
+                .console_log
+                .push(format!("[ERROR] Could not save game: {error}")),
+        }
     }
 
-    /// The directory the game state is saved in.
-    fn save_dir(&self) -> Option<PathBuf> {
-        self.project_root
-            .as_ref()
-            .map(|root| root.join(".kiln-save"))
+    /// Restore a validated candidate world without modifying authored project data.
+    fn load_game(&mut self) {
+        let (Some(play), Some(project), Some(root), Some(gpu)) = (
+            self.play.as_mut(),
+            self.current_project.as_ref(),
+            self.project_root.as_ref(),
+            self.gpu.as_ref(),
+        ) else {
+            return;
+        };
+        match play.slice.load_game(
+            &mut self.world,
+            0,
+            project,
+            |path| std::fs::read_to_string(root.join(path)).map_err(|e| e.to_string()),
+            |path| {
+                gpu.scene_textures
+                    .get(path)
+                    .map(|t| (t.id, [t.width, t.height]))
+            },
+        ) {
+            Ok(()) => {
+                play.scene_id = play.slice.scene_id().unwrap_or(&play.scene_id).to_owned();
+                play.camera_controller = Default::default();
+                let settings = project
+                    .cameras
+                    .get(&play.scene_id)
+                    .cloned()
+                    .unwrap_or_default();
+                if let Ok(camera) = play.camera_controller.update(
+                    &settings,
+                    &self.world,
+                    [project.window.width as f32, project.window.height as f32],
+                    0.0,
+                ) {
+                    play.game_camera = camera;
+                }
+                self.console_log.push("[INFO] Game loaded".into());
+            }
+            Err(error) => self
+                .console_log
+                .push(format!("[ERROR] Could not load game: {error}")),
+        }
     }
 
     /// Load a scene into the current world.
@@ -1955,7 +2025,8 @@ impl winit::application::ApplicationHandler for EditorApp {
                 .create_window(
                     winit::window::WindowAttributes::default()
                         .with_title("Kiln Editor - Game Engine")
-                        .with_inner_size(winit::dpi::LogicalSize::new(1600u32, 900u32)),
+                        .with_inner_size(winit::dpi::LogicalSize::new(1440u32, 900u32))
+                        .with_min_inner_size(winit::dpi::LogicalSize::new(1000u32, 640u32)),
                 )
                 .expect("window"),
         );
@@ -2022,6 +2093,9 @@ impl winit::application::ApplicationHandler for EditorApp {
                 }
             }
             WindowEvent::Focused(false) => {
+                if let Some(play) = self.play.as_mut() {
+                    play.slice.host_mut().reset_ui_input();
+                }
                 self.finish_transform_edit();
                 if let Some(play) = self.play.as_mut() {
                     play.clock.set_paused(true);
@@ -2043,9 +2117,10 @@ impl winit::application::ApplicationHandler for EditorApp {
         {
             if !response.consumed {
                 match key {
-                    Key::Character(key) if ["w", "e", "r"].contains(&key.as_str()) => {
+                    Key::Character(key) if ["q", "w", "e", "r"].contains(&key.as_str()) => {
                         self.finish_transform_edit();
                         self.gizmo.mode = match key.as_str() {
+                            "q" => GizmoMode::None,
                             "w" => GizmoMode::Translate,
                             "e" => GizmoMode::Rotate,
                             _ => GizmoMode::Scale,
@@ -2079,6 +2154,7 @@ impl winit::application::ApplicationHandler for EditorApp {
 
 impl EditorApp {
     fn render_frame(&mut self) {
+        self.build_panel.poll();
         if !self
             .project_requests
             .iter()
@@ -2108,6 +2184,20 @@ impl EditorApp {
                 continue;
             }
             let result = match request {
+                ProjectRequest::Export(config) => {
+                    let result = self.save_project().and_then(|_| {
+                        let path = self.project_path.as_ref().ok_or("Save the project first")?;
+                        let project = self
+                            .current_project
+                            .as_ref()
+                            .ok_or("Open a project first")?;
+                        self.build_panel.start(config, path, &project.id)
+                    });
+                    if let Err(error) = &result {
+                        self.build_panel.fail(error.clone());
+                    }
+                    result
+                }
                 ProjectRequest::RefreshVisuals => self.require_edit_mode().and_then(|_| {
                     let scene = self
                         .scenes
@@ -2138,8 +2228,13 @@ impl EditorApp {
                         .as_ref()
                         .is_some_and(|project| project.scenes.contains_key(&id))
                     {
-                        self.stop_play();
-                        self.start_play_scene(&id)
+                        let progress = self.stop_play_with_progress();
+                        self.start_play_scene(&id).and_then(|_| {
+                            if let (Some(progress), Some(play)) = (progress, self.play.as_mut()) {
+                                play.slice.set_game_progress(progress)?;
+                            }
+                            Ok(())
+                        })
                     } else {
                         Err(format!("Unknown scene transition '{id}'"))
                     }
@@ -2520,7 +2615,7 @@ impl EditorApp {
 
                 ui.menu_button("Window", |ui| {
                     if ui.button("Reset Layout").clicked() {
-                        self.dock_state = egui_dock::DockState::new(vec![Tab::SceneView]);
+                        self.dock_state = default_dock_layout();
                         ui.close_menu();
                     }
                 });
@@ -2537,13 +2632,69 @@ impl EditorApp {
                 });
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(format!("v{}", env!("CARGO_PKG_VERSION")));
+                    ui.weak(format!(
+                        "Kiln — {}",
+                        self.current_project
+                            .as_ref()
+                            .map(|p| p.name.as_str())
+                            .unwrap_or("Untitled")
+                    ));
                     if project_dirty {
                         ui.label("Unsaved changes");
                     }
                 });
             });
         });
+
+        if !self.show_welcome {
+            egui::TopBottomPanel::top("authoring_toolbar")
+                .exact_height(38.0)
+                .frame(
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_gray(43))
+                        .inner_margin(egui::Margin::symmetric(8.0, 4.0)),
+                )
+                .show(ctx, |ui| {
+                    if project_blocked {
+                        ui.disable();
+                    }
+                    let previous_mode = self.gizmo.mode;
+                    let actions = self.shell.toolbar(
+                        ui,
+                        &mut self.gizmo.mode,
+                        &mut self.grid_snap_enabled,
+                        &mut self.grid_snap_size,
+                        self.is_playing,
+                        self.play.as_ref().is_some_and(|play| play.clock.paused()),
+                    );
+                    if self.gizmo.mode != previous_mode {
+                        if let Some(edit) = self.transform_edit.take() {
+                            edit.commit(&mut self.scenes.history);
+                        }
+                        self.gizmo.drag = None;
+                    }
+                    if actions.toggle_play {
+                        self.play_toggle_requested = true;
+                    }
+                    if actions.pause {
+                        self.project_requests.push(ProjectRequest::PausePlay);
+                    }
+                    if actions.step {
+                        self.project_requests.push(ProjectRequest::StepPlay);
+                    }
+                    if actions.reset_layout {
+                        self.dock_state = default_dock_layout();
+                    }
+                    if actions.show_scene {
+                        if let Some(location) = self.dock_state.find_tab(&Tab::SceneView) {
+                            self.dock_state.set_active_tab(location);
+                        } else {
+                            self.dock_state.push_to_focused_leaf(Tab::SceneView);
+                        }
+                    }
+                });
+            show_status_bar(ctx, fps, entity_count, tier, is_playing);
+        }
 
         // Welcome screen overlay
         if self.show_welcome {
@@ -2672,9 +2823,13 @@ impl EditorApp {
                 .frame(egui::Frame::none())
                 .show(ctx, |ui| {
                     let mut dock_style = egui_dock::Style::from_egui(ui.style());
-                    dock_style.tab_bar.bg_fill = egui::Color32::from_rgb(30, 30, 35);
-                    dock_style.tab_bar.hline_color = egui::Color32::from_rgb(60, 60, 65);
-                    dock_style.separator.color_idle = egui::Color32::from_rgb(60, 60, 65);
+                    dock_style.tab_bar.bg_fill = egui::Color32::from_gray(36);
+                    dock_style.tab_bar.height = 28.0;
+                    dock_style.tab.tab_body.bg_fill = egui::Color32::from_gray(43);
+                    dock_style.dock_area_padding = Some(egui::Margin::same(0.0));
+                    dock_style.tab_bar.hline_color = egui::Color32::from_gray(23);
+                    dock_style.separator.color_idle = egui::Color32::from_gray(23);
+                    dock_style.separator.width = 1.0;
                     dock_style.separator.color_hovered = egui::Color32::from_rgb(80, 80, 90);
                     dock_style.separator.color_dragged = egui::Color32::from_rgb(100, 100, 110);
                     dock_style.separator.extra = 4.0;
@@ -2683,6 +2838,7 @@ impl EditorApp {
 
                     let mut tab_viewer = TabViewer {
                         world: &mut self.world,
+                        shell: &mut self.shell,
                         selected_entity: &mut self.selected_entity,
                         rename_input: &mut self.rename_input,
                         role_input: &mut self.role_input,
@@ -2692,7 +2848,6 @@ impl EditorApp {
                         render_tier: &mut self.render_tier,
                         pass_timings: &pass_timings,
                         profiler_supported,
-                        ui_designer: &mut self.ui_designer,
                         prefab_editor: &mut self.prefab_editor,
                         gameplay_editor: &mut self.gameplay_editor,
                         asset_browser: &mut self.asset_browser,
@@ -2702,11 +2857,7 @@ impl EditorApp {
                         current_project: &mut self.current_project,
                         project_requests: &mut self.project_requests,
                         project_blocked,
-                        play_toggle_requested: &mut self.play_toggle_requested,
-                        scene_save_requested: &mut self.scene_save_requested,
-                        scene_load_requested: &mut self.scene_load_requested,
                         play: self.play.as_mut(),
-                        fps,
                         scenes: &mut self.scenes,
                         entity_textures: &self.entity_textures,
                         entity_roles: &self.entity_roles,
@@ -2738,11 +2889,8 @@ impl EditorApp {
                         build_panel: &mut self.build_panel,
                         anim_editor: &mut self.anim_editor,
                     };
-                    tree.show(ctx, &mut tab_viewer);
+                    tree.show_inside(ui, &mut tab_viewer);
                 });
-
-            // Status bar
-            show_status_bar(ctx, fps, entity_count, tier, is_playing);
         }
 
         if let Some(action) = self.lifecycle.pending() {
@@ -2928,9 +3076,9 @@ impl EditorApp {
                         ctx.encoder,
                         ctx.output_view,
                         wgpu::Color {
-                            r: 0.1,
-                            g: 0.1,
-                            b: 0.12,
+                            r: 0.01,
+                            g: 0.01,
+                            b: 0.01,
                             a: 1.0,
                         },
                     ),
@@ -2976,8 +3124,10 @@ impl EditorApp {
                     world.1,
                     BACKGROUND_COLOR,
                 ));
-                for line in scene_view::grid_lines(world.0, world.1, GRID_SPACING, GRID_COLOR) {
-                    gpu.scene_view_sprite_renderer.push(line);
+                if self.shell.grid && !self.is_playing {
+                    for line in scene_view::grid_lines(world.0, world.1, GRID_SPACING, GRID_COLOR) {
+                        gpu.scene_view_sprite_renderer.push(line);
+                    }
                 }
                 let camera = &scene_camera;
                 let view_bounds = camera.view_bounds();
@@ -3048,8 +3198,21 @@ impl EditorApp {
                 // Render HUD overlay on top.
                 gpu.scene_view_overlay_renderer.begin_frame();
                 if let Some(play) = &self.play {
+                    let ui_runtime = play.slice.host_ui();
+                    let ui_viewport = kiln_ui::authored::UiViewport::new(
+                        [0.0, 0.0, viewport.width as f32, viewport.height as f32],
+                        ui_runtime.document().reference_size,
+                    );
+                    for quad in ui_runtime.draw(&gpu.ui_fonts, ui_viewport) {
+                        gpu.scene_view_overlay_renderer
+                            .push_textured(quad.texture, quad.instance);
+                    }
                     let text = kiln_ui::TextRenderer::new();
-                    let mut lines = play.slice.hud_lines();
+                    let mut lines = if ui_runtime.document().screens.is_empty() {
+                        play.slice.hud_lines()
+                    } else {
+                        Vec::new()
+                    };
                     if let Some(error) = &play.error {
                         lines.push(format!("ERROR: {error}"));
                     }
@@ -3231,6 +3394,7 @@ impl EditorApp {
                 match self.start_play() {
                     Ok(()) => self.is_playing = true,
                     Err(message) => {
+                        log::error!("Could not start Play: {message}");
                         self.console_log.push(format!("[ERROR] {message}"));
                     }
                 }
@@ -3265,34 +3429,33 @@ impl EditorApp {
             tier: kiln_render::RenderTier,
             is_playing: bool,
         ) {
-            egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing = egui::vec2(16.0, 0.0);
-
-                    // Left side: status info
-                    ui.label(format!("FPS: {:.0}", fps));
-                    ui.separator();
-                    ui.label(format!("Entities: {}", entity_count));
-                    ui.separator();
-                    ui.label(format!("Tier: {:?}", tier));
-
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        // Right side: shortcuts and info
-                        ui.label("Ctrl+S: Save | Ctrl+Z: Undo | Ctrl+Y: Redo");
-                        ui.separator();
-                        if is_playing {
-                            ui.label("🔴 Playing");
-                        } else {
-                            ui.label("⏸ Paused");
-                        }
+            egui::TopBottomPanel::bottom("status_bar")
+                .exact_height(22.0)
+                .frame(
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_gray(36))
+                        .inner_margin(egui::Margin::symmetric(10.0, 2.0)),
+                )
+                .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.weak("Ready");
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.weak(format!(
+                                "{} · {:.0} FPS · {} entities · {:?} · wgpu",
+                                if is_playing { "Play mode" } else { "Edit mode" },
+                                fps,
+                                entity_count,
+                                tier
+                            ));
+                        });
                     });
                 });
-            });
         }
     }
 }
 struct TabViewer<'a> {
     world: &'a mut GameWorld,
+    shell: &'a mut crate::editor_shell::EditorShell,
     selected_entity: &'a mut Option<hecs::Entity>,
     rename_input: &'a mut Option<(String, String)>,
     role_input: &'a mut Option<(String, String)>,
@@ -3302,7 +3465,6 @@ struct TabViewer<'a> {
     render_tier: &'a mut RenderTier,
     pass_timings: &'a [PassTiming],
     profiler_supported: bool,
-    ui_designer: &'a mut UIDesignerState,
     prefab_editor: &'a mut PrefabEditorPanel,
     gameplay_editor: &'a mut GameplayEditorState,
     asset_browser: &'a mut AssetBrowser,
@@ -3312,13 +3474,8 @@ struct TabViewer<'a> {
     current_project: &'a mut Option<Project>,
     project_requests: &'a mut Vec<ProjectRequest>,
     project_blocked: bool,
-    play_toggle_requested: &'a mut bool,
-    scene_save_requested: &'a mut bool,
-    scene_load_requested: &'a mut bool,
     /// The running game session, drawn over the scene view.
     play: Option<&'a mut PlaySession>,
-    /// The measured frame rate, in frames per second.
-    fps: f32,
     /// The history of scene edits, used by undo and redo.
     scenes: &'a mut SceneWorkspace,
     /// Asset path of each scene entity's texture, keyed by entity id.
@@ -3673,7 +3830,7 @@ impl TabViewer<'_> {
                 ));
             }
         }
-        if self.gizmo.mode == GizmoMode::None {
+        if self.gizmo.mode == GizmoMode::None || !self.shell.gizmos {
             return;
         }
         if response.drag_started() {
@@ -4083,116 +4240,58 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             ui.disable();
         }
         match tab {
-            Tab::SceneView => {
-                ui.vertical(|ui| {
-                    // Toolbar
+            Tab::SceneView | Tab::GameView => {
+                if matches!(tab, Tab::GameView) {
+                    self.shell.set_preview(false);
+                }
+                if self.shell.preview_3d && matches!(tab, Tab::SceneView) && !*self.is_playing {
                     ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = egui::vec2(8.0, 0.0);
-
-                        // Play/Stop button with icon-like styling
-                        let play_btn = if *self.is_playing {
-                            ui.add_sized([100.0, 28.0], egui::Button::new("■ Stop"))
-                        } else {
-                            ui.add_sized([100.0, 28.0], egui::Button::new("▶ Play"))
-                        };
-                        if play_btn.clicked() {
-                            *self.play_toggle_requested = true;
-                        }
-
-                        if let Some(play) = self.play.as_ref() {
-                            if ui
-                                .button(if play.clock.paused() {
-                                    "Resume"
-                                } else {
-                                    "Pause"
-                                })
-                                .clicked()
-                            {
-                                self.project_requests.push(ProjectRequest::PausePlay);
-                            }
-                            if ui.button("Step Frame").clicked() {
-                                self.project_requests.push(ProjectRequest::StepPlay);
-                            }
+                        ui.toggle_value(&mut self.shell.gizmos, "Gizmos");
+                        ui.toggle_value(&mut self.shell.grid, "Grid");
+                        ui.weak("3D preview · 2D project unchanged");
+                    });
+                    self.shell
+                        .preview
+                        .viewport(ui, self.shell.grid, self.shell.gizmos);
+                    return;
+                }
+                ui.horizontal(|ui| {
+                    ui.toggle_value(&mut self.shell.gizmos, "Gizmos");
+                    ui.toggle_value(&mut self.shell.grid, "Grid");
+                    if ui
+                        .add_enabled(!self.editing_locked(), egui::Button::new("+ Entity"))
+                        .clicked()
+                    {
+                        self.add_entity();
+                    }
+                    ui.checkbox(&mut self.physics_editor.show_scene_colliders, "Colliders");
+                    if ui.button("Frame (F)").clicked()
+                        || (ui.input(|i| i.key_pressed(egui::Key::F))
+                            && !ui.ctx().wants_keyboard_input())
+                    {
+                        self.frame_selection();
+                    }
+                    if *self.is_playing {
+                        ui.menu_button("Play", |ui| {
                             if ui.button("Restart").clicked() {
                                 self.project_requests.push(ProjectRequest::RestartPlay);
+                                ui.close_menu();
                             }
                             if ui
                                 .add_enabled(
-                                    play.clock.paused(),
+                                    self.play.as_ref().is_some_and(|p| p.clock.paused()),
                                     egui::Button::new("Apply Runtime Transforms and Stop"),
                                 )
                                 .clicked()
                             {
                                 self.project_requests
                                     .push(ProjectRequest::ApplyPlayTransforms);
+                                ui.close_menu();
                             }
-                        } else if ui.button("Play Project Start").clicked() {
-                            self.project_requests.push(ProjectRequest::PlayProject);
-                        }
-
-                        if ui.button("Frame Selection (F)").clicked()
-                            || (ui.ctx().input(|input| input.key_pressed(egui::Key::F))
-                                && !ui.ctx().wants_keyboard_input())
-                        {
-                            self.frame_selection();
-                        }
-
-                        ui.separator();
-
-                        // Gizmo mode toggle
-                        let gizmo_mode_label = match self.gizmo.mode {
-                            GizmoMode::Translate => "Gizmo: Move",
-                            GizmoMode::Rotate => "Gizmo: Rotate",
-                            GizmoMode::Scale => "Gizmo: Scale",
-                            GizmoMode::None => "Gizmo: None",
-                        };
-                        if ui.button(gizmo_mode_label).clicked() {
-                            self.finish_transform_edit();
-                            self.gizmo.mode = match self.gizmo.mode {
-                                GizmoMode::None => GizmoMode::Translate,
-                                GizmoMode::Translate => GizmoMode::Rotate,
-                                GizmoMode::Rotate => GizmoMode::Scale,
-                                GizmoMode::Scale => GizmoMode::None,
-                            };
-                        }
-
-                        ui.separator();
-
-                        // Grid snap controls
-                        ui.checkbox(&mut self.physics_editor.show_scene_colliders, "Colliders");
-                        ui.label("Grid:");
-                        ui.add_sized([60.0, 20.0], egui::DragValue::new(self.grid_snap_size));
-                        if ui
-                            .button(
-                                (if *self.grid_snap_enabled {
-                                    "✓"
-                                } else {
-                                    "○"
-                                })
-                                .to_string(),
-                            )
-                            .clicked()
-                        {
-                            *self.grid_snap_enabled = !*self.grid_snap_enabled;
-                        }
-                        ui.label("Snap");
-                    });
-
-                    if ui.button("Save Scene").clicked() {
-                        *self.scene_save_requested = true;
-                    }
-                    if ui.button("Load Scene").clicked() {
-                        *self.scene_load_requested = true;
-                    }
-
-                    ui.horizontal(|ui| {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if let Some(play) = &self.play {
-                                ui.label(format!("Playing: {}", play.scene_id));
-                            }
-                            ui.label(format!("FPS: {:.0}", self.fps));
                         });
-                    });
+                    } else if ui.button("Play Project Start").clicked() {
+                        self.project_requests.push(ProjectRequest::PlayProject);
+                    }
                 });
 
                 // Requests apply next frame, after dock UI borrows are released.
@@ -4244,89 +4343,10 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     });
                 }
 
-                // Entity list for selection
-                ui.add_space(8.0);
-                ui.separator();
-                ui.add_space(4.0);
-
-                ui.horizontal(|ui| {
-                    ui.heading("Entities");
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui
-                            .add_enabled(!self.editing_locked(), egui::Button::new("+ Add Entity"))
-                            .clicked()
-                        {
-                            self.add_entity();
-                        }
-                    });
-                });
-
-                ui.add_space(4.0);
-
-                egui::ScrollArea::vertical()
-                    .max_height(120.0)
-                    .show(ui, |ui| {
-                        let scene = crate::scene_document::snapshot_for_scene(
-                            self.world,
-                            self.entity_textures,
-                            self.entity_roles,
-                            self.current_project.as_ref(),
-                            self.scenes.active_id(),
-                        );
-                        let handles: HashMap<_, _> = self
-                            .world
-                            .world_ref()
-                            .query::<(hecs::Entity, &SourceId)>()
-                            .iter()
-                            .map(|(entity, source)| (source.0.clone(), entity))
-                            .collect();
-                        let entities: Vec<_> = scene
-                            .entities
-                            .iter()
-                            .filter_map(|authored| {
-                                let entity = *handles.get(&authored.id)?;
-                                let label = format!(
-                                    "{}{}",
-                                    authored.name,
-                                    if authored
-                                        .components
-                                        .iter()
-                                        .any(|c| matches!(c, kiln_core::Component::Sprite { .. }))
-                                    {
-                                        ""
-                                    } else {
-                                        " (nonvisual)"
-                                    }
-                                );
-                                Some((entity, authored.id.clone(), label))
-                            })
-                            .collect();
-                        for (entity, source, label) in entities {
-                            let selected = self.hierarchy_panel.selected_ids.contains(&source);
-                            if ui
-                                .selectable_label(selected, label)
-                                .on_hover_text(&source)
-                                .clicked()
-                            {
-                                self.finish_transform_edit();
-                                *self.selected_entity = Some(entity);
-                                let additive = ui
-                                    .input(|input| input.modifiers.command || input.modifiers.ctrl);
-                                if additive {
-                                    self.hierarchy_panel.toggle_select(&source);
-                                } else {
-                                    self.hierarchy_panel.select(&source);
-                                }
-                                *self.selected_entity = self
-                                    .hierarchy_panel
-                                    .selected_entity_id()
-                                    .and_then(|id| self.entity_id_to_hecs.get(id).copied());
-                            }
-                        }
-                    });
-                let rect = ui.available_rect_before_wrap();
-
-                ui.add_space(8.0);
+                let rect = ui
+                    .available_rect_before_wrap()
+                    .intersect(ui.clip_rect())
+                    .intersect(ui.ctx().screen_rect());
 
                 // The engine draws the scene here, so the panel must not
                 // paint over it. The rectangle is handed to the render
@@ -4334,6 +4354,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 // with the engine's sprite renderer.
                 *self.scene_view_rect = Some(rect);
                 self.translation_canvas(ui, rect);
+                ui.painter().with_clip_rect(rect).text(
+                    rect.right_top() + egui::vec2(-10.0, 8.0),
+                    egui::Align2::RIGHT_TOP,
+                    "2D · Orthographic",
+                    egui::FontId::proportional(11.0),
+                    egui::Color32::from_gray(154),
+                );
                 if self.physics_editor.show_scene_colliders {
                     let ppp = ui.ctx().pixels_per_point();
                     let viewport = scene_view::camera_viewport(rect, ppp, self.scene_camera);
@@ -4377,7 +4404,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 }
 
                 // Draw gizmo mode indicator in the top-left of the scene view
-                if self.gizmo.mode != GizmoMode::None {
+                if self.shell.gizmos && self.gizmo.mode != GizmoMode::None {
                     if let Some(entity) = self.selected_entity {
                         let gizmo_color = match self.gizmo.mode {
                             GizmoMode::Translate => egui::Color32::from_rgb(255, 0, 0),
@@ -4385,21 +4412,6 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             GizmoMode::Scale => egui::Color32::from_rgb(0, 0, 255),
                             GizmoMode::None => egui::Color32::from_rgb(128, 128, 128),
                         };
-                        ui.painter().rect_filled(
-                            egui::Rect::from_min_size(
-                                rect.min + egui::vec2(8.0, 8.0),
-                                egui::vec2(16.0, 16.0),
-                            ),
-                            4.0,
-                            gizmo_color,
-                        );
-                        ui.painter().text(
-                            rect.min + egui::vec2(28.0, 12.0),
-                            egui::Align2::LEFT_TOP,
-                            format!("Gizmo: {:?}", self.gizmo.mode),
-                            egui::FontId::proportional(10.0),
-                            gizmo_color,
-                        );
                         if let Ok(transform) = self
                             .world
                             .world_ref()
@@ -4480,8 +4492,12 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 // panel itself draws nothing over the canvas.
             }
             Tab::Inspector => {
+                if self.shell.preview_3d && !*self.is_playing {
+                    self.shell.preview.inspector(ui);
+                    return;
+                }
                 ui.vertical(|ui| {
-                    ui.heading("Inspector");
+
                     if self.editing_locked() { ui.disable(); }
 
                     // The selected entity is copied out, so the world can be
@@ -4497,103 +4513,6 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         let has_sprite = has(ComponentKind::Sprite);
                         let has_role = has(ComponentKind::Role);
                         let has_tilemap = has(ComponentKind::Tilemap);
-                        if has_sprite {
-                            let mut settings=authored.components.iter().find_map(|component|match component{kiln_core::Component::SpriteLayout {settings}=>Some(*settings),_=>None}).unwrap_or_default();
-                            ui.collapsing("Sprite Pivot / Pixel Scale",|ui|{
-                                if crate::sprite_editor::layout_ui(ui,&mut settings) {self.queue_component(entity,ComponentEdit::SetVisual(kiln_core::Component::SpriteLayout {settings}));}
-                            });
-                        }
-                        if authored.components.iter().any(|component|matches!(component,kiln_core::Component::Particles {..})) {
-                            ui.label("Saved particle effect: edit in VFX Editor.");
-                            if ui.button("Remove Particles").clicked() {self.remove_component(entity,ComponentKind::Particles);}
-                        } else if ui.button("+ Particles").clicked() {self.add_component(entity,ComponentKind::Particles);}
-                        if let Some((mut body, mut collider)) = authored.components.iter().find_map(|component| match component {
-                            kiln_core::Component::Physics { body, collider } => Some((*body,*collider)), _=>None,
-                        }) {
-                            ui.group(|ui| {
-                                ui.strong("Physics Body / Collider");
-                                if crate::physics_inspector::body_ui(ui,&mut body,&mut collider) { self.queue_component(entity,ComponentEdit::SetPhysics {body,collider}); }
-                                if ui.button("Remove Physics").clicked() { self.remove_component(entity,ComponentKind::Physics); }
-                            });
-                        } else if ui.button("+ Physics Body / Collider").clicked() { self.add_component(entity,ComponentKind::Physics); }
-                        if let Some(mut joint)=authored.components.iter().find_map(|component| match component {kiln_core::Component::Joint {joint}=>Some(joint.clone()),_=>None}) {
-                            ui.group(|ui| {
-                                ui.strong("Physics Joint");
-                                if crate::physics_inspector::joint_ui(ui,&mut joint) {self.queue_component(entity,ComponentEdit::SetJoint {joint:joint.clone()});}
-                                if ui.button("Remove Joint").clicked() {self.remove_component(entity,ComponentKind::Joint);}
-                            });
-                        } else {
-                            let targets: Vec<_>=self.current_project.as_ref().and_then(|project| self.scenes.active_id().and_then(|id| project.scenes.get(id))).map(|scene| scene.entities.iter().filter(|candidate| candidate.id!=authored.id).map(|candidate| candidate.id.clone()).collect()).unwrap_or_default();
-                            ui.menu_button("+ Joint to Entity",|ui| {
-                                for target in targets {if ui.button(&target).clicked() {
-                                    self.queue_component(entity,ComponentEdit::Add(kiln_core::Component::Joint {joint:kiln_core::physics_data::Joint2D {
-                                        entity_a:authored.id.clone(),entity_b:target,joint_type:kiln_core::physics_data::JointType::Distance,anchor_a:[0.0;2],anchor_b:[0.0;2],reference_angle:0.0,length:32.0,lower_translation:-32.0,upper_translation:32.0,enable_limit:false,motor_speed:0.0,max_motor_torque:0.0,enable_motor:false,
-                                    }}));ui.close_menu();
-                                }}
-                            });
-                        }
-                        if let Some((path, properties)) = authored.components.iter().find_map(|component| match component {
-                            kiln_core::Component::Script { path, properties } => Some((path.clone(), properties.clone())), _ => None,
-                        }) {
-                            ui.group(|ui| {
-                                ui.strong(format!("Script: {path}"));
-                                if !self.asset_browser.entries().iter().any(|entry| entry.path == path) {
-                                    ui.colored_label(egui::Color32::YELLOW, "Script resource is missing");
-                                }
-                                let mut edited = properties.clone();
-                                let mut names: Vec<_> = properties.keys().cloned().collect(); names.sort();
-                                let mut changed = false;
-                                for name in names {
-                                    ui.horizontal(|ui| {
-                                        ui.label(&name);
-                                        if let Some(value) = edited.get_mut(&name) { changed |= ui.add(egui::DragValue::new(value)).changed(); }
-                                    });
-                                }
-                                let widget_id = ui.id().with(("script-property-name", &authored.id));
-                                let mut name = ui.data_mut(|data| data.get_temp::<String>(widget_id).unwrap_or_default());
-                                ui.horizontal(|ui| {
-                                    ui.text_edit_singleline(&mut name);
-                                    if ui.button("Add Property").clicked() && !name.trim().is_empty() {
-                                        edited.entry(name.trim().into()).or_insert(0.0); changed = true;
-                                    }
-                                });
-                                ui.data_mut(|data| data.insert_temp(widget_id, name));
-                                if changed { self.queue_component(entity, ComponentEdit::SetScript { path: path.clone(), properties: edited }); }
-                                if ui.button("Remove Script").clicked() { self.remove_component(entity, ComponentKind::Script); }
-                            });
-                        } else {
-                            let scripts: Vec<_> = self.asset_browser.entries().iter().filter(|entry| entry.path.ends_with(".ks")).map(|entry| entry.path.clone()).collect();
-                            ui.menu_button("Attach Script", |ui| {
-                                if scripts.is_empty() { ui.label("Add a .ks file to the project and refresh Assets."); }
-                                for path in scripts {
-                                    if ui.button(&path).clicked() {
-                                        self.queue_component(entity, ComponentEdit::Add(kiln_core::Component::Script { path, properties: HashMap::new() }));
-                                        ui.close_menu();
-                                    }
-                                }
-                            });
-                        }
-                        if authored.components.iter().any(|component| matches!(component, kiln_core::Component::PrefabInstance { .. })) {
-                            ui.horizontal(|ui| {
-                                ui.label("Prefab instance");
-                                let can_revert = !self.editing_locked() && !self.project_blocked;
-                                if ui.add_enabled(can_revert, egui::Button::new("Apply Overrides to Prefab")).clicked() {
-                                    self.project_requests.push(ProjectRequest::ApplyPrefabInstance(authored.id.clone()));
-                                }
-                                if ui.add_enabled(can_revert, egui::Button::new("Revert Overrides")).clicked() {
-                                    if let Some(scene_id) = self.scenes.active_id().map(str::to_owned) {
-                                        self.project_requests.push(ProjectRequest::Entity(
-                                            crate::entity_command::EntityCommand {
-                                                scene_id,
-                                                edit: crate::entity_command::EntityEdit::RevertPrefabOverrides {
-                                                    entity_id: authored.id.clone(),
-                                                },
-                                            },
-                                        ));
-                                    }
-                                }
-                            });
-                        }
                         if self
                             .rename_input
                             .as_ref()
@@ -4609,7 +4528,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             let mut apply_rename = false;
                             let mut cancel_rename = false;
                             let can_rename = !self.editing_locked() && !self.project_blocked;
-                            ui.horizontal(|ui| {
+                            ui.horizontal_wrapped(|ui| {
                                 if let Some((_, name)) = self.rename_input.as_mut() {
                                     ui.add_enabled(
                                         can_rename,
@@ -4639,7 +4558,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 *self.rename_input = None;
                             }
                         } else {
-                            ui.horizontal(|ui| {
+                            ui.horizontal_wrapped(|ui| {
                                 ui.label(format!("{} ({})", authored.name, authored.id));
                                 if ui
                                     .add_enabled(
@@ -4675,16 +4594,16 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         if let Some(mut transform) = transform {
                             ui.add_space(4.0);
                             egui::Frame::none()
-                                .fill(egui::Color32::from_rgb(35, 35, 40))
+                                .fill(egui::Color32::from_gray(38))
                                 .rounding(4.0)
                                 .inner_margin(12.0)
                                 .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
+                                    ui.horizontal_wrapped(|ui| {
                                         ui.strong("Transform");
                                         ui.with_layout(
                                             egui::Layout::right_to_left(egui::Align::Center),
                                             |ui| {
-                                                ui.menu_button("⋮", |ui| {
+                                                ui.menu_button("...", |ui| {
                                                     if ui.button("Remove Component").clicked() {
                                                         self.remove_component(
                                                             entity,
@@ -4698,7 +4617,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     });
                                     ui.add_space(8.0);
 
-                                    ui.horizontal(|ui| {
+                                    ui.horizontal_wrapped(|ui| {
                                         ui.label("Position");
                                         ui.add_space(16.0);
                                         ui.label("X:");
@@ -4717,7 +4636,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         );
                                         self.transform_response(entity, transform, &response);
                                     });
-                                    ui.horizontal(|ui| {
+                                    ui.horizontal_wrapped(|ui| {
                                         ui.label("Rotation");
                                         ui.add_space(7.0);
                                         let mut degrees = transform.rotation.to_degrees();
@@ -4750,16 +4669,16 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         if let Some(mut sprite) = sprite.clone() {
                             ui.add_space(8.0);
                             egui::Frame::none()
-                                .fill(egui::Color32::from_rgb(35, 35, 40))
+                                .fill(egui::Color32::from_gray(38))
                                 .rounding(4.0)
                                 .inner_margin(12.0)
                                 .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
+                                    ui.horizontal_wrapped(|ui| {
                                         ui.strong("Sprite");
                                         ui.with_layout(
                                             egui::Layout::right_to_left(egui::Align::Center),
                                             |ui| {
-                                                ui.menu_button("⋮", |ui| {
+                                                ui.menu_button("...", |ui| {
                                                     if ui.button("Remove Component").clicked() {
                                                         self.remove_component(
                                                             entity,
@@ -4773,55 +4692,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     });
                                     ui.add_space(8.0);
 
-                                    ui.horizontal(|ui| {
+                                    ui.horizontal_wrapped(|ui| {
                                         ui.label("Color");
-                                        ui.add_space(16.0);
-                                        ui.label("R:");
-                                        let response = ui.add_enabled(
-                                            !self.editing_locked(),
-                                            egui::DragValue::new(&mut sprite.color[0])
-                                                .speed(0.01)
-                                                .range(0.0..=1.0),
-                                        );
-                                        if response.changed() {
-                                            self.sprite_visual_response(entity, &sprite, &response);
-                                        }
-                                        ui.add_space(8.0);
-                                        ui.label("G:");
-                                        let response = ui.add_enabled(
-                                            !self.editing_locked(),
-                                            egui::DragValue::new(&mut sprite.color[1])
-                                                .speed(0.01)
-                                                .range(0.0..=1.0),
-                                        );
-                                        if response.changed() {
-                                            self.sprite_visual_response(entity, &sprite, &response);
-                                        }
-                                        ui.add_space(8.0);
-                                        ui.label("B:");
-                                        let response = ui.add_enabled(
-                                            !self.editing_locked(),
-                                            egui::DragValue::new(&mut sprite.color[2])
-                                                .speed(0.01)
-                                                .range(0.0..=1.0),
-                                        );
-                                        if response.changed() {
-                                            self.sprite_visual_response(entity, &sprite, &response);
-                                        }
-                                        ui.add_space(8.0);
-                                        ui.label("A:");
-                                        let response = ui.add_enabled(
-                                            !self.editing_locked(),
-                                            egui::DragValue::new(&mut sprite.color[3])
-                                                .speed(0.01)
-                                                .range(0.0..=1.0),
-                                        );
-                                        if response.changed() {
-                                            self.sprite_visual_response(entity, &sprite, &response);
-                                        }
+                                        let response = ui.color_edit_button_rgba_unmultiplied(&mut sprite.color);
+                                        self.sprite_visual_response(entity, &sprite, &response);
                                     });
 
-                                    ui.horizontal(|ui| {
+                                    ui.horizontal_wrapped(|ui| {
                                         ui.label("Size");
                                         ui.add_space(16.0);
                                         ui.label("W:");
@@ -4849,7 +4726,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         }
                                     });
 
-                                    ui.horizontal(|ui| {
+                                    ui.horizontal_wrapped(|ui| {
                                         ui.label("Layer");
                                         let response = ui.add_enabled(
                                             !self.editing_locked(),
@@ -4862,27 +4739,6 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                                     ui.add_space(8.0);
 
-                                    // Color preview
-                                    let color_rect = egui::Rect::from_min_size(
-                                        ui.cursor().left_top(),
-                                        egui::vec2(40.0, 24.0),
-                                    );
-                                    let preview_color = egui::Color32::from_rgba_premultiplied(
-                                        (sprite.color[0] * 255.0) as u8,
-                                        (sprite.color[1] * 255.0) as u8,
-                                        (sprite.color[2] * 255.0) as u8,
-                                        (sprite.color[3] * 255.0) as u8,
-                                    );
-                                    ui.painter().rect_filled(color_rect, 2.0, preview_color);
-                                    ui.painter().rect_stroke(
-                                        color_rect,
-                                        2.0,
-                                        egui::Stroke::new(
-                                            1.0_f32,
-                                            egui::Color32::from_rgb(100, 100, 100),
-                                        ),
-                                    );
-                                    ui.add_space(32.0);
                                 });
                         }
 
@@ -4950,7 +4806,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                                     });
                                             }
                                         }
-                                        ui.horizontal(|ui| {
+                                        ui.horizontal_wrapped(|ui| {
                                             apply = ui.add_enabled(enabled, egui::Button::new("Apply")).clicked();
                                             cancel = ui.button("Cancel").clicked();
                                         });
@@ -5017,7 +4873,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     let mut apply_role = false;
                                     let mut cancel_role = false;
                                     let can_edit = !self.editing_locked() && !self.project_blocked;
-                                    ui.horizontal(|ui| {
+                                    ui.horizontal_wrapped(|ui| {
                                         if let Some((_, value)) = self.role_input.as_mut() {
                                             ui.add_enabled(
                                                 can_edit,
@@ -5040,7 +4896,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         *self.role_input = None;
                                     }
                                 } else {
-                                    ui.horizontal(|ui| {
+                                    ui.horizontal_wrapped(|ui| {
                                         ui.label(format!("Role: {role}"));
                                         if ui
                                             .add_enabled(
@@ -5084,6 +4940,103 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 if ui.button("Remove Tilemap").clicked() { self.remove_component(entity, ComponentKind::Tilemap); }
                             });
                         }
+                        if has_sprite {
+                            let mut settings=authored.components.iter().find_map(|component|match component{kiln_core::Component::SpriteLayout {settings}=>Some(*settings),_=>None}).unwrap_or_default();
+                            ui.collapsing("Sprite Pivot / Pixel Scale",|ui|{
+                                if crate::sprite_editor::layout_ui(ui,&mut settings) {self.queue_component(entity,ComponentEdit::SetVisual(kiln_core::Component::SpriteLayout {settings}));}
+                            });
+                        }
+                        if authored.components.iter().any(|component|matches!(component,kiln_core::Component::Particles {..})) {
+                            ui.label("Saved particle effect: edit in VFX Editor.");
+                            if ui.button("Remove Particles").clicked() {self.remove_component(entity,ComponentKind::Particles);}
+                        } else if ui.button("+ Particles").clicked() {self.add_component(entity,ComponentKind::Particles);}
+                        if let Some((mut body, mut collider)) = authored.components.iter().find_map(|component| match component {
+                            kiln_core::Component::Physics { body, collider } => Some((*body,*collider)), _=>None,
+                        }) {
+                            ui.group(|ui| {
+                                ui.strong("Physics Body / Collider");
+                                if crate::physics_inspector::body_ui(ui,&mut body,&mut collider) { self.queue_component(entity,ComponentEdit::SetPhysics {body,collider}); }
+                                if ui.button("Remove Physics").clicked() { self.remove_component(entity,ComponentKind::Physics); }
+                            });
+                        } else if ui.button("+ Physics Body / Collider").clicked() { self.add_component(entity,ComponentKind::Physics); }
+                        if let Some(mut joint)=authored.components.iter().find_map(|component| match component {kiln_core::Component::Joint {joint}=>Some(joint.clone()),_=>None}) {
+                            ui.group(|ui| {
+                                ui.strong("Physics Joint");
+                                if crate::physics_inspector::joint_ui(ui,&mut joint) {self.queue_component(entity,ComponentEdit::SetJoint {joint:joint.clone()});}
+                                if ui.button("Remove Joint").clicked() {self.remove_component(entity,ComponentKind::Joint);}
+                            });
+                        } else {
+                            let targets: Vec<_>=self.current_project.as_ref().and_then(|project| self.scenes.active_id().and_then(|id| project.scenes.get(id))).map(|scene| scene.entities.iter().filter(|candidate| candidate.id!=authored.id).map(|candidate| candidate.id.clone()).collect()).unwrap_or_default();
+                            ui.menu_button("+ Joint to Entity",|ui| {
+                                for target in targets {if ui.button(&target).clicked() {
+                                    self.queue_component(entity,ComponentEdit::Add(kiln_core::Component::Joint {joint:kiln_core::physics_data::Joint2D {
+                                        entity_a:authored.id.clone(),entity_b:target,joint_type:kiln_core::physics_data::JointType::Distance,anchor_a:[0.0;2],anchor_b:[0.0;2],reference_angle:0.0,length:32.0,lower_translation:-32.0,upper_translation:32.0,enable_limit:false,motor_speed:0.0,max_motor_torque:0.0,enable_motor:false,
+                                    }}));ui.close_menu();
+                                }}
+                            });
+                        }
+                        if let Some((path, properties)) = authored.components.iter().find_map(|component| match component {
+                            kiln_core::Component::Script { path, properties } => Some((path.clone(), properties.clone())), _ => None,
+                        }) {
+                            ui.group(|ui| {
+                                ui.strong(format!("Script: {path}"));
+                                if !self.asset_browser.entries().iter().any(|entry| entry.path == path) {
+                                    ui.colored_label(egui::Color32::YELLOW, "Script resource is missing");
+                                }
+                                let mut edited = properties.clone();
+                                let mut names: Vec<_> = properties.keys().cloned().collect(); names.sort();
+                                let mut changed = false;
+                                for name in names {
+                                    ui.horizontal_wrapped(|ui| {
+                                        ui.label(&name);
+                                        if let Some(value) = edited.get_mut(&name) { changed |= ui.add(egui::DragValue::new(value)).changed(); }
+                                    });
+                                }
+                                let widget_id = ui.id().with(("script-property-name", &authored.id));
+                                let mut name = ui.data_mut(|data| data.get_temp::<String>(widget_id).unwrap_or_default());
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.text_edit_singleline(&mut name);
+                                    if ui.button("Add Property").clicked() && !name.trim().is_empty() {
+                                        edited.entry(name.trim().into()).or_insert(0.0); changed = true;
+                                    }
+                                });
+                                ui.data_mut(|data| data.insert_temp(widget_id, name));
+                                if changed { self.queue_component(entity, ComponentEdit::SetScript { path: path.clone(), properties: edited }); }
+                                if ui.button("Remove Script").clicked() { self.remove_component(entity, ComponentKind::Script); }
+                            });
+                        } else {
+                            let scripts: Vec<_> = self.asset_browser.entries().iter().filter(|entry| entry.path.ends_with(".ks")).map(|entry| entry.path.clone()).collect();
+                            ui.menu_button("Attach Script", |ui| {
+                                if scripts.is_empty() { ui.label("Add a .ks file to the project and refresh Assets."); }
+                                for path in scripts {
+                                    if ui.button(&path).clicked() {
+                                        self.queue_component(entity, ComponentEdit::Add(kiln_core::Component::Script { path, properties: HashMap::new() }));
+                                        ui.close_menu();
+                                    }
+                                }
+                            });
+                        }
+                        if authored.components.iter().any(|component| matches!(component, kiln_core::Component::PrefabInstance { .. })) {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label("Prefab instance");
+                                let can_revert = !self.editing_locked() && !self.project_blocked;
+                                if ui.add_enabled(can_revert, egui::Button::new("Apply Overrides to Prefab")).clicked() {
+                                    self.project_requests.push(ProjectRequest::ApplyPrefabInstance(authored.id.clone()));
+                                }
+                                if ui.add_enabled(can_revert, egui::Button::new("Revert Overrides")).clicked() {
+                                    if let Some(scene_id) = self.scenes.active_id().map(str::to_owned) {
+                                        self.project_requests.push(ProjectRequest::Entity(
+                                            crate::entity_command::EntityCommand {
+                                                scene_id,
+                                                edit: crate::entity_command::EntityEdit::RevertPrefabOverrides {
+                                                    entity_id: authored.id.clone(),
+                                                },
+                                            },
+                                        ));
+                                    }
+                                }
+                            });
+                        }
                         ui.add_space(12.0);
                         ui.horizontal_wrapped(|ui| {
                             if !has_transform && ui.button("+ Transform").clicked() { self.add_component(entity, ComponentKind::Transform); }
@@ -5106,15 +5059,16 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         if has_transform && has_sprite && has_role && has_tilemap { ui.label("The entity has every inspector component."); }
                     } else {
                         ui.add_space(32.0);
-                        ui.centered_and_justified(|ui| {
+                        ui.vertical(|ui| {
                             ui.label("No entity selected");
                             ui.add_space(8.0);
                             ui.label(
-                                "Select an entity from the Scene View to inspect its components",
+                                "Select an entity in the hierarchy or scene to inspect it",
                             );
                         });
                     }
                 });
+                crate::editor_shell::EditorShell::future_components(ui);
             }
             Tab::GraphEditor => {
                 ui.vertical(|ui| {
@@ -5275,7 +5229,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 ui.vertical(|ui| {
                     let rename_source = self.asset_browser.preview_source().map(str::to_owned);
                     ui.horizontal(|ui| {
-                        ui.heading("Assets");
+                        ui.weak("Assets");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button("Import").clicked() {
                                 self.import_assets();
@@ -5312,80 +5266,25 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         });
                         ui.add_space(8.0);
                         ui.label("Filter:");
-                        ui.text_edit_singleline(self.asset_filter);
+                        ui.add(egui::TextEdit::singleline(self.asset_filter).hint_text("Search assets").desired_width(180.0));
                         if self.asset_browser.filter() != self.asset_filter {
                             self.asset_browser.set_filter(self.asset_filter.clone());
                         }
                     });
 
-                    ui.add_space(8.0);
+                    ui.add_space(2.0);
 
-                    egui::Frame::none()
-                        .fill(egui::Color32::from_rgb(35, 35, 40))
-                        .rounding(4.0)
-                        .inner_margin(12.0)
-                        .show(ui, |ui| {
-                            let entries: Vec<_> = self
-                                .asset_browser
-                                .filtered_entries()
-                                .into_iter()
-                                .cloned()
-                                .collect();
-                            if entries.is_empty() {
-                                ui.centered_and_justified(|ui| {
-                                    ui.label("No assets found");
-                                    ui.add_space(8.0);
-                                    ui.label("Open a project to browse its files");
-                                });
-                            } else {
-                                egui::ScrollArea::vertical().show(ui, |ui| {
-                                    for entry in &entries {
-                                        let name = entry
-                                            .path
-                                            .rsplit('/')
-                                            .next()
-                                            .unwrap_or(&entry.path)
-                                            .to_string();
-                                        let selected = self.asset_browser.preview_source()
-                                            == Some(&entry.path);
-
-                                        let selectable = ui
-                                            .add(egui::Label::new(if selected {egui::RichText::new(&name).strong()} else {egui::RichText::new(&name)}).sense(egui::Sense::click_and_drag()))
-                                            .on_hover_text(&entry.path);
-
-                                        // Drag-and-drop support: start drag on the asset entry.
-                                        if selectable.clicked() && entry.kind == AssetKind::Image {
-                                            if let Err(e) = self.asset_browser.select(&entry.path) {
-                                                log::warn!("asset '{}': {e}", entry.path);
-                                            }
-                                        }
-
-                                        // Drag-and-drop: start drag on mouse press.
-                                        if selectable.drag_started() {
-                                            self.asset_browser.set_drag_source(Some(&entry.path));
-                                            if entry.kind==AssetKind::Image {selectable.dnd_set_drag_payload(crate::assets::SpriteAssetPayload {path:entry.path.clone()});}
-                                        }
-
-                                        // Handle drop onto this entity (if it's a sprite/texture target).
-                                        if let Some(drag_source) = self.asset_browser.drag_source()
-                                        {
-                                            if selectable.hovered()
-                                                && selectable.hovered()
-                                                && entry.kind == AssetKind::Image
-                                            {
-                                                // We could support dropping an asset onto an entity here
-                                                // to change its texture. For now, just log.
-                                                log::info!(
-                                                    "Drag {:?} onto {}",
-                                                    drag_source,
-                                                    entry.path
-                                                );
-                                            }
-                                        }
-                                    }
-                                });
-                            }
-                        });
+                    let mut scene_ids: Vec<_> = self.current_project.as_ref().map(|p| p.scenes.keys().cloned().collect()).unwrap_or_default();
+                    scene_ids.sort();
+                    match crate::asset_shelf::show(ui, self.asset_browser, &mut self.shell.asset_category, &mut self.shell.thumbnails, &scene_ids) {
+                        Some(crate::asset_shelf::ShelfAction::SelectImage(path)) => {
+                            if let Err(error) = self.asset_browser.select(&path) { self.console_log.push(format!("[ERROR] {error}")); }
+                        }
+                        Some(crate::asset_shelf::ShelfAction::OpenScene(id)) => {
+                            self.project_requests.push(ProjectRequest::Scene(SceneAction::Open(id)));
+                        }
+                        None => {}
+                    }
 
                     if let Some((old_path, new_path)) = self.asset_rename.as_mut() {
                         let mut commit = false;
@@ -5413,6 +5312,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                     // PNG preview of the selected asset.
                     if let Some(source) = self.asset_browser.preview_source() {
+                        ui.collapsing("Selected texture · import settings and preview", |ui| {
                         ui.add_space(8.0);
                         ui.label(format!("Preview: {source}"));
                         if let Some(project) = self.current_project.as_mut() {
@@ -5454,6 +5354,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 ui.label(format!("{w} x {h} pixels"));
                             }
                         }
+                        });
                     }
 
                     // Decode failures are shown in the panel, not only logged.
@@ -5487,7 +5388,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                     // Console log
                     egui::Frame::none()
-                        .fill(egui::Color32::from_rgb(35, 35, 40))
+                        .fill(egui::Color32::from_gray(38))
                         .rounding(4.0)
                         .inner_margin(16.0)
                         .show(ui, |ui| {
@@ -5512,7 +5413,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                     // Render Quality section
                     egui::Frame::none()
-                        .fill(egui::Color32::from_rgb(35, 35, 40))
+                        .fill(egui::Color32::from_gray(38))
                         .rounding(4.0)
                         .inner_margin(12.0)
                         .show(ui, |ui| {
@@ -5561,7 +5462,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                     // GPU profiling (M28)
                     egui::Frame::none()
-                        .fill(egui::Color32::from_rgb(35, 35, 40))
+                        .fill(egui::Color32::from_gray(38))
                         .rounding(4.0)
                         .inner_margin(12.0)
                         .show(ui, |ui| {
@@ -5587,7 +5488,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                     // Export section
                     egui::Frame::none()
-                        .fill(egui::Color32::from_rgb(35, 35, 40))
+                        .fill(egui::Color32::from_gray(38))
                         .rounding(4.0)
                         .inner_margin(12.0)
                         .show(ui, |ui| {
@@ -5619,142 +5520,22 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         });
                 });
             }
-            Tab::UIDesigner => {
-                ui.vertical(|ui| {
-                    // Toolbar
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = egui::vec2(8.0, 0.0);
-
-                        ui.label("Add Widget:");
-                        if ui.button("Panel").clicked() {
-                            let panel = Panel::new(WidgetId::new());
-                            self.ui_designer.add_widget(UiWidget::Panel(panel), None);
+            Tab::UIDesigner | Tab::UiLayoutEditor => {
+                if self.editing_locked() {
+                    ui.disable();
+                }
+                if let Some(project) = self.current_project.as_mut() {
+                    let fonts = project.ui.fonts.len();
+                    self.ui_layout_editor
+                        .render(ui, project, self.asset_browser.root());
+                    if fonts != project.ui.fonts.len() {
+                        if let Some(root) = self.asset_browser.root().map(Path::to_path_buf) {
+                            self.asset_browser.scan(&root);
                         }
-                        if ui.button("Button").clicked() {
-                            let button = Button::new(WidgetId::new(), "button.label");
-                            self.ui_designer.add_widget(UiWidget::Button(button), None);
-                        }
-                        if ui.button("Label").clicked() {
-                            let label = Label::new(WidgetId::new(), "label.text");
-                            self.ui_designer.add_widget(UiWidget::Label(label), None);
-                        }
-                        if ui.button("List").clicked() {
-                            let list = List::new(WidgetId::new());
-                            self.ui_designer.add_widget(UiWidget::List(list), None);
-                        }
-
-                        ui.separator();
-
-                        if ui.button("Clear All").clicked() {
-                            *self.ui_designer = UIDesignerState::new();
-                        }
-
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.label("UI Designer");
-                        });
-                    });
-
-                    ui.add_space(8.0);
-
-                    // Split view: hierarchy tree on left, properties on right
-                    ui.horizontal(|ui| {
-                        // Left: Hierarchy tree
-                        ui.vertical(|ui| {
-                            ui.horizontal(|ui| {
-                                ui.strong("Hierarchy");
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if ui.button("Refresh").clicked() {
-                                            // Refresh hierarchy
-                                        }
-                                    },
-                                );
-                            });
-
-                            ui.add_space(4.0);
-
-                            egui::ScrollArea::vertical()
-                                .max_height(ui.available_height())
-                                .show(ui, |ui| {
-                                    let root_ids: Vec<WidgetId> =
-                                        self.ui_designer.root_nodes.clone();
-                                    for root_id in root_ids {
-                                        self.show_widget_tree(ui, root_id, 0);
-                                    }
-                                });
-                        });
-
-                        ui.separator();
-
-                        // Right: Visual canvas
-                        ui.vertical(|ui| {
-                            ui.strong("Canvas");
-                            ui.add_space(4.0);
-
-                            let desired_size =
-                                egui::vec2(ui.available_width(), ui.available_height());
-                            let (rect, _response) =
-                                ui.allocate_exact_size(desired_size, egui::Sense::click_and_drag());
-
-                            // Draw canvas background
-                            ui.painter().rect_filled(
-                                rect,
-                                0.0,
-                                egui::Color32::from_rgb(18, 18, 20),
-                            );
-
-                            // Draw grid
-                            let grid_size = 50.0;
-                            let painter = ui.painter();
-                            for x in
-                                (rect.min.x as i32..rect.max.x as i32).step_by(grid_size as usize)
-                            {
-                                painter.line_segment(
-                                    [
-                                        egui::pos2(x as f32, rect.min.y),
-                                        egui::pos2(x as f32, rect.max.y),
-                                    ],
-                                    (
-                                        1.0,
-                                        egui::Color32::from_rgba_premultiplied(255, 255, 255, 15),
-                                    ),
-                                );
-                            }
-                            for y in
-                                (rect.min.y as i32..rect.max.y as i32).step_by(grid_size as usize)
-                            {
-                                painter.line_segment(
-                                    [
-                                        egui::pos2(rect.min.x, y as f32),
-                                        egui::pos2(rect.max.x, y as f32),
-                                    ],
-                                    (
-                                        1.0,
-                                        egui::Color32::from_rgba_premultiplied(255, 255, 255, 15),
-                                    ),
-                                );
-                            }
-
-                            // Draw widgets
-                            for root_id in &self.ui_designer.root_nodes {
-                                self.draw_widget_canvas(ui, rect, *root_id);
-                            }
-                        });
-                    });
-
-                    ui.add_space(8.0);
-
-                    // Bottom: Property inspector for selected widget
-                    if let Some(selected_id) = self.ui_designer.selected_widget {
-                        ui.separator();
-                        ui.add_space(4.0);
-                        ui.strong("Properties");
-                        ui.add_space(4.0);
-
-                        self.show_widget_properties(ui, selected_id);
                     }
-                });
+                } else {
+                    ui.label("Open a project to author saved UI screens.");
+                }
             }
             Tab::PrefabEditor | Tab::PrefabEditorPanel => {
                 ui.vertical(|ui| {
@@ -5884,7 +5665,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                     // Scene composition info
                     egui::Frame::none()
-                        .fill(egui::Color32::from_rgb(35, 35, 40))
+                        .fill(egui::Color32::from_gray(38))
                         .rounding(4.0)
                         .inner_margin(12.0)
                         .show(ui, |ui| {
@@ -6117,7 +5898,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             Tab::BuildPanel => {
                 ui.vertical(|ui| {
                     if let Some(project) = self.current_project.as_mut() {
-                        crate::build_panel::BuildPanel::render(self.build_panel, ui, project);
+                        if let Some(config) = self.build_panel.render(ui, project) {
+                            self.project_requests.push(ProjectRequest::Export(config));
+                        }
                     } else {
                         ui.heading("Build / Export");
                         ui.add_space(8.0);
@@ -6227,38 +6010,21 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 });
             }
             Tab::AudioEditor => {
-                ui.vertical(|ui| {
-                    self.audio_editor.render(ui);
-                    #[cfg(not(feature = "audio"))]
-                    ui.label("Audio preview requires an audio-enabled build.");
-                    // Connect audio editor to the slice's audio engine
-                    #[cfg(feature = "audio")]
-                    if let Some(play) = self.play.as_mut() {
-                        let slice = &mut play.slice;
-                        // Handle preview playback
-                        if let Some(name) = self.audio_editor.preview_asset.clone() {
-                            if self.audio_editor.preview_playing {
-                                slice.host_mut().play_audio_preview(&name);
-                            } else {
-                                slice.host_mut().stop_audio_preview();
-                            }
-                        }
-                        // Register all project audio assets with the slice host
-                        for (name, path) in self
-                            .current_project
-                            .as_ref()
-                            .map(|p| {
-                                p.audio_assets
-                                    .iter()
-                                    .map(|a| (a.name.clone(), a.path.clone()))
-                                    .collect::<Vec<_>>()
-                            })
-                            .unwrap_or_default()
-                        {
-                            slice.host_mut().register_audio(&name, &path);
+                if self.editing_locked() {
+                    ui.disable();
+                }
+                if let Some(project) = self.current_project.as_mut() {
+                    let before = project.audio_assets.len();
+                    self.audio_editor
+                        .render(ui, project, self.asset_browser.root());
+                    if before != project.audio_assets.len() {
+                        if let Some(root) = self.asset_browser.root().map(Path::to_path_buf) {
+                            self.asset_browser.scan(&root);
                         }
                     }
-                });
+                } else {
+                    ui.label("Open a project to author audio.");
+                }
             }
             Tab::PhysicsEditor => {
                 ui.vertical(|ui| {
@@ -6274,11 +6040,6 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.add_space(8.0);
                         ui.label("Open a project to edit shaders.");
                     }
-                });
-            }
-            Tab::UiLayoutEditor => {
-                ui.vertical(|ui| {
-                    self.ui_layout_editor.render(ui);
                 });
             }
             Tab::Preferences => {
@@ -6353,6 +6114,10 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 });
             }
             Tab::Hierarchy => {
+                if self.shell.preview_3d && !*self.is_playing {
+                    self.shell.preview.hierarchy(ui);
+                    return;
+                }
                 let hierarchy_size = self.world_size();
                 ui.vertical(|ui| {
                     if let Some(project) = self.current_project.as_mut() {
@@ -6437,12 +6202,17 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
     }
 
     fn clear_background(&self, tab: &Self::Tab) -> bool {
-        !matches!(tab, Tab::SceneView)
+        !matches!(tab, Tab::SceneView | Tab::GameView)
+    }
+
+    fn scroll_bars(&self, tab: &Self::Tab) -> [bool; 2] {
+        [!matches!(tab, Tab::SceneView | Tab::GameView); 2]
     }
 
     fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
         match tab {
-            Tab::SceneView => "Scene View".into(),
+            Tab::SceneView => "Scene".into(),
+            Tab::GameView => "Game".into(),
             Tab::Inspector => "Inspector".into(),
             Tab::GraphEditor => "Graph Editor".into(),
             Tab::Assets => "Assets".into(),
@@ -6522,133 +6292,109 @@ impl<'a> TabViewer<'a> {
             (min_y + max_y) * 0.5 - base.viewport_size[1] / self.camera_state.zoom * 0.5,
         ];
     }
-    fn show_widget_tree(&mut self, ui: &mut egui::Ui, widget_id: WidgetId, depth: usize) {
-        if let Some(node) = self.ui_designer.widgets.get(&widget_id) {
-            let indent = depth as f32 * 16.0;
-            let is_selected = self.ui_designer.selected_widget == Some(widget_id);
-
-            ui.horizontal(|ui| {
-                ui.add_space(indent);
-
-                let label = format!("{} ({})", node.widget.name(), widget_id.as_u64());
-                if ui.selectable_label(is_selected, label).clicked() {
-                    self.ui_designer.selected_widget = Some(widget_id);
-                }
-            });
-
-            let children: Vec<WidgetId> = node.children.clone();
-            for child_id in children {
-                self.show_widget_tree(ui, child_id, depth + 1);
-            }
-        }
-    }
-
-    fn draw_widget_canvas(&self, ui: &mut egui::Ui, canvas_rect: egui::Rect, widget_id: WidgetId) {
-        if let Some(node) = self.ui_designer.widgets.get(&widget_id) {
-            let widget = &node.widget;
-            let bounds = widget.as_widget().bounds();
-
-            // Offset widget to canvas
-            let screen_pos = egui::pos2(canvas_rect.min.x + bounds.x, canvas_rect.min.y + bounds.y);
-            let size = egui::vec2(bounds.width, bounds.height);
-            let rect = egui::Rect::from_min_size(screen_pos, size);
-
-            // Draw widget based on type
-            let color = match widget {
-                UiWidget::Panel(_) => egui::Color32::from_rgb(60, 60, 70),
-                UiWidget::Button(_) => egui::Color32::from_rgb(66, 135, 245),
-                UiWidget::Label(_) => egui::Color32::from_rgb(100, 100, 110),
-                UiWidget::List(_) => egui::Color32::from_rgb(70, 70, 80),
-            };
-
-            let is_selected = self.ui_designer.selected_widget == Some(widget_id);
-            let stroke = if is_selected {
-                egui::Stroke::new(2.0_f32, egui::Color32::from_rgb(255, 200, 50))
-            } else {
-                egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(100, 100, 110))
-            };
-
-            ui.painter().rect_filled(rect, 4.0, color);
-            ui.painter().rect_stroke(rect, 4.0, stroke);
-
-            // Draw widget label
-            let label = widget.name();
-            ui.painter().text(
-                rect.center(),
-                egui::Align2::CENTER_CENTER,
-                label,
-                egui::FontId::proportional(12.0),
-                egui::Color32::WHITE,
-            );
-
-            // Draw children
-            for child_id in &node.children {
-                self.draw_widget_canvas(ui, canvas_rect, *child_id);
-            }
-        }
-    }
-
-    fn show_widget_properties(&mut self, ui: &mut egui::Ui, widget_id: WidgetId) {
-        let widget_clone = self.ui_designer.get_widget(widget_id).cloned();
-        let widget_name = widget_clone.as_ref().map(|w| w.name().to_string());
-        let widget_visible = widget_clone.as_ref().map(|w| w.as_widget().visible());
-        let widget_bounds = widget_clone.as_ref().map(|w| w.as_widget().bounds());
-
-        egui::Frame::none()
-            .fill(egui::Color32::from_rgb(35, 35, 40))
-            .rounding(4.0)
-            .inner_margin(12.0)
-            .show(ui, |ui| {
-                if let Some(name) = widget_name {
-                    ui.label(format!("Type: {}", name));
-                }
-                ui.label(format!("ID: {}", widget_id.as_u64()));
-
-                ui.add_space(8.0);
-
-                // Visibility
-                if let Some(visible) = widget_visible {
-                    let mut visible_mut = visible;
-                    if ui.checkbox(&mut visible_mut, "Visible").changed() {
-                        if let Some(w) = self.ui_designer.get_widget_mut(widget_id) {
-                            w.as_widget_mut().set_visible(visible_mut);
-                        }
-                    }
-                }
-
-                ui.add_space(8.0);
-
-                // Layout properties
-                ui.strong("Layout");
-                ui.add_space(4.0);
-
-                if let Some(bounds) = widget_bounds {
-                    ui.horizontal(|ui| {
-                        ui.label("Position:");
-                        ui.label(format!("x: {:.0}", bounds.x));
-                        ui.label(format!("y: {:.0}", bounds.y));
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.label("Size:");
-                        ui.label(format!("w: {:.0}", bounds.width));
-                        ui.label(format!("h: {:.0}", bounds.height));
-                    });
-                }
-
-                ui.add_space(8.0);
-
-                // Delete button
-                if ui.button("Delete Widget").clicked() {
-                    self.ui_designer.remove_widget(widget_id);
-                }
-            });
-    }
 }
 
 #[cfg(test)]
 mod play_tests {
     use super::*;
+
+    #[test]
+    fn play_input_reads_quick_edges_with_precomputed_display_scale() {
+        let ctx = egui::Context::default();
+        let pointer = |pressed| egui::Event::PointerButton {
+            pos: egui::pos2(10.0, 20.0),
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        ctx.begin_pass(egui::RawInput {
+            events: vec![
+                pointer(true),
+                pointer(false),
+                egui::Event::Key {
+                    key: egui::Key::ArrowRight,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                },
+                egui::Event::Key {
+                    key: egui::Key::Tab,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::SHIFT,
+                },
+            ],
+            ..Default::default()
+        });
+        // The extractor runs inside the real context lock. It must use the
+        // supplied scale rather than re-entering Context::pixels_per_point.
+        let (keys, points) = ctx.input(|input| play_input_edges(input, 2.0, false));
+        assert_eq!(keys, ["ArrowRight", "BackTab"]);
+        assert_eq!(points, [([20.0, 40.0], true), ([20.0, 40.0], false)]);
+        let (keys, points) = ctx.input(|input| play_input_edges(input, 2.0, true));
+        assert!(keys.is_empty());
+        assert_eq!(points.len(), 2);
+        let _ = ctx.end_pass();
+    }
+
+    #[test]
+    fn default_layout_keeps_scene_between_sidebars_and_above_full_width_shelf() {
+        struct Probe(Vec<(Tab, egui::Rect)>);
+        impl egui_dock::TabViewer for Probe {
+            type Tab = Tab;
+            fn title(&mut self, tab: &mut Tab) -> egui::WidgetText {
+                format!("{tab:?}").into()
+            }
+            fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Tab) {
+                self.0.push((*tab, ui.available_rect_before_wrap()));
+            }
+        }
+        for width in [1000.0, 1440.0, 1920.0] {
+            let ctx = egui::Context::default();
+            crate::editor_shell::apply_theme(&ctx);
+            let mut dock = default_dock_layout();
+            let mut probe = Probe(Vec::new());
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 900.0));
+            for _ in 0..3 {
+                probe.0.clear();
+                let _ = ctx.run(
+                    egui::RawInput {
+                        screen_rect: Some(screen),
+                        ..Default::default()
+                    },
+                    |ctx| {
+                        egui::TopBottomPanel::top("toolbar")
+                            .exact_height(62.0)
+                            .show(ctx, |_| {});
+                        egui::TopBottomPanel::bottom("status")
+                            .exact_height(22.0)
+                            .show(ctx, |_| {});
+                        egui::CentralPanel::default()
+                            .frame(egui::Frame::none())
+                            .show(ctx, |ui| {
+                                egui_dock::DockArea::new(&mut dock).show_inside(ui, &mut probe);
+                            });
+                    },
+                );
+            }
+            let rect = |tab| probe.0.iter().find(|(t, _)| *t == tab).unwrap().1;
+            let scene = rect(Tab::SceneView);
+            let hierarchy = rect(Tab::Hierarchy);
+            let inspector = rect(Tab::Inspector);
+            let shelf = rect(Tab::Assets);
+            assert!(hierarchy.right() < scene.left());
+            assert!(scene.right() < inspector.left());
+            assert!(scene.width() > width * 0.55);
+            assert!(shelf.width() > width * 0.98);
+            assert!(shelf.top() > scene.bottom());
+            for (_, panel) in &probe.0 {
+                assert!(screen.contains_rect(*panel), "{panel:?} outside {screen:?}");
+                assert!(panel.top() >= 62.0 && panel.bottom() <= 878.0);
+            }
+        }
+    }
 
     #[test]
     fn play_launch_uses_requested_scene_and_reports_script_location() {

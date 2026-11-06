@@ -1,12 +1,16 @@
 # Kiln Game Packaging and Signing Guide
 
-This document explains how to package and sign games exported from Kiln for distribution on Windows, macOS, and Linux.
+This document contains manual and planned packaging/signing guidance.
+**Current implementation (2026-11-06):** the CLI exports a portable game folder
+for the current desktop host using a matching prebuilt player. Installers, signing,
+cross-target and portable editor distribution remain Task 8 work. See
+[NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md) for the supported command and evidence.
 
 ---
 
 ## Overview
 
-Kiln games can be exported with `kiln-cli export --platform <platform> --packaging`. The `--packaging` flag creates platform-specific packages:
+The former `--packaging` scaffolding has been removed. Planned packaging outputs are:
 
 - **Windows**: ZIP archive (portable distribution)
 - **macOS**: .app bundle (application bundle)
@@ -246,7 +250,7 @@ Linux does not require code signing in the same way as Windows/macOS. The primar
    chmod +x Game-x86_64.AppImage
    ```
 
-**Note:** The current `kiln-cli export --packaging` implementation creates the AppDir structure. You must manually run `appimagetool` to create the final .AppImage file.
+**Note:** AppDir/AppImage creation is currently manual. The native exporter produces a game folder; assemble an AppDir and run `appimagetool` separately.
 
 ### Flatpak (Optional)
 
@@ -280,7 +284,7 @@ tar czf game-linux.tar.gz Game.AppDir
 
 ## Next Steps
 
-1. **Testing**: Run `kiln-cli export --platform windows --packaging` locally to test packaging
+1. **Testing**: Export a native folder on Windows and test the manual packaging workflow
 2. **Certification**: Obtain code signing certificates for production releases
 3. **CI Integration**: Add signing steps to GitHub Actions workflow
 4. **User Documentation**: Document the signing process for game developers using Kiln

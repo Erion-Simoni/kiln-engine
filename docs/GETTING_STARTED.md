@@ -21,6 +21,11 @@ M29 (3D foundation) is in progress — see `ROADMAP_FULL_M14_PLUS.md`.
 
 - **Rust 1.87+** — `rustup` to install
 - **just** — `cargo install just`
+- **Linux native audio/controllers:** ALSA and udev development headers (`sudo apt-get install libasound2-dev libudev-dev` on Debian/Ubuntu). Native editor/player enable audio, fonts and controllers by default. Use `--no-default-features` to opt out, and add selected features when needed.
+
+See [2D audio authoring](AUDIO_AUTHORING_2D.md) for imports, preview, buses and
+player settings. Saved native UI is described in [UI authoring](UI_AUTHORING_2D.md); general game saves remain in progress in
+[the 2D completion plan](2D_COMPLETION_PLAN.md).
 
 The engine is a Rust workspace. Build it once to verify:
 
@@ -137,15 +142,22 @@ For grid-based levels, see `docs/TILEMAPS.md` — chunked tilemaps with camera c
 
 ## Step 8: Export and Package
 
-Build a standalone game for Windows, macOS or Linux:
+Use **View → Build / Export → Save & Export** for a native game on the current
+host. First build/install matching `kiln-editor`, `kiln-cli` and `kiln-player`
+binaries; the editor locates the exporter/player beside itself.
 
 ```bash
-cargo run --bin kiln-cli -- export --platform windows --output export/mygame
-cargo run --bin kiln-cli -- export --platform macos  --output export/mygame
-cargo run --bin kiln-cli -- export --platform linux   --output export/mygame
+cargo build -p kiln-editor -p kiln-cli -p kiln-player --bins
+target/debug/kiln-cli export --project samples/ui2d_editor/kiln.toml --output /tmp/mygame-new
 ```
 
-Packaging (installers, code signing, storefront publishing) is documented in `docs/PACKAGING.md`.
+The complete output folder contains the executable, game archive and receipt.
+Run `game` (or `game.exe`) directly after moving that folder. Export/play do not
+need Rust; choose a new or empty destination. See [NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md)
+for validation, cancellation, runtime selection and the executed acceptance.
+Browser export, cross-target packaging, signing and portable editor distribution
+remain Task 8 work. [PACKAGING.md](PACKAGING.md) contains manual/future packaging
+guidance, not a claim that the CLI creates installers today.
 
 ## Where to Go Next
 

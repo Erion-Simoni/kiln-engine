@@ -40,6 +40,8 @@ pub enum LoaderError {
     /// The requested scene does not exist in the project.
     #[error("Scene '{0}' not found in project")]
     SceneNotFound(String),
+    #[error("Invalid saved UI: {0}")]
+    InvalidUi(String),
 }
 
 /// Result of loading a project's manifest and raw assets.
@@ -121,6 +123,7 @@ pub fn load(path: &Path, scene: Option<&str>) -> Result<LoadedGame, LoaderError>
         load_archive(path)?
     };
 
+    project.ui.validate().map_err(LoaderError::InvalidUi)?;
     let scene_id = select_scene(&project, scene)?;
     Ok(LoadedGame {
         project,

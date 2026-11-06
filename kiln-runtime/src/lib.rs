@@ -1,11 +1,14 @@
 //! Kiln runtime crate
 //! Frame loop, scene, input, audio hooks
 
+pub mod audio_backend;
+pub use kiln_ir::Value as ScriptValue;
 pub mod camera;
 pub mod input;
 pub mod jobs;
 pub mod loop_;
 pub mod play_clock;
+pub mod preferences;
 pub mod scene;
 pub mod schedule;
 mod script_source;
@@ -13,6 +16,7 @@ pub mod settings;
 pub mod slice;
 pub mod slice_sample;
 pub mod sprite;
+pub mod storage;
 pub mod tilemap;
 pub mod tilemap_collision;
 pub mod tilemap_scene;

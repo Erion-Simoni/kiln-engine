@@ -6,8 +6,8 @@ check:
     cargo fmt --all -- --check
     cargo clippy --workspace --all-targets -- -D warnings
     cargo check --workspace
-    # The audio sample is its own workspace, because it needs a system audio
-    # backend. It is checked on its own so the main workspace builds everywhere.
+    # Native editor/player enable audio/fonts/gamepad (Linux: libasound2-dev libudev-dev).
+    # The standalone audible device sample remains a separate workspace.
     cargo check --manifest-path samples/audio/Cargo.toml
 
 # run tests with cargo-nextest
@@ -68,3 +68,4 @@ web-smoke:
     wasm-bindgen target/wasm32-unknown-unknown/debug/kiln_web.wasm --target web --out-dir target/web-smoke
     npm ci --prefix tests/web --ignore-scripts
     node tests/web/smoke.cjs target/web-smoke
+    node tests/web/task7.cjs target/web-smoke

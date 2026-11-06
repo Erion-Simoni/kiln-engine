@@ -21,8 +21,10 @@ name = "scene_view_test"
 path = "src/scene_view_test.rs"
 
 [features]
-default = []
+default = ["audio", "fonts", "gamepad"]
+fonts = ["kiln-ui/fonts"]
 audio = ["kiln-runtime/audio"]
+gamepad = ["kiln-input/gamepad"]
 # Git integration for the Version Control panel. Opt-in because it requires
 # the system OpenSSL development headers (libssl-dev) to compile git2.
 git = ["dep:git2"]

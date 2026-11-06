@@ -1,23 +1,15 @@
-//! Audio sample: OGG/Opus playback demo
-//! Run with: cargo run --bin audio-sample
-
-use kiln_runtime::AudioEngine;
+//! Audible device check: cargo run --manifest-path samples/audio/Cargo.toml -- tone.wav
+use kiln_runtime::{AudioCategory, AudioEngine};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Kiln Audio Sample");
-    println!("==================");
-    println!();
-
-    let _engine = AudioEngine::new()?;
-    println!("Audio engine initialized successfully");
-
-    println!();
-    println!("To test audio playback:");
-    println!("1. Place an OGG/Opus file in this directory (e.g., test.ogg)");
-    println!("2. Uncomment the play_file line below");
-    println!("3. Run this sample again");
-
-    // engine.play_file("test.ogg")?;
-
+    let path = std::env::args().nth(1).ok_or("Pass a WAV, OGG Vorbis, MP3 or FLAC file to play")?;
+    let mut engine = AudioEngine::new()?;
+    engine.register_sound("sample", AudioCategory::Sfx, &path)?;
+    engine.open_output()?;
+    engine.play_sound("sample");
+    println!("Playing {path}. Press Ctrl+C to stop.");
+    while engine.is_playing("sample") {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
     Ok(())
 }

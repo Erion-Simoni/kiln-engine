@@ -2,9 +2,11 @@
 //! Math, time, shared types, ECS glue
 
 pub mod access;
+pub mod audio;
 pub mod camera;
 pub mod clip;
 pub mod device_tier;
+pub mod export;
 pub mod hierarchy_transform;
 pub mod id;
 pub mod input;
@@ -17,6 +19,7 @@ pub mod project;
 pub mod tilemap;
 pub mod time;
 pub mod transform;
+pub mod ui;
 
 pub use access::{any_conflicts, AccessKind, AccessSet, ComponentAccess};
 pub use clip::{Clip, ClipError, Frame, FrameEvent};

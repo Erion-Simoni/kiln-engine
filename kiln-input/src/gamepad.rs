@@ -20,8 +20,8 @@ pub struct GamepadManager {
 
 impl GamepadManager {
     /// Create a new gamepad manager.
-    pub fn new() -> Result<Self, gilrs::Error> {
-        let gilrs = Gilrs::new()?;
+    pub fn new() -> Result<Self, Box<gilrs::Error>> {
+        let gilrs = Gilrs::new().map_err(Box::new)?;
         let mut connected_gamepads = HashMap::new();
 
         // Initialize with already connected gamepads
@@ -66,6 +66,71 @@ impl GamepadManager {
         }
 
         events
+    }
+
+    /// Current held tokens. Rebuild each poll so disconnect/release never latches input.
+    /// Buttons use the existing runtime indices; semantic UI tokens avoid OS scan codes.
+    pub fn pressed_tokens(&self) -> Vec<String> {
+        use gilrs::{Axis, Button};
+        let mut out = Vec::new();
+        let buttons = [
+            Button::South,
+            Button::East,
+            Button::North,
+            Button::West,
+            Button::LeftTrigger2,
+            Button::RightTrigger2,
+            Button::LeftTrigger,
+            Button::RightTrigger,
+            Button::LeftThumb,
+            Button::RightThumb,
+            Button::DPadUp,
+            Button::DPadDown,
+            Button::DPadLeft,
+            Button::DPadRight,
+            Button::Start,
+            Button::Select,
+            Button::Mode,
+        ];
+        for (_, pad) in self.gilrs.gamepads().filter(|(_, pad)| pad.is_connected()) {
+            for (index, button) in buttons.into_iter().enumerate() {
+                if pad.is_pressed(button) {
+                    out.push(format!("GamepadBtn{index}"));
+                }
+            }
+            for (button, key) in [
+                (Button::DPadUp, "GamepadUp"),
+                (Button::DPadDown, "GamepadDown"),
+                (Button::DPadLeft, "GamepadLeft"),
+                (Button::DPadRight, "GamepadRight"),
+                (Button::South, "GamepadAccept"),
+                (Button::East, "GamepadCancel"),
+                (Button::Start, "GamepadPause"),
+            ] {
+                if pad.is_pressed(button) {
+                    out.push(key.into());
+                }
+            }
+            for (index, axis) in [
+                Axis::LeftStickX,
+                Axis::LeftStickY,
+                Axis::RightStickX,
+                Axis::RightStickY,
+                Axis::LeftZ,
+                Axis::RightZ,
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let value = pad.value(axis);
+                if value.abs() > 0.1 {
+                    out.push(format!("GamepadAxis{index}:{value:.2}"));
+                }
+            }
+        }
+        out.sort();
+        out.dedup();
+        out
     }
 
     /// Get all connected gamepads.

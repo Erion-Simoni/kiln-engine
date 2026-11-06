@@ -1,3 +1,4 @@
+mod export;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use kiln_assets::{Archive, AssetCache};
@@ -5,9 +6,6 @@ use kiln_updater::{dlc::DlcMetadata, generate_patch};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 
 /// Collect every file below a directory, recursively.
 ///
@@ -146,20 +144,22 @@ enum Commands {
         #[arg(short, long, default_value = "patch.qbsdiff")]
         output: PathBuf,
     },
-    /// Export project for web (WASM build + HTML shell) or native platforms
+    /// Export a saved project with a matching prebuilt native runtime.
     Export {
-        /// Target platform: web, windows, macos, linux, android, or ios
-        #[arg(short, long, default_value = "web")]
+        #[arg(short, long, default_value = std::env::consts::OS)]
         platform: String,
-        /// Output directory for build
-        #[arg(short, long, default_value = "export")]
+        /// Project manifest (TOML or RON), independent of the current directory.
+        #[arg(long, default_value = "kiln.toml")]
+        project: PathBuf,
+        /// New/empty output directory. Existing nonempty exports are preserved.
+        #[arg(short, long, default_value = "export/game")]
         output: PathBuf,
-        /// Create installers (for native platforms only)
+        /// Prebuilt player (defaults to kiln-player beside this exporter).
         #[arg(long)]
-        packaging: bool,
-        /// Create signed build for store (Android AAB, iOS requires Xcode)
+        player: Option<PathBuf>,
+        /// Correlate an editor request with its output receipt.
         #[arg(long)]
-        signed: bool,
+        job_id: Option<String>,
     },
     /// Publish to storefront (itch.io, Steam)
     Publish {
@@ -596,407 +596,18 @@ fn main() -> Result<()> {
         }
         Commands::Export {
             platform,
+            project,
             output,
-            packaging,
-            signed,
+            player,
+            job_id,
         } => {
-            match platform.as_str() {
-                "web" => {
-                    println!("Exporting to web build: {}", output.display());
-
-                    // Create output directory
-                    fs::create_dir_all(&output)?;
-
-                    // Build WASM
-                    println!("Building WASM...");
-                    let build_status = Command::new("cargo")
-                        .args([
-                            "build",
-                            "--target",
-                            "wasm32-unknown-unknown",
-                            "--release",
-                            "-p",
-                            "kiln-web",
-                        ])
-                        .status()?;
-
-                    if !build_status.success() {
-                        anyhow::bail!("WASM build failed");
-                    }
-
-                    // Run wasm-bindgen
-                    println!("Running wasm-bindgen...");
-                    let bindgen_status = Command::new("wasm-bindgen")
-                        .args([
-                            "target/wasm32-unknown-unknown/release/kiln_web.wasm",
-                            "--out-dir",
-                            &output.to_string_lossy(),
-                            "--target",
-                            "web",
-                        ])
-                        .status()?;
-
-                    if !bindgen_status.success() {
-                        anyhow::bail!("wasm-bindgen failed");
-                    }
-
-                    // Generate HTML shell
-                    // Multithreading (SharedArrayBuffer / Workers with atomics) requires
-                    // cross-origin isolation via COOP+COEP response headers. Meta tags
-                    // cannot set these; serve with a local server that adds them.
-                    let html = r#"<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kiln Web Export</title>
-    <!--
-      For Web Workers / threads: serve this directory with headers:
-        Cross-Origin-Opener-Policy: same-origin
-        Cross-Origin-Embedder-Policy: require-corp
-      Example: npx serve -l 8080 --cors  (plus a proxy that injects COOP/COEP)
-      Or use the _headers file written next to this HTML for Netlify-style hosts.
-      Without isolation, kiln-web automatically falls back to single-thread mode.
-    -->
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background: #0d0d0d;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            overflow: hidden;
-        }
-        canvas {
-            display: block;
-        }
-    </style>
-</head>
-<body>
-    <canvas id="kiln-canvas"></canvas>
-    <script type="module">
-        import init, { run, is_cross_origin_isolated, can_use_web_workers } from './kiln_web.js';
-        init().then(() => {
-            console.log('Kiln web runtime initialized');
-            console.log('crossOriginIsolated=', is_cross_origin_isolated());
-            console.log('canUseWebWorkers=', can_use_web_workers());
-            run();
-        }).catch(err => {
-            console.error('Failed to initialize:', err);
-        });
-    </script>
-</body>
-</html>"#;
-
-                    fs::write(output.join("index.html"), html)?;
-
-                    // Netlify / Cloudflare Pages style headers for COOP/COEP
-                    let headers = "/*\n  Cross-Origin-Opener-Policy: same-origin\n  Cross-Origin-Embedder-Policy: require-corp\n";
-                    fs::write(output.join("_headers"), headers)?;
-
-                    println!("Web export complete: {}", output.display());
-                    println!("Open {}/index.html in a browser", output.display());
-                    println!("Note: for threads, serve with COOP/COEP (see _headers); else single-thread fallback.");
-                }
-                "windows" | "macos" | "linux" => {
-                    println!("Exporting to {} build: {}", platform, output.display());
-
-                    // Create output directory
-                    fs::create_dir_all(&output)?;
-
-                    // Determine target triple
-                    let target = match platform.as_str() {
-                        "windows" => "x86_64-pc-windows-msvc",
-                        "macos" => "x86_64-apple-darwin",
-                        "linux" => "x86_64-unknown-linux-gnu",
-                        _ => anyhow::bail!("Unknown platform: {}", platform),
-                    };
-
-                    // Build player binary
-                    println!("Building player binary for {}...", target);
-                    let build_status = Command::new("cargo")
-                        .args([
-                            "build",
-                            "--release",
-                            "--target",
-                            target,
-                            "-p",
-                            "kiln-player",
-                        ])
-                        .status()?;
-
-                    if !build_status.success() {
-                        anyhow::bail!("Player build failed for {}", target);
-                    }
-
-                    // Copy player binary to output
-                    let binary_name = if platform == "windows" {
-                        "kiln-player.exe"
-                    } else {
-                        "kiln-player"
-                    };
-
-                    let source_path =
-                        PathBuf::from(format!("target/{}/release/{}", target, binary_name));
-                    let dest_path = output.join(binary_name);
-
-                    fs::copy(&source_path, &dest_path)?;
-                    println!("Player binary copied to: {}", dest_path.display());
-
-                    // Create packaging if requested
-                    if packaging {
-                        match platform.as_str() {
-                            "windows" => {
-                                // Create zip archive for Windows
-                                let zip_name = "game-windows.zip";
-                                let zip_path = output.join(zip_name);
-                                println!("Creating Windows zip archive...");
-
-                                // For now, just zip the binary
-                                // Full installer (MSI) requires WiX or cargo-dist with CI
-                                let cmd_result = Command::new("powershell")
-                                    .args([
-                                        "-Command",
-                                        &format!(
-                                            "Compress-Archive -Path '{}' -DestinationPath '{}'",
-                                            dest_path.display(),
-                                            zip_path.display()
-                                        ),
-                                    ])
-                                    .status();
-
-                                match cmd_result {
-                                    Ok(status) if status.success() => {
-                                        println!("Windows archive created: {}", zip_path.display());
-                                    }
-                                    _ => {
-                                        println!("Warning: Failed to create zip archive (requires PowerShell on Windows)");
-                                    }
-                                }
-                            }
-                            "macos" => {
-                                // Create .app bundle for macOS
-                                let app_name = "Game.app";
-                                let app_path = output.join(app_name);
-                                let contents_path = app_path.join("Contents");
-                                let macos_path = contents_path.join("MacOS");
-                                let resources_path = contents_path.join("Resources");
-
-                                println!("Creating macOS .app bundle...");
-
-                                fs::create_dir_all(&macos_path)?;
-                                fs::create_dir_all(&resources_path)?;
-
-                                // Copy binary to MacOS
-                                let app_binary = macos_path.join("game");
-                                fs::copy(&dest_path, &app_binary)?;
-                                #[cfg(unix)]
-                                {
-                                    let mut perms = fs::metadata(&app_binary)?.permissions();
-                                    perms.set_mode(0o755);
-                                    fs::set_permissions(&app_binary, perms)?;
-                                }
-
-                                // Create Info.plist
-                                let info_plist = r#"<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>game</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.kiln.game</string>
-    <key>CFBundleName</key>
-    <string>Game</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleVersion</key>
-    <string>0.1.0</string>
-</dict>
-</plist>"#;
-                                fs::write(contents_path.join("Info.plist"), info_plist)?;
-
-                                println!("macOS .app bundle created: {}", app_path.display());
-                            }
-                            "linux" => {
-                                // Create AppImage for Linux
-                                let appimage_name = "Game-x86_64.AppImage";
-                                let appimage_path = output.join(appimage_name);
-                                println!("Creating Linux AppImage...");
-
-                                // Basic AppImage structure
-                                let appdir = output.join("Game.AppDir");
-                                let usr_bin = appdir.join("usr/bin");
-                                fs::create_dir_all(&usr_bin)?;
-
-                                // Copy binary
-                                let app_binary = usr_bin.join("game");
-                                fs::copy(&dest_path, &app_binary)?;
-                                #[cfg(unix)]
-                                {
-                                    let mut perms = fs::metadata(&app_binary)?.permissions();
-                                    perms.set_mode(0o755);
-                                    fs::set_permissions(&app_binary, perms)?;
-                                }
-
-                                // Create .desktop file
-                                let desktop_file = r#"[Desktop Entry]
-Name=Game
-Exec=game
-Icon=game
-Type=Application
-Categories=Game;"#;
-                                fs::write(appdir.join("Game.desktop"), desktop_file)?;
-
-                                // Note: Full AppImage creation requires appimagetool
-                                // For now, just create the AppDir structure
-                                println!("Linux AppDir created: {}", appdir.display());
-                                println!("Note: Use appimagetool to create final .AppImage:");
-                                println!(
-                                    "  appimagetool {} {}",
-                                    appdir.display(),
-                                    appimage_path.display()
-                                );
-                            }
-                            _ => {}
-                        }
-                    }
-
-                    println!("Native export complete: {}", output.display());
-                    println!("Player binary: {}", dest_path.display());
-                    println!("Note: You must also pack game assets separately and provide them to the player");
-                }
-                "android" => {
-                    println!("Exporting to Android build: {}", output.display());
-
-                    // Create output directory
-                    fs::create_dir_all(&output)?;
-
-                    // Build APK using cargo-apk
-                    println!("Building Android APK...");
-                    let build_status = Command::new("cargo")
-                        .args(["apk", "build", "--release", "-p", "kiln-player"])
-                        .status()?;
-
-                    if !build_status.success() {
-                        anyhow::bail!("Android APK build failed");
-                    }
-
-                    // Copy APK to output
-                    let apk_source = PathBuf::from(
-                        "target/android/release/app/build/outputs/apk/release/app-release.apk",
-                    );
-                    let apk_dest = output.join("game.apk");
-
-                    if apk_source.exists() {
-                        fs::copy(&apk_source, &apk_dest)?;
-                        println!("Android APK created: {}", apk_dest.display());
-                    } else {
-                        anyhow::bail!(
-                            "APK not found at expected location: {}",
-                            apk_source.display()
-                        );
-                    }
-
-                    // Create signed AAB if requested
-                    if signed {
-                        println!("Note: Signed AAB requires manual keystore configuration");
-                        println!("See docs/ANDROID.md for signing instructions");
-                        println!(
-                            "AAB creation is a manual process with Android Studio or bundletool"
-                        );
-                    }
-
-                    println!("Android export complete: {}", output.display());
-                }
-                "ios" => {
-                    println!("Exporting to iOS build: {}", output.display());
-
-                    // iOS requires macOS and Xcode
-                    println!("Note: iOS export requires macOS with Xcode installed");
-                    println!("This CLI command creates the static library and project structure");
-                    println!("You must open the Xcode project on macOS to complete the build and signing");
-
-                    // Create output directory
-                    fs::create_dir_all(&output)?;
-
-                    // Determine target (device or simulator)
-                    let target = "aarch64-apple-ios"; // Default to device
-
-                    // Build static library for iOS
-                    println!("Building iOS static library for {}...", target);
-                    let build_status = Command::new("cargo")
-                        .args([
-                            "build",
-                            "--release",
-                            "--target",
-                            target,
-                            "-p",
-                            "kiln-player",
-                        ])
-                        .status();
-
-                    match build_status {
-                        Ok(status) if status.success() => {
-                            println!("iOS static library built successfully");
-                        }
-                        Ok(_) => {
-                            anyhow::bail!(
-                                "iOS build failed - this is expected on non-macOS platforms"
-                            );
-                        }
-                        Err(e) => {
-                            println!("Note: iOS build requires macOS and Xcode");
-                            println!("Error: {}", e);
-                            println!("To build on macOS:");
-                            println!("1. Install Rust iOS targets: rustup target add aarch64-apple-ios aarch64-apple-ios-sim");
-                            println!("2. Build: cargo build --release --target aarch64-apple-ios -p kiln-player");
-                            println!("3. Create Xcode project (see docs/IOS.md for instructions)");
-                        }
-                    }
-
-                    // Create iOS project structure template
-                    let ios_project = output.join("ios");
-                    fs::create_dir_all(&ios_project)?;
-
-                    // Create a simple build script for macOS
-                    let build_script = r#"#!/bin/bash
-# iOS build script for macOS
-# Run this on macOS with Xcode installed
-
-set -e
-
-echo "Building Kiln iOS static library..."
-
-# Build for device
-cargo build --release --target aarch64-apple-ios -p kiln-player
-
-# Build for simulator (Apple Silicon)
-cargo build --release --target aarch64-apple-ios-sim -p kiln-player
-
-echo "Static libraries built"
-echo "Next: Create Xcode project and integrate with UIKit"
-echo "See docs/IOS.md for complete instructions"
-"#;
-
-                    fs::write(ios_project.join("build.sh"), build_script)?;
-
-                    println!("iOS project structure created: {}", ios_project.display());
-                    println!("Build script: {}", ios_project.join("build.sh").display());
-                    println!("On macOS, run: cd {} && ./build.sh", ios_project.display());
-                    println!(
-                        "Then follow docs/IOS.md to create Xcode project and sign for App Store"
-                    );
-                }
-                _ => {
-                    anyhow::bail!(
-                        "Unknown platform: {}. Supported: web, windows, macos, linux, android, ios",
-                        platform
-                    );
-                }
-            }
+            export::run(export::Options {
+                platform,
+                project,
+                output,
+                player,
+                job_id,
+            })?;
         }
     }
 

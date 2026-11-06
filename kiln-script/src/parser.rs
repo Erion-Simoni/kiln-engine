@@ -15,6 +15,7 @@ pub enum ParseError {
 #[derive(Debug, Clone)]
 pub enum Expr {
     Number(i64, crate::diagnostic::Span),
+    Boolean(bool, crate::diagnostic::Span),
     Float(f64, crate::diagnostic::Span),
     String(String, crate::diagnostic::Span),
     Identifier(String, crate::diagnostic::Span),
@@ -368,6 +369,11 @@ impl<'a> Parser<'a> {
                 let span = self.current.as_ref().map(|t| t.span).unwrap();
                 self.advance();
                 Ok(Expr::Number(n, span))
+            }
+            Some(Token::Boolean(value)) => {
+                let span = self.current.as_ref().map(|t| t.span).unwrap();
+                self.advance();
+                Ok(Expr::Boolean(value, span))
             }
             Some(Token::Float(f)) => {
                 let span = self.current.as_ref().map(|t| t.span).unwrap();

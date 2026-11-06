@@ -31,13 +31,17 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Check formatting
         run: cargo fmt --all -- --check
+      - name: Install Linux audio/controller development headers
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Check
         run: cargo check --workspace
-      - name: Install Linux audio development headers
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - name: Check native feature opt-out
+        run: |
+          cargo check -p kiln-editor --no-default-features
+          cargo check -p kiln-player --no-default-features
       - name: Check Linux audio configurations
         if: runner.os == 'Linux'
         run: |
@@ -60,6 +64,9 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Install cargo-nextest
         run: cargo install cargo-nextest
+      - name: Install Linux audio/controller development headers
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: Run tests
         run: cargo nextest run --workspace
 
@@ -80,6 +87,9 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install Linux audio/controller development headers
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: Build release
         run: cargo build --workspace --release
 
@@ -140,6 +150,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-dist
         run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.33.0/installer.sh | sh
+      - name: Install Linux audio/controller development headers
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: Run cargo-dist
         run: cargo dist build --artifacts=all --target=${{ matrix.target }}
       - name: Upload artifacts
@@ -153,6 +166,57 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  native-ui-smoke:
+    name: Native editor and saved UI smoke tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install native test dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libgl1-mesa-dri mesa-vulkan-drivers xvfb xdotool imagemagick
+      - name: Build the native editor and player
+        env:
+          CARGO_PROFILE_DEV_DEBUG: 0
+        run: cargo build -p kiln-player -p kiln-editor -p kiln-cli --bins
+      - name: Exercise editor authoring, preview isolation and Play controls
+        env:
+          KILN_EDITOR_EVIDENCE_DIR: target/editor-design-evidence
+        run: python3 tests/native/editor_smoke.py
+      - name: Exercise saved menus and settings
+        env:
+          KILN_UI_EVIDENCE_DIR: target/native-ui-evidence
+        run: python3 tests/native/ui_smoke.py
+      - name: Exercise saved UI authoring and editor save/resume
+        env:
+          KILN_TASK7_EDITOR_EVIDENCE_DIR: target/task7-editor-evidence
+        run: python3 tests/native/task7_editor_smoke.py
+      - name: Pack the saved UI game
+        run: target/debug/kiln-cli pack --source samples/ui2d_editor --output target/task7-game.kar
+      - name: Exercise Task 7 save/resume across player restarts
+        env:
+          KILN_TASK7_EVIDENCE_DIR: target/task7-native-evidence
+          KILN_TASK7_ARCHIVE: target/task7-game.kar
+        run: python3 tests/native/task7_smoke.py
+      - name: Exercise real editor export and output validation
+        env:
+          KILN_EXPORT_EVIDENCE_DIR: target/task8-export-evidence
+        run: python3 tests/native/export_smoke.py
+      - name: Play relocated export without Rust or archive arguments
+        run: python3 tests/native/relocated_export.py
+      - name: Upload native UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ui-evidence
+          path: |
+            target/native-ui-evidence/
+            target/editor-design-evidence/
+            target/task7-native-evidence/
+            target/task7-editor-evidence/
+            target/task8-export-evidence/
+            target/task8-relocated-evidence/
+          retention-days: 7
+
   web-smoke:
     name: Browser WASM smoke test
     runs-on: ubuntu-latest
@@ -161,11 +225,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+          components: clippy
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: tests/web/package-lock.json
+      - name: Check WASM-specific code
+        run: cargo clippy -p kiln-web --target wasm32-unknown-unknown -- -D warnings
       - name: Build the browser runtime
         run: cargo build --target wasm32-unknown-unknown -p kiln-web
       - name: Install matching wasm-bindgen CLI
@@ -179,3 +246,12 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Exercise rendering and input
         run: node tests/web/smoke.cjs target/web-smoke
+      - name: Exercise browser menus, audio, controller input and save/resume
+        run: node tests/web/task7.cjs target/web-smoke
+      - name: Upload browser Task 7 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task7-browser-evidence
+          path: target/task7-web-evidence/
+          retention-days: 7

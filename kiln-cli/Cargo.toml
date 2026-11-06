@@ -11,6 +11,7 @@ path = "src/main.rs"
 clap = { workspace = true }
 kiln-assets = { workspace = true }
 kiln-core = { workspace = true }
+kiln-runtime = { workspace = true, features = ["audio"] }
 kiln-updater = { workspace = true }
 kiln-ui = { workspace = true, features = ["fonts"] }
 anyhow = { workspace = true }

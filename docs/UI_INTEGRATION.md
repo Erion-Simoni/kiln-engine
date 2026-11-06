@@ -1,4 +1,9 @@
-# UI (kiln-ui) In-Game Integration — Design Doc
+# UI (kiln-ui) In-Game Integration — Historical Design Doc
+
+> For the implemented saved native workflow, use
+> [Saved 2D UI Screens](UI_AUTHORING_2D.md), ADR-0056 and STATE.md.
+> This earlier design's source-status table is historical and does not describe
+> the current screen document, font atlas or callback implementation.
 
 **Problem:** `kiln-ui` (`Button`, `Label`, `List`, `Panel`, `UiRenderer`, `TextRenderer`, `NineSliceRenderer`) exists as a library but is not connected to:
 - the player (HUD text is drawn directly with `TextRenderer`, not through the full widget system),

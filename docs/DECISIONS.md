@@ -1353,3 +1353,183 @@ translation and removal synchronize with the existing fixed tick, stable source
 IDs, contact transitions and ray queries. Automatic map colliders use membership
 bit 1 and accept all body memberships. Axis-aligned map rendering and physics
 share the same translation/world-tile-size convention.
+
+## ADR-0055: Task 7 audio and player data boundaries
+
+**Date:** 2026-11-05
+**Status:** accepted
+
+Persist audio assets and named mixer buses in kiln-core's Project. The Audio
+Editor edits that data directly; it has no second asset library. Import validates
+and copies project-relative resources. Preview owns its output independently of
+Play. Native editor/player enable the existing optional audio backend by default;
+headless/no-audio builds remain available with --no-default-features. No new
+external dependency is introduced.
+
+Decode each registered resource once into a shared PCM buffer. Each SFX trigger
+creates a separate voice; music has one replaceable voice and an explicit loop
+flag. A bounded voice pool prevents unbounded script allocation. Rodio's same
+mixer feeds either an explicitly opened device or offline sample tests. Creating
+a script session must never open a device. Child entity scripts borrow the same
+audio context as their scene script, including error paths. Resources in packed
+players are decoded from archive bytes without temporary file extraction.
+
+Keep versioned player preferences outside the authored project and game save
+slots. Project mixer values are author defaults; per-player overrides survive
+scene transitions/restart. Settings writes replace a complete temporary file;
+corrupt/unsupported data is reported and never silently overwritten. Generic
+game data and saved UI are separate Task 7 checkpoints; this audio checkpoint
+does not certify world/script restoration, UI, browser audio parity or audible
+device acceptance.
+
+## ADR-0056: Saved UI screens and shared native interaction
+
+**Date:** 2026-11-05
+**Status:** accepted
+
+Store screens, stable widget IDs, parent-relative anchors/pivots/stretch, styles,
+navigation links, button actions and font resource paths in Project.ui in
+kiln-core. kiln-ui resolves and clips this data, manages edge-triggered pointer/
+keyboard/controller focus and generates the same quads for author preview,
+native editor Play and player. Both editor UI tabs edit this document; retire
+their unsaved parallel widget models. Changes use project dirty tracking and
+document-level undo/redo within the UI panel, without touching scene histories.
+
+Use a responsive logical canvas scaled into the actual gameplay viewport. Input
+uses the inverse of that same mapping, excluding letterbox bars and other editor
+panels. Hidden/disabled ancestors affect children; topmost hit testing, release
+activation, focus repair and held-key suppression survive screen transitions.
+Screens may pause gameplay, but UI callbacks continue. Existing projects without
+saved screens retain their scheduling. New scripts guard gameplay with
+script_phase()=="update" and handle "ui_event" separately; root and attached
+callbacks receive event/widget/screen IDs. Screen changes do not reset worlds.
+
+Retain the built-in bitmap font and add real alpha-atlas TTF/OTF text through the
+existing optional fontdue dependency. Native applications enable fonts by
+default; no new external dependency. Atlases contain ASCII, authored text and
+explicit extra characters; missing dynamic characters use a fallback glyph.
+Clipped textured glyph quads share the ordinary sprite renderer. UI-only renderers
+release prior atlas textures before reloading them, so Play restarts do not
+accumulate font allocations. This does not
+extend the older SDF renderer's unimplemented sampling path. Controller polling
+uses the existing gilrs dependency through kiln-input; native apps enable it by
+default, with no-default-features builds retained. Linux CI installs ALSA/udev
+development headers before checking/building native packages.
+
+Validate documents before Play (duplicate/missing IDs, parent cycles/depth,
+invalid geometry/actions/fonts/navigation). Bound widgets, glyphs and draw
+quads. The player acceptance target uses the existing workspace egui crate only as a
+dev-dependency to verify that opening the authoring panel does not dirty data.
+Tests author/save/reopen/pack the actual document, execute the shared
+session, compare editor/player geometry/events and exercise a real font atlas.
+A Linux native-player smoke job uses test-only Xvfb/xdotool/ImageMagick and
+software graphics, retaining screenshots/logs as CI artifacts. The same script
+is executed locally. Full editor GUI and physical-controller acceptance remain
+separately recorded; generic world saves, browser parity and export UI are
+subsequent checkpoints.
+
+## ADR-0057: Native editor design and isolated 3D visual preview
+
+**Date:** 2026-11-05
+**Status:** accepted
+
+Apply the user's uploaded Kiln Editor HTML as a visual reference for the existing
+Rust/egui editor: compact charcoal chrome, a global authoring/transport toolbar,
+a central scene workspace, hierarchy/inspector sidebars and an assets/console/
+profiler shelf. Keep existing commands, histories and project persistence behind
+these controls. Use DockArea::show_inside inside the application's CentralPanel;
+a second nested CentralPanel conflicts with layout and input. Reserve status and
+toolbar panels before laying out the dock. Hierarchy rows use one click/drag
+response so a drag wrapper cannot intercept selection. Collect Play input edges
+with a precomputed display scale: re-entering Context from its input closure
+deadlocks the native editor on the first frame after pressing Play.
+
+The user's explicit request also authorizes an editor-only 3D visual preview.
+Draw bounded, lit perspective primitives with egui's existing triangle painter;
+allow orbit/zoom, selection and transient preview properties. Clearly label the
+mode and properties as preview-only. Keep this state separate from Project,
+scene history, runtime Play and exports. No 3D scene serialization, mesh import,
+physics or gameplay is claimed. Switching back must retain real 2D data and
+selection; Play continues to use the actual 2D scene. No dependency is added.
+
+Retain egui's standard color-format handling: some fallback adapters cannot use
+alternate swapchain views. Verify the palette and interaction with native
+screenshots and input smoke checks, alongside the workspace quality gate.
+Task 7 gameplay save/load work remains paused for this explicitly requested UI
+checkpoint.
+
+## ADR-0058: Versioned gameplay saves and shared platform storage
+
+**Date:** 2026-11-05
+**Status:** accepted
+
+Finish Task 7 with one bounded, versioned gameplay document shared by native
+editor Play, player and browser. Persist project/active-scene identity, stable
+entity definitions and live transforms/sprites/parents/physics/tilemaps,
+root/attached script memories and locals, game-specific typed values, elapsed
+simulation and UI screen/focus/back-stack/widget overrides. Rebind GPU resources
+and reconstruct physics from logical data; never persist handles or pointers.
+Audio voices, input captures, collision contacts and particle instances are
+transient. Resume logical animation state; current player preferences remain
+independent of save slots. Reject incompatible script layouts and invalid or
+newer documents before replacing any live world or overwriting a file.
+
+Queue script save/load requests and service them at completed tick boundaries,
+after command application. Their boolean result means accepted; expose completion
+status/error separately. The same generic session APIs also serve native F5/F9
+and browser controls. Stage load into a candidate session/world, validate resource
+and scene references, and install only on success. Saves capture the active scene;
+game-wide values can record progress in other levels. Transfers retain game-wide
+values when changing scenes. Keep the legacy sample serializer as an explicit
+compatibility API, never the gameplay save path.
+
+Introduce a small shared storage interface: native slot metadata/atomic writes
+and preferences files; browser project-scoped localStorage with quota/access
+errors surfaced. Use existing serde/serde_json and platform dependencies. No new
+third-party dependency. Harden existing slot version/migration checks and writes.
+Use tagged runtime save values to preserve integer/float/boolean/string/array
+types without adding serialization dependencies to kiln-ir.
+
+Move the browser onto the shared scene/module/attachment/UI runtime, the existing
+font-atlas renderer and the same storage contract. Web Audio owns bounded voices,
+looping music and named gain buses on the browser thread. Runtime commands expose
+this backend without enabling native audio devices in WASM. Validate real native
+and browser menus/settings/save/resume and saved UI authoring, while recording
+hardware/device and remote CI acceptance separately. Task 8 remains unstarted.
+
+## ADR-0059: Task 8 native export transaction and editor process supervision
+
+**Date:** 2026-11-06
+**Status:** accepted (native checkpoint; browser/distribution follow)
+
+Replace simulated Build/Export with a supervised `kiln-cli export` process. Start
+with the host desktop platform, a saved project and a matching prebuilt player.
+Locate exporter/player beside the editor by default; allow explicit paths. Export
+and playing the result must not invoke Cargo or require the player's Rust toolchain.
+Other targets and installer/signing options must report unsupported until their
+real implementation/target-machine acceptance exists.
+
+The editor queues Save & Export through its existing project-save transaction,
+including scene tabs, then starts a nonblocking child. Drain bounded stdout/stderr,
+poll actual exit status even when the panel closes, and validate a job-specific
+receipt and output before showing success. Cancellation uses a private marker
+observed by the CLI, with bounded kill/reap fallback and cleanup of job staging.
+No shell command interpolation. Drop/exit cancels/reaps active work.
+
+CLI export snapshots visible project resources with relative paths, excludes
+editor saves/caches/build outputs, rejects escaping/symlink resources, validates
+scene/scripts/UI/resource references, packs and verifies a real KAR and copies a
+compatible prebuilt runtime. A no-GPU `--runtime-info` handshake identifies the
+runtime's host/version/features. Publish a complete staged directory with receipt
+by rename; refuse a nonempty existing destination. Retain existing output after
+failure or cancellation. The player defaults to `assets.kar` beside its executable,
+so a moved export launches directly from another working directory.
+
+Use existing serde/serde_json/uuid and standard process/filesystem APIs. Add the
+existing internal kiln-runtime crate to CLI for shared scene/module validation
+and device-free audio decoding; use the existing CPU font/image decoders too;
+no new third-party dependency. Shared versioned runtime/receipt types belong to
+kiln-core. Native editor UI and exported-game execution on Xvfb are required;
+no-Rust PATH and relocation checks are evidence, not a claim of clean-machine,
+other-OS/GPU or installer certification. Browser export, portable editor bundles
+and clean-machine/physical target checks remain Task 8 follow-up work.

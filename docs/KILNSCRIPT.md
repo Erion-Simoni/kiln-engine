@@ -89,6 +89,33 @@ Builtins are host functions registered by the runtime. The standard slice builti
 | `stop_all_sounds()` | 0 | — | Stop all sounds |
 | `sound_playing(name)` | 1 (str) | bool | Whether a sound is playing |
 | `music_playing()` | 0 | bool | Whether music is playing |
+| `set_bus_volume(name, volume)` | 2 (str, number) | — | Set named bus or Master gain; persist native player override |
+| `get_bus_volume(name)` | 1 (str) | f64 | Current configured bus or Master gain |
+
+Native audio assets and buses are authored in the Audio Editor and saved with
+Project. Repeated `play_sound` calls create overlapping voices; `play_music`
+replaces the previous track and respects its Loop option. Master/bus volume
+setters persist to player preferences when a settings directory is configured.
+A preferences write failure produces a script error. Browser audio parity is
+still pending; see [Audio authoring](AUDIO_AUTHORING_2D.md).
+
+### Player settings
+
+`setting_get(key, fallback)` returns a saved setting or the fallback.
+`setting_set(key, value)` persists an integer, finite float, boolean, string or
+array and returns that value. These settings are shared across scene/entity
+scripts and survive restart. They are separate from `state_get`/`state_set`,
+which remain per-instance memory, and from game save slots. Setters require a
+configured writable directory; failures are reported as script errors. Corrupt
+or unsupported preferences files block writes until repaired and reloaded.
+
+```ks
+setting_set("language", "sq");
+let language = setting_get("language", "en");
+```
+
+Native hosts configure the directory before the first script callback. The
+browser localStorage adapter remains unfinished.
 
 ### Entity builtins
 
@@ -183,8 +210,18 @@ See [Physics and cameras](PHYSICS_2D.md) and the checked-in editor sample.
 
 | Function | Arguments | Returns | Description |
 |----------|-----------|---------|-------------|
-| `save_game(slot_id)` | 1 (i64) | bool | Save game to slot |
-| `load_game(slot_id)` | 1 (i64) | bool | Load game from slot |
+| `save_game(slot_id)` | 1 (i64, 0–99) | bool | Queue a completed-tick gameplay save; true means admitted |
+| `load_game(slot_id)` | 1 (i64, 0–99) | bool | Queue an atomic gameplay restore; true means admitted |
+| `game_get(key, default)` | 2 (str, value) | value | Shared persistent game data, independent of sample score/coins |
+| `game_set(key, value)` | 2 (str, value) | value | Set validated typed game data shared across scene/entity scripts |
+| `has_save(slot_id)` | 1 (i64, 0–99) | bool | Compatible gameplay payload exists |
+| `save_status()` | 0 | str | idle / queued / saved / loaded / error |
+| `save_error()` | 0 | str | Last storage/restore failure, empty after success |
+
+UI completion events: `save_complete`, `load_complete`, `save_failed`,
+`load_failed`. They dispatch even while gameplay is paused. F5/F9 in native Play
+and the browser use slot 0. See [GAME_SAVING_2D.md](GAME_SAVING_2D.md) for the
+snapshot contract, version limits, storage profiles and Continue example.
 
 
 ```ks
@@ -305,3 +342,21 @@ of this debugger surface.
 - `kiln-script/src/` — lexer, parser, compiler source
 - `kiln-ir/src/vm.rs` — bytecode VM
 - `kiln-runtime/src/slice.rs` — slice runtime and builtins
+
+## Saved native UI screens
+
+Author screens through UI Layout Editor/UI Designer, then handle buttons in
+`script_phase() == "ui_event"` separately from normal `"update"` gameplay.
+`ui_event_name()`, `ui_event_widget()` and `ui_event_screen()` identify the callback.
+`ui_show_screen(id)`, `ui_close_screen()`, `ui_screen()` and `ui_clicked(id)` manage
+or inspect state. `ui_set_text(id, value)` formats an active-screen label/button;
+`ui_set_visible(id, bool)` and `ui_set_enabled(id, bool)` change flags and repair
+focus. Missing widgets/invalid text changes return false; invalid argument types
+or unknown screens produce script diagnostics.
+
+An initially paused title starts attached controllers once. UI callbacks continue
+while gameplay/physics/animation are paused; their delta is zero. Guard ordinary
+gameplay with the update phase so menu events cannot run movement twice. Screen
+actions apply before callbacks, whose event screen still names the originating
+screen. See [Saved UI](UI_AUTHORING_2D.md) and `samples/ui2d_editor` for the full
+native contract, limits, fonts, navigation and remaining browser/save acceptance.

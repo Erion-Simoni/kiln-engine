@@ -200,6 +200,21 @@ impl<H: HostContext> Vm<H> {
         &self.locals
     }
 
+    /// Restore completed-tick locals into a compatible compiled program.
+    /// Execution stacks and instruction pointers always restart at a tick boundary.
+    pub fn restore_locals(&mut self, program: &Program, locals: Vec<Value>) -> Result<(), VmError> {
+        if !locals.is_empty() && locals.len() != program.local_slots() as usize {
+            return Err(VmError::HostCallError(
+                "Saved script locals do not match this program".into(),
+            ));
+        }
+        self.locals = locals;
+        self.stack.clear();
+        self.call_stack.clear();
+        self.ip = 0;
+        Ok(())
+    }
+
     /// Get the call stack (for debugging).
     pub fn call_stack(&self) -> &[usize] {
         &self.call_stack
