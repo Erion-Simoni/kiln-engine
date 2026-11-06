@@ -49,6 +49,14 @@ impl Role {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceId(pub String);
 
+/// Authored resource/component provenance retained for logical gameplay saves.
+#[derive(Debug, Clone)]
+pub struct EntityDefinition(pub kiln_core::project::Entity);
+
+/// Project-relative texture resource for runtime-created sprites.
+#[derive(Debug, Clone)]
+pub struct SpriteResource(pub String);
+
 impl SourceId {
     /// A source id with the given value.
     pub fn new(id: impl Into<String>) -> Self {

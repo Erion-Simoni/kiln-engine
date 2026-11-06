@@ -6,7 +6,8 @@ rust-version.workspace = true
 license.workspace = true
 
 [features]
-default = []
+default = ["fonts"]
+fonts = ["kiln-ui/fonts"]
 threads = []
 
 [dependencies]
@@ -49,6 +50,7 @@ web-sys = { version = "0.3.106", features = [
     "GainNode",
     "AudioBuffer",
     "RequestMode",
+    "Storage", "Navigator", "Gamepad", "GamepadButton",
 ] }
 console_error_panic_hook = "0.1.7"
 pollster = { workspace = true }

@@ -1457,3 +1457,42 @@ alternate swapchain views. Verify the palette and interaction with native
 screenshots and input smoke checks, alongside the workspace quality gate.
 Task 7 gameplay save/load work remains paused for this explicitly requested UI
 checkpoint.
+
+## ADR-0058: Versioned gameplay saves and shared platform storage
+
+**Date:** 2026-11-05
+**Status:** accepted
+
+Finish Task 7 with one bounded, versioned gameplay document shared by native
+editor Play, player and browser. Persist project/active-scene identity, stable
+entity definitions and live transforms/sprites/parents/physics/tilemaps,
+root/attached script memories and locals, game-specific typed values, elapsed
+simulation and UI screen/focus/back-stack/widget overrides. Rebind GPU resources
+and reconstruct physics from logical data; never persist handles or pointers.
+Audio voices, input captures, collision contacts and particle instances are
+transient. Resume logical animation state; current player preferences remain
+independent of save slots. Reject incompatible script layouts and invalid or
+newer documents before replacing any live world or overwriting a file.
+
+Queue script save/load requests and service them at completed tick boundaries,
+after command application. Their boolean result means accepted; expose completion
+status/error separately. The same generic session APIs also serve native F5/F9
+and browser controls. Stage load into a candidate session/world, validate resource
+and scene references, and install only on success. Saves capture the active scene;
+game-wide values can record progress in other levels. Transfers retain game-wide
+values when changing scenes. Keep the legacy sample serializer as an explicit
+compatibility API, never the gameplay save path.
+
+Introduce a small shared storage interface: native slot metadata/atomic writes
+and preferences files; browser project-scoped localStorage with quota/access
+errors surfaced. Use existing serde/serde_json and platform dependencies. No new
+third-party dependency. Harden existing slot version/migration checks and writes.
+Use tagged runtime save values to preserve integer/float/boolean/string/array
+types without adding serialization dependencies to kiln-ir.
+
+Move the browser onto the shared scene/module/attachment/UI runtime, the existing
+font-atlas renderer and the same storage contract. Web Audio owns bounded voices,
+looping music and named gain buses on the browser thread. Runtime commands expose
+this backend without enabling native audio devices in WASM. Validate real native
+and browser menus/settings/save/resume and saved UI authoring, while recording
+hardware/device and remote CI acceptance separately. Task 8 remains unstarted.

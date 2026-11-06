@@ -71,10 +71,11 @@ Missing preferences use author defaults. Corrupt or newer-version files produce
 an error and block writes; repair/remove the file and restart Play to reload.
 There is no silent reset that overwrites an unreadable user's settings.
 
-`state_get`/`state_set` are still per-instance memory. The older `save_game` API
-still saves the vertical-slice fields; it does **not** save these instance values,
-world entities or scene transitions. Generic game restoration is the next save
-checkpoint and must be completed before Task 7 is checked off.
+`state_get`/`state_set` remain per-instance memory. `save_game/load_game` now
+capture the general active world, scene, script memories and UI, with `game_*`
+values for shared persistent progress. They use queued completed-tick requests;
+see GAME_SAVING_2D.md for completion events, compatibility and failure behavior.
+The old sample serializer remains an explicit compatibility helper only.
 
 ## Reproduce acceptance
 
@@ -97,6 +98,8 @@ solo/mute and voice limits. Integration tests import external resources, save an
 reopen the project, pack a real KAR, load it with the player's loader, execute
 scene/entity VMs and compare the direct/packed PCM. Settings tests cover restart,
 precision and corrupt/future/unwritable documents, plus callback error recovery.
-None of these checks certifies audible speakers/headphones, native GUI clicks,
-controller-operated saved UI or clean-machine exports. Those acceptance gates
-remain open; see STATE.md for executed local evidence.
+Native GUI menu/settings and editor Play checks now pass on Xvfb. Browser Web
+Audio loop/overlap/gain, saved fonts/UI and controller API navigation also pass in
+Chromium; see GAME_SAVING_2D.md and evidence/task7-complete/. Physical-controller,
+audible speakers/headphones, remote CI and clean-machine exports still need their
+own acceptance; see STATE.md for the exact executed evidence.

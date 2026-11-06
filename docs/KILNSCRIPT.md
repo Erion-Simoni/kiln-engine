@@ -210,8 +210,18 @@ See [Physics and cameras](PHYSICS_2D.md) and the checked-in editor sample.
 
 | Function | Arguments | Returns | Description |
 |----------|-----------|---------|-------------|
-| `save_game(slot_id)` | 1 (i64) | bool | Save game to slot |
-| `load_game(slot_id)` | 1 (i64) | bool | Load game from slot |
+| `save_game(slot_id)` | 1 (i64, 0–99) | bool | Queue a completed-tick gameplay save; true means admitted |
+| `load_game(slot_id)` | 1 (i64, 0–99) | bool | Queue an atomic gameplay restore; true means admitted |
+| `game_get(key, default)` | 2 (str, value) | value | Shared persistent game data, independent of sample score/coins |
+| `game_set(key, value)` | 2 (str, value) | value | Set validated typed game data shared across scene/entity scripts |
+| `has_save(slot_id)` | 1 (i64, 0–99) | bool | Compatible gameplay payload exists |
+| `save_status()` | 0 | str | idle / queued / saved / loaded / error |
+| `save_error()` | 0 | str | Last storage/restore failure, empty after success |
+
+UI completion events: `save_complete`, `load_complete`, `save_failed`,
+`load_failed`. They dispatch even while gameplay is paused. F5/F9 in native Play
+and the browser use slot 0. See [GAME_SAVING_2D.md](GAME_SAVING_2D.md) for the
+snapshot contract, version limits, storage profiles and Continue example.
 
 
 ```ks

@@ -316,6 +316,9 @@ pub fn spawn_entities(
         let Some(child) = spawned_handles.get(&entity.id) else {
             continue;
         };
+        let _ = world
+            .world_mut()
+            .insert_one(*child, crate::EntityDefinition(entity.clone()));
         let _ = world.world_mut().insert_one(
             *child,
             crate::SceneDrawOrder(draw_order_base + index as u64),

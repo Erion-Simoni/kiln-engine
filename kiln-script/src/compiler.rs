@@ -205,6 +205,7 @@ impl Compiler {
         fn offset(expr: &Expr) -> usize {
             match expr {
                 Expr::Number(_, span)
+                | Expr::Boolean(_, span)
                 | Expr::Float(_, span)
                 | Expr::String(_, span)
                 | Expr::Identifier(_, span)
@@ -218,6 +219,10 @@ impl Compiler {
             Expr::Number(n, _span) => {
                 self.program
                     .add_instruction(Instruction::PushConst(Value::I64(*n)));
+            }
+            Expr::Boolean(value, _) => {
+                self.program
+                    .add_instruction(Instruction::PushConst(Value::Bool(*value)));
             }
             Expr::Float(f, _span) => {
                 self.program

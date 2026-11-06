@@ -190,3 +190,38 @@ fn attached_ui_callbacks_receive_current_physical_input_while_gameplay_is_paused
     );
     assert_eq!(session.state().elapsed, 0.0);
 }
+
+#[test]
+fn rapid_cancel_navigation_and_accept_keep_their_order_across_menu_transitions() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../samples/ui2d_editor");
+    let project =
+        Project::from_toml(&std::fs::read_to_string(root.join("kiln.toml")).unwrap()).unwrap();
+    let mut session = SliceSession::with_scene_sources(&project, "main", |path| {
+        std::fs::read_to_string(root.join(path)).map_err(|e| e.to_string())
+    })
+    .unwrap();
+    let mut world = GameWorld::new();
+    kiln_runtime::spawn_scene(&mut world, &project, "main", &mut |_, color, _| {
+        kiln_runtime::Sprite::new(color[0], color[1], color[2], color[3])
+    });
+    session.step(&mut world, (0.0, 0.0), 1.0 / 60.0).unwrap();
+    session.host_mut().queue_ui_key("ArrowDown");
+    session.step(&mut world, (0.0, 0.0), 1.0 / 60.0).unwrap();
+    session.host_mut().queue_ui_key("Enter");
+    session.step(&mut world, (0.0, 0.0), 1.0 / 60.0).unwrap();
+    assert_eq!(session.host_ui().active_screen(), "settings");
+    // All events arrive between two fixed ticks, as quick DOM key taps do.
+    for key in ["Escape", "ArrowUp", "Enter"] {
+        session.host_mut().queue_ui_key(key);
+    }
+    session.host_mut().set_pressed_keys(&["Enter".into()]);
+    for _ in 0..3 {
+        session.step(&mut world, (0.0, 0.0), 1.0 / 60.0).unwrap();
+    }
+    assert_eq!(session.host_ui().active_screen(), "hud");
+    session.step(&mut world, (0.0, 0.0), 1.0 / 60.0).unwrap();
+    assert_eq!(
+        session.host_mut().game_value("health"),
+        Some(&Value::I64(73))
+    );
+}

@@ -302,3 +302,55 @@ fn oversized_bitmap_text_is_rejected_and_runtime_text_keeps_its_previous_value()
     assert!(!ui.set_text("a", &"W".repeat(1000)));
     assert_eq!(ui.document().screens["title"].widgets[0].text, "Button");
 }
+
+#[test]
+fn snapshots_restore_menu_history_overrides_and_suppress_held_input_atomically() {
+    let doc = document();
+    let mut ui = UiRuntime::new(&doc, "main").unwrap();
+    ui.update(
+        UiInput {
+            accept: true,
+            ..Default::default()
+        },
+        [640.0, 360.0],
+    )
+    .unwrap();
+    ui.set_text("back", "Resume saved game");
+    let saved = ui.snapshot();
+    let mut fresh = UiRuntime::new(&doc, "main").unwrap();
+    fresh.restore_snapshot(&saved).unwrap();
+    assert_eq!(fresh.active_screen(), "settings");
+    assert_eq!(
+        fresh.snapshot().widgets["settings"][0].text,
+        "Resume saved game"
+    );
+    assert!(fresh
+        .update(
+            UiInput {
+                accept: true,
+                cancel: true,
+                ..Default::default()
+            },
+            [640.0, 360.0]
+        )
+        .unwrap()
+        .is_empty());
+    assert_eq!(fresh.active_screen(), "settings");
+    fresh.update(UiInput::default(), [640.0, 360.0]).unwrap();
+    fresh
+        .update(
+            UiInput {
+                cancel: true,
+                ..Default::default()
+            },
+            [640.0, 360.0],
+        )
+        .unwrap();
+    assert_eq!(fresh.active_screen(), "title");
+    assert_eq!(fresh.focused(), Some("a"));
+    let before = fresh.snapshot();
+    let mut invalid = saved;
+    invalid.widgets.get_mut("title").unwrap()[0].id = "missing".into();
+    assert!(fresh.restore_snapshot(&invalid).is_err());
+    assert_eq!(fresh.snapshot(), before);
+}

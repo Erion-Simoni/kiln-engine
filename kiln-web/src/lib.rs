@@ -8,6 +8,10 @@
 // This crate hosts browser APIs and is only executable on wasm32.
 #![cfg(target_arch = "wasm32")]
 
+mod audio;
+mod input;
+mod resources;
+mod storage;
 mod threading;
 
 use kiln_render::{camera::Camera, Renderer, SpriteRenderer, TextureId};
@@ -17,7 +21,7 @@ use log::{info, warn};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use wasm_bindgen::prelude::*;
-use web_sys::{AudioContext, HtmlCanvasElement, KeyboardEvent, MouseEvent, TouchEvent, WheelEvent};
+use web_sys::{AudioContext, HtmlCanvasElement};
 
 use image::GenericImageView;
 
@@ -71,18 +75,15 @@ pub async fn run(canvas_id: &str, project_path: &str) -> Result<(), JsValue> {
 
 #[derive(Default, Clone)]
 struct WebInput {
-    input_x: f64,
-    input_y: f64,
+    keys: std::collections::HashSet<String>,
+    key_edges: Vec<String>,
+    pointer_edges: Vec<([f32; 2], bool)>,
     mouse_x: f64,
     mouse_y: f64,
     mouse_pressed: bool,
     mouse_just_pressed: bool,
-    mouse_just_released: bool,
-    /// Track which movement keys are currently pressed
-    key_right: bool,
-    key_left: bool,
-    key_down: bool,
-    key_up: bool,
+    touch_origin: Option<[f64; 2]>,
+    touch_axis: [f64; 2],
 }
 
 struct App {
@@ -94,6 +95,14 @@ struct App {
     world: GameWorld,
     slice: Option<SliceSession>,
     game_loop: GameLoop,
+    project: kiln_core::Project,
+    scene_id: String,
+    scripts: HashMap<String, String>,
+    textures: resources::Textures,
+    ui_fonts: kiln_ui::authored::UiFonts,
+    camera_controller: kiln_runtime::camera::CameraController,
+    audio: Option<std::rc::Rc<std::cell::RefCell<audio::WebAudio>>>,
+    focused: bool,
     input: WebInput,
     /// Web Audio API context for audio playback
     audio_context: Option<web_sys::AudioContext>,
@@ -103,13 +112,6 @@ struct App {
     canvas_width: u32,
     /// Canvas height
     canvas_height: u32,
-}
-
-impl App {
-    /// Get the canvas element for touch position calculations
-    fn get_canvas_element(&self) -> Option<web_sys::HtmlCanvasElement> {
-        self.canvas_element.clone()
-    }
 }
 
 impl App {
@@ -162,7 +164,7 @@ impl App {
         let mut sprite_renderer =
             SpriteRenderer::new(renderer.device(), renderer.queue(), renderer.scene_format());
         sprite_renderer.upload_quad(renderer.queue());
-        let overlay_renderer =
+        let mut overlay_renderer =
             SpriteRenderer::new(renderer.device(), renderer.queue(), surface_format);
         overlay_renderer.upload_quad(renderer.queue());
 
@@ -178,76 +180,87 @@ impl App {
         )
         .await?;
 
-        let mut world = GameWorld::new();
         let scene_id = project.default_scene_id().ok_or("Project has no scenes")?;
-        let scene = project.scenes.get(&scene_id).ok_or("Scene not found")?;
-
-        // Initialize Web Audio API
+        let scripts = resources::scripts(&project, project_path).await?;
+        let (mut session, world) = resources::session(&project, &scene_id, &scripts, &textures)?;
+        session
+            .host_mut()
+            .set_storage(std::rc::Rc::new(storage::BrowserStorage {
+                project: project.id.clone(),
+            }));
         let audio_context = web_sys::AudioContext::new().ok();
-        let master_gain = audio_context
-            .as_ref()
-            .and_then(|ctx| ctx.create_gain().ok());
-        if let Some(gain) = &master_gain {
-            gain.connect_with_audio_node(&audio_context.as_ref().unwrap().destination())
-                .ok();
-            gain.gain().set_value(1.0);
-        }
-
-        // Register all project audio assets and decode them
-        let mut audio_buffers = std::collections::HashMap::new();
-        if let Some(ctx) = &audio_context {
+        let mut buffers = HashMap::new();
+        if let Some(context) = &audio_context {
             for asset in &project.audio_assets {
-                if let Ok(array_buffer) = fetch_audio_buffer(&format!(
+                let bytes = fetch_audio_buffer(&format!(
                     "{}/{}",
                     project_path_dir(project_path),
                     asset.path
                 ))
                 .await
+                .map_err(|e| format!("Audio fetch: {e:?}"))?;
+                let buffer = decode_audio(context, &bytes)
+                    .await
+                    .map_err(|e| format!("Audio decode: {e:?}"))?;
+                if buffers
+                    .insert(asset.name.clone(), (asset.clone(), buffer))
+                    .is_some()
                 {
-                    if let Ok(buffer) = decode_audio(ctx, &array_buffer).await {
-                        audio_buffers.insert(asset.name.clone(), buffer);
-                    }
+                    return Err("Duplicate audio asset name".into());
                 }
             }
         }
-
-        let camera = Camera::new(width as f32, height as f32);
-
-        let mut slice = None;
-        if let Some(script_path) = &scene.script {
-            let script_source = load_script(script_path, project_path).await?;
-            let mut session =
-                SliceSession::with_action_map(&script_source, project.action_map.clone())
-                    .map_err(|e| format!("Script compile error: {:?}", e))?;
-
-            // JS audio handles stay on the browser thread; access the public host.
-            if let Some(audio_ctx) = audio_context.clone() {
-                let buffers = audio_buffers.clone();
-                let gain = master_gain.clone();
-                session.host_mut().set_audio_player(Box::new(move |name| {
-                    let Some(buffer) = buffers.get(name) else {
-                        return;
-                    };
-                    match audio_ctx.create_buffer_source() {
-                        Ok(source) => {
-                            source.set_buffer(Some(buffer));
-                            let connected = match &gain {
-                                Some(gain) => source.connect_with_audio_node(gain),
-                                None => source.connect_with_audio_node(&audio_ctx.destination()),
-                            };
-                            if connected.is_ok() {
-                                let _ = source.start();
-                            }
-                        }
-                        Err(error) => web_sys::console::error_1(&error),
-                    }
-                }));
-            }
-
-            slice = Some(session);
+        let audio = audio_context.as_ref().map(|context| {
+            std::rc::Rc::new(std::cell::RefCell::new(audio::WebAudio::new(
+                context.clone(),
+                buffers,
+                project.audio_mixer.clone(),
+            )))
+        });
+        if let Some(audio) = &audio {
+            session
+                .host_mut()
+                .set_platform_audio(Box::new(audio::AudioAdapter(audio.clone())));
         }
-
-        spawn_scene_entities(&mut world, &project, scene, &textures, &sprite_renderer)?;
+        let mut font_resources = HashMap::new();
+        for font in project.ui.fonts.values() {
+            let bytes =
+                fetch_audio_buffer(&format!("{}/{}", project_path_dir(project_path), font.path))
+                    .await
+                    .map_err(|e| format!("Font fetch: {e:?}"))?;
+            font_resources.insert(font.path.clone(), js_sys::Uint8Array::new(&bytes).to_vec());
+        }
+        let (ui_fonts, font_errors) = kiln_ui::authored::UiFonts::load(
+            &project.ui,
+            |path| {
+                font_resources
+                    .get(path)
+                    .cloned()
+                    .ok_or_else(|| format!("Missing font {path}"))
+            },
+            |id, size, rgba| {
+                overlay_renderer.create_texture_rgba_with_options(
+                    renderer.device(),
+                    renderer.queue(),
+                    id,
+                    size,
+                    rgba,
+                    [false, false],
+                )
+            },
+        );
+        for error in font_errors {
+            warn!("{error}");
+        }
+        let mut camera_controller = kiln_runtime::camera::CameraController::default();
+        let settings = project.cameras.get(&scene_id).cloned().unwrap_or_default();
+        let camera = camera_controller.update(
+            &settings,
+            &world,
+            [project.window.width as f32, project.window.height as f32],
+            0.0,
+        )?;
+        let slice = Some(session);
 
         Ok(Self {
             surface,
@@ -258,6 +271,14 @@ impl App {
             world,
             slice,
             game_loop: GameLoop::new(),
+            project,
+            scene_id,
+            scripts,
+            textures,
+            ui_fonts,
+            camera_controller,
+            audio,
+            focused: true,
             input: WebInput::default(),
             audio_context,
             canvas_element: Some(canvas.clone()),
@@ -270,303 +291,7 @@ impl App {
         let app = std::rc::Rc::new(std::cell::RefCell::new(Some(self)));
         let app_clone = std::rc::Rc::clone(&app);
 
-        // --- Keyboard input: update WebInput so gameplay receives real input ---
-        {
-            let app_for_keydown = app_clone.clone();
-            let on_keydown = Closure::wrap(Box::new(move |event: KeyboardEvent| {
-                let mut app = app_for_keydown.borrow_mut();
-                if let Some(app) = app.as_mut() {
-                    if let Some(context) = &app.audio_context {
-                        let _ = context.resume();
-                    }
-                    let mut changed = false;
-                    match event.key().as_str() {
-                        "ArrowRight" | "d" | "D" => {
-                            if !app.input.key_right {
-                                app.input.key_right = true;
-                                changed = true;
-                            }
-                        }
-                        "ArrowLeft" | "a" | "A" => {
-                            if !app.input.key_left {
-                                app.input.key_left = true;
-                                changed = true;
-                            }
-                        }
-                        "ArrowDown" | "s" | "S" => {
-                            if !app.input.key_down {
-                                app.input.key_down = true;
-                                changed = true;
-                            }
-                        }
-                        "ArrowUp" | "w" | "W" => {
-                            if !app.input.key_up {
-                                app.input.key_up = true;
-                                changed = true;
-                            }
-                        }
-                        _ => {}
-                    }
-                    // Recompute input_x and input_y based on all pressed keys
-                    if changed {
-                        app.input.input_x =
-                            (app.input.key_right as i8 - app.input.key_left as i8) as f64;
-                        app.input.input_y =
-                            (app.input.key_down as i8 - app.input.key_up as i8) as f64;
-                    }
-                }
-            }) as Box<dyn FnMut(KeyboardEvent)>);
-            let _ = window
-                .add_event_listener_with_callback("keydown", on_keydown.as_ref().unchecked_ref());
-            on_keydown.forget();
-
-            let app_for_keyup = app_clone.clone();
-            let on_keyup = Closure::wrap(Box::new(move |event: KeyboardEvent| {
-                let mut app = app_for_keyup.borrow_mut();
-                if let Some(app) = app.as_mut() {
-                    let mut changed = false;
-                    match event.key().as_str() {
-                        "ArrowRight" | "d" | "D" => {
-                            if app.input.key_right {
-                                app.input.key_right = false;
-                                changed = true;
-                            }
-                        }
-                        "ArrowLeft" | "a" | "A" => {
-                            if app.input.key_left {
-                                app.input.key_left = false;
-                                changed = true;
-                            }
-                        }
-                        "ArrowDown" | "s" | "S" => {
-                            if app.input.key_down {
-                                app.input.key_down = false;
-                                changed = true;
-                            }
-                        }
-                        "ArrowUp" | "w" | "W" => {
-                            if app.input.key_up {
-                                app.input.key_up = false;
-                                changed = true;
-                            }
-                        }
-                        _ => {}
-                    }
-                    // Recompute input_x and input_y based on all pressed keys
-                    if changed {
-                        app.input.input_x =
-                            (app.input.key_right as i8 - app.input.key_left as i8) as f64;
-                        app.input.input_y =
-                            (app.input.key_down as i8 - app.input.key_up as i8) as f64;
-                    }
-                }
-            }) as Box<dyn FnMut(KeyboardEvent)>);
-            let _ =
-                window.add_event_listener_with_callback("keyup", on_keyup.as_ref().unchecked_ref());
-            on_keyup.forget();
-        }
-        // ----------------------------------------------------------------------
-
-        // --- Touch input: update WebInput so gameplay receives touch input ---
-        {
-            let app_for_touchstart = app_clone.clone();
-            let on_touchstart = Closure::wrap(Box::new(move |event: TouchEvent| {
-                let mut app = app_for_touchstart.borrow_mut();
-                if let Some(app) = app.as_mut() {
-                    if let Some(context) = &app.audio_context {
-                        let _ = context.resume();
-                    }
-                    if let Some(touch) = event.touches().item(0) {
-                        // Calculate input axes from touch position relative to canvas center
-                        if let Some(canvas) = app.get_canvas_element() {
-                            let rect = canvas.get_bounding_client_rect();
-                            let canvas_width = rect.width() as f64;
-                            let canvas_height = rect.height() as f64;
-                            let touch_x = touch.client_x() as f64 - rect.left();
-                            let touch_y = touch.client_y() as f64 - rect.top();
-
-                            // Normalize to -1 to 1 range from canvas center
-                            app.input.input_x =
-                                (touch_x - canvas_width / 2.0) / (canvas_width / 2.0);
-                            app.input.input_y =
-                                (touch_y - canvas_height / 2.0) / (canvas_height / 2.0);
-
-                            // Clamp to [-1, 1]
-                            app.input.input_x = app.input.input_x.clamp(-1.0, 1.0);
-                            app.input.input_y = app.input.input_y.clamp(-1.0, 1.0);
-                        } else {
-                            // Fallback if canvas not available
-                            app.input.input_x = 1.0;
-                            app.input.input_y = 1.0;
-                        }
-                    }
-                }
-            }) as Box<dyn FnMut(TouchEvent)>);
-            let _ = window.add_event_listener_with_callback(
-                "touchstart",
-                on_touchstart.as_ref().unchecked_ref(),
-            );
-            on_touchstart.forget();
-
-            let app_for_touchend = app_clone.clone();
-            let on_touchend = Closure::wrap(Box::new(move |event: TouchEvent| {
-                let mut app = app_for_touchend.borrow_mut();
-                if let Some(app) = app.as_mut() {
-                    if event.touches().length() == 0 {
-                        app.input.input_x = 0.0;
-                        app.input.input_y = 0.0;
-                    }
-                }
-            }) as Box<dyn FnMut(TouchEvent)>);
-            let _ = window
-                .add_event_listener_with_callback("touchend", on_touchend.as_ref().unchecked_ref());
-            on_touchend.forget();
-
-            let app_for_touchmove = app_clone.clone();
-            let on_touchmove = Closure::wrap(Box::new(move |event: TouchEvent| {
-                let mut app = app_for_touchmove.borrow_mut();
-                if let Some(app) = app.as_mut() {
-                    if let Some(touch) = event.touches().item(0) {
-                        // Calculate input axes from touch position relative to canvas center
-                        if let Some(canvas) = app.get_canvas_element() {
-                            let rect = canvas.get_bounding_client_rect();
-                            let canvas_width = rect.width() as f64;
-                            let canvas_height = rect.height() as f64;
-                            let touch_x = touch.client_x() as f64 - rect.left();
-                            let touch_y = touch.client_y() as f64 - rect.top();
-
-                            // Normalize to -1 to 1 range from canvas center
-                            app.input.input_x =
-                                (touch_x - canvas_width / 2.0) / (canvas_width / 2.0);
-                            app.input.input_y =
-                                (touch_y - canvas_height / 2.0) / (canvas_height / 2.0);
-
-                            // Clamp to [-1, 1]
-                            app.input.input_x = app.input.input_x.clamp(-1.0, 1.0);
-                            app.input.input_y = app.input.input_y.clamp(-1.0, 1.0);
-                        } else {
-                            app.input.input_x = 1.0;
-                            app.input.input_y = 1.0;
-                        }
-                    }
-                }
-            }) as Box<dyn FnMut(TouchEvent)>);
-            let _ = window.add_event_listener_with_callback(
-                "touchmove",
-                on_touchmove.as_ref().unchecked_ref(),
-            );
-            on_touchmove.forget();
-        }
-        // ----------------------------------------------------------------------
-
-        // --- Mouse input: update WebInput so gameplay receives mouse input ---
-        {
-            let app_for_mousedown = app_clone.clone();
-            let on_mousedown = Closure::wrap(Box::new(move |event: MouseEvent| {
-                let mut app = app_for_mousedown.borrow_mut();
-                if let Some(app) = app.as_mut() {
-                    if let Some(context) = &app.audio_context {
-                        let _ = context.resume();
-                    }
-                    app.input.mouse_pressed = true;
-                    app.input.mouse_just_pressed = true;
-                    app.input.mouse_x = event.client_x() as f64;
-                    app.input.mouse_y = event.client_y() as f64;
-                    // Also update input axes for UI interaction
-                    app.input.input_x = 1.0;
-                    app.input.input_y = 1.0;
-                }
-            }) as Box<dyn FnMut(MouseEvent)>);
-            let _ = window.add_event_listener_with_callback(
-                "mousedown",
-                on_mousedown.as_ref().unchecked_ref(),
-            );
-            on_mousedown.forget();
-
-            let app_for_mouseup = app_clone.clone();
-            let on_mouseup = Closure::wrap(Box::new(move |event: MouseEvent| {
-                let mut app = app_for_mouseup.borrow_mut();
-                if let Some(app) = app.as_mut() {
-                    app.input.mouse_pressed = false;
-                    app.input.mouse_just_released = true;
-                    app.input.mouse_x = event.client_x() as f64;
-                    app.input.mouse_y = event.client_y() as f64;
-                    app.input.input_x = 0.0;
-                    app.input.input_y = 0.0;
-                }
-            }) as Box<dyn FnMut(MouseEvent)>);
-            let _ = window
-                .add_event_listener_with_callback("mouseup", on_mouseup.as_ref().unchecked_ref());
-            on_mouseup.forget();
-
-            let app_for_mousemove = app_clone.clone();
-            let on_mousemove = Closure::wrap(Box::new(move |event: MouseEvent| {
-                let mut app = app_for_mousemove.borrow_mut();
-                if let Some(app) = app.as_mut() {
-                    app.input.mouse_x = event.client_x() as f64;
-                    app.input.mouse_y = event.client_y() as f64;
-                }
-            }) as Box<dyn FnMut(MouseEvent)>);
-            let _ = window.add_event_listener_with_callback(
-                "mousemove",
-                on_mousemove.as_ref().unchecked_ref(),
-            );
-            on_mousemove.forget();
-
-            let app_for_wheel = app_clone.clone();
-            let on_wheel = Closure::wrap(Box::new(move |event: WheelEvent| {
-                let mut app = app_for_wheel.borrow_mut();
-                if let Some(app) = app.as_mut() {
-                    // Handle zoom with mouse wheel (delta_y negative = zoom in)
-                    app.camera.zoom *= (1.0 - event.delta_y() as f32 * 0.001).clamp(0.1, 10.0);
-                    event.prevent_default();
-                }
-            }) as Box<dyn FnMut(WheelEvent)>);
-            let _ =
-                window.add_event_listener_with_callback("wheel", on_wheel.as_ref().unchecked_ref());
-            on_wheel.forget();
-        }
-        // ----------------------------------------------------------------------
-
-        // --- Window resize handler ---
-        {
-            let app_for_resize = app_clone.clone();
-            let on_resize = Closure::wrap(Box::new(move |_event: web_sys::Event| {
-                let mut app = app_for_resize.borrow_mut();
-                if let Some(app) = app.as_mut() {
-                    let window = web_sys::window().expect("no window");
-                    let document = window.document().expect("no document");
-                    if let Some(canvas) = document.get_element_by_id("game-canvas") {
-                        if let Ok(canvas) = canvas.dyn_into::<HtmlCanvasElement>() {
-                            let width = canvas.client_width().max(1) as u32;
-                            let height = canvas.client_height().max(1) as u32;
-                            if width != app.canvas_width || height != app.canvas_height {
-                                app.canvas_width = width;
-                                app.canvas_height = height;
-                                app.surface.configure(
-                                    &app.renderer.device(),
-                                    &wgpu::SurfaceConfiguration {
-                                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                                        format: app.renderer.surface_config().format,
-                                        width,
-                                        height,
-                                        present_mode: app.renderer.surface_config().present_mode,
-                                        alpha_mode: app.renderer.surface_config().alpha_mode,
-                                        view_formats: vec![],
-                                        desired_maximum_frame_latency: 2,
-                                    },
-                                );
-                                app.camera = Camera::new(width as f32, height as f32);
-                            }
-                        }
-                    }
-                }
-            }) as Box<dyn FnMut(web_sys::Event)>);
-            let _ = window
-                .add_event_listener_with_callback("resize", on_resize.as_ref().unchecked_ref());
-            on_resize.forget();
-        }
-        // ----------------------------------------------------------------------
+        input::install(&app_clone, window);
 
         let f = std::rc::Rc::new(std::cell::RefCell::new(None::<Closure<dyn FnMut()>>));
         let f_clone = std::rc::Rc::clone(&f);
@@ -592,34 +317,141 @@ impl App {
             window.request_animation_frame(f.borrow().as_ref().unwrap().as_ref().unchecked_ref());
     }
 
+    fn viewport(&self) -> [f32; 4] {
+        self.camera
+            .fit_viewport([0, 0, self.canvas_width, self.canvas_height])
+            .map(|v| v as f32)
+    }
+
+    fn transition(&mut self, id: &str) -> Result<(), String> {
+        let (mut next, world) =
+            resources::session(&self.project, id, &self.scripts, &self.textures)?;
+        if let Some(previous) = &mut self.slice {
+            previous.stop(&mut self.world).map_err(|e| e.to_string())?;
+            previous.transfer_game_data_to(&mut next);
+        }
+        next.host_mut()
+            .set_storage(std::rc::Rc::new(storage::BrowserStorage {
+                project: self.project.id.clone(),
+            }));
+        if let Some(audio) = &self.audio {
+            next.host_mut()
+                .set_platform_audio(Box::new(audio::AudioAdapter(audio.clone())));
+        }
+        self.world = world;
+        self.slice = Some(next);
+        self.scene_id = id.into();
+        self.camera_controller = Default::default();
+        self.camera = self.camera_controller.update(
+            &self.project.cameras.get(id).cloned().unwrap_or_default(),
+            &self.world,
+            [
+                self.project.window.width as f32,
+                self.project.window.height as f32,
+            ],
+            0.0,
+        )?;
+        Ok(())
+    }
+
     fn update(&mut self) {
+        if !self.focused {
+            self.game_loop = GameLoop::new();
+            return;
+        }
         let input = self.input.clone();
-        let input_axis = (input.input_x, input.input_y);
-
+        let viewport = self.viewport();
+        let mut keys: Vec<_> = input.keys.iter().cloned().collect();
+        keys.extend(input::gamepad_keys());
+        let mut key_edges = std::mem::take(&mut self.input.key_edges);
+        let mut pointer_edges = std::mem::take(&mut self.input.pointer_edges);
+        let mut transition = None;
+        let mut restored = false;
         self.game_loop.tick(|dt| {
+            if transition.is_some() || restored {
+                return;
+            }
             if let Some(slice) = &mut self.slice {
-                // Update mouse state on the slice host for UI click detection
                 let host = slice.host_mut();
+                host.set_pressed_keys(&keys);
+                for key in key_edges.drain(..) {
+                    host.queue_ui_key(&key);
+                }
+                for (point, down) in pointer_edges.drain(..) {
+                    host.queue_ui_pointer(viewport, point, down);
+                }
+                host.set_ui_pointer(
+                    viewport,
+                    Some([input.mouse_x as f32, input.mouse_y as f32]),
+                    input.mouse_pressed,
+                );
                 host.set_mouse_state(input.mouse_x, input.mouse_y, input.mouse_just_pressed);
-
-                if let Err(error) = slice.step(&mut self.world, input_axis, dt.as_secs_f64()) {
+                if let Some(position) = self
+                    .camera
+                    .screen_to_world([input.mouse_x as f32, input.mouse_y as f32], viewport)
+                {
+                    host.set_mouse_world(position.map(|v| v as f64));
+                }
+                if let Err(error) = slice.step(&mut self.world, input.axes(), dt.as_secs_f64()) {
                     web_sys::console::error_1(&JsValue::from_str(&format!(
                         "Script execution failed: {error}"
                     )));
+                    return;
+                }
+                match slice.service_saves(
+                    &mut self.world,
+                    &self.project,
+                    |path| {
+                        self.scripts
+                            .get(path)
+                            .cloned()
+                            .ok_or_else(|| format!("Missing script {path}"))
+                    },
+                    |path| self.textures.get(path).copied(),
+                ) {
+                    Ok(true) => {
+                        self.scene_id = slice.scene_id().unwrap_or(&self.scene_id).to_owned();
+                        self.camera_controller = Default::default();
+                        restored = true;
+                    }
+                    Ok(false) => {}
+                    Err(error) => web_sys::console::warn_1(&JsValue::from_str(&format!(
+                        "Gameplay storage: {error}"
+                    ))),
+                }
+                transition = slice.take_scene_request();
+                if let Ok(camera) = self.camera_controller.update(
+                    &self
+                        .project
+                        .cameras
+                        .get(&self.scene_id)
+                        .cloned()
+                        .unwrap_or_default(),
+                    &self.world,
+                    [
+                        self.project.window.width as f32,
+                        self.project.window.height as f32,
+                    ],
+                    dt.as_secs_f32(),
+                ) {
+                    self.camera = camera;
                 }
             }
-            // SliceSession updates particles itself; avoid advancing them twice.
-            if self.slice.is_none() {
-                kiln_runtime::sprite::update_particle_systems(
-                    self.world.world_mut(),
-                    dt.as_secs_f32(),
-                );
-            }
         });
-
-        // Reset just_pressed/just_released flags
+        // Do not drop quick edges when RAF ran before the next fixed tick.
+        self.input.key_edges.splice(0..0, key_edges);
+        self.input.pointer_edges.splice(0..0, pointer_edges);
         self.input.mouse_just_pressed = false;
-        self.input.mouse_just_released = false;
+        if let Some(id) = transition {
+            if let Err(error) = self.transition(&id) {
+                web_sys::console::error_1(&JsValue::from_str(&format!(
+                    "Scene transition: {error}"
+                )));
+            }
+        }
+        if let Some(audio) = &self.audio {
+            audio.borrow_mut().prune();
+        }
     }
 
     fn render(&mut self, _window: &web_sys::Window) {
@@ -627,9 +459,8 @@ impl App {
             Ok(f) => f,
             Err(e) => {
                 warn!("Surface texture error: {}", e);
-                let _ = self
-                    .surface
-                    .configure(&self.renderer.device(), &self.renderer.surface_config());
+                self.surface
+                    .configure(self.renderer.device(), &self.renderer.surface_config());
                 return;
             }
         };
@@ -680,6 +511,10 @@ impl App {
                 occlusion_query_set: None,
             });
 
+            let viewport = self.viewport();
+            if viewport[2] > 0.0 && viewport[3] > 0.0 {
+                pass.set_viewport(viewport[0], viewport[1], viewport[2], viewport[3], 0.0, 1.0);
+            }
             self.sprite_renderer
                 .flush(&mut pass, &self.camera, self.renderer.queue());
         }
@@ -696,18 +531,36 @@ impl App {
             .map(|slice| (slice.take_ui_commands(), slice.hud_lines()))
         {
             self.overlay_renderer.begin_frame();
-            let ui = UiRenderer::new();
-            for command in commands {
-                for quad in command_quads(command, &ui) {
+            if let Some(slice) = self
+                .slice
+                .as_ref()
+                .filter(|s| !s.host_ui().document().screens.is_empty())
+            {
+                for quad in slice.host_ui().draw(
+                    &self.ui_fonts,
+                    kiln_ui::authored::UiViewport::new(
+                        self.viewport(),
+                        slice.host_ui().document().reference_size,
+                    ),
+                ) {
                     self.overlay_renderer
                         .push_textured(quad.texture, quad.instance);
                 }
-            }
-            let text = TextRenderer::new();
-            for (index, line) in lines.iter().enumerate() {
-                for instance in text.render(line, 16.0, 16.0 + index as f32 * 20.0, 16.0, [1.0; 4])
-                {
-                    self.overlay_renderer.push(instance);
+            } else {
+                let ui = UiRenderer::new();
+                for command in commands {
+                    for quad in command_quads(command, &ui) {
+                        self.overlay_renderer
+                            .push_textured(quad.texture, quad.instance);
+                    }
+                }
+                let text = TextRenderer::new();
+                for (index, line) in lines.iter().enumerate() {
+                    for instance in
+                        text.render(line, 16.0, 16.0 + index as f32 * 20.0, 16.0, [1.0; 4])
+                    {
+                        self.overlay_renderer.push(instance);
+                    }
                 }
             }
             let size = self.renderer.surface_config();
@@ -761,6 +614,9 @@ async fn load_script(path: &str, project_path: &str) -> Result<String, Box<dyn s
     let resp: web_sys::Response = resp_value
         .dyn_into()
         .map_err(|e| format!("Response cast failed: {:?}", e))?;
+    if !resp.ok() {
+        return Err(format!("HTTP resource error {}", resp.status()).into());
+    }
     let text_promise = resp.text().map_err(|e| format!("{:?}", e))?;
     let text = wasm_bindgen_futures::JsFuture::from(text_promise)
         .await
@@ -780,18 +636,20 @@ async fn load_textures(
     sprite_renderer: &mut SpriteRenderer,
     project: &kiln_core::Project,
     project_path: &str,
-) -> Result<HashMap<String, TextureId>, Box<dyn std::error::Error>> {
+) -> Result<resources::Textures, Box<dyn std::error::Error>> {
     let mut texture_paths = Vec::new();
 
     // Collect all unique texture paths from the project
     for scene in project.scenes.values() {
         for entity in &scene.entities {
             for component in &entity.components {
-                if let kiln_core::project::Component::Sprite { texture, .. } = component {
-                    if let Some(path) = texture {
-                        if !texture_paths.contains(path) {
-                            texture_paths.push(path.clone());
-                        }
+                if let kiln_core::project::Component::Sprite {
+                    texture: Some(path),
+                    ..
+                } = component
+                {
+                    if !texture_paths.contains(path) {
+                        texture_paths.push(path.clone());
                     }
                 }
             }
@@ -830,14 +688,14 @@ async fn load_textures(
         )
         .await
         {
-            Ok(tex_id) => {
+            Ok((tex_id, [width, height])) => {
                 info!("Loaded texture: {} -> {:?}", path, tex_id);
-                textures.insert(path.clone(), tex_id);
+                textures.insert(path.clone(), (tex_id, [width, height]));
             }
             Err(e) => {
                 warn!("Failed to load texture {}: {}", path, e);
                 // Fall back to white texture
-                textures.insert(path.clone(), TextureId::WHITE);
+                return Err(format!("Texture resource failed: {path}: {e}").into());
             }
         }
     }
@@ -875,6 +733,9 @@ async fn load_project(
     let resp: web_sys::Response = resp_value
         .dyn_into()
         .map_err(|e| format!("Response cast failed: {:?}", e))?;
+    if !resp.ok() {
+        return Err(format!("HTTP resource error {}", resp.status()).into());
+    }
     let text_promise = resp.text().map_err(|e| format!("{:?}", e))?;
     let text = wasm_bindgen_futures::JsFuture::from(text_promise)
         .await
@@ -929,7 +790,7 @@ async fn load_png_texture(
     sprite_renderer: &mut SpriteRenderer,
     url: &str,
     options: [bool; 2],
-) -> Result<TextureId, Box<dyn std::error::Error>> {
+) -> Result<(TextureId, [u32; 2]), Box<dyn std::error::Error>> {
     let window = web_sys::window().ok_or("No window")?;
     let opts = web_sys::RequestInit::new();
     opts.set_method("GET");
@@ -985,61 +846,10 @@ async fn load_png_texture(
         options,
     );
 
-    Ok(tex_id)
+    Ok((tex_id, [width, height]))
 }
 
 /// Spawn all entities from a scene, including tilemaps.
-fn spawn_scene_entities(
-    world: &mut GameWorld,
-    project: &kiln_core::Project,
-    scene: &kiln_core::project::Scene,
-    textures: &HashMap<String, TextureId>,
-    sprite_renderer: &SpriteRenderer,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // Share entity identity, roles and animation setup with the native player.
-    let mut make_sprite = |entity: &kiln_core::Entity, color: [f32; 4], texture: Option<&str>| {
-        let mut sprite =
-            kiln_runtime::Sprite::new(color[0], color[1], color[2], color[3]).with_size(32.0, 32.0);
-        if let Some(id) = texture.and_then(|path| textures.get(path)) {
-            sprite = sprite.with_texture(*id);
-            if let Some((w, h)) = sprite_renderer.texture_size(*id) {
-                sprite.size = [w as f32, h as f32];
-            }
-        }
-        for component in &entity.components {
-            if let kiln_core::Component::Sprite {
-                layer, material, ..
-            } = component
-            {
-                sprite.layer = *layer;
-                sprite.material = material.clone();
-            }
-        }
-        sprite
-    };
-    kiln_runtime::spawn_scene(world, project, &scene.id, &mut make_sprite);
-
-    // Spawn tilemaps using the runtime's function with a texture resolver.
-    // Create a resolver that maps tileset IDs to TextureIds.
-    let mut resolve = |tileset_id: &str| {
-        // Look up the tileset in the project and get its texture path
-        project
-            .tilesets
-            .get(tileset_id)
-            .and_then(|ts| textures.get(&ts.texture).copied())
-    };
-
-    kiln_runtime::spawn_tilemaps(
-        world,
-        project,
-        scene,
-        kiln_core::SceneOffset::default(),
-        &mut resolve,
-    );
-
-    Ok(())
-}
-
 fn create_wgpu_surface(
     instance: &wgpu::Instance,
     canvas: HtmlCanvasElement,

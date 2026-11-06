@@ -96,12 +96,24 @@ impl SliceSession {
     /// Update screen input/start/UI callbacks before deciding whether to advance gameplay.
     pub(super) fn dispatch_saved_ui(&mut self, world: &mut GameWorld) -> Result<(), VmError> {
         let host = self.vm.host_mut();
-        let mut input = UiInput::from_keys(host.pressed_keys.iter().map(String::as_str));
+        // Process one queued key edge per UI tick. Combining Cancel/Up/Accept
+        // loses their order across screen transitions. Suppress held state for
+        // keys still waiting in the queue so it cannot overtake those edges.
+        let next_key = if host.ui_key_edges.is_empty() {
+            None
+        } else {
+            Some(host.ui_key_edges.remove(0))
+        };
+        let mut held = host.pressed_keys.clone();
+        for pending in &host.ui_key_edges {
+            held.remove(if pending == "BackTab" { "Tab" } else { pending });
+        }
+        let mut input = UiInput::from_keys(held.iter().map(String::as_str));
         if input.next && host.pressed_keys.contains("Shift") {
             input.next = false;
             input.previous = true;
         }
-        input.pressed_keys = std::mem::take(&mut host.ui_key_edges);
+        input.pressed_keys = next_key.into_iter().collect();
         input.pointer_events = std::mem::take(&mut host.ui_pointer_edges);
         input.pointer = host.ui_pointer;
         input.pointer_down = host.ui_pointer_down;
@@ -110,13 +122,22 @@ impl SliceSession {
         } else {
             host.ui.document().reference_size
         };
-        let events = host
+        let mut events = host
             .ui
             .update(input, size)
             .map_err(VmError::HostCallError)?;
         if host.ui.document().screens.is_empty() {
             return Ok(());
         }
+        events.extend(
+            std::mem::take(&mut host.storage_events)
+                .into_iter()
+                .map(|name| kiln_ui::authored::UiEvent {
+                    screen: host.ui.active_screen().into(),
+                    widget: String::new(),
+                    name,
+                }),
+        );
         let frame = host.frame_count.saturating_add(1);
         let keys = host.pressed_keys.clone();
         let mouse_world = host.mouse_world;

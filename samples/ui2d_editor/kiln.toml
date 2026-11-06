@@ -626,6 +626,62 @@ ShowScreen = "game_over"
 
 [ui.screens.pause.widgets.navigation]
 
+[[ui.screens.pause.widgets]]
+id = "save"
+parent = ""
+kind = "Button"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Save game"
+font = "body"
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = "save"
+action = "Event"
+
+[ui.screens.pause.widgets.layout]
+anchor = [
+    0.5,
+    0.5,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+offset = [0.0, 124.0]
+size = [
+    240.0,
+    36.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.pause.widgets.navigation]
+
 [ui.screens.settings]
 name = "Settings"
 pause_game = true
@@ -1113,6 +1169,237 @@ stretch = [
 ShowScreen = "settings"
 
 [ui.screens.title.widgets.navigation]
+
+[[ui.screens.title.widgets]]
+id = "continue"
+parent = ""
+kind = "Button"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Continue saved game"
+font = "body"
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = "load"
+action = "Event"
+
+[ui.screens.title.widgets.layout]
+anchor = [
+    0.5,
+    0.5,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+offset = [0.0, 96.0]
+size = [
+    240.0,
+    36.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.title.widgets.navigation]
+
+[ui.screens.hud]
+name = "Gameplay HUD"
+pause_game = false
+modal = false
+allow_cancel = false
+default_focus = "damage"
+
+[[ui.screens.hud.widgets]]
+id = "health"
+parent = ""
+kind = "Label"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Health 73"
+font = "body"
+font_size = 30.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = ""
+action = "Event"
+
+[ui.screens.hud.widgets.layout]
+anchor = [
+    0.5,
+    0.0,
+]
+pivot = [
+    0.5,
+    0.0,
+]
+offset = [0.0, 24.0]
+size = [
+    460.0,
+    50.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.hud.widgets.navigation]
+
+[[ui.screens.hud.widgets]]
+id = "inventory"
+parent = ""
+kind = "Label"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "brass_key"
+font = "body"
+font_size = 30.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = ""
+action = "Event"
+
+[ui.screens.hud.widgets.layout]
+anchor = [
+    0.5,
+    0.0,
+]
+pivot = [
+    0.5,
+    0.0,
+]
+offset = [0.0, 64.0]
+size = [
+    460.0,
+    50.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.hud.widgets.navigation]
+
+[[ui.screens.hud.widgets]]
+id = "damage"
+parent = ""
+kind = "Button"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Take 7 damage"
+font = "body"
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = "damage"
+action = "Event"
+
+[ui.screens.hud.widgets.layout]
+anchor = [
+    0.5,
+    0.5,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+offset = [0.0, 96.0]
+size = [
+    240.0,
+    36.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.hud.widgets.navigation]
 
 [ui.fonts.body]
 path = "assets/fonts/KilnSampleSans.ttf"

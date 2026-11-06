@@ -3,6 +3,16 @@ use kiln_core::{Clip, Frame, FrameEvent};
 use kiln_render::TextureId;
 use std::collections::HashMap;
 
+/// Logical clip playback; GPU bindings and pending frame events are transient.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AnimationSnapshot {
+    pub clips: std::collections::BTreeMap<String, Clip>,
+    pub current: Option<String>,
+    pub elapsed: f64,
+    pub speed: f32,
+    pub started: bool,
+}
+
 #[derive(Debug)]
 pub struct AnimationPlayer {
     clips: HashMap<String, Clip>,
@@ -15,6 +25,63 @@ pub struct AnimationPlayer {
 }
 
 impl AnimationPlayer {
+    pub fn snapshot(&self) -> Result<AnimationSnapshot, String> {
+        let saved = AnimationSnapshot {
+            clips: self
+                .clips
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+            current: self.current.clone(),
+            elapsed: self.elapsed,
+            speed: self.speed,
+            started: self.started,
+        };
+        // Verify that a newly written snapshot can be restored before replacing a slot.
+        Self::restore_snapshot(&saved, |path| {
+            self.clips.iter().find_map(|(id, clip)| {
+                (clip.texture == path)
+                    .then(|| self.textures.get(id).copied())
+                    .flatten()
+            })
+        })?;
+        Ok(saved)
+    }
+
+    pub fn restore_snapshot(
+        saved: &AnimationSnapshot,
+        mut resolve: impl FnMut(&str) -> Option<(TextureId, [u32; 2])>,
+    ) -> Result<Self, String> {
+        if saved.clips.len() > 256
+            || !saved.elapsed.is_finite()
+            || saved.elapsed < 0.0
+            || !saved.speed.is_finite()
+            || saved.speed < 0.0
+        {
+            return Err("Invalid saved animation state".into());
+        }
+        let mut player = Self::new();
+        for (id, clip) in &saved.clips {
+            if id != &clip.name || clip.frames.len() > 8192 {
+                return Err("Invalid saved animation clip".into());
+            }
+            let (texture, size) = resolve(&clip.texture).ok_or("Missing animation texture")?;
+            clip.validate(size)?;
+            player.add_bound_clip(clip.clone(), texture, size);
+        }
+        if saved
+            .current
+            .as_ref()
+            .is_some_and(|id| !player.clips.contains_key(id))
+        {
+            return Err("Missing saved animation clip".into());
+        }
+        player.current.clone_from(&saved.current);
+        player.elapsed = saved.elapsed;
+        player.speed = saved.speed;
+        player.started = saved.started;
+        Ok(player)
+    }
     pub fn new() -> Self {
         Self {
             clips: HashMap::new(),

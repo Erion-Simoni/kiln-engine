@@ -20,6 +20,11 @@ scripting/spawn/browser integration gaps remain. See
 implementation checkboxes describe their tested contracts, not full traditional
 engine feature parity. This audit does not start a new implementation task.
 
+2026-11-06 update: Task 7 software implementation and native/editor/KAR/browser
+acceptance now pass; general saves and browser UI/audio/storage are integrated.
+The dated audit and checkpoints below remain a historical record. Tasks 8–9,
+physical-device checks and broader release acceptance remain pending.
+
 ### 1. Build and test baseline — COMPLETE (local Linux validation; remote CI pending)
 
 - [x] Repair native workspace syntax/API/test-fixture blockers; subsequent browser checkpoint repaired the actual WASM target.
@@ -125,20 +130,26 @@ acceptance remain unverified. Real archive export is exercised; automating the
 editor's Build/Export panel remains Task 8. See `docs/VISUAL_AUTHORING_2D.md` for
 the exact supported contract and graphical acceptance procedure.
 
-### 7. Audio, UI, saving, and settings — IN PROGRESS
+### 7. Audio, UI, saving, and settings — IMPLEMENTATION COMPLETE
 
-- [x] Implement native audio import/playback/preview, simultaneous effects, looping music, named buses, and persisted volume settings. Shared decoded PCM is verified through real project save/reopen and packed-player loading; audible native/device acceptance and browser parity remain pending.
+- [x] Implement native audio import/playback/preview, simultaneous effects, looping music, named buses, and persisted volume settings. Shared decoded PCM passes project save/reopen and packed-player loading; browser Web Audio loop/overlap/gain also passes real Chromium checks. Audible-device acceptance remains separate.
 - [x] Add versioned player preferences and typed `setting_get`/`setting_set`, shared by scene/entity scripts and independent of sample score/coins. Failed/corrupt preference files report errors and are preserved.
-- [x] Implement native saved UI layout/anchors, bitmap and TTF/OTF text, buttons, focus/keyboard/controller navigation and root/entity script events. Native player mouse/keyboard rendering/events/settings passed on Xvfb; full editor interaction and physical-controller acceptance remain pending.
-- [ ] Provide save/load APIs, versioned game data, and player settings independent of engine sample-specific score/coin concepts.
+- [x] Implement native saved UI layout/anchors, bitmap and TTF/OTF text, buttons, focus/keyboard/controller navigation and root/entity script events. Native player menus and editor UI Designer add/drag/undo/redo/save/reopen/Play pass on Xvfb. Browser saved fonts/UI, controller API navigation and touch pass in Chromium; physical-controller acceptance remains separate.
+- [x] Provide versioned general game data and completed-tick save/load APIs shared by editor/player/browser: active scene/world, stable IDs, scripts, UI, typed progress, independent preferences, atomic failure handling and resource rebinding.
 
 Acceptance: title/pause/settings/game-over screens, music and overlapping effects, controller navigation, and save/resume work in editor and exported game.
 
 Audio checkpoint: see [AUDIO_AUTHORING_2D.md](AUDIO_AUTHORING_2D.md), ADR-0055 and
 `kiln-player/tests/audio_workflow.rs`. Native editor/player enable audio by default;
 no-audio builds remain supported. The saved UI checkpoint is documented in [UI_AUTHORING_2D.md](UI_AUTHORING_2D.md).
-Generic game/scene/entity/script restoration and browser parity remain unfinished;
-do not mark Task 7 complete.
+The general save contract and compatibility limits are documented in
+[GAME_SAVING_2D.md](GAME_SAVING_2D.md), ADR-0058 and
+[evidence/task7-complete/README.md](evidence/task7-complete/README.md).
+Fresh-process native directory/KAR resume, editor Play resume and browser reload
+resume passed with health/inventory/script lifecycle preserved. Corrupt/future
+saves and browser quota failures preserve the old slot/live world. Software
+acceptance is complete; physical-controller, audible-device and remote CI checks
+remain explicitly separate. Real editor export/distribution is Task 8.
 
 ### 8. Real build/export and distribution — PENDING
 
@@ -439,3 +450,24 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
   specialist-panel, saved-UI authoring and device gates remain separate.
 - `just check` and all **631 tests** passed. Task 7's generic game restoration,
   browser parity and Tasks 8–9 remain unfinished; resume Task 7 next.
+
+
+### 2026-11-06 — Task 7 general gameplay saves and browser integration
+
+- Replaced sample-only gameplay save/load with bounded versioned active-scene
+  snapshots, typed global progress, script lifecycle/locals/state, live entities
+  and resources, UI stack/overrides and atomic staged restore. Native atomic writes
+  and browser localStorage preserve prior slots on corrupt/future/quota failures.
+  Settings remain independent. ADR-0058 and GAME_SAVING_2D.md define compatibility.
+- Browser now uses shared scene/module/entity lifecycle and saved fonts/UI,
+  controller polling, correctly scaled pointer/touch input and Web Audio voices,
+  music/buses/preferences. Ordered key queues preserve rapid menu transitions.
+- Fixed native UI Designer press-origin selection and cumulative drag movement.
+  Added real GUI author/save/reopen/Play acceptance and a restartable save demo.
+- `just check`, **641 tests (zero skipped)**, default native binaries, minimal
+  native checks, strict WASM Clippy and WASM build passed. Real editor, native
+  directory/KAR restart/save/resume, existing editor/menu regressions and Chromium
+  rendering/controller/touch/audio/storage checks passed. CI now runs these paths.
+- Retained inspected evidence in `docs/evidence/task7-complete/`. Physical-controller,
+  audible-device and remote CI results remain unverified. Task 8's real editor
+  export/distribution workflow was not started; all of 2D is not release-complete.

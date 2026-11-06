@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "health": 66,
+  "script_starts": 1,
+  "saved_x": 178.0,
+  "resumed_x": 226.0,
+  "fresh_process_resume": true,
+  "corrupt_slot_preserved": true
+}

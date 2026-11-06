@@ -1,13 +1,13 @@
 # Saved 2D UI screens
 
-Task 7 now has project-backed native UI: panels, labels and buttons, responsive
-anchors, custom fonts, focus/navigation, script events and pausing. Native editor
-Play and the player use the same layout, state machine and draw quads. Generic
-world/game saves and browser UI integration remain unfinished.
+Task 7 has project-backed UI: panels, labels and buttons, responsive anchors,
+custom fonts, focus/navigation, script events and pausing. Native editor Play,
+the player and browser share layout, state machine, draw quads and general saved
+game/UI restoration. See GAME_SAVING_2D.md for the save contract.
 
 ## Author a screen
 
-1. Save/open a project and choose **Window → UI Layout Editor** (or **UI Designer**).
+1. Save/open a project and choose **View → UI Layout Editor** (or **UI Designer**).
    Both tabs edit the same `Project.ui` document. The old unsaved parallel models
    are removed. Saving, recovery and Save As use ordinary project persistence.
 2. Enter a screen name and click **Add screen**. Choose the global Initial screen
@@ -118,18 +118,22 @@ cargo run -p kiln-player -- --archive samples/ui2d_editor --game-name ui2d-demo
 ```
 
 The player starts the authored title automatically. Settings changes text and
-persists 25% master volume. Start closes UI and moves the blue actor; Escape
-opens Pause. Pause → Game over opens the fourth screen without replacing the
-world. Resume demo continues that world; it does not claim generic save/restore.
+persists 25% master volume. Start shows health/inventory and moves the blue actor;
+Escape opens Pause. Pause → Game over preserves the world. Save game and title
+Continue restore the active world, custom progress, scripts and UI across restart.
+See [GAME_SAVING_2D.md](GAME_SAVING_2D.md) for the versioned save contract.
 Title music and button effects reuse the small synthesized audio fixture.
 The included font is a renamed DejaVu subset with its license beside it.
 
 ```bash
 just check
 just test
-KILN_TASK7_UI_SAMPLE_OUT=samples/ui2d_editor cargo test -p kiln-player --test ui_workflow authored_screens_survive_restart_archive_and_editor_player_gameplay
+cargo test -p kiln-player --test ui_workflow
 cargo build -p kiln-player --bin kiln-player
 python3 tests/native/ui_smoke.py
+python3 tests/native/task7_smoke.py
+python3 tests/native/task7_editor_smoke.py
+just web-smoke
 ```
 
 The native smoke requires Xvfb, xdotool, ImageMagick import and a software graphics
@@ -143,8 +147,10 @@ Executed player screenshots: [Title](evidence/task7-ui/title.png),
 Disk/KAR tests compare project persistence, editor/player geometry/colors/UVs,
 script callbacks and frozen/resumed gameplay. Additional tests cover focus,
 clipping, rapid input, invalid documents, real font coverage/metrics, atomic UI
-transactions and opening the panel without dirtying data. Full native editor
-panel/drag/save/Play interaction acceptance is still pending; a virtual-display
-launch succeeded, but its automated toolbar/menu click flow was inconclusive.
-See STATE.md for current validation counts and limits. Browser saved UI/audio/
-settings parity, general game saves and real export/distribution remain open.
+transactions and opening the panel without dirtying data. Native UI Designer
+add/drag/undo/redo/save/reopen and editor Play save/resume have now passed on a
+virtual display. Browser saved fonts/UI, Web Audio, controller polling, touch and
+localStorage resume/failure behavior passed in Chromium. Selected captures are in
+[evidence/task7-complete](evidence/task7-complete/README.md). Physical-controller,
+audible-device, remote CI and clean-machine export checks remain separate.
+See STATE.md for current validation counts and limits.

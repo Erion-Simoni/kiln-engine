@@ -8,6 +8,7 @@ use std::str::Chars;
 pub enum Token {
     // Literals
     Number(i64),
+    Boolean(bool),
     Float(f64),
     String(String),
     Identifier(String),
@@ -190,6 +191,8 @@ impl<'a> Lexer<'a> {
         }
 
         let token = match ident.as_str() {
+            "true" => Token::Boolean(true),
+            "false" => Token::Boolean(false),
             "if" => Token::If,
             "else" => Token::Else,
             "return" => Token::Return,

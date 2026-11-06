@@ -177,7 +177,7 @@ jobs:
       - name: Build the native editor and player
         env:
           CARGO_PROFILE_DEV_DEBUG: 0
-        run: cargo build -p kiln-player -p kiln-editor --bins
+        run: cargo build -p kiln-player -p kiln-editor -p kiln-cli --bins
       - name: Exercise editor authoring, preview isolation and Play controls
         env:
           KILN_EDITOR_EVIDENCE_DIR: target/editor-design-evidence
@@ -186,6 +186,17 @@ jobs:
         env:
           KILN_UI_EVIDENCE_DIR: target/native-ui-evidence
         run: python3 tests/native/ui_smoke.py
+      - name: Exercise saved UI authoring and editor save/resume
+        env:
+          KILN_TASK7_EDITOR_EVIDENCE_DIR: target/task7-editor-evidence
+        run: python3 tests/native/task7_editor_smoke.py
+      - name: Pack the saved UI game
+        run: target/debug/kiln-cli pack --source samples/ui2d_editor --output target/task7-game.kar
+      - name: Exercise Task 7 save/resume across player restarts
+        env:
+          KILN_TASK7_EVIDENCE_DIR: target/task7-native-evidence
+          KILN_TASK7_ARCHIVE: target/task7-game.kar
+        run: python3 tests/native/task7_smoke.py
       - name: Upload native UI evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -194,6 +205,8 @@ jobs:
           path: |
             target/native-ui-evidence/
             target/editor-design-evidence/
+            target/task7-native-evidence/
+            target/task7-editor-evidence/
           retention-days: 7
 
   web-smoke:
@@ -204,11 +217,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+          components: clippy
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: tests/web/package-lock.json
+      - name: Check WASM-specific code
+        run: cargo clippy -p kiln-web --target wasm32-unknown-unknown -- -D warnings
       - name: Build the browser runtime
         run: cargo build --target wasm32-unknown-unknown -p kiln-web
       - name: Install matching wasm-bindgen CLI
@@ -222,3 +238,12 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Exercise rendering and input
         run: node tests/web/smoke.cjs target/web-smoke
+      - name: Exercise browser menus, audio, controller input and save/resume
+        run: node tests/web/task7.cjs target/web-smoke
+      - name: Upload browser Task 7 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task7-browser-evidence
+          path: target/task7-web-evidence/
+          retention-days: 7

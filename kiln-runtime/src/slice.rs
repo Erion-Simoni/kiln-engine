@@ -10,6 +10,10 @@
 //! behaves identically in both.
 
 mod authored_ui;
+mod game_save;
+pub use game_save::{
+    GameProgress, GameSave, SaveRequest, SaveValue, GAME_SAVE_VERSION, MAX_GAME_SAVE_BYTES,
+};
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -143,6 +147,11 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("ui_set_visible", 86, 2),
     ("ui_set_enabled", 87, 2),
     ("ui_event_screen", 88, 0),
+    ("game_get", 89, 2),
+    ("game_set", 90, 2),
+    ("save_status", 91, 0),
+    ("save_error", 92, 0),
+    ("has_save", 93, 1),
 ];
 
 /// Distance (in world units) at which a pickup counts as collected.
@@ -403,6 +412,11 @@ pub struct SliceHost {
     localization: Option<kiln_ui::Localization>,
     /// Directory where save slots are written.
     save_dir: Option<std::path::PathBuf>,
+    storage: Option<crate::storage::SharedStorage>,
+    game_data: HashMap<String, Value>,
+    save_requests: Vec<SaveRequest>,
+    save_status: String,
+    save_error: String,
     preferences: crate::preferences::PlayerPreferences,
     preference_fault: Option<String>,
     /// Current persistent state (synced from SliceSession each frame).
@@ -424,6 +438,9 @@ pub struct SliceHost {
     registered_audio: HashMap<String, String>,
     /// Custom audio player callback for platforms without rodio (e.g., WASM).
     audio_player: Option<AudioPlayer>,
+    platform_audio: Option<crate::audio_backend::AudioBackend>,
+    storage_events: Vec<String>,
+    spawn_counter: u64,
 }
 
 impl std::fmt::Debug for SliceHost {
@@ -477,6 +494,11 @@ impl SliceHost {
             action_map: kiln_input::ActionMap::new(),
             localization: None,
             save_dir: None,
+            storage: None,
+            game_data: HashMap::new(),
+            save_requests: Vec::new(),
+            save_status: String::new(),
+            save_error: String::new(),
             preferences: Default::default(),
             preference_fault: None,
             state: SliceState::default(),
@@ -489,6 +511,9 @@ impl SliceHost {
             #[cfg(feature = "audio")]
             registered_audio: HashMap::new(),
             audio_player: None,
+            platform_audio: None,
+            storage_events: Vec::new(),
+            spawn_counter: 0,
         }
     }
 
@@ -540,20 +565,10 @@ impl SliceHost {
             return;
         }
         self.save_dir = Some(dir.to_path_buf());
-        match crate::preferences::PlayerPreferences::load(dir) {
-            Ok(preferences) => {
-                #[cfg(feature = "audio")]
-                if let (Some(audio), Some(settings)) = (&mut self.audio, &preferences.audio) {
-                    audio.set_settings(settings.clone());
-                }
-                self.preferences = preferences;
-                self.preference_fault = None;
-            }
-            Err(error) => {
-                log::error!("Could not load player preferences: {error}");
-                self.preference_fault = Some(error);
-            }
-        }
+        #[cfg(not(target_arch = "wasm32"))]
+        self.set_storage(std::sync::Arc::new(crate::storage::FileStorage(
+            dir.to_owned(),
+        )));
     }
 
     /// Configure project assets once from disk or packed resource bytes.
@@ -625,12 +640,14 @@ impl SliceHost {
                 "Preferences unchanged: {error}"
             )));
         }
-        let dir = self.save_dir.as_ref().ok_or_else(|| {
-            VmError::HostCallError("Player settings directory is not configured".into())
+        let storage = self.storage.as_ref().ok_or_else(|| {
+            VmError::HostCallError("Player settings storage is not configured".into())
         })?;
-        candidate.save(dir).map_err(|error| {
-            VmError::HostCallError(format!("Could not save preferences: {error}"))
-        })?;
+        let data =
+            serde_json::to_string(&candidate).map_err(|e| VmError::HostCallError(e.to_string()))?;
+        storage
+            .write_preferences(&data)
+            .map_err(|e| VmError::HostCallError(format!("Could not save preferences: {e}")))?;
         self.preferences = candidate;
         Ok(())
     }
@@ -655,8 +672,33 @@ impl SliceHost {
     }
 
     #[cfg(feature = "audio")]
+    fn call_native_volume(&mut self, id: u32, args: &[Value]) -> Result<Value, VmError> {
+        let old = self.audio.as_ref().map(|a| a.settings().clone());
+        let volume = args
+            .get(if id == 76 { 1 } else { 0 })
+            .and_then(Value::to_f64)
+            .unwrap_or(1.0) as f32;
+        if let Some(audio) = &mut self.audio {
+            match id {
+                16 => audio.set_master_volume(volume),
+                17 => audio.set_sfx_volume(volume),
+                18 => audio.set_music_volume(volume),
+                76 => audio.set_bus_volume(args[0].as_str().unwrap_or_default(), volume),
+                _ => {}
+            }
+        }
+        if let Err(error) = self.persist_audio_settings() {
+            if let (Some(audio), Some(old)) = (&mut self.audio, old) {
+                audio.set_settings(old);
+            }
+            return Err(error);
+        }
+        Ok(Value::I64(0))
+    }
+
+    #[cfg(feature = "audio")]
     fn persist_audio_settings(&mut self) -> Result<(), VmError> {
-        if self.save_dir.is_none() {
+        if self.storage.is_none() {
             return Ok(());
         }
         let mut candidate = self.preferences.clone();
@@ -788,6 +830,9 @@ impl SliceHost {
                 }
             }
         }
+        if matches!(func_id, 12..=25 | 76 | 77) && self.platform_audio.is_some() {
+            return self.call_platform_audio(func_id, args);
+        }
         match func_id {
             // Core builtins (0-16)
             0 => {
@@ -869,40 +914,15 @@ impl SliceHost {
                 }
                 Ok(Value::I64(0))
             }
-            16 => {
+            16..=18 => {
                 #[cfg(feature = "audio")]
                 {
-                    let volume = args.first().and_then(|v| v.to_f64()).unwrap_or(1.0) as f32;
-                    if let Some(audio) = &mut self.audio {
-                        audio.set_master_volume(volume);
-                    }
-                    self.persist_audio_settings()?;
+                    self.call_native_volume(func_id, args)
                 }
-                Ok(Value::I64(0))
-            }
-            17 => {
-                // set_sfx_volume(volume) -> void
-                #[cfg(feature = "audio")]
+                #[cfg(not(feature = "audio"))]
                 {
-                    let volume = args.first().and_then(|v| v.to_f64()).unwrap_or(1.0) as f32;
-                    if let Some(audio) = &mut self.audio {
-                        audio.set_sfx_volume(volume);
-                    }
-                    self.persist_audio_settings()?;
+                    Ok(Value::I64(0))
                 }
-                Ok(Value::I64(0))
-            }
-            18 => {
-                // set_music_volume(volume) -> void
-                #[cfg(feature = "audio")]
-                {
-                    let volume = args.first().and_then(|v| v.to_f64()).unwrap_or(1.0) as f32;
-                    if let Some(audio) = &mut self.audio {
-                        audio.set_music_volume(volume);
-                    }
-                    self.persist_audio_settings()?;
-                }
-                Ok(Value::I64(0))
             }
             19 => {
                 // pause_sound(name) -> void
@@ -1385,23 +1405,7 @@ impl SliceHost {
                 }
             }
             // Save/load (53-54)
-            53 => {
-                // save_game(slot_id) -> bool
-                let slot = args.first().and_then(|v| v.as_i64()).unwrap_or(0) as u32;
-                let Some(dir) = &self.save_dir else {
-                    return Ok(Value::Bool(false));
-                };
-                match save_state(dir, slot, &self.state) {
-                    Ok(()) => Ok(Value::Bool(true)),
-                    Err(_) => Ok(Value::Bool(false)),
-                }
-            }
-            54 => {
-                // load_game(slot_id) -> bool
-                let slot = args.first().and_then(|v| v.as_i64()).unwrap_or(0) as u32;
-                self.commands.push(SliceCommand::LoadGame { slot });
-                Ok(Value::Bool(true))
-            }
+            53 | 54 | 89..=93 => self.call_save(func_id, args),
             // Animation clip creation (55)
             55 => {
                 // create_animation_clip(source_id, clip_name, texture_path) -> void
@@ -1558,19 +1562,12 @@ impl SliceHost {
             76 => {
                 #[cfg(feature = "audio")]
                 {
-                    let name = args[0]
-                        .as_str()
-                        .ok_or_else(|| VmError::HostCallError("Expected a bus name".into()))?;
-                    let volume = args[1]
-                        .to_f64()
-                        .ok_or_else(|| VmError::HostCallError("Expected a volume".into()))?
-                        as f32;
-                    if let Some(audio) = &mut self.audio {
-                        audio.set_bus_volume(name, volume);
-                    }
-                    self.persist_audio_settings()?;
+                    self.call_native_volume(func_id, args)
                 }
-                Ok(Value::I64(0))
+                #[cfg(not(feature = "audio"))]
+                {
+                    Ok(Value::I64(0))
+                }
             }
             77 => {
                 #[cfg(feature = "audio")]
@@ -1627,6 +1624,8 @@ fn describe(value: &Value) -> String {
 /// A running slice: the compiled script plus its state.
 pub struct SliceSession {
     source: Option<crate::script_source::ExpandedSource>,
+    save_identity: Option<(String, String, Option<String>)>,
+    save_project: Option<std::sync::Arc<kiln_core::Project>>,
     external_collisions: Vec<(String, String, bool)>,
     attached: Vec<AttachedScript>,
     signals: Vec<(String, Value)>,
@@ -1669,6 +1668,7 @@ impl AttachedScript {
         dt: f64,
         collisions: &[(String, String, bool)],
     ) -> Result<(), VmError> {
+        self.session.vm.host_mut().swap_game_services(_parent);
         self.session.vm.host_mut().phase = phase.into();
         self.session.vm.host_mut().frame_count = self.frame.saturating_sub(1);
         #[cfg(feature = "physics")]
@@ -1719,6 +1719,7 @@ impl AttachedScript {
             &mut _parent.physics,
             &mut self.session.vm.host_mut().physics,
         );
+        self.session.vm.host_mut().swap_game_services(_parent);
         result.map_err(|error| {
             VmError::HostCallError(format!(
                 "{} (entity {}, {phase}): {error}",
@@ -1874,6 +1875,12 @@ impl SliceSession {
             }
         }
         session.vm.host_mut().ui = kiln_ui::authored::UiRuntime::new(&project.ui, scene_id)?;
+        session.save_identity = Some((
+            project.id.clone(),
+            scene_id.into(),
+            project.scenes.get(scene_id).and_then(|s| s.script.clone()),
+        ));
+        session.save_project = Some(std::sync::Arc::new(project.clone()));
         Ok(session)
     }
 
@@ -1913,6 +1920,8 @@ impl SliceSession {
         let debugger = Debugger::new(program.clone(), host);
         Ok(Self {
             source: None,
+            save_identity: None,
+            save_project: None,
             external_collisions: Vec::new(),
             attached: Vec::new(),
             signals: Vec::new(),
@@ -2368,12 +2377,28 @@ impl SliceSession {
                 name,
                 x,
                 y,
-                texture_path: _,
+                texture_path,
             } => {
                 use crate::{Role, SourceId, Sprite};
                 use kiln_core::Transform;
-                let source_id = crate::world::next_entity_id(&[]);
-                world.world_mut().spawn((
+                let existing: std::collections::HashSet<_> = world
+                    .world_ref()
+                    .query::<&SourceId>()
+                    .iter()
+                    .map(|id| id.0.clone())
+                    .collect();
+                let source_id = loop {
+                    let host = self.vm.host_mut();
+                    host.spawn_counter = host.spawn_counter.saturating_add(1);
+                    let candidate = format!("entity_{}", host.spawn_counter);
+                    if !existing.contains(&candidate) {
+                        break candidate;
+                    }
+                    if host.spawn_counter == u64::MAX {
+                        return;
+                    }
+                };
+                let spawned = world.world_mut().spawn((
                     Transform::new(x as f32, y as f32),
                     Sprite::new(1.0, 1.0, 1.0, 1.0)
                         .with_size(32.0, 32.0)
@@ -2381,6 +2406,11 @@ impl SliceSession {
                     SourceId::new(source_id.clone()),
                     Role::new(name),
                 ));
+                if let Some(texture_path) = texture_path.filter(|path| !path.is_empty()) {
+                    let _ = world
+                        .world_mut()
+                        .insert_one(spawned, crate::SpriteResource(texture_path));
+                }
             }
             SliceCommand::DespawnEntity(source_id) => {
                 use crate::SourceId;
@@ -2669,10 +2699,8 @@ impl SliceSession {
             SliceCommand::UiButton { .. }
             | SliceCommand::UiLabel { .. }
             | SliceCommand::UiPanel { .. } => {}
-            SliceCommand::LoadGame { slot: _ } => {
-                // Load state from disk and apply it to the session + world.
-                // TODO: Add save_dir field to SliceSession or use a default path
-                log::warn!("LoadGame command not yet implemented - save_dir not set");
+            SliceCommand::LoadGame { slot } => {
+                self.vm.host_mut().request_save(slot, true);
             }
             SliceCommand::CreateAnimationClip {
                 source_id,

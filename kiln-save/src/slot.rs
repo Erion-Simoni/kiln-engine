@@ -3,9 +3,39 @@
 use crate::version::{MigrationError, SaveVersion, VersionMigration};
 use dirs;
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::path::PathBuf;
+use std::{fs, io::Write, path::Path};
 use thiserror::Error;
+
+/// Bound slot files before allocating/parsing untrusted data.
+pub const MAX_SLOT_BYTES: u64 = 16 * 1024 * 1024;
+
+/// Flush a temporary file before atomically replacing its destination.
+/// Failures retain the previous file and remove the temporary file.
+pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), std::io::Error> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| std::io::Error::other("Missing parent directory"))?;
+    fs::create_dir_all(parent)?;
+    let temp = parent.join(format!(
+        ".kiln-save-{}-{}.tmp",
+        std::process::id(),
+        kiln_core::next_id()
+    ));
+    let result = (|| {
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        fs::rename(&temp, path)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    result
+}
 
 /// Save slot metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,6 +95,9 @@ impl SaveSlotManager {
 
     /// Save data to a slot.
     pub fn save(&self, slot_id: u32, data: &str, description: &str) -> Result<(), SaveSlotError> {
+        if self.slot_path(slot_id).exists() {
+            self.load(slot_id)?;
+        }
         let metadata = SaveSlotMetadata {
             slot_id,
             version: SaveVersion::current(),
@@ -79,7 +112,10 @@ impl SaveSlotManager {
 
         let slot_path = self.slot_path(slot_id);
         let json = serde_json::to_string_pretty(&slot).map_err(SaveSlotError::Serialization)?;
-        fs::write(&slot_path, json).map_err(SaveSlotError::Io)?;
+        if json.len() as u64 > MAX_SLOT_BYTES {
+            return Err(SaveSlotError::Invalid("Slot exceeds 16 MiB".into()));
+        }
+        atomic_write(&slot_path, json.as_bytes())?;
 
         Ok(())
     }
@@ -87,14 +123,29 @@ impl SaveSlotManager {
     /// Load data from a slot with automatic migration.
     pub fn load(&self, slot_id: u32) -> Result<SaveSlot, SaveSlotError> {
         let slot_path = self.slot_path(slot_id);
+        if fs::metadata(&slot_path)?.len() > MAX_SLOT_BYTES {
+            return Err(SaveSlotError::Invalid("Slot exceeds 16 MiB".into()));
+        }
         let json = fs::read_to_string(&slot_path).map_err(SaveSlotError::Io)?;
         let mut slot: SaveSlot =
             serde_json::from_str(&json).map_err(SaveSlotError::Serialization)?;
 
         // Apply migrations if needed
         let current_version = SaveVersion::current();
+        if slot.metadata.slot_id != slot_id || slot.metadata.version > current_version {
+            return Err(SaveSlotError::Invalid(
+                "Slot identity or version is incompatible".into(),
+            ));
+        }
         while slot.metadata.version < current_version {
             let migrated = self.apply_migration(&slot)?;
+            if migrated.metadata.version <= slot.metadata.version
+                || migrated.metadata.version > current_version
+            {
+                return Err(SaveSlotError::Invalid(
+                    "Migration must advance towards the current version".into(),
+                ));
+            }
             slot = migrated;
         }
 
@@ -149,6 +200,8 @@ impl SaveSlotManager {
 /// Save slot error types.
 #[derive(Error, Debug)]
 pub enum SaveSlotError {
+    #[error("Invalid save slot: {0}")]
+    Invalid(String),
     #[error("No data directory found")]
     NoDataDir,
     #[error("IO error: {0}")]
@@ -182,6 +235,44 @@ mod tests {
         fn migrate(&self, data: &str) -> Result<String, MigrationError> {
             Ok(format!("MIGRATED: {}", data))
         }
+    }
+
+    #[test]
+    fn corrupt_future_and_oversized_replacements_preserve_the_previous_slot() {
+        let dir = std::env::temp_dir().join(format!(
+            "kiln-atomic-{}-{}",
+            std::process::id(),
+            kiln_core::next_id()
+        ));
+        let manager = SaveSlotManager::with_directory(dir.clone());
+        manager.save(0, "progress", "before").unwrap();
+        let path = dir.join("slot_0.json");
+        let before = fs::read(&path).unwrap();
+        assert!(manager
+            .save(0, &"x".repeat(MAX_SLOT_BYTES as usize), "too big")
+            .is_err());
+        assert_eq!(fs::read(&path).unwrap(), before);
+        let mut future = manager.load(0).unwrap();
+        future.metadata.version = SaveVersion::new(999, 0, 0);
+        let future = serde_json::to_vec(&future).unwrap();
+        fs::write(&path, &future).unwrap();
+        assert!(manager.load(0).is_err());
+        assert!(manager.save(0, "new", "after").is_err());
+        assert_eq!(fs::read(&path).unwrap(), future);
+        fs::write(&path, "broken").unwrap();
+        assert!(manager.save(0, "new", "after").is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "broken");
+        // Rename failure cleans its temporary file without touching the destination.
+        let blocked = dir.join("directory");
+        fs::create_dir(&blocked).unwrap();
+        assert!(atomic_write(&blocked, b"data").is_err());
+        assert!(blocked.is_dir());
+        assert!(!fs::read_dir(&dir).unwrap().any(|e| e
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .ends_with(".tmp")));
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

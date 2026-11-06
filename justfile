@@ -68,3 +68,4 @@ web-smoke:
     wasm-bindgen target/wasm32-unknown-unknown/debug/kiln_web.wasm --target web --out-dir target/web-smoke
     npm ci --prefix tests/web --ignore-scripts
     node tests/web/smoke.cjs target/web-smoke
+    node tests/web/task7.cjs target/web-smoke

@@ -393,7 +393,14 @@ impl UiLayoutEditorState {
             .map(|s| kiln_ui::authored::layout::resolve(s, viewport.logical_size))
             .unwrap_or_default();
         if response.clicked() || response.drag_started() {
-            if let Some(point) = pointer.and_then(|p| viewport.logical_point([p.x, p.y])) {
+            // Egui starts dragging after a movement threshold; hit-test where
+            // the press began so a small label is not replaced by its backdrop.
+            let origin = if response.drag_started() {
+                ui.input(|i| i.pointer.press_origin())
+            } else {
+                pointer
+            };
+            if let Some(point) = origin.and_then(|p| viewport.logical_point([p.x, p.y])) {
                 if let Some(screen) = doc.screens.get(&self.selected_screen) {
                     if let Some(row) = rows
                         .iter()
@@ -423,7 +430,12 @@ impl UiLayoutEditorState {
                 painter.rect_stroke(r, 0.0, egui::Stroke::new(1.0_f32, Color32::YELLOW));
                 if response.dragged() {
                     if let Some(base) = self.drag_base {
-                        let delta = response.drag_delta() / viewport.scale;
+                        let delta = ui.input(|i| {
+                            match (i.pointer.interact_pos(), i.pointer.press_origin()) {
+                                (Some(current), Some(origin)) => current - origin,
+                                _ => Vec2::ZERO,
+                            }
+                        }) / viewport.scale;
                         let w = &mut screen.widgets[row.index];
                         w.layout.offset = [base[0] + delta.x, base[1] + delta.y].map(|v| {
                             if self.snap > 0.0 {

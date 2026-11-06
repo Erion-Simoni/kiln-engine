@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 #[cfg(target_arch = "wasm32")]
+#[cfg(not(target_arch = "wasm32"))]
 use std::ops::Deref;
 
 #[derive(Error, Debug)]
@@ -365,7 +366,6 @@ impl Archive {
 /// This provides streaming access to archive files without loading the entire archive.
 #[cfg(target_arch = "wasm32")]
 pub struct WebArchiveLoader {
-    url: String,
     entries: HashMap<String, ArchiveEntry>,
 }
 
@@ -374,8 +374,7 @@ impl WebArchiveLoader {
     /// Load archive metadata from a URL via HTTP.
     /// Not supported on wasm32 - use kiln-web to fetch and pass bytes directly.
     pub async fn load_from_url(_url: String) -> Result<Self, ArchiveError> {
-        Err(ArchiveError::Io(io::Error::new(
-            io::ErrorKind::Other,
+        Err(ArchiveError::Io(io::Error::other(
             "HTTP loading not supported on wasm32",
         )))
     }
@@ -383,8 +382,7 @@ impl WebArchiveLoader {
     /// Extract a file's bytes via HTTP range request.
     /// Not supported on wasm32 - use kiln-web to fetch and pass bytes directly.
     pub async fn extract(&self, _path: &str) -> Result<Vec<u8>, ArchiveError> {
-        Err(ArchiveError::Io(io::Error::new(
-            io::ErrorKind::Other,
+        Err(ArchiveError::Io(io::Error::other(
             "HTTP extraction not supported on wasm32",
         )))
     }

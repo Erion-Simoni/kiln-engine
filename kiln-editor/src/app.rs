@@ -1041,15 +1041,21 @@ impl EditorApp {
 
     /// Stop playing and return to editing the scene.
     fn stop_play(&mut self) {
+        let _ = self.stop_play_with_progress();
+    }
+
+    fn stop_play_with_progress(&mut self) -> Option<kiln_runtime::GameProgress> {
         if let Some(play) = self.play.as_mut() {
             if let Err(error) = play.slice.stop(&mut self.world) {
                 self.console_log
                     .push(format!("[ERROR] Stop callback: {error}"));
             }
         }
+        let progress = self.play.as_ref().map(|play| play.slice.game_progress());
         self.play = None;
         self.is_playing = false;
         self.reset_scene_view();
+        progress
     }
 
     fn apply_play_transforms(&mut self) -> Result<(), String> {
@@ -1296,6 +1302,9 @@ impl EditorApp {
             world,
             play,
             project_requests,
+            current_project,
+            project_root,
+            gpu,
             ..
         } = self;
         let Some(play) = play.as_mut() else {
@@ -1339,6 +1348,40 @@ impl EditorApp {
                 play.error = Some(format!("Scene '{}': {error}", play.scene_id));
                 play.clock.set_paused(true);
                 break;
+            }
+            if let (Some(project), Some(root), Some(gpu)) = (
+                current_project.as_ref(),
+                project_root.as_ref(),
+                gpu.as_ref(),
+            ) {
+                match play.slice.service_saves(
+                    world,
+                    project,
+                    |path| std::fs::read_to_string(root.join(path)).map_err(|e| e.to_string()),
+                    |path| {
+                        gpu.scene_textures
+                            .get(path)
+                            .map(|t| (t.id, [t.width, t.height]))
+                    },
+                ) {
+                    Ok(true) => {
+                        play.scene_id = play.slice.scene_id().unwrap_or(&play.scene_id).to_owned();
+                        play.camera_controller = Default::default();
+                        let settings = project
+                            .cameras
+                            .get(&play.scene_id)
+                            .cloned()
+                            .unwrap_or_default();
+                        if let Ok(camera) =
+                            play.camera_controller.update(&settings, world, size, 0.0)
+                        {
+                            play.game_camera = camera;
+                        }
+                        return;
+                    }
+                    Ok(false) => {}
+                    Err(error) => log::warn!("Gameplay storage: {error}"),
+                }
             }
             play.error = None;
             let _ = play.slice.take_ui_commands();
@@ -1784,45 +1827,60 @@ impl EditorApp {
 
     /// Save the running game to its save slot.
     fn save_game(&mut self) {
-        let Some(play) = self.play.as_ref() else {
-            return;
-        };
-        let Some(dir) = self.save_dir() else {
-            return;
-        };
-        match kiln_runtime::save_state(&dir, 0, play.slice.state()) {
-            Ok(()) => self.console_log.push("[INFO] Game saved".to_string()),
-            Err(e) => {
-                let message = format!("[ERROR] Could not save the game: {e}");
-                log::error!("{message}");
-                self.console_log.push(message);
-            }
-        }
-    }
-
-    /// Load the running game from its save slot.
-    fn load_game(&mut self) {
-        let Some(dir) = self.save_dir() else {
-            return;
-        };
-        let state = match kiln_runtime::load_state(&dir, 0) {
-            Ok(state) => state,
-            // No save yet is not an error; the game just starts fresh.
-            Err(_) => return,
-        };
         let Some(play) = self.play.as_mut() else {
             return;
         };
-        play.slice.set_state(state);
-        play.slice.sync_world(&mut self.world);
-        self.console_log.push("[INFO] Game loaded".to_string());
+        match play.slice.save_game(&self.world, 0) {
+            Ok(()) => self.console_log.push("[INFO] Game saved".into()),
+            Err(error) => self
+                .console_log
+                .push(format!("[ERROR] Could not save game: {error}")),
+        }
     }
 
-    /// The directory the game state is saved in.
-    fn save_dir(&self) -> Option<PathBuf> {
-        self.project_root
-            .as_ref()
-            .map(|root| root.join(".kiln-save"))
+    /// Restore a validated candidate world without modifying authored project data.
+    fn load_game(&mut self) {
+        let (Some(play), Some(project), Some(root), Some(gpu)) = (
+            self.play.as_mut(),
+            self.current_project.as_ref(),
+            self.project_root.as_ref(),
+            self.gpu.as_ref(),
+        ) else {
+            return;
+        };
+        match play.slice.load_game(
+            &mut self.world,
+            0,
+            project,
+            |path| std::fs::read_to_string(root.join(path)).map_err(|e| e.to_string()),
+            |path| {
+                gpu.scene_textures
+                    .get(path)
+                    .map(|t| (t.id, [t.width, t.height]))
+            },
+        ) {
+            Ok(()) => {
+                play.scene_id = play.slice.scene_id().unwrap_or(&play.scene_id).to_owned();
+                play.camera_controller = Default::default();
+                let settings = project
+                    .cameras
+                    .get(&play.scene_id)
+                    .cloned()
+                    .unwrap_or_default();
+                if let Ok(camera) = play.camera_controller.update(
+                    &settings,
+                    &self.world,
+                    [project.window.width as f32, project.window.height as f32],
+                    0.0,
+                ) {
+                    play.game_camera = camera;
+                }
+                self.console_log.push("[INFO] Game loaded".into());
+            }
+            Err(error) => self
+                .console_log
+                .push(format!("[ERROR] Could not load game: {error}")),
+        }
     }
 
     /// Load a scene into the current world.
@@ -2154,8 +2212,13 @@ impl EditorApp {
                         .as_ref()
                         .is_some_and(|project| project.scenes.contains_key(&id))
                     {
-                        self.stop_play();
-                        self.start_play_scene(&id)
+                        let progress = self.stop_play_with_progress();
+                        self.start_play_scene(&id).and_then(|_| {
+                            if let (Some(progress), Some(play)) = (progress, self.play.as_mut()) {
+                                play.slice.set_game_progress(progress)?;
+                            }
+                            Ok(())
+                        })
                     } else {
                         Err(format!("Unknown scene transition '{id}'"))
                     }

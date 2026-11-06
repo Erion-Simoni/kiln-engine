@@ -4,10 +4,12 @@ pub use draw::{clip_quad, MAX_UI_QUADS};
 pub mod fonts;
 pub mod layout;
 mod navigation;
+mod save;
 pub use fonts::UiFonts;
 use kiln_core::ui::{UiAction, UiDocument, UiKind};
 pub use layout::UiViewport;
 use layout::{resolve, ResolvedWidget};
+pub use save::UiSnapshot;
 
 /// Digital state, not repeat events. The runtime detects edges itself.
 #[derive(Debug, Clone, Default)]
@@ -211,7 +213,13 @@ impl UiRuntime {
         let mut events = Vec::new();
         let edges = UiInput::from_keys(input.pressed_keys.iter().map(String::as_str));
         if (input.cancel && !self.previous.cancel) || edges.cancel {
-            if self.active.is_empty() {
+            if self.active.is_empty()
+                || self
+                    .document
+                    .screens
+                    .get(&self.active)
+                    .is_some_and(|screen| !screen.modal && !screen.pause_game)
+            {
                 let pause = self.document.pause_screen.clone();
                 if !pause.is_empty() {
                     self.show(&pause)?;

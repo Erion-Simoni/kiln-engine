@@ -57,8 +57,8 @@ struct Args {
     scene: Option<String>,
 
     /// Game name (used for save/settings folders)
-    #[arg(short, long, default_value = "KilnGame")]
-    game_name: String,
+    #[arg(short, long)]
+    game_name: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -67,10 +67,12 @@ fn main() -> Result<()> {
     let args = Args::parse();
     info!("Loading game from: {}", args.archive.display());
 
-    // Initialize platform-specific paths
-    let save_path = save_dir(&args.game_name);
-    let settings_path = settings_dir(&args.game_name);
-    let cache_path = cache_dir(&args.game_name);
+    // Scope defaults to the actual project; explicit names select an alternate profile.
+    let game = loader::load(&args.archive, args.scene.as_deref())?;
+    let profile = args.game_name.as_deref().unwrap_or(&game.project.id);
+    let save_path = save_dir(profile);
+    let settings_path = settings_dir(profile);
+    let cache_path = cache_dir(profile);
 
     info!("Save directory: {}", save_path.display());
     info!("Settings directory: {}", settings_path.display());
@@ -82,7 +84,6 @@ fn main() -> Result<()> {
     std::fs::create_dir_all(&cache_path)?;
 
     // Load the project and its assets
-    let game = loader::load(&args.archive, args.scene.as_deref())?;
     info!(
         "Loaded '{}' from {}",
         game.project.name,
@@ -342,6 +343,7 @@ impl PlayerApp {
                 log::error!("Stop callback: {error}");
             }
         }
+        let game_progress = self.slice.as_ref().map(|s| s.game_progress());
         self.slice = None;
         self.world = GameWorld::new();
         self.game_loop = GameLoop::new();
@@ -403,11 +405,11 @@ impl PlayerApp {
             Ok(camera) => self.camera = camera,
             Err(error) => log::error!("Camera: {error}"),
         }
-        self.load_slice();
+        self.load_slice(game_progress);
     }
 
     /// Compile the scene's gameplay script, if it has one.
-    fn load_slice(&mut self) {
+    fn load_slice(&mut self, game_progress: Option<kiln_runtime::GameProgress>) {
         if let Some(gpu) = &mut self.gpu {
             gpu.hud_sprite_renderer.clear_asset_textures();
             let (fonts, errors) = kiln_ui::authored::UiFonts::load(
@@ -451,6 +453,11 @@ impl PlayerApp {
                     }
                 }
                 session.host_mut().set_save_dir(&self.save_dir);
+                if let Some(progress) = game_progress {
+                    if let Err(error) = session.set_game_progress(progress) {
+                        log::warn!("Game progress: {error}");
+                    }
+                }
                 #[cfg(feature = "audio")]
                 if !self.project.audio_assets.is_empty() {
                     if let Err(error) = session.host_mut().open_audio_output() {
@@ -488,27 +495,55 @@ impl PlayerApp {
     }
 
     fn save_game(&mut self) {
-        let Some(slice) = self.slice.as_ref() else {
+        let Some(slice) = self.slice.as_mut() else {
             return;
         };
-        match kiln_runtime::save_state(&self.save_dir, self.save_slot, slice.state()) {
+        match slice.save_game(&self.world, self.save_slot) {
             Ok(()) => log::info!("game saved to slot {}", self.save_slot),
-            Err(e) => log::error!("could not save the game: {e}"),
+            Err(e) => log::error!("could not save game: {e}"),
         }
     }
 
-    /// Load the game state from the save slot.
     fn load_game(&mut self) {
         let Some(slice) = self.slice.as_mut() else {
             return;
         };
-        match kiln_runtime::load_state(&self.save_dir, self.save_slot) {
-            Ok(state) => {
-                slice.set_state(state);
-                slice.sync_world(&mut self.world);
+        let result = slice.load_game(
+            &mut self.world,
+            self.save_slot,
+            &self.project,
+            |path| {
+                self.assets
+                    .get(path)
+                    .ok_or_else(|| format!("Missing script {path}"))
+                    .and_then(|bytes| String::from_utf8(bytes.clone()).map_err(|e| e.to_string()))
+            },
+            |path| self.textures.get(path).map(|t| (t.id, [t.width, t.height])),
+        );
+        match result {
+            Ok(()) => {
+                self.scene_id = slice.scene_id().unwrap_or(&self.scene_id).to_owned();
+                self.camera_controller = Default::default();
+                let settings = self
+                    .project
+                    .cameras
+                    .get(&self.scene_id)
+                    .cloned()
+                    .unwrap_or_default();
+                if let Ok(camera) = self.camera_controller.update(
+                    &settings,
+                    &self.world,
+                    [
+                        self.project.window.width as f32,
+                        self.project.window.height as f32,
+                    ],
+                    0.0,
+                ) {
+                    self.camera = camera;
+                }
                 log::info!("game loaded from slot {}", self.save_slot);
             }
-            Err(e) => log::warn!("could not load the game: {e}"),
+            Err(e) => log::warn!("could not load game: {e}"),
         }
     }
 
@@ -725,9 +760,13 @@ impl PlayerApp {
             .get(&self.scene_id)
             .cloned()
             .unwrap_or_default();
+        let project = &self.project;
+        let assets = &self.assets;
+        let textures = &self.textures;
+        let mut restored_scene = None;
         let mut transition = None;
         self.game_loop.tick(|dt| {
-            if transition.is_some() {
+            if transition.is_some() || restored_scene.is_some() {
                 return;
             }
             if let Some(slice) = slice.as_mut() {
@@ -755,6 +794,26 @@ impl PlayerApp {
                 slice.host_mut().set_save_dir(&save_dir);
                 if let Err(e) = slice.step(world, axis, dt.as_secs_f64()) {
                     log::error!("scene script failed: {e}");
+                }
+                match slice.service_saves(
+                    world,
+                    project,
+                    |path| {
+                        assets
+                            .get(path)
+                            .ok_or_else(|| format!("Missing script {path}"))
+                            .and_then(|bytes| {
+                                String::from_utf8(bytes.clone()).map_err(|e| e.to_string())
+                            })
+                    },
+                    |path| textures.get(path).map(|t| (t.id, [t.width, t.height])),
+                ) {
+                    Ok(true) => {
+                        restored_scene = slice.scene_id().map(str::to_owned);
+                        return;
+                    }
+                    Ok(false) => {}
+                    Err(error) => log::warn!("Gameplay storage: {error}"),
                 }
                 transition = slice.take_scene_request();
                 let _ = kiln_runtime::scene::update_global_transforms(world);
@@ -816,6 +875,27 @@ impl PlayerApp {
             // Step physics (if the physics feature is enabled)
             // Physics stepping happens inside slice.step() via sync_physics_with_ecs().
         });
+        if let Some(id) = restored_scene {
+            self.scene_id = id;
+            self.camera_controller = Default::default();
+            let settings = self
+                .project
+                .cameras
+                .get(&self.scene_id)
+                .cloned()
+                .unwrap_or_default();
+            if let Ok(camera) = self.camera_controller.update(
+                &settings,
+                &self.world,
+                [
+                    self.project.window.width as f32,
+                    self.project.window.height as f32,
+                ],
+                0.0,
+            ) {
+                self.camera = camera;
+            }
+        }
         if let Some(id) = transition {
             if self.project.scenes.contains_key(&id) {
                 if let Some(slice) = self.slice.as_mut() {
