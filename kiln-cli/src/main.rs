@@ -144,7 +144,12 @@ enum Commands {
         #[arg(short, long, default_value = "patch.qbsdiff")]
         output: PathBuf,
     },
-    /// Export a saved project with a matching prebuilt native runtime.
+    /// Record a generated JS/WASM runtime pair for offline browser export.
+    WebRuntime {
+        #[arg(long)]
+        input: PathBuf,
+    },
+    /// Export a saved project with a matching prebuilt native or browser runtime.
     Export {
         #[arg(short, long, default_value = std::env::consts::OS)]
         platform: String,
@@ -157,6 +162,9 @@ enum Commands {
         /// Prebuilt player (defaults to kiln-player beside this exporter).
         #[arg(long)]
         player: Option<PathBuf>,
+        /// Prepared browser runtime directory (defaults beside the exporter).
+        #[arg(long)]
+        web_runtime: Option<PathBuf>,
         /// Correlate an editor request with its output receipt.
         #[arg(long)]
         job_id: Option<String>,
@@ -594,11 +602,16 @@ fn main() -> Result<()> {
                 .map_err(|e| anyhow::anyhow!("Failed to write metadata '{:?}': {e}", metadata))?;
             println!("Font metadata written to: {}", metadata.display());
         }
+        Commands::WebRuntime { input } => {
+            kiln_assets::web_bundle::prepare(&input).map_err(anyhow::Error::msg)?;
+            println!("Browser runtime prepared: {}", input.display());
+        }
         Commands::Export {
             platform,
             project,
             output,
             player,
+            web_runtime,
             job_id,
         } => {
             export::run(export::Options {
@@ -606,6 +619,7 @@ fn main() -> Result<()> {
                 project,
                 output,
                 player,
+                web_runtime,
                 job_id,
             })?;
         }

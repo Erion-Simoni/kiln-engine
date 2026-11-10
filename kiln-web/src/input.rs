@@ -91,6 +91,11 @@ pub(super) fn install(app: &SharedApp, window: &web_sys::Window) {
         {
             event.prevent_default();
         }
+        // A key held before this game installed input (or across blur) must
+        // be released before its repeats can act on the game underneath.
+        if event.repeat() && !app.input.keys.contains(&key) {
+            return;
+        }
         app.input.keys.insert(key.clone());
         if !event.repeat() {
             if matches!(key.as_str(), "F5" | "F9") {

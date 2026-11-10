@@ -8,9 +8,10 @@ Closing the panel does not stop supervision. Cancel requests cooperative shutdow
 after three seconds the editor kills/reaps the exporter and cleans private staging.
 Exiting the editor also reaps its export process.
 
-This checkpoint supports the current desktop host and matching CPU architecture.
-It was exercised on Linux x86_64. Browser export, cross-target toolchains,
-installers/signing and portable editor packages remain Task 8 work; unsupported
+The native target supports the current desktop host and matching CPU architecture.
+It was exercised on Linux x86_64. Browser export is now available through the
+Browser target; see [BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md). Cross-target
+toolchains, installers/signing and portable editor packages remain Task 8 work; unsupported
 platforms/options fail rather than producing a placeholder success.
 
 ## Build tools once, then export without Rust
@@ -100,5 +101,5 @@ This is relocated/no-toolchain execution on the cloud runner, not a clean-machin
 OS/dependency test. Xvfb/software graphics and ALSA null output do not certify an
 Intel HD 520, real controller/speakers, Windows/macOS or a signed distribution.
 Debug runtime size measurements are not release-budget results. Full clean-machine
-native acceptance, browser export and portable editor/other-platform packaging
+native acceptance and portable editor/other-platform packaging
 must still pass before Task 8 is complete. Task 9 has not started.

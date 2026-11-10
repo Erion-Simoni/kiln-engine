@@ -151,19 +151,20 @@ saves and browser quota failures preserve the old slot/live world. Software
 acceptance is complete; physical-controller, audible-device and remote CI checks
 remain explicitly separate. Real editor export/distribution is Task 8.
 
-### 8. Real build/export and distribution — IN PROGRESS (native export checkpoint)
+### 8. Real build/export and distribution — IN PROGRESS (native and browser exports)
 
-- [x] Replace simulated Build/Export with a real asynchronous host-native CLI process, bounded streamed stdout/stderr, actual exit status, job-specific receipt/archive validation and cancellation/cleanup. Real editor Save & Export and UI Cancel pass on Linux/Xvfb. Unsupported targets/options fail explicitly.
-- [ ] Finish resource/runtime bundling across supported targets. Native checkpoint preserves project-relative resources, packs/verifies a KAR and includes a matching prebuilt player; export/play run without Cargo. Browser runtime bundling remains pending.
-- [ ] Deliver clean-machine desktop acceptance, then browser export with loading/input/audio-unlock/save behavior. Relocated Linux export passes menus/settings/save/restart/Continue with no archive argument or Rust on PATH; a separate clean-machine dependency/OS test remains pending.
+- [x] Replace simulated Build/Export with a real asynchronous native/browser CLI process, bounded streamed stdout/stderr, actual exit status, job-specific receipt/resource validation off the UI thread and cancellation/cleanup. Real editor Save & Export and UI Cancel pass on Linux/Xvfb. Unsupported targets/options fail explicitly; Browser also rejects authored physics/joints and material overrides pending host integration.
+- [x] Bundle resources/runtimes for the current supported native/browser targets. Native packs/verifies a KAR and includes a matching player; Browser includes the normalized project tree, hash-verified prepared JS/WASM and actual loading/start/error shell. Export/play need no Cargo. Browser capabilities remain explicitly bounded; other target/toolchain support is pending.
+- [ ] Deliver clean-machine desktop acceptance, then browser export with loading/input/audio-unlock/save behavior. Relocated Linux export passes menus/settings/save/restart/Continue with no archive argument or Rust on PATH; a separate clean-machine dependency/OS test remains pending. The relocated editor-produced Browser artifact passes nested HTTP deployment, loading/error/retry, input, explicit audio unlock and reload/save/resume.
 - [ ] Add portable editor distribution and document supported OS/GPU requirements; validate other platforms on appropriate machines.
 
 Acceptance: author and export from the editor, move the artifact outside the repository to a machine without Rust, and play the full game. A failing exporter produces failure, never a success message.
 
 Native checkpoint: [NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md), ADR-0059 and
 [evidence/task8-native/README.md](evidence/task8-native/README.md). Task 8 remains
-open for clean-machine/other-platform checks, browser export and portable editor
-distribution. Task 9 is not started.
+open for clean-machine/other-platform checks, browser physics/material parity and
+portable editor distribution. See [BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md) for
+the tested browser contract. Task 9 is not started.
 
 ### 9. Reference games and release gate — PENDING
 
@@ -496,3 +497,30 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
   acceptance. Debug runtime size is recorded separately from release budgets.
 - Browser exporter, portable editor packages, installers/signing, other-platform
   and actual clean-machine dependency acceptance remain Task 8 follow-up.
+
+
+### 2026-11-10 — Task 8 prepared browser export and relocated page acceptance
+
+- Added Browser to the editor's supervised Save & Export workflow. Prepared
+  JS/WASM bundles carry embedded engine/font metadata and SHA-256 identities;
+  missing/mixed/changed bundles fail before publishing output. No Cargo/Node/
+  wasm-bindgen runs during export. Runtime preparation is a separate build step.
+- Published relative project resources and a real loading/start/error shell. Asset
+  loading never advances gameplay; trusted Play resumes audio before the first
+  tick. Held Enter repeats cannot activate the underlying menu. Asset/loader
+  failures show reload feedback. Authored physics/joints/material overrides fail
+  explicitly instead of silently changing game behavior on the browser host.
+- Actual native editor Browser export saved an unsaved X=88 edit, validated output,
+  preserved previous output on failure, moved the artifact outside the repo and
+  made the source project unavailable. Chromium serves only that folder at a
+  nested URL and passes loading, consent, controller/touch, audio, preferences,
+  reload/save/resume, corrupt/quota failures and failure/retry assertions.
+- `just check`, **652 tests (zero skipped)**, native builds/minimal checks, WASM
+  build and strict target Clippy passed. Native export/cancel/relocated gameplay
+  and direct browser runtime/menu/movement regressions also passed. CI now runs
+  the actual editor/browser export path. Selected evidence is in task8-browser/.
+- The interrupted native launch was retried through normal approval after the
+  usage limit cleared. Managed Chrome blocks file:// by administrator policy;
+  that guidance branch is unverified, and file launching is not supported.
+  Clean-machine desktop/release/other-platform/device and portable editor gates
+  remain open. Task 9/full 3D were not started.

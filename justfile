@@ -69,3 +69,9 @@ web-smoke:
     npm ci --prefix tests/web --ignore-scripts
     node tests/web/smoke.cjs target/web-smoke
     node tests/web/task7.cjs target/web-smoke
+
+# Prepare the reusable browser export runtime beside development editor binaries.
+web-runtime:
+    cargo build --target wasm32-unknown-unknown -p kiln-web
+    wasm-bindgen target/wasm32-unknown-unknown/debug/kiln_web.wasm --target web --out-dir target/debug/web-runtime
+    cargo run -p kiln-cli -- web-runtime --input target/debug/web-runtime

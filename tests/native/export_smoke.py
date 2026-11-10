@@ -52,12 +52,17 @@ def main():
     (config/'project_hub.json').write_text(json.dumps([
         {'path': str(manifest), 'name': 'Editor Design Showcase', 'last_opened': 0}]))
     server_log, editor_log = output/'xvfb.log', output/'editor.log'
+    editor_log.write_text('')
     server = subprocess.Popen([executable('Xvfb'), display, '-screen', '0',
                                '1440x900x24', '-nolisten', 'tcp', '-ac'], env=env,
                               stdout=server_log.open('w'), stderr=subprocess.STDOUT)
     editor = None
     try:
-        wait_for(socket.exists, server, server_log)
+        # A socket can exist before Xvfb is accepting X11 connections.
+        wait_for(lambda: subprocess.run([executable('xdotool'), 'getdisplaygeometry'],
+                                       env=env, stdout=subprocess.DEVNULL,
+                                       stderr=subprocess.DEVNULL).returncode == 0,
+                 server, server_log)
         binary = os.environ.get('KILN_EDITOR_PATH', str(REPO/'target/debug/kiln-editor'))
         xdo = executable('xdotool')
 
@@ -118,14 +123,14 @@ def main():
         command('mouseup', 1)
         destination = run/'native game'
         # This edits the actual output field; the old panel discarded these edits.
-        click(250, 253)
+        click(250, 257)
         key('ctrl+a')
         command('type', '--clearmodifiers', str(destination))
         key('Return')
         shot('ready_unsaved')
-        click(75, 322)
+        click(75, 326)
         wait_for(lambda: (destination/'export.json').exists(), editor, editor_log)
-        wait_for(lambda: 'Export result: Success' in editor_log.read_text(), editor, editor_log)
+        wait_for(lambda: 'Export result: Success' in editor_log.read_text(), editor, editor_log, attempts=300)
         shot('export_verified')
         assert authored_x() == 88, 'Save & Export missed the actual scene edit'
         receipt = json.loads((destination/'export.json').read_text())
@@ -134,7 +139,7 @@ def main():
         for file in receipt['files']:
             assert (destination/file['path']).stat().st_size == file['bytes']
         before = hashlib.sha256((destination/'assets.kar').read_bytes()).hexdigest()
-        click(75, 322)  # Existing output must fail, never overwrite a previous good export.
+        click(75, 326)  # Existing output must fail, never overwrite a previous good export.
         wait_for(lambda: 'Export result: Failed' in editor_log.read_text(), editor, editor_log)
         shot('existing_output_failed')
         assert hashlib.sha256((destination/'assets.kar').read_bytes()).hexdigest() == before
@@ -143,18 +148,18 @@ def main():
         slow_runtime = run/'slow-runtime'
         slow_runtime.write_text('#!/bin/sh\nexec /bin/sleep 20\n')
         slow_runtime.chmod(0o755)
-        click(250, 253)
+        click(250, 257)
         key('ctrl+a')
         command('type', '--clearmodifiers', str(cancel_destination))
         key('Return')
-        click(80, 279)
-        click(260, 330)
+        click(80, 283)
+        click(260, 334)
         key('ctrl+a')
         command('type', '--clearmodifiers', str(slow_runtime))
         key('Return')
-        click(75, 392)
+        click(75, 396)
         shot('active_export')
-        click(240, 392)
+        click(240, 396)
         wait_for(lambda: 'Export result: Cancelled' in editor_log.read_text(), editor, editor_log)
         shot('cancelled')
         assert not cancel_destination.exists()

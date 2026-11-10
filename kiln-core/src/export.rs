@@ -1,8 +1,9 @@
-//! Native export protocol shared by the editor, exporter and standalone player.
+//! Export protocol shared by the editor, exporter and standalone player.
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 pub const EXPORT_PROTOCOL: u32 = 1;
+pub const MAX_RECEIPT_BYTES: u64 = 16 * 1024 * 1024;
 pub const RECEIPT_FILE: &str = "export.json";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -17,18 +18,22 @@ pub struct RuntimeInfo {
 }
 impl RuntimeInfo {
     pub fn validate(&self, platform: &str) -> Result<(), String> {
+        let target_matches = if platform == "web" {
+            self.platform == "web" && self.arch == "wasm32"
+        } else {
+            self.platform == platform
+                && self.platform == std::env::consts::OS
+                && self.arch == std::env::consts::ARCH
+        };
         if self.protocol != EXPORT_PROTOCOL
             || self.version != env!("CARGO_PKG_VERSION")
-            || self.platform != platform
-            || self.platform != std::env::consts::OS
-            || self.arch != std::env::consts::ARCH
+            || !target_matches
             || !self.audio
             || !self.fonts
             || !self.gamepad
         {
             return Err(
-                "Player runtime does not match this host/engine or lacks audio/fonts/gamepad"
-                    .into(),
+                "Runtime does not match this target/engine or lacks audio/fonts/gamepad".into(),
             );
         }
         Ok(())
@@ -51,25 +56,54 @@ pub struct ExportReceipt {
     pub files: Vec<ExportFile>,
 }
 impl ExportReceipt {
-    /// Require this job's complete native output rather than stale files or log text.
+    /// Require this job's complete output rather than stale files or log text.
     pub fn validate(&self, dir: &Path, job: &str, project: &str) -> Result<(), String> {
-        self.runtime.validate(std::env::consts::OS)?;
+        let web = self.runtime.platform == "web";
+        self.runtime
+            .validate(if web { "web" } else { std::env::consts::OS })?;
         if self.protocol != EXPORT_PROTOCOL
             || self.job_id != job
             || self.project_id != project
-            || self.files.len() != 2
+            || (!web && self.files.len() != 2)
+            || self.files.len() > 100_010
         {
             return Err("Export receipt identity or file list is invalid".into());
         }
-        for name in [game_binary(), "assets.kar"] {
-            let file = self
-                .files
-                .iter()
-                .find(|f| f.path == name)
-                .ok_or("Export output is missing a required file")?;
-            let meta = std::fs::symlink_metadata(dir.join(name)).map_err(|e| e.to_string())?;
-            if !meta.is_file() || meta.len() == 0 || meta.len() != file.bytes {
-                return Err(format!("Export output is incomplete: {name}"));
+        let required: &[&str] = if web {
+            &[
+                "index.html",
+                "game.js",
+                "runtime/kiln_web.js",
+                "runtime/kiln_web_bg.wasm",
+                "runtime/runtime.json",
+                "project/kiln.toml",
+            ]
+        } else {
+            &[game_binary(), "assets.kar"]
+        };
+        if required
+            .iter()
+            .any(|name| !self.files.iter().any(|f| f.path == *name))
+        {
+            return Err("Export output is missing a required file".into());
+        }
+        let mut seen = std::collections::HashSet::new();
+        for file in &self.files {
+            let path = Path::new(&file.path);
+            if !seen.insert(&file.path)
+                || path
+                    .components()
+                    .any(|c| !matches!(c, std::path::Component::Normal(_)))
+                || file.path.is_empty()
+            {
+                return Err("Invalid or duplicate export resource path".into());
+            }
+            let meta = std::fs::symlink_metadata(dir.join(path)).map_err(|e| e.to_string())?;
+            if !meta.is_file()
+                || meta.len() != file.bytes
+                || (required.contains(&file.path.as_str()) && meta.len() == 0)
+            {
+                return Err(format!("Export output is incomplete: {}", file.path));
             }
         }
         Ok(())

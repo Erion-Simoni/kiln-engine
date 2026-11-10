@@ -23,8 +23,10 @@ pub struct ExportJob {
     output: PathBuf,
     job: String,
     project: String,
+    target: String,
     cancelled: Option<Instant>,
     exited: Option<(ExitStatus, Instant)>,
+    verification: Option<Receiver<Result<(), String>>>,
 }
 impl ExportJob {
     pub fn start(config: &BuildConfig, manifest: &Path, project: &str) -> Result<Self, String> {
@@ -49,13 +51,15 @@ impl ExportJob {
         let mut child = Command::new(&config.cli_path)
             .arg("export")
             .arg("--platform")
-            .arg(std::env::consts::OS)
+            .arg(config.target.platform())
             .arg("--project")
             .arg(manifest)
             .arg("--output")
             .arg(&output)
             .arg("--player")
             .arg(&config.player_path)
+            .arg("--web-runtime")
+            .arg(&config.web_runtime)
             .arg("--job-id")
             .arg(&job)
             .current_dir(root)
@@ -102,9 +106,14 @@ impl ExportJob {
             output,
             job,
             project: project.into(),
+            target: config.target.platform().into(),
             cancelled: None,
             exited: None,
+            verification: None,
         })
+    }
+    pub fn is_verifying(&self) -> bool {
+        self.verification.is_some() && self.cancelled.is_none()
     }
     pub fn cancel(&mut self) {
         if self.cancelled.is_none() {
@@ -117,6 +126,22 @@ impl ExportJob {
         let _ = fs::remove_file(export::cancel_path(&self.output, &self.job));
     }
     pub fn poll(&mut self, log: &mut Vec<String>) -> Option<Outcome> {
+        if let Some(verification) = &self.verification {
+            if self.cancelled.is_some() {
+                self.cleanup();
+                return Some(Outcome::Cancelled);
+            }
+            return match verification.try_recv() {
+                Ok(Ok(())) => Some(Outcome::Success(self.output.clone())),
+                Ok(Err(error)) => Some(Outcome::Failed(format!(
+                    "Exporter exited successfully but output validation failed: {error}"
+                ))),
+                Err(TryRecvError::Empty) => None,
+                Err(TryRecvError::Disconnected) => Some(Outcome::Failed(
+                    "Output verification stopped unexpectedly".into(),
+                )),
+            };
+        }
         let mut closed = false;
         loop {
             match self.logs.try_recv() {
@@ -164,14 +189,16 @@ impl ExportJob {
                 "Exporter failed: {status}. See diagnostics above."
             )));
         }
-        Some(
-            match verify_output(&self.output, &self.job, &self.project) {
-                Ok(()) => Outcome::Success(self.output.clone()),
-                Err(e) => Outcome::Failed(format!(
-                    "Exporter exited successfully but output validation failed: {e}"
-                )),
-            },
-        )
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let output = self.output.clone();
+        let job = self.job.clone();
+        let project = self.project.clone();
+        let target = self.target.clone();
+        std::thread::spawn(move || {
+            let _ = sender.send(verify_output(&output, &job, &project, &target));
+        });
+        self.verification = Some(receiver);
+        None
     }
 }
 impl Drop for ExportJob {
@@ -184,18 +211,29 @@ impl Drop for ExportJob {
         self.cleanup();
     }
 }
-fn verify_output(output: &Path, job: &str, project: &str) -> Result<(), String> {
+fn verify_output(output: &Path, job: &str, project: &str, target: &str) -> Result<(), String> {
     let path = output.join(RECEIPT_FILE);
-    if fs::metadata(&path).map_err(|e| e.to_string())?.len() > 65536 {
+    if fs::metadata(&path).map_err(|e| e.to_string())?.len() > export::MAX_RECEIPT_BYTES {
         return Err("Receipt is oversized".into());
     }
     let receipt: ExportReceipt =
         serde_json::from_slice(&fs::read(path).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
     receipt.validate(output, job, project)?;
-    let archive =
-        kiln_assets::Archive::load(&output.join("assets.kar")).map_err(|e| e.to_string())?;
-    let bytes = archive.extract("kiln.toml").map_err(|e| e.to_string())?;
+    if receipt.runtime.platform != target {
+        return Err("Receipt target does not match this export".into());
+    }
+    let bytes = if target == "web" {
+        let runtime = kiln_assets::web_bundle::verify(&output.join("runtime"))?;
+        if runtime != receipt.runtime {
+            return Err("Browser receipt/runtime mismatch".into());
+        }
+        fs::read(output.join("project/kiln.toml")).map_err(|e| e.to_string())?
+    } else {
+        let archive =
+            kiln_assets::Archive::load(&output.join("assets.kar")).map_err(|e| e.to_string())?;
+        archive.extract("kiln.toml").map_err(|e| e.to_string())?
+    };
     let saved =
         kiln_core::Project::from_toml(std::str::from_utf8(&bytes).map_err(|e| e.to_string())?)?;
     if saved.id != project {
@@ -221,6 +259,8 @@ mod tests {
         fn job(&self) -> ExportJob {
             ExportJob::start(
                 &BuildConfig {
+                    target: Default::default(),
+                    web_runtime: self.0.join("web-runtime"),
                     output_dir: self.0.join("output"),
                     cli_path: self.0.join("cli"),
                     player_path: self.0.join("player"),
@@ -264,6 +304,20 @@ mod tests {
             matches!(finish(&mut job).0,Outcome::Failed(ref e) if e.contains("output validation failed"))
         );
     }
+    #[test]
+    fn pending_output_verification_keeps_polling_and_can_be_cancelled() {
+        let fixture = Fixture::new("exit 0");
+        let mut job = fixture.job();
+        let status = job.child.wait().unwrap();
+        job.exited = Some((status, Instant::now()));
+        let (_sender, receiver) = mpsc::sync_channel(1);
+        job.verification = Some(receiver);
+        assert!(job.poll(&mut Vec::new()).is_none());
+        job.cancel();
+        assert_eq!(job.poll(&mut Vec::new()), Some(Outcome::Cancelled));
+        assert!(!export::cancel_path(&job.output, &job.job).exists());
+    }
+
     #[test]
     fn cancellation_fallback_and_drop_reap_the_owned_process() {
         let fixture = Fixture::new("exec sleep 20");

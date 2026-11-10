@@ -4,8 +4,25 @@ use egui::{Color32, RichText, ScrollArea, Ui};
 use job::{ExportJob, Outcome};
 use std::path::{Path, PathBuf};
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum BuildTarget {
+    #[default]
+    Native,
+    Web,
+}
+impl BuildTarget {
+    pub fn platform(self) -> &'static str {
+        if self == Self::Web {
+            "web"
+        } else {
+            std::env::consts::OS
+        }
+    }
+}
 #[derive(Debug, Clone)]
 pub struct BuildConfig {
+    pub target: BuildTarget,
+    pub web_runtime: PathBuf,
     pub output_dir: PathBuf,
     pub cli_path: PathBuf,
     pub player_path: PathBuf,
@@ -17,6 +34,8 @@ impl Default for BuildConfig {
             .and_then(|p| p.parent().map(Path::to_owned))
             .unwrap_or_default();
         Self {
+            target: BuildTarget::Native,
+            web_runtime: base.join("web-runtime"),
             output_dir: PathBuf::from("export/game"),
             cli_path: base.join(if cfg!(windows) {
                 "kiln-cli.exe"
@@ -70,6 +89,9 @@ impl BuildPanel {
             .job
             .as_mut()
             .and_then(|job| job.poll(&mut self.build_log));
+        if self.job.as_ref().is_some_and(ExportJob::is_verifying) {
+            self.status = "Verifying exported files…".into();
+        }
         if let Some(result) = result {
             self.job = None;
             log::info!("Export result: {result:?}");
@@ -85,24 +107,34 @@ impl BuildPanel {
     pub fn render(&mut self, ui: &mut Ui, project: &kiln_core::Project) -> Option<BuildConfig> {
         ui.heading("Build / Export");
         ui.label(format!("{} • {}", project.name, project.version));
-        ui.label(format!(
-            "Target: {} ({})",
-            std::env::consts::OS,
-            std::env::consts::ARCH
-        ));
-        ui.label("Standalone native folder. Save & Export includes edits in all scene tabs.");
+        ui.add_enabled_ui(self.job.is_none(), |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Target:");
+                ui.radio_value(
+                    &mut self.config.target,
+                    BuildTarget::Native,
+                    std::env::consts::OS,
+                );
+                ui.radio_value(&mut self.config.target, BuildTarget::Web, "Browser");
+            });
+        });
+        ui.label("Save & Export includes edits in all scene tabs.");
         ui.label("Choose a new or empty output folder; existing exports are preserved.");
         ui.add_enabled_ui(self.job.is_none(), |ui| {
             path_field(ui, "Output directory:", &mut self.config.output_dir);
             ui.collapsing("Runtime tools", |ui| {
                 path_field(ui, "Exporter:", &mut self.config.cli_path);
-                path_field(ui, "Player runtime:", &mut self.config.player_path);
+                if self.config.target == BuildTarget::Web {
+                    path_field(ui, "Browser runtime:", &mut self.config.web_runtime);
+                } else {
+                    path_field(ui, "Player runtime:", &mut self.config.player_path);
+                }
                 ui.label(
                     "Use matching prebuilt tools beside the editor, or choose their paths here.",
                 );
             });
         });
-        ui.small("Browser export, installers and other target platforms are pending.");
+        ui.small("Native exports launch directly. Browser exports require HTTP(S). Installers remain pending.");
         let mut request = None;
         if let Some(job) = &mut self.job {
             ui.horizontal(|ui| {

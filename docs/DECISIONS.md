@@ -1533,3 +1533,40 @@ kiln-core. Native editor UI and exported-game execution on Xvfb are required;
 no-Rust PATH and relocation checks are evidence, not a claim of clean-machine,
 other-OS/GPU or installer certification. Browser export, portable editor bundles
 and clean-machine/physical target checks remain Task 8 follow-up work.
+
+## ADR-0060: Prepared browser runtime bundles and relocated web exports
+
+**Date:** 2026-11-06
+**Status:** accepted (Task 8 browser checkpoint)
+
+Extend Task 8's staged export/process/receipt contract to Browser. Prepare the
+existing wasm-bindgen JS/WASM pair once, then export from prebuilt files without
+Cargo, Node or wasm-bindgen on the author's export PATH. Embed a small versioned
+custom metadata section in kiln-web; a CLI `web-runtime` preparation command reads
+it and records hashes for the JS/WASM pair. Export and editor output verification
+reject missing/changed/incompatible bundles. Reuse existing SHA-256 content_hash in kiln-assets (adding existing core protocol types);
+no new third-party dependency. Native receipts remain readable.
+
+Browser outputs contain the normalized project/resource tree, runtime files,
+job-specific receipt, and a self-contained loading HTML/JS shell using relative
+URLs and the real run(canvas_id, project_path) API. Display loading and actionable
+failure/retry state, and require a user gesture after loading for explicit audio
+unlock before exposing the playable canvas. Prevent the start gesture from
+activating an underlying game button, including a held Enter repeat after input
+installation. Add minimal WASM prepare/start entry points so loading never advances gameplay and
+audio is resumed from the start gesture before simulation begins;
+retain normal keyboard/pointer/touch/focus behavior. Serve over HTTP(S), including
+nested deployment paths; no HTML file:// launch claim. Failures and cancellation
+retain the prior export and clean staging as for native.
+
+Keep the native player/KAR branch intact. Add Browser choice/runtime-directory
+controls in the native editor and pass the selected target to output verification.
+Run artifact/hash verification off the editor UI thread so large WASM files do
+not pause rendering; cancellation after publication may retain complete output.
+Exercise actual GUI Browser export and relocate the result, then serve only that
+artifact in Chromium: loading/errors, game UI/fonts, keyboard/controller/touch,
+Web Audio unlock/overlap, localStorage settings/save/reload/resume and failed
+resource loading. Reject authored physics/joints and material overrides that the existing browser
+host has not integrated, rather than exporting silently degraded behavior. Other
+browsers/devices, clean-machine desktop dependency closure,
+release budgets and portable editor packaging remain separate Task 8 gates.

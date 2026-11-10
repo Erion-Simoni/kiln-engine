@@ -155,8 +155,9 @@ The complete output folder contains the executable, game archive and receipt.
 Run `game` (or `game.exe`) directly after moving that folder. Export/play do not
 need Rust; choose a new or empty destination. See [NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md)
 for validation, cancellation, runtime selection and the executed acceptance.
-Browser export, cross-target packaging, signing and portable editor distribution
-remain Task 8 work. [PACKAGING.md](PACKAGING.md) contains manual/future packaging
+For Browser, prepare the runtime with `just web-runtime`, choose **Browser** in
+the panel and follow [BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md). Cross-target
+packaging, signing and portable editor distribution remain Task 8 work. [PACKAGING.md](PACKAGING.md) contains manual/future packaging
 guidance, not a claim that the CLI creates installers today.
 
 ## Where to Go Next

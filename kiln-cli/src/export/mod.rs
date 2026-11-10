@@ -1,5 +1,6 @@
 //! Host-native export without a source checkout or toolchain at export/play time.
 mod resources;
+mod web;
 use anyhow::{bail, Context, Result};
 use kiln_assets::Archive;
 use kiln_core::export::{
@@ -17,6 +18,7 @@ pub struct Options {
     pub project: PathBuf,
     pub output: PathBuf,
     pub player: Option<PathBuf>,
+    pub web_runtime: Option<PathBuf>,
     pub job_id: Option<String>,
 }
 struct Staging(PathBuf);
@@ -73,11 +75,13 @@ fn runtime_info(player: &Path, marker: &Path) -> Result<RuntimeInfo> {
 }
 
 pub fn run(options: Options) -> Result<()> {
-    if !["linux", "windows", "macos"].contains(&options.platform.as_str())
-        || options.platform != std::env::consts::OS
+    let browser = options.platform == "web";
+    if !browser
+        && (!["linux", "windows", "macos"].contains(&options.platform.as_str())
+            || options.platform != std::env::consts::OS)
     {
         bail!(
-            "Only host-native export ({}) is available in this checkpoint; '{}' is not ready",
+            "Only host-native export ({}) and web are available; '{}' is not ready",
             std::env::consts::OS,
             options.platform
         );
@@ -94,6 +98,9 @@ pub fn run(options: Options) -> Result<()> {
         .context("Project manifest is missing")?;
     let root = manifest.parent().context("Project has no directory")?;
     let project = resources::read_project(&manifest)?;
+    if browser {
+        web::validate_target(&project)?;
+    }
     let output = std::path::absolute(options.output)?;
     if output.file_name().is_none() {
         bail!("Choose an output subdirectory");
@@ -119,7 +126,9 @@ pub fn run(options: Options) -> Result<()> {
     cancelled(&marker)?;
     fs::create_dir(&stage).context("Cannot create private export staging directory")?;
     let stage = Staging(stage);
-    println!("Validating player runtime");
+    let bundle = options
+        .web_runtime
+        .unwrap_or(std::env::current_exe()?.with_file_name("web-runtime"));
     let player = options
         .player
         .unwrap_or(std::env::current_exe()?.with_file_name(if cfg!(windows) {
@@ -127,13 +136,20 @@ pub fn run(options: Options) -> Result<()> {
         } else {
             "kiln-player"
         }));
-    let player = player.canonicalize().context(
-        "Prebuilt player is missing; build/install the matching player once, or use --player",
-    )?;
-    let runtime = runtime_info(&player, &marker)?;
-    runtime
-        .validate(&options.platform)
-        .map_err(anyhow::Error::msg)?;
+    let runtime = if browser {
+        println!("Validating prepared browser runtime");
+        kiln_assets::web_bundle::verify(&bundle).map_err(anyhow::Error::msg)?
+    } else {
+        println!("Validating player runtime");
+        let player = player.canonicalize().context(
+            "Prebuilt player is missing; build/install the matching player once, or use --player",
+        )?;
+        let runtime = runtime_info(&player, &marker)?;
+        runtime
+            .validate(&options.platform)
+            .map_err(anyhow::Error::msg)?;
+        runtime
+    };
     println!("Snapshotting saved project '{}'", project.name);
     let snapshot = stage.0.join("project");
     fs::create_dir(&snapshot)?;
@@ -142,27 +158,45 @@ pub fn run(options: Options) -> Result<()> {
     )?;
     resources::validate(&project, &snapshot)?;
     cancelled(&marker)?;
-    println!(
-        "Packing {} project files with relative resource paths",
-        files.len()
-    );
-    let archive_path = stage.0.join("assets.kar");
-    Archive::new(archive_path.clone()).pack_with_version(&files, Some(&project.version))?;
-    let archive = Archive::load(&archive_path)?;
-    for file in &files {
-        cancelled(&marker)?;
-        let relative = file
-            .strip_prefix(&snapshot)?
-            .to_string_lossy()
-            .replace('\\', "/");
-        if archive.extract(&relative)? != fs::read(file)? {
-            bail!("Archive verification failed: {relative}");
+    if browser {
+        println!("Bundling {} project files for HTTP deployment", files.len());
+        web::write(&stage.0, &bundle, &project, &marker)?;
+    } else {
+        println!(
+            "Packing {} project files with relative resource paths",
+            files.len()
+        );
+        let archive_path = stage.0.join("assets.kar");
+        Archive::new(archive_path.clone()).pack_with_version(&files, Some(&project.version))?;
+        let archive = Archive::load(&archive_path)?;
+        for file in &files {
+            cancelled(&marker)?;
+            let relative = file
+                .strip_prefix(&snapshot)?
+                .to_string_lossy()
+                .replace('\\', "/");
+            if archive.extract(&relative)? != fs::read(file)? {
+                bail!("Archive verification failed: {relative}");
+            }
         }
+        println!("Copying standalone runtime");
+        let game_path = stage.0.join(export::game_binary());
+        fs::copy(&player, &game_path)?;
+        fs::remove_dir_all(&snapshot)?;
     }
-    println!("Copying standalone runtime");
-    let game_path = stage.0.join(export::game_binary());
-    fs::copy(&player, &game_path)?;
-    fs::remove_dir_all(&snapshot)?;
+    let output_files: Vec<String> = if browser {
+        crate::collect_files(&stage.0)?
+            .into_iter()
+            .map(|p| {
+                p.strip_prefix(&stage.0)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect()
+    } else {
+        vec![export::game_binary().into(), "assets.kar".into()]
+    };
     let receipt = ExportReceipt {
         protocol: EXPORT_PROTOCOL,
         job_id: job.clone(),
@@ -170,12 +204,12 @@ pub fn run(options: Options) -> Result<()> {
         game_name: project.name,
         game_version: project.version,
         runtime,
-        files: [export::game_binary(), "assets.kar"]
+        files: output_files
             .into_iter()
             .map(|name| {
                 Ok(ExportFile {
-                    path: name.into(),
-                    bytes: fs::metadata(stage.0.join(name))?.len(),
+                    bytes: fs::metadata(stage.0.join(&name))?.len(),
+                    path: name,
                 })
             })
             .collect::<Result<_, std::io::Error>>()?,
@@ -183,10 +217,11 @@ pub fn run(options: Options) -> Result<()> {
     receipt
         .validate(&stage.0, &job, &project.id)
         .map_err(anyhow::Error::msg)?;
-    fs::write(
-        stage.0.join(RECEIPT_FILE),
-        serde_json::to_vec_pretty(&receipt)?,
-    )?;
+    let receipt_bytes = serde_json::to_vec_pretty(&receipt)?;
+    if receipt_bytes.len() as u64 > export::MAX_RECEIPT_BYTES {
+        bail!("Export receipt exceeds 16 MiB");
+    }
+    fs::write(stage.0.join(RECEIPT_FILE), receipt_bytes)?;
     cancelled(&marker)?;
     // Never replace a previous export. Remove an empty destination for Windows rename.
     if output.exists() {
@@ -194,9 +229,13 @@ pub fn run(options: Options) -> Result<()> {
     }
     fs::rename(&stage.0, &output).context("Cannot publish complete export")?;
     println!("Export complete: {}", output.display());
-    println!(
-        "Launch {} directly; Rust and the source project are not required",
-        export::game_binary()
-    );
+    if browser {
+        println!("Serve this complete folder over HTTP(S), then open index.html");
+    } else {
+        println!(
+            "Launch {} directly; Rust and the source project are not required",
+            export::game_binary()
+        );
+    }
     Ok(())
 }

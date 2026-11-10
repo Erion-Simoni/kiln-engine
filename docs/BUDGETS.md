@@ -2,6 +2,24 @@
 
 All budgets are enforced via `just size`. Exceeding a budget requires an ADR entry with justification.
 
+## Task 8 browser export observations — 2026-11-10
+
+The editor-exported saved-UI fixture contains a **40,080,403-byte debug WASM**,
+**118,759-byte generated JS** and **40,314,183 bytes across 15 output files**
+(including runtime descriptor, receipt, shell and raw project resources). These
+are development-profile observations, not release size/startup budget results.
+Export reuses the selected prepared bundle; it does not run Cargo or optimizers.
+No release budget was waived. Runtime/hash verification runs off the editor UI
+thread; resources load before the first gameplay tick. No new rendering pass or
+frame-time performance claim is introduced.
+
+Prepared runtime limits are 256 MiB WASM, 8 MiB JS, 64 KiB descriptor and 4 KiB
+embedded metadata. Output receipts are capped at 16 MiB. Project copying retains
+the native 2 GiB/100,000-file bounds. The browser export currently rejects authored
+physics/joints and sprite material overrides instead of claiming unsupported
+host parity. Release optimization, physical target and clean-machine acceptance
+remain distinct gates. See evidence/task8-browser/ for actual captures/results.
+
 ## Task 8 native export observations — 2026-11-06
 
 The real editor-exported saved-UI fixture contains a **86,627,928-byte debug

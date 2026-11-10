@@ -9,6 +9,7 @@
 #![cfg(target_arch = "wasm32")]
 
 mod audio;
+mod export_info;
 mod input;
 mod resources;
 mod storage;
@@ -30,8 +31,52 @@ pub fn start() {
     console_error_panic_hook::set_once();
 }
 
+thread_local! {
+    static PREPARED_GAME: std::cell::RefCell<Option<App>> = const { std::cell::RefCell::new(None) };
+}
+
 #[wasm_bindgen]
 pub async fn run(canvas_id: &str, project_path: &str) -> Result<(), JsValue> {
+    let (app, window) = load_app(canvas_id, project_path).await?;
+    app.run(&window);
+    Ok(())
+}
+
+/// Load all runtime resources without starting gameplay or installing input handlers.
+#[wasm_bindgen]
+pub async fn prepare_game(canvas_id: &str, project_path: &str) -> Result<(), JsValue> {
+    if PREPARED_GAME.with(|app| app.borrow().is_some()) {
+        return Err(JsValue::from_str("A game is already prepared"));
+    }
+    let (app, _) = load_app(canvas_id, project_path).await?;
+    PREPARED_GAME.with(|pending| *pending.borrow_mut() = Some(app));
+    Ok(())
+}
+
+/// Call from a trusted start gesture; resume audio before advancing the first tick.
+#[wasm_bindgen]
+pub async fn start_game() -> Result<(), JsValue> {
+    let audio = PREPARED_GAME
+        .with(|pending| {
+            pending
+                .borrow()
+                .as_ref()
+                .map(|app| app.audio_context.clone())
+        })
+        .ok_or_else(|| JsValue::from_str("Prepare the game before starting"))?;
+    if let Some(context) = audio {
+        wasm_bindgen_futures::JsFuture::from(context.resume()?).await?;
+    }
+    let mut app = PREPARED_GAME
+        .with(|pending| pending.borrow_mut().take())
+        .ok_or_else(|| JsValue::from_str("Game was already started"))?;
+    app.game_loop = GameLoop::new();
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("No window"))?;
+    app.run(&window);
+    Ok(())
+}
+
+async fn load_app(canvas_id: &str, project_path: &str) -> Result<(App, web_sys::Window), JsValue> {
     console_error_panic_hook::set_once();
     let window = web_sys::window().ok_or_else(|| JsValue::from_str("No window"))?;
     let document = window
@@ -69,8 +114,7 @@ pub async fn run(canvas_id: &str, project_path: &str) -> Result<(), JsValue> {
     let app = App::new(&instance, surface, canvas, width, height, project_path)
         .await
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    app.run(&window);
-    Ok(())
+    Ok((app, window))
 }
 
 #[derive(Default, Clone)]
