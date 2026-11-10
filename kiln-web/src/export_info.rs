@@ -1,8 +1,12 @@
 //! Prepared runtime identity retained as a WASM custom section for offline export.
-#[cfg(feature = "fonts")]
-const INFO: &str = concat!("1\n", env!("CARGO_PKG_VERSION"), "\nfonts=1\n");
-#[cfg(not(feature = "fonts"))]
-const INFO: &str = concat!("1\n", env!("CARGO_PKG_VERSION"), "\nfonts=0\n");
+#[cfg(all(feature = "fonts", feature = "physics"))]
+const INFO: &str = concat!("1\n", env!("CARGO_PKG_VERSION"), "\nfonts=1\nphysics=1\n");
+#[cfg(all(feature = "fonts", not(feature = "physics")))]
+const INFO: &str = concat!("1\n", env!("CARGO_PKG_VERSION"), "\nfonts=1\nphysics=0\n");
+#[cfg(all(not(feature = "fonts"), feature = "physics"))]
+const INFO: &str = concat!("1\n", env!("CARGO_PKG_VERSION"), "\nfonts=0\nphysics=1\n");
+#[cfg(all(not(feature = "fonts"), not(feature = "physics")))]
+const INFO: &str = concat!("1\n", env!("CARGO_PKG_VERSION"), "\nfonts=0\nphysics=0\n");
 const fn bytes<const N: usize>(text: &str) -> [u8; N] {
     let mut out = [0; N];
     let mut i = 0;

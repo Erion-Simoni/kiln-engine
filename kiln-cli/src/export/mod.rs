@@ -150,6 +150,9 @@ pub fn run(options: Options) -> Result<()> {
             .map_err(anyhow::Error::msg)?;
         runtime
     };
+    if !runtime.physics && kiln_core::physics_data::project_uses_physics(&project) {
+        bail!("This project uses physics, but the selected runtime lacks physics support. Install or prepare a physics-enabled runtime.");
+    }
     println!("Snapshotting saved project '{}'", project.name);
     let snapshot = stage.0.join("project");
     fs::create_dir(&snapshot)?;

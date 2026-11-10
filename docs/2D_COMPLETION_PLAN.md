@@ -153,8 +153,8 @@ remain explicitly separate. Real editor export/distribution is Task 8.
 
 ### 8. Real build/export and distribution — IN PROGRESS (exports, portable editor and clean Linux userspace)
 
-- [x] Replace simulated Build/Export with a real asynchronous native/browser CLI process, bounded streamed stdout/stderr, actual exit status, job-specific receipt/resource validation off the UI thread and cancellation/cleanup. Real editor Save & Export and UI Cancel pass on Linux/Xvfb. Unsupported targets/options fail explicitly; Browser also rejects authored physics/joints and material overrides pending host integration.
-- [x] Bundle resources/runtimes for the current supported native/browser targets. Native packs/verifies a KAR and includes a matching player; Browser includes the normalized project tree, hash-verified prepared JS/WASM and actual loading/start/error shell. Export/play need no Cargo. Browser capabilities remain explicitly bounded; other target/toolchain support is pending.
+- [x] Replace simulated Build/Export with a real asynchronous native/browser CLI process, bounded streamed stdout/stderr, actual exit status, job-specific receipt/resource validation off the UI thread and cancellation/cleanup. Real editor Save & Export and UI Cancel pass on Linux/Xvfb. Unsupported targets/options fail explicitly; Browser gates authored physics/joints/solid tilemaps against the selected runtime capability and rejects sprite material overrides pending host integration.
+- [x] Bundle resources/runtimes for the current supported native/browser targets. Native packs/verifies a KAR and includes a matching player; Browser includes the normalized project tree, hash-verified prepared JS/WASM and actual loading/start/error shell. Export/play need no Cargo. Default Browser builds now include shared 2D physics; capabilities remain explicit and other target/toolchain support is pending.
 - [x] Deliver clean Linux userspace acceptance plus relocated Browser loading/input/audio-unlock/save behavior. A pinned Ubuntu 24.04 container runs the installed editor and exported game offline/unprivileged without Rust, repository or development sysroot mounts; real edit/save/export/cancel and game settings/save/restart/Continue pass. Shipped runtime requirements include the discovered dynamic X11 dependency. Browser artifact passes nested HTTP deployment, loading/error/retry, input, explicit audio unlock and reload/save/resume. Physical machines/other OS and driver/device coverage remain in the platform gate below.
 - [ ] Finish portable editor release distribution and validate other platforms on appropriate machines. Linux development archive now includes matched tools, browser runtime, templates/sample, SHA-256 inventory, original dependency/font/Rust notices and verified MPL sources. Moved installation passes both real editor export and relocated gameplay with no Rust on PATH; GLIBC 2.39/system dependency requirements are recorded. Release provenance/licensing review, physical-machine and other OS/GPU checks remain open. Package-size goals are removed by owner request (ADR-0062). See [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md).
 
@@ -162,7 +162,7 @@ Acceptance: author and export from the editor, move the artifact outside the rep
 
 Native checkpoint: [NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md), ADR-0059 and
 [evidence/task8-native/README.md](evidence/task8-native/README.md). Task 8 remains
-open for physical-machine/other-platform checks, browser physics/material parity and
+open for physical-machine/other-platform checks, browser material parity and
 release editor distribution (development relocation checkpoint passes). See [BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md) for
 the tested browser contract. Task 9 is not started.
 
@@ -581,3 +581,26 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
   evidence/task8-clean-linux. Same-kernel/software graphics/ALSA null evidence
   does not replace physical GPU/audio/controller or other OS testing. Browser
   gameplay was not rerun inside this native-only image. Size is not a gate.
+
+### 2026-11-10 — Task 8 capability-checked browser physics
+
+- Default kiln-web builds enable existing kiln-runtime/Rapier physics, sharing
+  the native fixed-step/collider/joint/script/save paths. The physics feature can
+  be disabled explicitly; no new third-party engine/runtime dependency was added.
+- RuntimeInfo/prepared WASM metadata now declare a strict physics capability.
+  Legacy JSON/three-line metadata defaults false. Body/joint/prefab/solid-tilemap
+  or declared-physics projects fail export with an incapable selected runtime;
+  direct browser API startup also returns an actionable missing-feature error.
+  Sprite material overrides remain rejected. ADR-0063 records the contract.
+- Added a playable physics fixture and relocated HTTP/WASM acceptance: gravity,
+  floor/mask filtering, sensor enter/exit/raycast, solid tiles, kinematics,
+  distance/revolute/prismatic joints (including slider limits/motor), upward
+  velocity across save/page reload/Start once, rebuilt contacts, fresh scene
+  colliders and cross-scene restore. Pixel assertions verify the blue body at
+  its actual simulated floor heights. Both exporter and browser reject an
+  intentionally physics-disabled runtime. CI runs the fixture and opt-out build.
+- Added the playground to portable bundles; packaging still needs no development
+  tools during authoring/export. Package size remains informational, not a goal.
+  Actual editor Browser Save & Export and prior movement/UI/audio/storage
+  acceptance pass against the upgraded runtime. Task 8 remains open for material
+  integration, release provenance and physical/other-platform checks.

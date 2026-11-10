@@ -1633,3 +1633,28 @@ share the host kernel/software graphics: other OS and physical-device validation
 remain separate, as does browser physics/material parity. The test image and
 installation share an explicit Ubuntu runtime package list, including dynamically
 loaded X11 libraries that native ELF dependency inspection alone cannot detect.
+
+## ADR-0063: Capability-checked browser 2D physics
+
+**Date:** 2026-11-10
+**Status:** accepted (Task 8 browser physics checkpoint)
+
+Enable the existing kiln-runtime/Rapier physics feature in default kiln-web builds.
+Reuse the shared scene, tilemap collider, fixed-step, collision/joint/script and
+logical save/restore paths; do not introduce a separate browser physics engine.
+Expose a `physics` Cargo opt-out alongside fonts. No new third-party dependency:
+Rapier already powers the native editor/player and is an existing optional runtime
+crate dependency. Browser minimal builds must reject authored physics explicitly.
+
+Record a backward-compatible optional physics capability in RuntimeInfo and the
+prepared WASM custom section. Legacy three-line metadata/JSON has physics=false;
+new metadata adds a strictly validated physics=0/1 line. Gate physics/joint export
+against the selected prepared runtime, including prefab definitions, so older
+runtimes still support nonphysics projects but cannot silently lose simulation.
+Keep material override rejection until the browser material host is integrated.
+
+Add shared WASM-compatible session regressions and real relocated browser export
+acceptance for simulation, collisions/filtering/raycast, kinematics/joints, logical
+save/reload and scene changes. Re-run existing browser UI/input/audio/storage and
+native/workspace checks. Software browser evidence does not certify physical
+hardware/other browsers. Package-size goals remain removed (ADR-0062).

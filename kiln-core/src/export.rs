@@ -15,6 +15,9 @@ pub struct RuntimeInfo {
     pub audio: bool,
     pub fonts: bool,
     pub gamepad: bool,
+    /// Legacy runtimes omit this field and cannot export authored physics.
+    #[serde(default)]
+    pub physics: bool,
 }
 impl RuntimeInfo {
     pub fn validate(&self, platform: &str) -> Result<(), String> {
@@ -129,4 +132,28 @@ pub fn staging_path(output: &Path, job: &str) -> PathBuf {
 }
 pub fn cancel_path(output: &Path, job: &str) -> PathBuf {
     output.with_file_name(format!(".kiln-export-{job}.cancel"))
+}
+
+#[cfg(test)]
+mod capability_tests {
+    #[test]
+    fn legacy_runtime_json_does_not_claim_physics() {
+        let legacy = format!(
+            r#"{{"protocol":1,"version":"{}","platform":"web","arch":"wasm32","audio":true,"fonts":true,"gamepad":true}}"#,
+            env!("CARGO_PKG_VERSION")
+        );
+        let runtime: super::RuntimeInfo = serde_json::from_str(&legacy).unwrap();
+        runtime.validate("web").unwrap();
+        assert!(!runtime.physics);
+        let current = super::RuntimeInfo {
+            physics: true,
+            ..runtime
+        };
+        let encoded = serde_json::to_string(&current).unwrap();
+        assert!(
+            serde_json::from_str::<super::RuntimeInfo>(&encoded)
+                .unwrap()
+                .physics
+        );
+    }
 }

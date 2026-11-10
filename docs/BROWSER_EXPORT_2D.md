@@ -80,13 +80,15 @@ HTTP-guidance branch is unverified; HTTP deployment is the supported path.
 
 ## Supported contract and remaining gates
 
-The checkpoint exercises the existing browser runtime's scripts, sprites,
-animation/tile resources, saved UI/fonts, camera/input, Web Audio and localStorage.
-It does not expand the renderer/physics contracts from earlier tasks. **Authored
-physics bodies/joints and sprite material overrides are rejected for Browser**:
-those host integrations are still missing. Use native export for those projects.
-Physics-query scripts and other runtime/platform feature parity remain bounded by
-the existing browser host; no universal native/browser gameplay parity is claimed.
+The runtime supports scripts, sprites, animation/tile resources, saved UI/fonts,
+camera/input, Web Audio, localStorage and shared 2D Rapier physics. Default browser
+builds enable physics. Authored bodies/joints, solid tilemaps and projects declaring
+physics require a prepared runtime advertising `physics=true`; legacy or opted-out
+runtimes reject those exports. See [BROWSER_PHYSICS_2D.md](BROWSER_PHYSICS_2D.md)
+for capabilities and actual simulation/save/transition evidence.
+
+**Sprite material overrides remain rejected for Browser** pending material host
+integration. No universal native/browser gameplay or hardware parity is claimed.
 
 Automated evidence includes actual native-editor Browser export with an empty
 tools PATH, an unsaved scene edit saved into the artifact, previous-output
@@ -98,7 +100,8 @@ page-reload save/resume, quota/corrupt-save preservation, asset/loader failures 
 reload retry. Selected captures/results: [evidence/task8-browser](evidence/task8-browser/README.md).
 
 This is Chromium/SwiftShader and simulated controller input; real GPU/audio/
-controller devices, other browsers/OS, clean-machine desktop dependencies, release
-performance/device validation and clean-machine/platform acceptance remain open.
+controller devices, other browsers/OS and reference-hardware performance remain
+open. Clean Ubuntu native userspace acceptance is recorded separately; release
+provenance and other-platform acceptance remain open.
 Package-size goals are removed by owner request (ADR-0062).
 Task 8 remains in progress. Task 9 and full 3D implementation are not started.

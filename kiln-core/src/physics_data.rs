@@ -1,5 +1,31 @@
 //! Serializable 2D body, collider and joint authoring data.
 
+/// Whether any authored scene or prefab needs a 2D physics-capable runtime.
+pub fn project_uses_physics(project: &crate::Project) -> bool {
+    project.features.iter().any(|feature| feature == "physics")
+        || project
+            .scenes
+            .values()
+            .flat_map(|scene| &scene.entities)
+            .chain(project.prefabs.values().map(|prefab| &prefab.root_entity))
+            .any(|entity| {
+                entity.components.iter().any(|component| match component {
+                    crate::Component::Physics { .. } | crate::Component::Joint { .. } => true,
+                    crate::Component::Tilemap { map } => {
+                        project.tilemaps.get(map).is_some_and(|map| {
+                            map.layers.iter().any(|layer| {
+                                project
+                                    .tilesets
+                                    .get(&layer.tileset)
+                                    .is_some_and(|set| set.solid.iter().any(|solid| *solid))
+                            })
+                        })
+                    }
+                    _ => false,
+                })
+            })
+}
+
 /// 2D rigid body physics component.
 ///
 /// When the `physics` feature is enabled, this component is synced with a
@@ -186,4 +212,61 @@ pub fn validate_joint(joint: &Joint2D) -> Result<(), String> {
         return Err("Joint parameters must be finite and limits ordered".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod capability_tests {
+    use super::*;
+    #[test]
+    fn body_joint_prefab_and_solid_tilemap_capabilities_are_detected() {
+        let mut project =
+            crate::Project::from_toml(include_str!("../../samples/browser_physics2d/kiln.toml"))
+                .unwrap();
+        assert!(project_uses_physics(&project));
+        project.features.clear();
+        assert!(project_uses_physics(&project));
+        let joint = project.scenes["main"]
+            .entities
+            .iter()
+            .find(|entity| entity.id == "rope")
+            .unwrap()
+            .clone();
+        for scene in project.scenes.values_mut() {
+            for entity in &mut scene.entities {
+                entity.components.retain(|component| {
+                    !matches!(
+                        component,
+                        crate::Component::Physics { .. } | crate::Component::Joint { .. }
+                    )
+                });
+            }
+        }
+        assert!(
+            project_uses_physics(&project),
+            "solid tilemaps require a capable runtime"
+        );
+        project
+            .tilesets
+            .values_mut()
+            .for_each(|set| set.solid.clear());
+        assert!(!project_uses_physics(&project));
+        project.prefabs.insert(
+            "joint".into(),
+            crate::prefab::Prefab {
+                id: "joint".into(),
+                name: "joint".into(),
+                root_entity: joint,
+            },
+        );
+        assert!(
+            project_uses_physics(&project),
+            "uninstantiated prefab joints also require capability"
+        );
+        project.prefabs.clear();
+        project.features.push("physics".into());
+        assert!(
+            project_uses_physics(&project),
+            "explicit scripted physics intent requires capability"
+        );
+    }
 }

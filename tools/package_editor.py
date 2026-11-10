@@ -232,6 +232,7 @@ def prepare(args):
             copy_file(args.web_runtime/name, root/'web-runtime'/name)
         copy_tree(REPO/'templates', root/'templates')
         copy_tree(REPO/'samples/ui2d_editor', root/'examples/ui2d_editor')
+        copy_tree(REPO/'samples/browser_physics2d', root/'examples/browser_physics2d')
         copy_file(REPO/'Cargo.lock', root/'Cargo.lock')
         if identity['platform'] == 'linux':
             copy_file(REPO/'packaging/linux-runtime-packages.txt', root/'linux-runtime-packages.txt')
@@ -246,7 +247,8 @@ def prepare(args):
             'Native and Browser exports use sibling kiln-cli, kiln-player and web-runtime.\n'
             'No Rust, Cargo, Node, Python or wasm-bindgen is needed to author/export/play.\n'
             'Browser output must be served over HTTP(S); open index.html through that server.\n'
-            'Browser export currently rejects physics/joints and sprite material overrides.\n'
+            'Browser physics requires a physics-enabled runtime; material overrides remain unsupported.\n'
+            'Open examples/browser_physics2d/kiln.toml for the physics playground.\n'
             'Linux requires compatible glibc and system display, GPU, audio and controller libraries.\n'
             'On Ubuntu 24.04, install the packages listed in linux-runtime-packages.txt.\n'
             'This includes the runtime-loaded libxkbcommon-x11 dependency required for X11.\n'

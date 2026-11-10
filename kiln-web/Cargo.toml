@@ -6,7 +6,8 @@ rust-version.workspace = true
 license.workspace = true
 
 [features]
-default = ["fonts"]
+default = ["fonts", "physics"]
+physics = ["kiln-runtime/physics"]
 fonts = ["kiln-ui/fonts"]
 threads = []
 

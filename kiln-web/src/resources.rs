@@ -49,6 +49,9 @@ pub(super) fn session(
     scripts: &HashMap<String, String>,
     textures: &Textures,
 ) -> Result<(SliceSession, GameWorld), String> {
+    if !cfg!(feature = "physics") && kiln_core::physics_data::project_uses_physics(project) {
+        return Err("This browser runtime lacks physics; rebuild with the physics feature".into());
+    }
     let session = SliceSession::with_scene_sources(project, scene, |path| {
         scripts
             .get(path)

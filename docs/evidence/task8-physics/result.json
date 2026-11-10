@@ -1,0 +1,39 @@
+{
+  "passed": true,
+  "runtime_physics": true,
+  "source_project_unavailable": true,
+  "export_tools_path_empty": true,
+  "relocated_nested_http": true,
+  "gravity_collision_filter_sensor_raycast": true,
+  "tilemap_collisions": true,
+  "kinematic_body": true,
+  "distance_revolute_prismatic_joints": true,
+  "minimal_runtime_rejected": true,
+  "checkpoint_reload_velocity_and_start_once": true,
+  "restored_colliders": true,
+  "scene_transition_clears_bodies_joints": true,
+  "cross_scene_load": true,
+  "rendered_hero_pixels": {
+    "settled": {
+      "count": 400,
+      "x": 99.5,
+      "y": 329.5
+    },
+    "next": {
+      "count": 400,
+      "x": 99.5,
+      "y": 229.5
+    }
+  },
+  "settled_hero_y": 29.995846,
+  "checkpoint_velocity": [
+    0,
+    161.14001
+  ],
+  "restored_velocity": [
+    0,
+    112.09003
+  ],
+  "next_scene_hero_y": 129.40935,
+  "errors": []
+}

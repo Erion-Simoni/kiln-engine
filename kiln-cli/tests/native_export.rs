@@ -51,6 +51,7 @@ impl Fixture {
             audio: true,
             fonts: true,
             gamepad: true,
+            physics: true,
         };
         fs::write(
             &player,
@@ -329,6 +330,36 @@ fn browser_exports_only_prepared_runtime_and_relative_project_with_validated_rec
     let physics = command("physics").output().unwrap();
     assert!(!physics.status.success());
     assert!(String::from_utf8_lossy(&physics.stderr).contains("uses physics"));
+    assert!(!output.exists());
+    assert!(!export::staging_path(&output, "physics").exists());
+    // The same authored body exports only with a capability-bearing prepared runtime.
+    let capable_text = format!("1\n{}\nfonts=1\nphysics=1\n", env!("CARGO_PKG_VERSION"));
+    let mut capable_wasm = b"\0asm\x01\0\0\0".to_vec();
+    capable_wasm.extend([
+        0,
+        (name.len() + 1 + capable_text.len()) as u8,
+        name.len() as u8,
+    ]);
+    capable_wasm.extend(name);
+    capable_wasm.extend(capable_text.as_bytes());
+    fs::write(bundle.join("kiln_web_bg.wasm"), capable_wasm).unwrap();
+    assert!(Command::new(env!("CARGO_BIN_EXE_kiln-cli"))
+        .args(["web-runtime", "--input"])
+        .arg(&bundle)
+        .output()
+        .unwrap()
+        .status
+        .success());
+    let capable = command("capable").output().unwrap();
+    assert!(
+        capable.status.success(),
+        "{}",
+        String::from_utf8_lossy(&capable.stderr)
+    );
+    let receipt: ExportReceipt =
+        serde_json::from_slice(&fs::read(output.join(export::RECEIPT_FILE)).unwrap()).unwrap();
+    assert!(receipt.runtime.physics);
+    fs::remove_dir_all(&output).unwrap();
     project
         .scenes
         .get_mut("main")

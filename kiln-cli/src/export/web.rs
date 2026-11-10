@@ -15,16 +15,11 @@ pub fn validate_target(project: &kiln_core::Project) -> Result<()> {
         .chain(project.prefabs.values().map(|p| &p.root_entity));
     for entity in entities {
         for component in &entity.components {
-            match component {
-                kiln_core::Component::Physics { .. } | kiln_core::Component::Joint { .. } => {
-                    bail!("This project uses physics, which this Browser runtime does not support. Export a native game.");
-                }
-                kiln_core::Component::Sprite {
-                    material: Some(_), ..
-                } => {
-                    bail!("This project uses material overrides, which this Browser runtime does not support. Export a native game.");
-                }
-                _ => {}
+            if let kiln_core::Component::Sprite {
+                material: Some(_), ..
+            } = component
+            {
+                bail!("This project uses material overrides, which this Browser runtime does not support. Export a native game.");
             }
         }
     }

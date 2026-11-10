@@ -100,6 +100,7 @@ fn main() -> Result<()> {
             audio: cfg!(feature = "audio"),
             fonts: cfg!(feature = "fonts"),
             gamepad: cfg!(feature = "gamepad"),
+            physics: true,
         };
         println!("{}", serde_json::to_string(&runtime)?);
         return Ok(());

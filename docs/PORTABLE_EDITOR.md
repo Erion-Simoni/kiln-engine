@@ -1,7 +1,7 @@
 # Portable development editor — Task 8
 
 The Linux development bundle contains the native editor, CLI exporter, player,
-prepared browser JS/WASM, three project templates, the saved-UI example and
+prepared browser JS/WASM, three project templates, saved-UI and physics examples, and
 notices. Keep the extracted directory together. Authoring and both export targets
 use those prebuilt files without Cargo, Rust, Python, Node or wasm-bindgen.
 
@@ -53,6 +53,7 @@ The editor finds the exporter/player/browser runtime beside its executable even
 when launched from an unrelated directory. Open
 `examples/ui2d_editor/kiln.toml`, or create a project. Save working projects outside
 the installation so installation verification can continue to detect changes.
+The physics playground is at `examples/browser_physics2d/kiln.toml`.
 CLI templates also work from elsewhere:
 
 ```sh
@@ -64,8 +65,9 @@ CLI templates also work from elsewhere:
 The empty template receives a main scene and script. Other templates retain their
 scenes. Init refuses a nonempty output to protect existing projects. Native games
 launch their included executable; serve complete Browser outputs over HTTP(S).
-Browser exports reject physics/joints and sprite material overrides pending host
-integration. See [NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md) and
+Browser physics requires a matching physics-enabled prepared runtime. Default
+builds provide it; opted-out/legacy bundles reject authored physics. Sprite
+material overrides remain rejected pending host integration. See [NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md) and
 [BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md) for target contracts.
 
 ## Integrity and provenance

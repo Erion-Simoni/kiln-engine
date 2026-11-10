@@ -239,8 +239,10 @@ jobs:
         env:
           CARGO_PROFILE_DEV_DEBUG: 0
         run: cargo build -p kiln-editor -p kiln-cli -p kiln-player --bins
-      - name: Check WASM-specific code
-        run: cargo clippy -p kiln-web --target wasm32-unknown-unknown -- -D warnings
+      - name: Check WASM-specific code and feature opt-out
+        run: |
+          cargo clippy -p kiln-web --target wasm32-unknown-unknown -- -D warnings
+          cargo clippy -p kiln-web --target wasm32-unknown-unknown --no-default-features -- -D warnings
       - name: Build the browser runtime
         run: cargo build --target wasm32-unknown-unknown -p kiln-web
       - name: Install matching wasm-bindgen CLI
@@ -258,6 +260,15 @@ jobs:
         run: node tests/web/smoke.cjs target/debug/web-runtime
       - name: Exercise browser menus, audio, controller input and save/resume
         run: node tests/web/task7.cjs target/debug/web-runtime
+      - name: Prepare a physics-disabled browser runtime for rejection coverage
+        run: |
+          cargo build -p kiln-web --target wasm32-unknown-unknown --no-default-features --features fonts
+          wasm-bindgen target/wasm32-unknown-unknown/debug/kiln_web.wasm --target web --out-dir target/web-no-physics-runtime
+          target/debug/kiln-cli web-runtime --input target/web-no-physics-runtime
+      - name: Exercise exported physics, joints, tile collision and save/scene restoration
+        env:
+          WEB_PHYSICS_MINIMAL_RUNTIME: target/web-no-physics-runtime
+        run: node tests/web/physics.cjs target/debug/web-runtime
       - name: Exercise Browser export in the native editor
         env:
           KILN_BROWSER_EXPORT_EVIDENCE_DIR: target/task8-browser-export-evidence
@@ -284,5 +295,6 @@ jobs:
             target/task8-browser-evidence/
             target/task8-portable-evidence/
             target/task8-clean-linux-evidence/
+            target/task8-physics-evidence/
             target/dist/kiln-portable-development.tar.gz
           retention-days: 7

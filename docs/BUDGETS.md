@@ -6,6 +6,17 @@ measurements, with no release ceiling or size-based completion gate. Frame-time,
 startup, memory/resource budgets and bounded-input limits remain active.
 `just size` only reports sizes; it does not enforce these other budgets.
 
+## Task 8 browser physics — 2026-11-10
+
+Default WASM builds now enable the existing shared Rapier runtime. Simulation uses
+existing 60 Hz fixed-step limits and bounded save documents; no new render pass is
+added. Browser acceptance covers contacts/filtering/sensors, tile colliders,
+kinematics and all three joint types, save/reload and scene replacement. This is
+functional Chromium/SwiftShader evidence, not reference-hardware timing/memory
+certification. Physics can be explicitly opted out; runtime capability checks
+prevent silently exporting unsupported authored physics. Package sizes remain
+informational only (ADR-0062). See [BROWSER_PHYSICS_2D.md](BROWSER_PHYSICS_2D.md).
+
 ## Task 8 clean Ubuntu userspace — 2026-11-10
 
 The prepared editor and native export passed clean Ubuntu 24.04 container

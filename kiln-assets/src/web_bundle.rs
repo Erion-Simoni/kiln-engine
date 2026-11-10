@@ -75,7 +75,10 @@ pub fn runtime_info(wasm: &[u8]) -> Result<RuntimeInfo, String> {
         .ok_or("WASM lacks Kiln runtime metadata; rebuild the runtime")?
         .lines()
         .collect();
-    if lines.len() != 3 || !["fonts=0", "fonts=1"].contains(&lines[2]) {
+    if !(3..=4).contains(&lines.len())
+        || !["fonts=0", "fonts=1"].contains(&lines[2])
+        || (lines.len() == 4 && !["physics=0", "physics=1"].contains(&lines[3]))
+    {
         return Err("Unsupported WASM runtime metadata".into());
     }
     let runtime = RuntimeInfo {
@@ -86,6 +89,7 @@ pub fn runtime_info(wasm: &[u8]) -> Result<RuntimeInfo, String> {
         audio: true,
         fonts: lines[2] == "fonts=1",
         gamepad: true,
+        physics: lines.get(3) == Some(&"physics=1"),
     };
     runtime.validate("web")?;
     Ok(runtime)
@@ -168,5 +172,32 @@ mod tests {
         let mut duplicate = wasm.clone();
         duplicate.extend(&wasm[8..]);
         assert!(runtime_info(&duplicate).unwrap_err().contains("Duplicate"));
+    }
+}
+
+#[cfg(test)]
+mod capability_tests {
+    #[test]
+    fn legacy_metadata_lacks_physics_and_new_flags_are_strict() {
+        fn wasm(tail: &str) -> Vec<u8> {
+            let name = b"kiln.runtime.v1";
+            let text = format!("1\n{}\nfonts=1\n{tail}", env!("CARGO_PKG_VERSION"));
+            let mut module = b"\0asm\x01\0\0\0".to_vec();
+            module.extend([0, (name.len() + 1 + text.len()) as u8, name.len() as u8]);
+            module.extend(name);
+            module.extend(text.as_bytes());
+            module
+        }
+        assert!(!super::runtime_info(&wasm("")).unwrap().physics);
+        assert!(super::runtime_info(&wasm("physics=1\n")).unwrap().physics);
+        assert!(!super::runtime_info(&wasm("physics=0\n")).unwrap().physics);
+        for tail in [
+            "physics=true\n",
+            "physics=2\n",
+            "physics=1\nunknown=1\n",
+            "physics=1\nphysics=0\n",
+        ] {
+            assert!(super::runtime_info(&wasm(tail)).is_err());
+        }
     }
 }
