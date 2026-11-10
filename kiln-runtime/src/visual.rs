@@ -6,6 +6,14 @@ use kiln_render::{SpriteInstance, TextureId, FULL_UV};
 /// Collect tiles, sprites and particles in one sorting-layer order. Stable
 /// authored order resolves equal layers identically in editor and player.
 pub fn collect_scene_draws(world: &GameWorld, view: [f32; 4]) -> Vec<(TextureId, SpriteInstance)> {
+    collect_scene_draws_with_materials(world, view, |_| None)
+}
+/// Resolve material IDs per host without changing painter order or draw geometry.
+pub fn collect_scene_draws_with_materials(
+    world: &GameWorld,
+    view: [f32; 4],
+    resolve: impl Fn(&str) -> Option<u32>,
+) -> Vec<(TextureId, SpriteInstance)> {
     let mut draws = Vec::new();
     for (entity, source, pose, sprite) in world
         .world_ref()
@@ -20,14 +28,15 @@ pub fn collect_scene_draws(world: &GameWorld, view: [f32; 4]) -> Vec<(TextureId,
         let id = source
             .map(|id| id.0.clone())
             .unwrap_or_else(|| format!("{entity:?}"));
-        draws.push((
-            sprite.layer,
-            order,
-            id,
-            0,
-            sprite.texture,
-            sprite.draw_instance(pose.0),
-        ));
+        let mut instance = sprite.draw_instance(pose.0);
+        if let Some(name) = &sprite.material {
+            if let Some(id) = resolve(name) {
+                instance.material_id = id;
+            } else {
+                instance.color = [1.0, 0.0, 1.0, 1.0];
+            }
+        }
+        draws.push((sprite.layer, order, id, 0, sprite.texture, instance));
     }
     for (entity, source, map) in world
         .world_ref()

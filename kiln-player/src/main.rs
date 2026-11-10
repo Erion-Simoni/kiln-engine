@@ -101,6 +101,7 @@ fn main() -> Result<()> {
             fonts: cfg!(feature = "fonts"),
             gamepad: cfg!(feature = "gamepad"),
             physics: true,
+            materials: true,
         };
         println!("{}", serde_json::to_string(&runtime)?);
         return Ok(());
@@ -245,6 +246,7 @@ struct GpuState {
 
 /// The player application: owns the world, the camera and the GPU state.
 struct PlayerApp {
+    material_error: Option<String>,
     gpu: Option<GpuState>,
     camera: Camera,
     camera_controller: kiln_runtime::camera::CameraController,
@@ -309,6 +311,7 @@ impl PlayerApp {
         save_dir: PathBuf,
     ) -> Self {
         Self {
+            material_error: None,
             gpu: None,
             camera: Camera::new(width as f32, height as f32),
             camera_controller: Default::default(),
@@ -405,6 +408,16 @@ impl PlayerApp {
         }
         info!("Uploaded {} textures", textures.len());
         self.textures = textures;
+        if let Err(error) = pollster::block_on(gpu.sprite_renderer.prepare_project_materials(
+            gpu.renderer.device(),
+            &self.project,
+            |p| self.textures.get(p).map(|t| t.id),
+        )) {
+            log::error!("{error}");
+            self.material_error = Some(error);
+            return;
+        }
+        self.material_error = None;
 
         // Now that the textures exist, spawn the scene with them bound.
         let spawned = spawn::spawn_scene_by_id_with_textures(
@@ -963,6 +976,13 @@ impl PlayerApp {
         }
 
         // If in a menu state, render the menu (requires GPU).
+        if let Some(error) = &self.material_error {
+            if let Some(gpu) = &self.gpu {
+                gpu.window
+                    .set_title(&format!("Kiln material error: {error}"));
+            }
+            self.menu_state = MenuState::Main;
+        }
         if self.menu_state != MenuState::Playing {
             self.render_menu();
             return;
@@ -997,9 +1017,11 @@ impl PlayerApp {
         // Tilemaps are drawn first so entities appear on top of them.
         // Only the chunks inside the camera view are submitted.
         let view_bounds = self.camera.view_bounds();
-        for (texture, instance) in
-            kiln_runtime::visual::collect_scene_draws(&self.world, view_bounds)
-        {
+        for (texture, instance) in kiln_runtime::visual::collect_scene_draws_with_materials(
+            &self.world,
+            view_bounds,
+            |name| gpu.sprite_renderer.material_id(name),
+        ) {
             gpu.sprite_renderer.push_textured(texture, instance);
         }
 

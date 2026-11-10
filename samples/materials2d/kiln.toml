@@ -1,0 +1,241 @@
+id = "kiln-materials2d"
+name = "Sprite material acceptance"
+version = "0.1.0"
+features = []
+[window]
+width = 640
+height = 360
+[scenes.main]
+id = "main"
+name = "Materials"
+script = "scripts/game.ks"
+
+[[scenes.main.entities]]
+id = "default_before"
+name = "default_before"
+components = [
+ { type = "Transform", x = 80.0, y = 260.0, rotation = 0.0, scale = 1.0 },
+ { type = "Sprite", color = [0, 0, 1, 1], width = 64.0, height = 64.0, layer = 0.0 },
+]
+
+[[scenes.main.entities]]
+id = "default_parameters"
+name = "default_parameters"
+components = [
+ { type = "Transform", x = 180.0, y = 260.0, rotation = 0.0, scale = 1.0 },
+ { type = "Sprite", color = [1, 1, 1, 1], width = 64.0, height = 64.0, layer = 0.0, material = "green" },
+]
+
+[[scenes.main.entities]]
+id = "overridden_color"
+name = "overridden_color"
+components = [
+ { type = "Transform", x = 280.0, y = 260.0, rotation = 0.0, scale = 1.0 },
+ { type = "Sprite", color = [1, 1, 1, 1], width = 64.0, height = 64.0, layer = 0.0, material = "red" },
+]
+
+[[scenes.main.entities]]
+id = "overridden_float"
+name = "overridden_float"
+components = [
+ { type = "Transform", x = 380.0, y = 260.0, rotation = 0.0, scale = 1.0 },
+ { type = "Sprite", color = [1, 1, 1, 1], width = 64.0, height = 64.0, layer = 0.0, material = "dark_red" },
+]
+
+[[scenes.main.entities]]
+id = "default_after"
+name = "default_after"
+components = [
+ { type = "Transform", x = 480.0, y = 260.0, rotation = 0.0, scale = 1.0 },
+ { type = "Sprite", color = [0, 0, 1, 1], width = 64.0, height = 64.0, layer = 0.0 },
+]
+
+[[scenes.main.entities]]
+id = "default_texture"
+name = "default_texture"
+components = [
+ { type = "Transform", x = 80.0, y = 170.0, rotation = 0.0, scale = 1.0 },
+ { type = "Sprite", color = [1, 1, 1, 1], width = 64.0, height = 64.0, layer = 0.0, material = "texture_red" },
+]
+
+[[scenes.main.entities]]
+id = "overridden_texture"
+name = "overridden_texture"
+components = [
+ { type = "Transform", x = 180.0, y = 170.0, rotation = 0.0, scale = 1.0 },
+ { type = "Sprite", color = [1, 1, 1, 1], width = 64.0, height = 64.0, layer = 0.0, material = "texture_blue" },
+]
+
+[[scenes.main.entities]]
+id = "alpha_back"
+name = "alpha_back"
+components = [
+ { type = "Transform", x = 100.0, y = 80.0, rotation = 0.0, scale = 1.0 },
+ { type = "Sprite", color = [0, 0, 1, 1], width = 64.0, height = 64.0, layer = 0.0 },
+]
+
+[[scenes.main.entities]]
+id = "alpha_material"
+name = "alpha_material"
+components = [
+ { type = "Transform", x = 100.0, y = 80.0, rotation = 0.0, scale = 1.0 },
+ { type = "Sprite", color = [1, 1, 1, 1], width = 64.0, height = 64.0, layer = 1.0, material = "alpha_red" },
+]
+
+[[scenes.main.entities]]
+id = "alpha_front"
+name = "alpha_front"
+components = [
+ { type = "Transform", x = 100.0, y = 80.0, rotation = 0.0, scale = 1.0 },
+ { type = "Sprite", color = [0, 1, 0, 0.5], width = 64.0, height = 64.0, layer = 2.0 },
+]
+
+[[scenes.main.entities]]
+id = "flipped"
+name = "flipped"
+components = [
+ { type = "Transform", x = 380.0, y = 80.0, rotation = 0.0, scale = 1.0 },
+ { type = "Sprite", color = [1, 1, 1, 1], width = 64.0, height = 64.0, layer = 0.0, material = "identity", texture = "assets/stripe.png" },
+ { type = "SpriteLayout", settings = { flip_x = true, flip_y = false, pivot = [0.5,0.5], pixels_per_unit = 1.0 } },
+]
+
+[[scenes.main.entities]]
+id = "rotated"
+name = "rotated"
+components = [
+ { type = "Transform", x = 480.0, y = 80.0, rotation = 1.57079632679, scale = 1.0 },
+ { type = "Sprite", color = [1, 1, 1, 1], width = 64.0, height = 64.0, layer = 0.0, material = "identity", texture = "assets/stripe.png" },
+]
+
+[scenes.next]
+id = "next"
+name = "Next material scene"
+script = "scripts/game.ks"
+
+[[scenes.next.entities]]
+id = "changed_scene"
+name = "changed_scene"
+components = [
+ { type = "Transform", x = 80.0, y = 260.0, rotation = 0.0, scale = 1.0 },
+ { type = "Sprite", color = [1, 1, 1, 1], width = 64.0, height = 64.0, layer = 0.0, material = "texture_blue" },
+]
+
+[action_map.actions.save]
+id = "save"
+name = "save"
+bindings = [{ binding_type = { Key = "s" } }]
+
+[action_map.actions.load]
+id = "load"
+name = "load"
+bindings = [{ binding_type = { Key = "l" } }]
+
+[action_map.actions.next]
+id = "next"
+name = "next"
+bindings = [{ binding_type = { Key = "n" } }]
+
+[shaders.tint]
+id = "tint"
+name = "Typed tint"
+entry_point = "paint"
+source = '''
+@fragment fn paint(in: VertexOutput) -> @location(0) vec4<f32> {
+ let texel = textureSample(sprite_tex, sprite_sampler, in.uv + offset);
+ return vec4<f32>(texel.rgb * in.color.rgb * tint.rgb * brightness * gain * extra.rgb, texel.a * in.color.a * tint.a * extra.a);
+}
+'''
+[shaders.tint.parameters]
+tint = { Color = [0.0,1.0,0.0,1.0] }
+brightness = { Float = 1.0 }
+offset = { Vec2 = [0.0,0.0] }
+gain = { Vec3 = [1.0,1.0,1.0] }
+extra = { Vec4 = [1.0,1.0,1.0,1.0] }
+[shaders.texture]
+id = "texture"
+name = "Named texture"
+entry_point = "paint"
+source = '''
+@fragment fn paint(in: VertexOutput) -> @location(0) vec4<f32> {
+ return textureSample(accent, accent_sampler, in.uv) * in.color;
+}
+'''
+[shaders.texture.parameters]
+accent = { Texture = "assets/red.png" }
+[shaders.identity]
+id = "identity"
+name = "Identity fragment"
+entry_point = "fs_main"
+source = '''
+@fragment fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+ return textureSample(sprite_tex, sprite_sampler, in.uv) * in.color;
+}
+'''
+
+[materials.green]
+id = "green"
+name = "green"
+shader = "tint"
+[materials.green.parameters]
+
+
+[materials.red]
+id = "red"
+name = "red"
+shader = "tint"
+[materials.red.parameters]
+tint = { Color = [1.0,0.0,0.0,1.0] }
+
+[materials.dark_red]
+id = "dark_red"
+name = "dark_red"
+shader = "tint"
+[materials.dark_red.parameters]
+tint = { Color = [1.0,0.0,0.0,1.0] }
+brightness = { Float = 0.25 }
+
+[materials.alpha_red]
+id = "alpha_red"
+name = "alpha_red"
+shader = "tint"
+[materials.alpha_red.parameters]
+tint = { Color = [1.0,0.0,0.0,0.5] }
+
+[materials.texture_red]
+id = "texture_red"
+name = "texture_red"
+shader = "texture"
+[materials.texture_red.parameters]
+
+
+[materials.texture_blue]
+id = "texture_blue"
+name = "texture_blue"
+shader = "texture"
+[materials.texture_blue.parameters]
+accent = { Texture = "assets/blue.png" }
+
+[materials.identity]
+id = "identity"
+name = "identity"
+shader = "identity"
+[materials.identity.parameters]
+
+
+[ui]
+initial_screen = "hud"
+[ui.screens.hud]
+name = "Material controls"
+pause_game = false
+modal = false
+allow_cancel = false
+[[ui.screens.hud.widgets]]
+id = "help"
+kind = "Label"
+blocks_pointer = false
+text = "S save / L load / N next scene"
+font_size = 14.0
+text_align = [0.0,0.0]
+[ui.screens.hud.widgets.layout]
+offset = [10.0,10.0]
+size = [610.0,28.0]

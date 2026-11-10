@@ -87,8 +87,10 @@ physics require a prepared runtime advertising `physics=true`; legacy or opted-o
 runtimes reject those exports. See [BROWSER_PHYSICS_2D.md](BROWSER_PHYSICS_2D.md)
 for capabilities and actual simulation/save/transition evidence.
 
-**Sprite material overrides remain rejected for Browser** pending material host
-integration. No universal native/browser gameplay or hardware parity is claimed.
+Authored sprite materials now use the shared fragment pipeline, typed numeric
+constants and named texture parameters. A capable selected runtime is required;
+legacy bundles reject material projects. See [SPRITE_MATERIALS_2D.md](SPRITE_MATERIALS_2D.md).
+No universal native/browser gameplay or hardware parity is claimed.
 
 Automated evidence includes actual native-editor Browser export with an empty
 tools PATH, an unsaved scene edit saved into the artifact, previous-output

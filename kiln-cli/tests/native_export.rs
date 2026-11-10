@@ -52,6 +52,7 @@ impl Fixture {
             fonts: true,
             gamepad: true,
             physics: true,
+            materials: true,
         };
         fs::write(
             &player,
@@ -379,11 +380,96 @@ fn browser_exports_only_prepared_runtime_and_relative_project_with_validated_rec
     fs::write(&f.project, project.to_toml().unwrap()).unwrap();
     let material = command("material").output().unwrap();
     assert!(!material.status.success());
-    assert!(String::from_utf8_lossy(&material.stderr).contains("material overrides"));
+    assert!(String::from_utf8_lossy(&material.stderr).contains("missing material"));
     project.scenes.get_mut("main").unwrap().entities.clear();
     fs::write(&f.project, project.to_toml().unwrap()).unwrap();
     fs::write(bundle.join("kiln_web.js"), format!("{js}\n// mixed build")).unwrap();
     assert!(!command("mixed").output().unwrap().status.success());
     assert!(!output.exists());
     assert!(!export::staging_path(&output, "mixed").exists());
+}
+
+#[test]
+fn material_capabilities_and_bad_shader_diagnostics_preserve_output() {
+    let fixture = Fixture::new();
+    let root = fixture.project.parent().unwrap();
+    let mut project = Project::from_toml(&fs::read_to_string(&fixture.project).unwrap()).unwrap();
+    project.shaders.insert(
+        "tint".into(),
+        kiln_core::project::Shader {
+            id: "tint".into(),
+            name: "tint".into(),
+            source: kiln_runtime::materials::DEFAULT_FRAGMENT.into(),
+            entry_point: "fs_main".into(),
+            parameters: Default::default(),
+        },
+    );
+    project.materials.insert(
+        "paint".into(),
+        kiln_core::project::SpriteMaterial {
+            id: "paint".into(),
+            name: "paint".into(),
+            shader: "tint".into(),
+            parameters: Default::default(),
+        },
+    );
+    fs::write(&fixture.project, project.to_toml().unwrap()).unwrap();
+    let bundle = root.join("materials-runtime");
+    fs::create_dir(&bundle).unwrap();
+    fs::write(
+        bundle.join("kiln_web.js"),
+        "export function run(){}\nexport function prepare_game(){}\nexport function start_game(){}",
+    )
+    .unwrap();
+    let prepare = |capable: bool| {
+        let name = b"kiln.runtime.v1";
+        let text = format!(
+            "1\n{}\nfonts=1\nphysics=1\nmaterials={}\n",
+            env!("CARGO_PKG_VERSION"),
+            u8::from(capable)
+        );
+        let mut wasm = b"\0asm\x01\0\0\0".to_vec();
+        wasm.extend([0, (name.len() + 1 + text.len()) as u8, name.len() as u8]);
+        wasm.extend(name);
+        wasm.extend(text.as_bytes());
+        fs::write(bundle.join("kiln_web_bg.wasm"), wasm).unwrap();
+        assert!(Command::new(env!("CARGO_BIN_EXE_kiln-cli"))
+            .args(["web-runtime", "--input"])
+            .arg(&bundle)
+            .output()
+            .unwrap()
+            .status
+            .success());
+    };
+    let output = root.join("material-game");
+    let command = || {
+        Command::new(env!("CARGO_BIN_EXE_kiln-cli"))
+            .args(["export", "--platform", "web", "--project"])
+            .arg(&fixture.project)
+            .arg("--web-runtime")
+            .arg(&bundle)
+            .arg("--output")
+            .arg(&output)
+            .output()
+            .unwrap()
+    };
+    prepare(false);
+    let failed = command();
+    assert!(!failed.status.success());
+    assert!(String::from_utf8_lossy(&failed.stderr).contains("lacks sprite materials"));
+    assert!(!output.exists());
+    prepare(true);
+    let valid = command();
+    assert!(
+        valid.status.success(),
+        "{}",
+        String::from_utf8_lossy(&valid.stderr)
+    );
+    let before = fs::read(output.join("export.json")).unwrap();
+    project.shaders.get_mut("tint").unwrap().source = "invalid WGSL".into();
+    fs::write(&fixture.project, project.to_toml().unwrap()).unwrap();
+    let invalid = command();
+    assert!(!invalid.status.success());
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("Material 'paint'"));
+    assert_eq!(before, fs::read(output.join("export.json")).unwrap());
 }

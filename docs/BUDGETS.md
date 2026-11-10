@@ -6,6 +6,21 @@ measurements, with no release ceiling or size-based completion gate. Frame-time,
 startup, memory/resource budgets and bounded-input limits remain active.
 `just size` only reports sizes; it does not enforce these other budgets.
 
+## Task 8 authored sprite materials — 2026-11-10
+
+Material pipelines are cached across unchanged frames. Preparation is bounded at
+256 shaders/materials, 256 KiB per source, 1 MiB total authored sources, 64 typed
+parameters per shader and four named textures per material. These are technical
+resource limits, not package-size goals. Constants specialize pipelines on edit;
+shader compilation/validation does not run every frame. Shader definition/texture
+keys are compared for changes. Additional material runs can add draw calls while
+preserving transparent painter order; no new render pass is added.
+
+Actual native/browser pixels agree within one channel value of backend rounding
+for the test fixture. This is functional software evidence, not a reference GPU
+performance/startup certification. See SPRITE_MATERIALS_2D.md and the selected
+material evidence. Package-size goals remain removed.
+
 ## Task 8 browser physics — 2026-11-10
 
 Default WASM builds now enable the existing shared Rapier runtime. Simulation uses

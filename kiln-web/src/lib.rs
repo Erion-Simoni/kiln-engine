@@ -214,6 +214,7 @@ impl App {
 
         // Load project first to get audio assets and scene script
         let project = load_project(project_path).await?;
+        kiln_render::materials::plans(&project)?;
 
         let textures = load_textures(
             renderer.device(),
@@ -223,6 +224,12 @@ impl App {
             project_path,
         )
         .await?;
+
+        sprite_renderer
+            .prepare_project_materials(renderer.device(), &project, |p| {
+                textures.get(p).map(|t| t.0)
+            })
+            .await?;
 
         let scene_id = project.default_scene_id().ok_or("Project has no scenes")?;
         let scripts = resources::scripts(&project, project_path).await?;
@@ -528,9 +535,11 @@ impl App {
         // Tilemaps are drawn first so entities appear on top of them.
         // Only the chunks inside the camera view are submitted.
         let view_bounds = self.camera.view_bounds();
-        for (texture, instance) in
-            kiln_runtime::visual::collect_scene_draws(&self.world, view_bounds)
-        {
+        for (texture, instance) in kiln_runtime::visual::collect_scene_draws_with_materials(
+            &self.world,
+            view_bounds,
+            |name| self.sprite_renderer.material_id(name),
+        ) {
             self.sprite_renderer.push_textured(texture, instance);
         }
 
@@ -683,6 +692,7 @@ async fn load_textures(
 ) -> Result<resources::Textures, Box<dyn std::error::Error>> {
     let mut texture_paths = Vec::new();
 
+    texture_paths.extend(kiln_render::materials::texture_paths(project));
     // Collect all unique texture paths from the project
     for scene in project.scenes.values() {
         for entity in &scene.entities {
@@ -711,6 +721,7 @@ async fn load_textures(
         }
     }
     texture_paths.sort();
+    texture_paths.dedup();
     let mut textures = HashMap::new();
 
     // Load each texture

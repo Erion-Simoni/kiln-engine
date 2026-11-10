@@ -6,25 +6,6 @@ fn escape(text: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
 }
-/// Fail explicitly for authored features that this browser host has not integrated.
-pub fn validate_target(project: &kiln_core::Project) -> Result<()> {
-    let entities = project
-        .scenes
-        .values()
-        .flat_map(|s| &s.entities)
-        .chain(project.prefabs.values().map(|p| &p.root_entity));
-    for entity in entities {
-        for component in &entity.components {
-            if let kiln_core::Component::Sprite {
-                material: Some(_), ..
-            } = component
-            {
-                bail!("This project uses material overrides, which this Browser runtime does not support. Export a native game.");
-            }
-        }
-    }
-    Ok(())
-}
 /// Copy a prepared runtime and emit a relocatable loading/start shell.
 pub fn write(
     stage: &Path,

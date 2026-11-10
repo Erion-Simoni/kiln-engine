@@ -13,6 +13,7 @@ pub fn read_project(path: &Path) -> Result<Project> {
         bail!("Project needs an ID and at least one scene");
     }
     project.ui.validate().map_err(anyhow::Error::msg)?;
+    kiln_runtime::materials::plans(&project).map_err(anyhow::Error::msg)?;
     Ok(project)
 }
 
@@ -88,6 +89,9 @@ fn resource(root: &Path, path: &str) -> Result<PathBuf> {
     Ok(file)
 }
 pub fn validate(project: &Project, root: &Path) -> Result<()> {
+    for path in kiln_runtime::materials::texture_paths(project) {
+        kiln_assets::decode_png(&fs::read(resource(root, &path)?)?)?;
+    }
     let check = |path: &str| resource(root, path).map(|_| ());
     let image = |path: &str| image::open(resource(root, path)?).map_err(anyhow::Error::from);
     if !project.icon.is_empty() {

@@ -18,6 +18,9 @@ pub struct RuntimeInfo {
     /// Legacy runtimes omit this field and cannot export authored physics.
     #[serde(default)]
     pub physics: bool,
+    /// Authored fragment pipelines, constants and texture parameters.
+    #[serde(default)]
+    pub materials: bool,
 }
 impl RuntimeInfo {
     pub fn validate(&self, platform: &str) -> Result<(), String> {
@@ -145,6 +148,7 @@ mod capability_tests {
         let runtime: super::RuntimeInfo = serde_json::from_str(&legacy).unwrap();
         runtime.validate("web").unwrap();
         assert!(!runtime.physics);
+        assert!(!runtime.materials);
         let current = super::RuntimeInfo {
             physics: true,
             ..runtime

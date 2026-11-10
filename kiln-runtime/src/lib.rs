@@ -55,3 +55,6 @@ pub use physics::*;
 
 mod animation_player;
 pub mod visual;
+
+/// Shared authored sprite material validation and texture references.
+pub use kiln_render::materials;

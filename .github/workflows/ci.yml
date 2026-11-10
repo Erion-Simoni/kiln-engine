@@ -66,7 +66,7 @@ jobs:
         run: cargo install cargo-nextest
       - name: Install Linux audio/controller development headers
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libgl1-mesa-dri mesa-vulkan-drivers
       - name: Run tests
         run: cargo nextest run --workspace
       - name: Test portable package preparation
@@ -199,6 +199,8 @@ jobs:
           KILN_TASK7_EVIDENCE_DIR: target/task7-native-evidence
           KILN_TASK7_ARCHIVE: target/task7-game.kar
         run: python3 tests/native/task7_smoke.py
+      - name: Exercise native and editor sprite material pixels
+        run: python3 tests/native/materials_smoke.py
       - name: Exercise real editor export and output validation
         env:
           KILN_EXPORT_EVIDENCE_DIR: target/task8-export-evidence
@@ -217,6 +219,7 @@ jobs:
             target/task7-editor-evidence/
             target/task8-export-evidence/
             target/task8-relocated-evidence/
+            target/task8-material-native-evidence/
           retention-days: 7
 
   web-smoke:
@@ -269,6 +272,8 @@ jobs:
         env:
           WEB_PHYSICS_MINIMAL_RUNTIME: target/web-no-physics-runtime
         run: node tests/web/physics.cjs target/debug/web-runtime
+      - name: Exercise exported sprite materials, texture parameters and save restoration
+        run: node tests/web/materials.cjs target/debug/web-runtime
       - name: Exercise Browser export in the native editor
         env:
           KILN_BROWSER_EXPORT_EVIDENCE_DIR: target/task8-browser-export-evidence
@@ -296,5 +301,6 @@ jobs:
             target/task8-portable-evidence/
             target/task8-clean-linux-evidence/
             target/task8-physics-evidence/
+            target/task8-material-evidence/
             target/dist/kiln-portable-development.tar.gz
           retention-days: 7

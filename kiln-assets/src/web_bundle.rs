@@ -75,9 +75,10 @@ pub fn runtime_info(wasm: &[u8]) -> Result<RuntimeInfo, String> {
         .ok_or("WASM lacks Kiln runtime metadata; rebuild the runtime")?
         .lines()
         .collect();
-    if !(3..=4).contains(&lines.len())
+    if !(3..=5).contains(&lines.len())
         || !["fonts=0", "fonts=1"].contains(&lines[2])
-        || (lines.len() == 4 && !["physics=0", "physics=1"].contains(&lines[3]))
+        || (lines.len() >= 4 && !["physics=0", "physics=1"].contains(&lines[3]))
+        || (lines.len() == 5 && !["materials=0", "materials=1"].contains(&lines[4]))
     {
         return Err("Unsupported WASM runtime metadata".into());
     }
@@ -90,6 +91,7 @@ pub fn runtime_info(wasm: &[u8]) -> Result<RuntimeInfo, String> {
         fonts: lines[2] == "fonts=1",
         gamepad: true,
         physics: lines.get(3) == Some(&"physics=1"),
+        materials: lines.get(4) == Some(&"materials=1"),
     };
     runtime.validate("web")?;
     Ok(runtime)
@@ -191,6 +193,18 @@ mod capability_tests {
         assert!(!super::runtime_info(&wasm("")).unwrap().physics);
         assert!(super::runtime_info(&wasm("physics=1\n")).unwrap().physics);
         assert!(!super::runtime_info(&wasm("physics=0\n")).unwrap().physics);
+        assert!(!super::runtime_info(&wasm("physics=1\n")).unwrap().materials);
+        assert!(
+            super::runtime_info(&wasm("physics=1\nmaterials=1\n"))
+                .unwrap()
+                .materials
+        );
+        assert!(
+            !super::runtime_info(&wasm("physics=1\nmaterials=0\n"))
+                .unwrap()
+                .materials
+        );
+        assert!(super::runtime_info(&wasm("physics=1\nmaterials=true\n")).is_err());
         for tail in [
             "physics=true\n",
             "physics=2\n",

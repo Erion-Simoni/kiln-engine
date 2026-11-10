@@ -153,7 +153,7 @@ remain explicitly separate. Real editor export/distribution is Task 8.
 
 ### 8. Real build/export and distribution — IN PROGRESS (exports, portable editor and clean Linux userspace)
 
-- [x] Replace simulated Build/Export with a real asynchronous native/browser CLI process, bounded streamed stdout/stderr, actual exit status, job-specific receipt/resource validation off the UI thread and cancellation/cleanup. Real editor Save & Export and UI Cancel pass on Linux/Xvfb. Unsupported targets/options fail explicitly; Browser gates authored physics/joints/solid tilemaps against the selected runtime capability and rejects sprite material overrides pending host integration.
+- [x] Replace simulated Build/Export with a real asynchronous native/browser CLI process, bounded streamed stdout/stderr, actual exit status, job-specific receipt/resource validation off the UI thread and cancellation/cleanup. Real editor Save & Export and UI Cancel pass on Linux/Xvfb. Unsupported targets/options fail explicitly; Browser gates authored physics/joints/solid tilemaps against the selected runtime capability and validates/gates authored sprite materials against the selected runtime.
 - [x] Bundle resources/runtimes for the current supported native/browser targets. Native packs/verifies a KAR and includes a matching player; Browser includes the normalized project tree, hash-verified prepared JS/WASM and actual loading/start/error shell. Export/play need no Cargo. Default Browser builds now include shared 2D physics; capabilities remain explicit and other target/toolchain support is pending.
 - [x] Deliver clean Linux userspace acceptance plus relocated Browser loading/input/audio-unlock/save behavior. A pinned Ubuntu 24.04 container runs the installed editor and exported game offline/unprivileged without Rust, repository or development sysroot mounts; real edit/save/export/cancel and game settings/save/restart/Continue pass. Shipped runtime requirements include the discovered dynamic X11 dependency. Browser artifact passes nested HTTP deployment, loading/error/retry, input, explicit audio unlock and reload/save/resume. Physical machines/other OS and driver/device coverage remain in the platform gate below.
 - [ ] Finish portable editor release distribution and validate other platforms on appropriate machines. Linux development archive now includes matched tools, browser runtime, templates/sample, SHA-256 inventory, original dependency/font/Rust notices and verified MPL sources. Moved installation passes both real editor export and relocated gameplay with no Rust on PATH; GLIBC 2.39/system dependency requirements are recorded. Release provenance/licensing review, physical-machine and other OS/GPU checks remain open. Package-size goals are removed by owner request (ADR-0062). See [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md).
@@ -162,8 +162,8 @@ Acceptance: author and export from the editor, move the artifact outside the rep
 
 Native checkpoint: [NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md), ADR-0059 and
 [evidence/task8-native/README.md](evidence/task8-native/README.md). Task 8 remains
-open for physical-machine/other-platform checks, browser material parity and
-release editor distribution (development relocation checkpoint passes). See [BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md) for
+open for physical-machine/other-platform checks, release provenance and
+other-platform editor distribution (development relocation checkpoint passes). See [BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md) for
 the tested browser contract. Task 9 is not started.
 
 ### 9. Reference games and release gate — PENDING
@@ -604,3 +604,28 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
   Actual editor Browser Save & Export and prior movement/UI/audio/storage
   acceptance pass against the upgraded runtime. Task 8 remains open for material
   integration, release provenance and physical/other-platform checks.
+
+### 2026-11-10 — Task 8 shared authored sprite materials
+
+- Replaced unused/broken material pipeline plumbing with one fixed-vertex/custom
+  WGSL fragment contract across editor/native/browser. Real scene submission now
+  resolves authored material IDs. Pipelines use the actual target format, correct
+  quad/instance layouts and compatible camera/sprite/material texture bindings.
+  Adjacent batches retain transparent painter order and reset default pipelines.
+- Added typed Float/Vec2/Vec3/Vec4/Color specialization and named Texture defaults/
+  overrides. PNG paths use the normal project resource/import pipeline. Export
+  validates definitions, references, parameter types/finiteness, WGSL stages/
+  bindings and resources before publication; backend errors are captured.
+- Prepared runtime identity now advertises materials; old JSON/metadata defaults
+  false, so incapable runtimes fail explicitly instead of dropping materials.
+  Editor templates/entry names are corrected, project shader data stays
+  authoritative, and Shader Editor can create parameters/materials and edit
+  overrides. Actual scene preview replaces the former fake shader preview box.
+- Native/editor and relocated HTTP browser pixel tests cover defaults/overrides,
+  named textures, transparent default/custom/default order, flip/rotation and
+  cross-scene save/load. Invalid shader loading feedback and old-runtime rejection
+  are exercised. CI runs both paths; material playground joins portable examples.
+  ADR-0064 and SPRITE_MATERIALS_2D.md record scope. Package size is not a gate.
+- Remaining Task 8 work is physical/other-platform validation, startup/frame-time/
+  memory evidence on reference hardware and release provenance/licensing; shader
+  host APIs alone are no longer the evidence for material support.

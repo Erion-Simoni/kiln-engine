@@ -98,9 +98,6 @@ pub fn run(options: Options) -> Result<()> {
         .context("Project manifest is missing")?;
     let root = manifest.parent().context("Project has no directory")?;
     let project = resources::read_project(&manifest)?;
-    if browser {
-        web::validate_target(&project)?;
-    }
     let output = std::path::absolute(options.output)?;
     if output.file_name().is_none() {
         bail!("Choose an output subdirectory");
@@ -152,6 +149,9 @@ pub fn run(options: Options) -> Result<()> {
     };
     if !runtime.physics && kiln_core::physics_data::project_uses_physics(&project) {
         bail!("This project uses physics, but the selected runtime lacks physics support. Install or prepare a physics-enabled runtime.");
+    }
+    if !runtime.materials && kiln_runtime::materials::project_uses_materials(&project) {
+        bail!("The selected runtime lacks sprite materials support; install or prepare a matching runtime");
     }
     println!("Snapshotting saved project '{}'", project.name);
     let snapshot = stage.0.join("project");

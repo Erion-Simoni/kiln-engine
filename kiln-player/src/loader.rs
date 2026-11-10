@@ -42,6 +42,8 @@ pub enum LoaderError {
     SceneNotFound(String),
     #[error("Invalid saved UI: {0}")]
     InvalidUi(String),
+    #[error("Invalid sprite materials: {0}")]
+    InvalidMaterials(String),
 }
 
 /// Result of loading a project's manifest and raw assets.
@@ -124,6 +126,7 @@ pub fn load(path: &Path, scene: Option<&str>) -> Result<LoadedGame, LoaderError>
     };
 
     project.ui.validate().map_err(LoaderError::InvalidUi)?;
+    kiln_render::materials::plans(&project).map_err(LoaderError::InvalidMaterials)?;
     let scene_id = select_scene(&project, scene)?;
     Ok(LoadedGame {
         project,

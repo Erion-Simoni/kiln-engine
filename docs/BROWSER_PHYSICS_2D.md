@@ -84,8 +84,7 @@ acceptance also pass with physics enabled.
 
 ## Remaining boundaries
 
-Sprite material overrides are still rejected by Browser pending material host
-integration. This checkpoint does not certify every possible script/platform
+Sprite materials now have a shared validated host; see [SPRITE_MATERIALS_2D.md](SPRITE_MATERIALS_2D.md). This checkpoint does not certify every possible script/platform
 integration, other browser engines/mobile or physical GPU/audio/controller
 behavior. Reference-hardware startup/frame-time/memory and release provenance
 remain separate Task 8 checks. Package-size goals are removed (ADR-0062).

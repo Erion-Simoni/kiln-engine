@@ -1658,3 +1658,35 @@ acceptance for simulation, collisions/filtering/raycast, kinematics/joints, logi
 save/reload and scene changes. Re-run existing browser UI/input/audio/storage and
 native/workspace checks. Software browser evidence does not certify physical
 hardware/other browsers. Package-size goals remain removed (ADR-0062).
+
+## ADR-0064: Shared authored sprite material pipelines
+
+**Date:** 2026-11-10
+**Status:** accepted (Task 8 material checkpoint)
+
+Replace the unused placeholder sprite material pipeline with one shared contract
+for editor/native/browser. Keep Kiln's vertex transform/UV/tint shader; authors
+supply a WGSL fragment entry taking VertexOutput (color, uv) and returning RGBA.
+Expose typed shader-default/material-override constants (Float/Vec2/Vec3/Vec4/Color)
+and named Texture parameters with generated texture/sampler bindings. Parameters
+are specialized per material; project edits rebuild cached pipelines, not every
+frame. Cap source/definition/parameter/texture counts as resource bounds, not
+package-size targets. Validate references/types/finiteness/WGSL/stages/bindings
+before export and capture backend pipeline failures through wgpu error scopes.
+
+Add kiln-core as an internal kiln-render dependency (core does not depend on
+render), plus direct naga 22.1 with wgsl-in, already present through wgpu 22.1
+(MIT/Apache-2.0, same compiler version, no new compiler implementation). Centralize
+material preparation/texture references and use actual render-target formats,
+quad/instance layouts and explicit compatible bind layouts. Bind per-material
+textures and preserve transparent painter order across default/custom/default runs.
+Missing/invalid authored material definitions fail export/startup; editor drafts
+surface errors and visibly mark unresolved material draws.
+
+Wire shared preparation/draw IDs into all three hosts and correct the shader
+editor's invalid new-shader template/entry defaults. Extend prepared runtime
+capabilities so old runtimes cannot silently ignore materials. Test pure validation,
+real native/browser pixels (including numeric and texture overrides, alpha/order,
+rotation, scene/save restoration), failure feedback and existing workflows.
+No release-size goal is reintroduced. Physical hardware/other OS and provenance
+checks remain separate Task 8 gates.
