@@ -850,7 +850,7 @@ Once the 2D gate is completed, the existing M29 roadmap becomes the right next s
 3. Depth buffer and perspective camera.
 4. Frustum culling.
 5. 3D editor viewport and transform gizmos.
-6. Verify that disabling `3d` does not increase the 2D web build size.
+6. Verify that disabling `3d` excludes optional 3D code/dependencies. Package size is informational (ADR-0062).
 7. Run a basic 3D sample on Low and Medium hardware.
 
 M29 acceptance required.

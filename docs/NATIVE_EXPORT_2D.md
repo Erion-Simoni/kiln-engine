@@ -100,6 +100,6 @@ Selected real captures/results are in [evidence/task8-native](evidence/task8-nat
 This is relocated/no-toolchain execution on the cloud runner, not a clean-machine
 OS/dependency test. Xvfb/software graphics and ALSA null output do not certify an
 Intel HD 520, real controller/speakers, Windows/macOS or a signed distribution.
-Debug runtime size measurements are not release-budget results. Full clean-machine
+Package-size goals are removed (ADR-0062); sizes are informational. Clean Ubuntu 24.04 container acceptance now passes (see [CLEAN_MACHINE_TEST.md](CLEAN_MACHINE_TEST.md)); physical-machine
 native acceptance and portable editor/other-platform packaging
 must still pass before Task 8 is complete. Task 9 has not started.

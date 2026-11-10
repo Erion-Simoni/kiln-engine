@@ -151,18 +151,18 @@ saves and browser quota failures preserve the old slot/live world. Software
 acceptance is complete; physical-controller, audible-device and remote CI checks
 remain explicitly separate. Real editor export/distribution is Task 8.
 
-### 8. Real build/export and distribution — IN PROGRESS (exports and portable development editor)
+### 8. Real build/export and distribution — IN PROGRESS (exports, portable editor and clean Linux userspace)
 
 - [x] Replace simulated Build/Export with a real asynchronous native/browser CLI process, bounded streamed stdout/stderr, actual exit status, job-specific receipt/resource validation off the UI thread and cancellation/cleanup. Real editor Save & Export and UI Cancel pass on Linux/Xvfb. Unsupported targets/options fail explicitly; Browser also rejects authored physics/joints and material overrides pending host integration.
 - [x] Bundle resources/runtimes for the current supported native/browser targets. Native packs/verifies a KAR and includes a matching player; Browser includes the normalized project tree, hash-verified prepared JS/WASM and actual loading/start/error shell. Export/play need no Cargo. Browser capabilities remain explicitly bounded; other target/toolchain support is pending.
-- [ ] Deliver clean-machine desktop acceptance, then browser export with loading/input/audio-unlock/save behavior. Relocated Linux export passes menus/settings/save/restart/Continue with no archive argument or Rust on PATH; a separate clean-machine dependency/OS test remains pending. The relocated editor-produced Browser artifact passes nested HTTP deployment, loading/error/retry, input, explicit audio unlock and reload/save/resume.
-- [ ] Finish portable editor release distribution and validate other platforms on appropriate machines. Linux development archive now includes matched tools, browser runtime, templates/sample, SHA-256 inventory, original dependency/font/Rust notices and verified MPL sources. Moved installation passes both real editor export and relocated gameplay with no Rust on PATH; GLIBC 2.39/system dependency requirements are recorded. Release provenance/licensing review, budgets, clean-machine and other OS/GPU checks remain open. See [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md).
+- [x] Deliver clean Linux userspace acceptance plus relocated Browser loading/input/audio-unlock/save behavior. A pinned Ubuntu 24.04 container runs the installed editor and exported game offline/unprivileged without Rust, repository or development sysroot mounts; real edit/save/export/cancel and game settings/save/restart/Continue pass. Shipped runtime requirements include the discovered dynamic X11 dependency. Browser artifact passes nested HTTP deployment, loading/error/retry, input, explicit audio unlock and reload/save/resume. Physical machines/other OS and driver/device coverage remain in the platform gate below.
+- [ ] Finish portable editor release distribution and validate other platforms on appropriate machines. Linux development archive now includes matched tools, browser runtime, templates/sample, SHA-256 inventory, original dependency/font/Rust notices and verified MPL sources. Moved installation passes both real editor export and relocated gameplay with no Rust on PATH; GLIBC 2.39/system dependency requirements are recorded. Release provenance/licensing review, physical-machine and other OS/GPU checks remain open. Package-size goals are removed by owner request (ADR-0062). See [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md).
 
 Acceptance: author and export from the editor, move the artifact outside the repository to a machine without Rust, and play the full game. A failing exporter produces failure, never a success message.
 
 Native checkpoint: [NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md), ADR-0059 and
 [evidence/task8-native/README.md](evidence/task8-native/README.md). Task 8 remains
-open for clean-machine/other-platform checks, browser physics/material parity and
+open for physical-machine/other-platform checks, browser physics/material parity and
 release editor distribution (development relocation checkpoint passes). See [BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md) for
 the tested browser contract. Task 9 is not started.
 
@@ -217,7 +217,7 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Formatted the workspace, applied compiler-supported lint fixes, removed unused duplicate state/legacy methods, preserved the currently reachable graph tab, corrected egui APIs, and connected existing plugin enable configuration to its checkbox. No blanket lint allowances or required-test exclusions were added.
 - Plugin ABI v2 now uses plugin-owned opaque handles and matching destruction instead of exposing Rust trait-object layout through C. ADR-0038 documents the compatibility change and limits; this does not implement a plugin loader.
 - CI preserves its strict native gates and adds Linux audio development headers plus editor/sample audio checks. The browser job remains enabled. Remote CI/matrix execution has not been observed here.
-- Task 1's specified local acceptance commands now pass. Next is task 2: dependable scene authoring/project lifecycle. Hardware, WebGPU/other browsers, export packaging, release-size/performance budgets, and full audio/UI/save functionality remain separate gates in tasks 2–9.
+- Task 1's specified local acceptance commands now pass. Next is task 2: dependable scene authoring/project lifecycle. Hardware, WebGPU/other browsers, export packaging, performance/resource budgets, and full audio/UI/save functionality remain separate gates in tasks 2–9.
 
 ### 2026-11-03 — Task 2 project lifecycle and preservation checkpoint
 
@@ -494,7 +494,7 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
   software/cloud-runner evidence, not clean-machine or physical-device proof.
 - `just check`, **649 tests (zero skipped)**, native binary builds, minimal native
   checks and strict WASM Clippy pass. CI runs editor export plus relocated-game
-  acceptance. Debug runtime size is recorded separately from release budgets.
+  acceptance. Debug runtime size is recorded separately from performance/resource budgets.
 - Browser exporter, portable editor packages, installers/signing, other-platform
   and actual clean-machine dependency acceptance remain Task 8 follow-up.
 
@@ -549,6 +549,35 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
   runs from an unrelated cwd; actual unsaved edits/save/export, prior-output
   preservation/cancel and both relocated gameplay/save/resume suites pass.
 - Record Linux ELF/glibc observations (this build needs GLIBC 2.39), document
-  runtime requirements and keep clean-machine, release budgets/provenance,
+  runtime requirements and keep clean-machine, performance/resource budgets/provenance,
   Windows/macOS and physical devices separate. CI is configured to prepare and
   exercise the bundle; remote execution is unobserved. Task 9 remains unstarted.
+
+### 2026-11-10 — Owner removes package-size goals
+
+- Removed editor/player/WASM/mobile package-size ceilings from active goals and
+  commands (ADR-0062). Size observations remain informational; performance,
+  startup, memory/resource limits, correct exports and compatibility still matter.
+- Historical ADRs/evidence retain their original measurements and are superseded
+  on size policy by ADR-0062. Task 8 continues with clean Linux userspace testing.
+
+### 2026-11-10 — Task 8 clean Ubuntu runtime acceptance
+
+- Added a pinned Ubuntu 24.04 runtime-only image and a repeatable Docker runner.
+  Runtime container is offline/unprivileged with read-only root; only archive and
+  evidence are mounted. No Rust/Cargo/compiler/Git, repository or development
+  sysroot is available. The build context contains only four test scripts and
+  runtime requirements. CI's producing job is pinned to Ubuntu 24.04 for GLIBC
+  compatibility and runs this acceptance before uploading evidence.
+- Clean launch exposed a runtime-loaded libxkbcommon-x11 requirement that ldd
+  cannot detect. Added a shared Ubuntu package list to both the image and shipped
+  bundle instructions. The test verifies shipped/tested requirements match.
+- Final isolated run passes installation hashes/identities/library resolution,
+  real editor Player X=88 save/native export, prior-output preservation, UI
+  cancellation, relocated game menus/settings/save/restart/Continue and corrupt
+  slot preservation, followed by unchanged-installation verification.
+- 657 Rust tests, four producer regressions and just check pass. Selected actual
+  editor/resumed-game captures and machine-readable evidence are retained in
+  evidence/task8-clean-linux. Same-kernel/software graphics/ALSA null evidence
+  does not replace physical GPU/audio/controller or other OS testing. Browser
+  gameplay was not rerun inside this native-only image. Size is not a gate.

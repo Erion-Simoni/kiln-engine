@@ -200,11 +200,10 @@ The Android player properly handles:
 - Verify winit touch events are being handled in `android.rs`
 - Check `InputState` touch tracking in game systems
 
-## Size Budget
+## Package size
 
-APK size budget: <20 MB (includes player binary + assets)
-
-The Android player uses the same runtime crates as desktop, ensuring feature parity while maintaining size constraints through feature gating.
+There is no APK size goal (owner request, ADR-0062). Sizes may be recorded for
+information. Target-platform compatibility and working gameplay remain required.
 
 ## CI/CD
 

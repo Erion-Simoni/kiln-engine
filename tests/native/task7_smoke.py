@@ -62,7 +62,10 @@ def main():
                               stdout=server_log.open('w'), stderr=subprocess.STDOUT)
     player = None
     try:
-        wait_for(socket.exists, server, server_log)
+        wait_for(lambda: subprocess.run([executable('xdotool'), 'getdisplaygeometry'],
+                                       env=env, stdout=subprocess.DEVNULL,
+                                       stderr=subprocess.DEVNULL).returncode == 0,
+                 server, server_log)
         binary = os.environ.get('KILN_PLAYER_PATH', str(REPO/'target/debug/kiln-player'))
         archive = os.environ.get('KILN_TASK7_ARCHIVE', str(REPO/'samples/ui2d_editor'))
         binary = str(Path(binary).resolve())

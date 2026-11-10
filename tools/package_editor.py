@@ -233,6 +233,8 @@ def prepare(args):
         copy_tree(REPO/'templates', root/'templates')
         copy_tree(REPO/'samples/ui2d_editor', root/'examples/ui2d_editor')
         copy_file(REPO/'Cargo.lock', root/'Cargo.lock')
+        if identity['platform'] == 'linux':
+            copy_file(REPO/'packaging/linux-runtime-packages.txt', root/'linux-runtime-packages.txt')
         package_notices(args.metadata, root/'licenses')
         compiler = compiler_notices(root/'licenses')
         (root/'README.txt').write_text(
@@ -246,8 +248,10 @@ def prepare(args):
             'Browser output must be served over HTTP(S); open index.html through that server.\n'
             'Browser export currently rejects physics/joints and sprite material overrides.\n'
             'Linux requires compatible glibc and system display, GPU, audio and controller libraries.\n'
+            'On Ubuntu 24.04, install the packages listed in linux-runtime-packages.txt.\n'
+            'This includes the runtime-loaded libxkbcommon-x11 dependency required for X11.\n'
             'Drivers/system libraries are not bundled; bundle.json records direct ELF/glibc observations.\n'
-            'This is development relocation evidence, not a clean-machine, signed or size-certified release.\n'
+            'This is development relocation evidence, not a signed release or physical-device compatibility certification.\n'
             'Internal package license declarations and exact binary provenance require release review.\n'
             'Checksums detect changes; this unsigned manifest does not authenticate a download.\n', encoding='utf-8')
         initial = file_entries(root)

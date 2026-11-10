@@ -1,6 +1,6 @@
 # Kiln — Agent Brief
 
-Standalone desktop game engine (editor + runtime + CLI). Light like Godot's install story; art-directed looks; tiny web/native exports. **M0–M28 and the 2D-first gate (G-1 … G-6) are complete; M29 (3D foundation) is in progress** — the `3d` feature and mesh/material types landed in `kiln-core` (commit `4556431`).
+Standalone desktop game engine (editor + runtime + CLI). Light like Godot's install story; art-directed looks; working web/native exports. **M0–M28 and the 2D-first gate (G-1 … G-6) are complete; M29 (3D foundation) is in progress** — the `3d` feature and mesh/material types landed in `kiln-core` (commit `4556431`).
 
 ## Crate map (planned)
 
@@ -36,7 +36,7 @@ just check    # fmt + clippy + build
 just test     # cargo nextest
 just run      # editor or demo window
 just web      # wasm demo in browser
-just size     # wasm/native size budgets
+just size     # optional artifact size report; no release-size target
 just assets   # import / pack
 just package  # installers via cargo-dist
 ```
@@ -68,7 +68,7 @@ just package  # installers via cargo-dist
 - Use Electron. Prefer pure-Rust native; Tauri only via ADR.
 - Add engine/runtime crates until M0 is approved. (All crates now exist; new ones need an ADR.)
 - Start M(n+1) in the same session as M(n).
-- Bypass budgets in `docs/BUDGETS.md` without an ADR.
+- Bypass active performance/resource budgets in `docs/BUDGETS.md` without an ADR. Package size is informational per ADR-0062.
 - Commit secrets, large binaries, or generated `target/` artifacts.
 
 ## Context pointers

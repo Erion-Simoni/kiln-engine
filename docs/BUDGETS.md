@@ -1,6 +1,22 @@
 # Kiln Budgets
 
-All budgets are enforced via `just size`. Exceeding a budget requires an ADR entry with justification.
+Package-size goals were removed at the project owner’s request on 2026-11-10
+(ADR-0062). Editor, native player, WASM and mobile package sizes are informational
+measurements, with no release ceiling or size-based completion gate. Frame-time,
+startup, memory/resource budgets and bounded-input limits remain active.
+`just size` only reports sizes; it does not enforce these other budgets.
+
+## Task 8 clean Ubuntu userspace — 2026-11-10
+
+The prepared editor and native export passed clean Ubuntu 24.04 container
+acceptance without Rust, repository or development sysroot access. Xvfb/Mesa
+software graphics and ALSA null were used; startup/frame-time/physical-device
+budgets were not certified. The run found a missing runtime-loaded X11 dependency
+and added `libxkbcommon-x11-0` to shared shipped/tested requirements. Runtime
+packages/GLIBC and exact image identity are recorded under
+[evidence/task8-clean-linux](evidence/task8-clean-linux/README.md). The older
+relocation measurements below remain historical observations. Package size has
+no release ceiling or completion gate (owner request, ADR-0062).
 
 ## Task 8 portable editor observations — 2026-11-10
 
@@ -9,8 +25,7 @@ containing **287,905,643 bytes across 1,530 listed files**, plus bundle.json.
 It includes three debug native tools, debug WASM/bindings, templates/sample,
 433-package conservative dependency notices, 17 verified MPL source archives and
 the compiler standard-library copyright report. Native debug information was
-disabled; debug assertions remain enabled. This exceeds the <40 MB release
-installer target and does not certify release budgets. No budget was waived.
+disabled; debug assertions remain enabled. Package size is informational; there is no release-size target.
 
 Installation verification caps the manifest at 8 MiB, file count at 20,000,
 each file at 512 MiB and total listed contents at 2 GiB. Native hashing streams
@@ -25,9 +40,9 @@ observations, not clean-machine/system-plugin dependency closure. See
 The editor-exported saved-UI fixture contains a **40,080,403-byte debug WASM**,
 **118,759-byte generated JS** and **40,314,183 bytes across 15 output files**
 (including runtime descriptor, receipt, shell and raw project resources). These
-are development-profile observations, not release size/startup budget results.
+are development-profile size observations; startup requires separate measurement.
 Export reuses the selected prepared bundle; it does not run Cargo or optimizers.
-No release budget was waived. Runtime/hash verification runs off the editor UI
+Package-size measurements are informational (ADR-0062). Runtime/hash verification runs off the editor UI
 thread; resources load before the first gameplay tick. No new rendering pass or
 frame-time performance claim is introduced.
 
@@ -35,18 +50,17 @@ Prepared runtime limits are 256 MiB WASM, 8 MiB JS, 64 KiB descriptor and 4 KiB
 embedded metadata. Output receipts are capped at 16 MiB. Project copying retains
 the native 2 GiB/100,000-file bounds. The browser export currently rejects authored
 physics/joints and sprite material overrides instead of claiming unsupported
-host parity. Release optimization, physical target and clean-machine acceptance
-remain distinct gates. See evidence/task8-browser/ for actual captures/results.
+host parity. Physical-target and clean-machine acceptance remain distinct gates. See evidence/task8-browser/ for actual captures/results.
 
 ## Task 8 native export observations — 2026-11-06
 
 The real editor-exported saved-UI fixture contains a **86,627,928-byte debug
 player** (CARGO_PROFILE_DEV_DEBUG=0) and **109,324-byte KAR**, plus a small JSON
-receipt. These are development profile observations, not release budget results.
+receipt. These development profile sizes are informational.
 The selected prebuilt runtime's profile/features determine executable size; the
 exporter does not invoke Cargo or silently optimize it. A release runtime and
 clean-machine dependency/ABI closure still need separate measurement/acceptance.
-No release budget was waived. Export adds no gameplay rendering pass or draw-call
+Package-size measurements are informational (ADR-0062). Export adds no gameplay rendering pass or draw-call
 budget; no new game frame-time claim is made.
 
 Export caps copied resources at 2 GiB and 100,000 files. Editor diagnostics keep
@@ -80,7 +94,7 @@ size/performance acceptance remain open.
 The generated native audio fixture contains 62,488 bytes of WAV data, decoded to
 124,800 bytes of mono f32 PCM shared by overlapping voices. The voice pool is
 capped at 128, including music; long clips still decode fully into memory.
-No device latency/frame-time or release-size claim is established by offline
+No device latency/frame-time claim is established by offline
 mixing and ALSA null-output checks. Native desktop debug binaries built with
 debug symbols disabled for cloud disk limits; these are not release-budget
 measurements. Real device, GUI and release performance acceptance remains open.
@@ -95,10 +109,10 @@ native editor has no display server in this runner.
 
 Debug artifacts measured locally: editor 389524776 bytes, player 325188200 bytes,
 WASM 197188114 bytes. These include debug build overhead and are not release
-size-budget results. Release distribution budgets below remain separate gates.
+release measurements. Package size is informational (ADR-0062).
 The fixture's PNG sheets are 163 and 191 bytes. Mips require additional texture
 storage; per-asset generation is optional. The existing 16384-quad renderer
-budget is unchanged. Native visual/device/release-size acceptance is pending.
+budget is unchanged. Native visual/device acceptance is pending.
 
 Reproduce with `WEB_SMOKE_PROJECT=samples/visual2d_editor WEB_SMOKE_PROFILE=1`
 and `node tests/web/smoke.cjs target/web-smoke` after building WASM and running
@@ -164,7 +178,7 @@ wasm-bindgen; this runner also uses `CHROMIUM_PATH=/usr/bin/chromium`.
 
 ## Web runtime WASM
 
-**Target:** <1.5 MB brotli-compressed
+**Size policy:** informational only; no release-size goal (ADR-0062).
 
 **Measurement:**
 ```bash
@@ -173,23 +187,21 @@ brotli output.wasm -o output.wasm.br
 ls -l output.wasm.br
 ```
 
-**Current status:** CI measures brotli-compressed WASM size on every push
-via the `wasm` job (`.github/workflows/ci.yml`). Build: `cargo build --release
---target wasm32-unknown-unknown -p kiln-web`, then `wasm-opt -Oz` + `brotli`.
-Budget: <1.5 MB brotli-compressed. Local measurement requires `wasm-opt`
-and `brotli` tools (see "Measurement" above).
+**Measurement status:** optional local reporting uses `cargo build --release
+--target wasm32-unknown-unknown -p kiln-web`, then `wasm-opt -Oz` and `brotli`
+if installed. There is no size threshold and no size-failing CI job.
 
 **Notes:**
 - Measure with `wasm-opt -Oz` and brotli
 - Include only runtime dependencies (no editor)
-- Feature-gate physics/audio to stay under budget
-- Current 36 KB is well under 1.5 MB budget
+- Feature-gate unused capabilities where appropriate; functionality drives selection
+- Earlier 36 KB measurements are historical, not current full-runtime evidence
 
 ---
 
 ## Native player binary
 
-**Target:** <15 MB (executable without assets)
+**Size policy:** informational only; no release-size goal (ADR-0062).
 
 **Measurement:**
 ```bash
@@ -202,7 +214,7 @@ ls -lh target/release/kiln-player
 **Notes:**
 - Player binary contains only runtime, not editor
 - Assets shipped separately in packed archive format
-- Target is for stripped release build (LTO, panic=abort, strip=true)
+- Record the selected build profile with any measurement
 - Measure separately from editor installer
 - No editor crates in dependency tree (verified via cargo tree)
 - Archive format (KILNARV1) size varies with content; sample: 68 bytes for 1 text file
@@ -211,7 +223,7 @@ ls -lh target/release/kiln-player
 
 ## Android APK
 
-**Target:** <20 MB (includes player binary + assets)
+**Size policy:** informational only; no release-size goal (ADR-0062).
 
 **Measurement:**
 ```bash
@@ -232,7 +244,7 @@ ls -lh target/aarch64-linux-android/release/apk/kiln-player.apk
 
 ## iOS App Bundle
 
-**Target:** <25 MB (includes player binary + assets in .app bundle)
+**Size policy:** informational only; no release-size goal (ADR-0062).
 
 **Measurement:**
 ```bash
@@ -256,7 +268,7 @@ du -sh YourGame.app
 
 ## Editor installer
 
-**Target:** <40 MB
+**Size policy:** informational only; no release-size goal (ADR-0062).
 
 **Measurement:**
 ```bash
@@ -403,7 +415,8 @@ cargo run -p threads-sample --release
 ## Dependency size tracking
 
 Every new dependency must have an ADR entry with:
-- Binary size impact (measured via `cargo bloat` or similar)
+- Purpose, licensing and maintenance implications
+- Optional size observations when useful
 - Compile time impact
 - Justification for inclusion
 
@@ -418,16 +431,16 @@ Every new dependency must have an ADR entry with:
 
 ---
 
-## Budget enforcement
+## Active performance and resource goals
 
-CI will fail `just size` if:
-- Web WASM >1.5 MB brotli (after M10)
-- Native player binary >15 MB (after M14)
-- Android APK >20 MB (after M18)
-- iOS .app bundle >25 MB (after M26, requires macOS runner)
-- Editor installer >40 MB (after M12)
-- Startup time >2 seconds on reference hardware (after M14)
-- Editor idle RAM >300 MB (after M6)
-- Frame time >16.6 ms on reference device (after M12)
+Package size does not block completion or release (ADR-0062). `just size` is an
+optional report and does not claim to enforce runtime performance. Continue to
+measure these existing goals on appropriate reference hardware:
 
-Temporary exemptions must be documented in STATE.md with a plan to fix.
+- Startup time <2 seconds on reference hardware (after M14)
+- Editor idle RAM <300 MB (after M6)
+- Frame time <16.6 ms on reference device (after M12)
+
+Record evidence and any performance/resource exceptions in STATE.md. File-count,
+input-size and archive validation bounds are technical resource protections, not
+release-size goals; they remain enforced.

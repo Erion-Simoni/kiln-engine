@@ -302,11 +302,12 @@ microphone = "This game uses the microphone for voice chat"
 photo_library = "This game saves screenshots to your photo library"
 ```
 
-## Size Budget
+## Package size
 
 iOS App Store limit: **4 GB** (can be increased with approval)
 
-Kiln target: **<25 MB** for player binary + assets
+Kiln has no package-size goal (owner request, ADR-0062). Store-imposed limits
+remain external platform requirements, not Kiln completion targets.
 
 To measure size:
 

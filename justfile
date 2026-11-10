@@ -26,24 +26,11 @@ demo:
 web:
     cargo build --target wasm32-unknown-unknown --release -p kiln-web
 
-# wasm/native size budgets
+# Optional artifact size observations; no package-size goal or release threshold.
 size:
-    @echo "=== Web WASM size check ==="
     cargo build --release --target wasm32-unknown-unknown -p kiln-web
-    @echo "Uncompressed WASM:"
-    @ls -lh target/wasm32-unknown-unknown/release/kiln_web.wasm
-    @echo ""
-    @echo "Note: wasm-opt and brotli tools required for full size check"
-    @echo "Install with: cargo install wasm-opt; cargo install brotli"
-    @echo ""
-    @echo "=== Editor installer size check ==="
-    @echo "Note: cargo-dist requires GitHub Actions CI for full installer builds"
-    @echo "Local build can estimate binary size:"
-    cargo build --release --bin kiln-editor
-    @echo "Editor binary:"
-    @ls -lh target/release/kiln-editor.exe 2>/dev/null || ls -lh target/release/kiln-editor 2>/dev/null || echo "Binary not found"
-    @echo ""
-    @echo "Budgets: WASM <1.5 MB brotli, Editor <40 MB installer"
+    cargo build --release --bin kiln-editor --bin kiln-player
+    python3 tools/report_sizes.py
 
 # import / pack assets
 assets:

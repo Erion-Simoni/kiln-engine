@@ -175,7 +175,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Install native test dependencies
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libgl1-mesa-dri mesa-vulkan-drivers xvfb xdotool imagemagick
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libxkbcommon-x11-0 libgl1-mesa-dri mesa-vulkan-drivers xvfb xdotool imagemagick
       - name: Build the native editor and player
         env:
           CARGO_PROFILE_DEV_DEBUG: 0
@@ -220,8 +220,8 @@ jobs:
           retention-days: 7
 
   web-smoke:
-    name: Browser WASM smoke test
-    runs-on: ubuntu-latest
+    name: Browser WASM and portable editor compatibility
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -234,7 +234,7 @@ jobs:
           cache: npm
           cache-dependency-path: tests/web/package-lock.json
       - name: Install editor export test dependencies
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libgl1-mesa-dri mesa-vulkan-drivers xvfb xdotool imagemagick
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libxkbcommon-x11-0 libgl1-mesa-dri mesa-vulkan-drivers xvfb xdotool imagemagick
       - name: Build the native editor, exporter and player
         env:
           CARGO_PROFILE_DEV_DEBUG: 0
@@ -271,6 +271,8 @@ jobs:
           python3 tools/package_editor.py --binaries target/debug --web-runtime target/debug/web-runtime --metadata target/portable-metadata.json --metadata target/portable-web-metadata.json --output target/dist/kiln-portable-development.tar.gz
       - name: Exercise moved portable editor and both exported games
         run: python3 tests/native/portable_editor_smoke.py target/dist/kiln-portable-development.tar.gz
+      - name: Exercise clean Ubuntu userspace without Rust or repository access
+        run: python3 tools/test_clean_linux.py target/dist/kiln-portable-development.tar.gz
       - name: Upload browser UI and export evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -281,5 +283,6 @@ jobs:
             target/task8-browser-export-evidence/
             target/task8-browser-evidence/
             target/task8-portable-evidence/
+            target/task8-clean-linux-evidence/
             target/dist/kiln-portable-development.tar.gz
           retention-days: 7

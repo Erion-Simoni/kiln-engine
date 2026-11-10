@@ -13,7 +13,7 @@ For remaining production workflow gaps and test evidence, see [the 2D completion
 
 ## Goals
 
-- **Tiny:** Web runtime <1.5 MB, editor installer <40 MB
+- **Portable:** Native and browser exports use prebuilt runtimes; package size is not a release goal
 - **Fast:** 60 FPS on 2015 laptops with integrated GPUs
 - **Beautiful:** Art-directed 2D/2.5D with render tiers
 - **One codebase:** Export to Web (WASM), desktop, and later mobile
@@ -66,7 +66,7 @@ New to Kiln? Start with the [Tutorial](docs/TUTORIAL.md) to build your first gam
 - **docs/ROADMAP.md** - Milestones M0-M61+
 - **ROADMAP_FULL_M14_PLUS.md** - M14+ milestones (M29+ detail)
 - **docs/DECISIONS.md** - Architecture decision records
-- **docs/BUDGETS.md** - Size and performance budgets
+- **docs/BUDGETS.md** - Performance/resource goals and optional size observations
 - **docs/STATE.md** - Session handoff (current status)
 - **docs/TUTORIAL.md** - Build your first game
 - **docs/GETTING_STARTED.md** - Make a 2D game from scratch

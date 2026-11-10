@@ -172,7 +172,7 @@ guidance, not a claim that the CLI creates installers today.
 | iOS export | `docs/IOS.md` |
 | Architecture / crate map | `docs/ARCHITECTURE.md` |
 | Roadmap (M29 = 3D) | `ROADMAP_FULL_M14_PLUS.md` |
-| Budgets (size / perf) | `docs/BUDGETS.md` |
+| Performance/resource goals and optional size observations | `docs/BUDGETS.md` |
 | Session handoff / status | `docs/STATE.md` |
 
 ## Reference Sample

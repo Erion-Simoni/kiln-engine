@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "health": 66,
+  "script_starts": 1,
+  "saved_x": 216.0,
+  "resumed_x": 262.0,
+  "fresh_process_resume": true,
+  "corrupt_slot_preserved": true,
+  "evidence": "/evidence/gameplay",
+  "screenshots": [
+    "/evidence/gameplay/gameplay.png",
+    "/evidence/gameplay/load_error.png",
+    "/evidence/gameplay/pause.png",
+    "/evidence/gameplay/restarted_title.png",
+    "/evidence/gameplay/resumed_pause.png",
+    "/evidence/gameplay/settings.png",
+    "/evidence/gameplay/settings_changed.png",
+    "/evidence/gameplay/title.png"
+  ]
+}

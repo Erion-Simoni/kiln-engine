@@ -99,5 +99,6 @@ reload retry. Selected captures/results: [evidence/task8-browser](evidence/task8
 
 This is Chromium/SwiftShader and simulated controller input; real GPU/audio/
 controller devices, other browsers/OS, clean-machine desktop dependencies, release
-size/performance budgets and portable editor packages still require acceptance.
+performance/device validation and clean-machine/platform acceptance remain open.
+Package-size goals are removed by owner request (ADR-0062).
 Task 8 remains in progress. Task 9 and full 3D implementation are not started.

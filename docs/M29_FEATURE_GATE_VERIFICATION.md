@@ -2,7 +2,7 @@
 
 **Goal:** Confirm the `3d` feature gate in `kiln-core` is watertight — a 2D build (default features, no `3d`) pulls in zero 3D code, and `cargo check` passes both with and without `3d`.
 
-**Why:** M29's acceptance includes "`3d` off: 2D web build size unchanged (measured)." If the gate leaks 3D types into the 2D path, the web WASM size budget breaks.
+**Why:** Optional 3D implementations and dependencies must remain excluded from builds with `3d` disabled. Package-size goals were removed by owner request (ADR-0062).
 
 ## Current state (verified from source)
 

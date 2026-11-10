@@ -28,7 +28,7 @@ metadata dependencies; the Python producer performs no build or download.
 Python interface accepts explicit `--binaries`, `--web-runtime`, repeated
 `--metadata` and `--output` paths. The producer requires matching tool build profiles and records compiled debug
 flags. Supplying release binaries creates a release candidate; it does not
-certify provenance, licensing, budgets or clean-machine acceptance. It refuses an
+certify provenance, licensing, performance or clean-machine acceptance. It refuses an
 existing output, including symlinks; select a new output path for another bundle.
 Generated archives stay under `target/dist`, outside Git.
 
@@ -106,14 +106,17 @@ preparation tools are redistributed by this archive.
 
 Tested: Linux x86_64, X11 via Xvfb, Chromium SwiftShader/software graphics and
 ALSA null output. Linux needs compatible glibc and display/GPU/audio/controller
-system libraries. `bundle.json.system_observations` records each native ELF's
+system libraries. Bundles include `linux-runtime-packages.txt` for Ubuntu 24.04.
+Install that list with `sudo xargs -a linux-runtime-packages.txt apt-get install -y`
+after updating APT. It includes runtime-loaded `libxkbcommon-x11-0`; absence of
+that X11 dependency can panic inside winit despite successful `ldd` output. `bundle.json.system_observations` records each native ELF's
 direct DT_NEEDED libraries and highest referenced GLIBC symbol. This local build
 references GLIBC 2.39, libasound.so.2 and (editor/player) libudev.so.1, in addition
 to libgcc_s, libm, libc and the ELF loader. It does not
 resolve dynamic graphics/audio plugins or prove complete library closure. Driver
 compatibility, physical audio and Intel HD 520 performance are unverified.
-Windows/macOS bundles and installation are unverified. The debug archive exceeds
-the <40 MB release installer target; no budget exception was granted.
+Windows/macOS bundles and installation are unverified. Package-size goals were removed by the project owner (ADR-0062); archive sizes
+are informational and do not block completion.
 
 Run `python3 -m unittest discover -s tests/native -p test_portable_package.py`
 for producer regressions. Full software acceptance:
@@ -131,3 +134,13 @@ save/restart/Continue and browser consent/storage/error behavior reuse existing
 acceptance tests. The installation must still verify after use. Evidence lives
 under `target/task8-portable-evidence`; selected inspected evidence is retained in
 [evidence/task8-portable/README.md](evidence/task8-portable/README.md).
+
+## Isolated Linux runtime acceptance
+
+Run `python3 tools/test_clean_linux.py ARCHIVE` to exercise the installation in a
+pinned Ubuntu 24.04 runtime userspace without mounting the repository or development
+sysroot. It runs offline and unprivileged with only archive/evidence mounts and
+executes real native editor export and relocated game save/resume. See
+[CLEAN_MACHINE_TEST.md](CLEAN_MACHINE_TEST.md) for requirements, evidence and the
+separate physical-machine/platform checks. Package-size targets are removed
+(ADR-0062); current archive sizes are informational.

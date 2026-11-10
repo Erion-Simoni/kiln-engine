@@ -2,6 +2,10 @@
 
 Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 
+**Current package-size policy:** ADR-0062 supersedes earlier size ceilings and
+size-based release/completion gates, at the project owner’s request. Historical
+measurements and earlier rationale are retained; sizes are informational.
+
 ---
 
 ## ADR-0028: Sprite texture paths are project-relative, `/`-separated (accepted)
@@ -1602,3 +1606,30 @@ Git. Local debug bundles remain development evidence; release budgets, dependenc
 closure/clean-machine execution, other OS/GPU/device checks and signing remain
 Task 8 gates. Include direct Linux ELF/glibc observations rather than claiming a
 self-contained system-library closure.
+
+## ADR-0062: Remove package-size release goals; verify a clean Linux userspace
+
+**Date:** 2026-11-10
+**Status:** accepted (explicit project-owner request)
+
+The owner removed release size as a project goal. Retire editor installer,
+native executable, WASM, Android and iOS package-size ceilings and associated
+completion gates. Size may be reported for information; no size result blocks
+completion, requires an exception or justifies removing working functionality.
+Keep frame-time, startup, memory/resource and bounded-input requirements.
+Earlier ADR/evidence size observations are historical, superseded by this decision.
+`just size` becomes an informational measurement command with no threshold checks.
+
+Continue Task 8 by testing the prepared installation in a clean Ubuntu 24.04
+container. Build a pinned-base test image with documented runtime system libraries
+and native GUI test drivers, copy only the required acceptance scripts, and run
+unprivileged/offline with only the archive and evidence mounted. No repository,
+Rust/Cargo, development sysroot or preinstalled editor may be present. Exercise
+installed-tool verification, real editor authoring/save/native export, relocated
+gameplay/save/restart/Continue and library resolution. Record base/image IDs,
+installed package versions and explicit absent-tool/source checks. Docker and
+Python are test infrastructure, not new engine/runtime dependencies. Containers
+share the host kernel/software graphics: other OS and physical-device validation
+remain separate, as does browser physics/material parity. The test image and
+installation share an explicit Ubuntu runtime package list, including dynamically
+loaded X11 libraries that native ELF dependency inspection alone cannot detect.
