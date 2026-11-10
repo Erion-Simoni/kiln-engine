@@ -72,6 +72,7 @@
 ## Editor
 
 * [Editor Roadmap](EDITOR_ROADMAP.md)
+* [Portable Development Editor](PORTABLE_EDITOR.md)
 * [UI Integration](UI_INTEGRATION.md)
 * [VFX Integration](VFX_INTEGRATION.md)
 

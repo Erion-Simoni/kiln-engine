@@ -1,0 +1,68 @@
+{
+  "passed": true,
+  "target": "web",
+  "authored_x": 88,
+  "saved_by_export": true,
+  "failure_preserves_previous_output": true,
+  "runtime_files": [
+    {
+      "path": "_headers",
+      "bytes": 90
+    },
+    {
+      "path": "game.js",
+      "bytes": 2110
+    },
+    {
+      "path": "index.html",
+      "bytes": 2149
+    },
+    {
+      "path": "project/README.md",
+      "bytes": 2153
+    },
+    {
+      "path": "project/assets/audio/hit.wav",
+      "bytes": 14444
+    },
+    {
+      "path": "project/assets/audio/theme.wav",
+      "bytes": 48044
+    },
+    {
+      "path": "project/assets/fonts/KilnSampleSans.ttf",
+      "bytes": 22352
+    },
+    {
+      "path": "project/assets/fonts/LICENSE.txt",
+      "bytes": 2481
+    },
+    {
+      "path": "project/kiln.toml",
+      "bytes": 17392
+    },
+    {
+      "path": "project/scripts/main.ks",
+      "bytes": 280
+    },
+    {
+      "path": "project/scripts/ui.ks",
+      "bytes": 1823
+    },
+    {
+      "path": "runtime/kiln_web.js",
+      "bytes": 118759
+    },
+    {
+      "path": "runtime/kiln_web_bg.wasm",
+      "bytes": 40080403
+    },
+    {
+      "path": "runtime/runtime.json",
+      "bytes": 344
+    }
+  ],
+  "relocated_export": "/tmp/kiln-browser-relocated-kab0pfpd/game folder",
+  "source_project_unavailable": true,
+  "rust_required_at_export": false
+}

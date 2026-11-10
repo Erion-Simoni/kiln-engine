@@ -1,0 +1,133 @@
+# Portable development editor — Task 8
+
+The Linux development bundle contains the native editor, CLI exporter, player,
+prepared browser JS/WASM, three project templates, the saved-UI example and
+notices. Keep the extracted directory together. Authoring and both export targets
+use those prebuilt files without Cargo, Rust, Python, Node or wasm-bindgen.
+
+This checkpoint proves relocation within the tested Linux cloud machine. Release
+builds, installers/signing, another-machine dependency closure, Windows/macOS and
+physical GPU/audio/controller acceptance remain open. Task 8 is not complete.
+
+## Prepare once
+
+Requirements for preparation: Rust/Cargo, Python 3.11+, matching wasm-bindgen CLI,
+Linux `readelf`, cached dependency sources/crate archives, and the compiler's
+`share/doc/rust/COPYRIGHT-library.html` (install Rust documentation if omitted).
+Runtime use does not require these preparation tools.
+
+```sh
+CARGO_PROFILE_DEV_DEBUG=0 cargo build -p kiln-editor -p kiln-cli -p kiln-player --bins
+just web-runtime
+just portable-editor
+```
+
+The recipe uses host/WASM filtered, locked Cargo metadata. It can fetch missing
+metadata dependencies; the Python producer performs no build or download.
+`just portable-editor` currently targets Linux x86_64 development builds. Its
+Python interface accepts explicit `--binaries`, `--web-runtime`, repeated
+`--metadata` and `--output` paths. The producer requires matching tool build profiles and records compiled debug
+flags. Supplying release binaries creates a release candidate; it does not
+certify provenance, licensing, budgets or clean-machine acceptance. It refuses an
+existing output, including symlinks; select a new output path for another bundle.
+Generated archives stay under `target/dist`, outside Git.
+
+All three binaries must report matching tool/version/host/build-profile identity.
+Editor/player require audio, fonts and gamepad support. Browser files must pass
+existing prepared-runtime descriptor/hash/embedded-version checks. Staging is
+private, the completed installation is verified, and archive publication is
+exclusive. Tar/gzip entries have sorted paths, normalized times/ownership and
+preserved executable modes. Equal inputs/manifest observations produce equal
+archives; differing source state/compiler observations change the manifest.
+
+## Use the extracted installation
+
+```sh
+tar -xzf kiln-portable-development.tar.gz
+cd kiln-0.1.0-linux-x86_64
+./kiln-cli verify-editor-bundle --input .
+./kiln-editor
+```
+
+The editor finds the exporter/player/browser runtime beside its executable even
+when launched from an unrelated directory. Open
+`examples/ui2d_editor/kiln.toml`, or create a project. Save working projects outside
+the installation so installation verification can continue to detect changes.
+CLI templates also work from elsewhere:
+
+```sh
+/path/to/kiln-cli init --name MyGame --template empty_2d --output /games/MyGame
+/path/to/kiln-cli export --project /games/MyGame/kiln.toml --output /games/native
+/path/to/kiln-cli export --platform web --project /games/MyGame/kiln.toml --output /games/browser
+```
+
+The empty template receives a main scene and script. Other templates retain their
+scenes. Init refuses a nonempty output to protect existing projects. Native games
+launch their included executable; serve complete Browser outputs over HTTP(S).
+Browser exports reject physics/joints and sprite material overrides pending host
+integration. See [NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md) and
+[BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md) for target contracts.
+
+## Integrity and provenance
+
+`bundle.json` inventories file sizes, SHA-256, executable flags and tool metadata.
+Verification rejects incompatible/missing tool identities, changed/missing files,
+unlisted files, duplicate/traversing paths, symlinks/special files and changed
+browser runtime pairs. It hashes files in bounded chunks and never executes
+installation tools. Limits: 8 MiB manifest, 20,000 files, 512 MiB per file, 2 GiB
+listed contents. `SHA256SUMS` covers payload files before it and bundle.json are
+written; bundle.json also covers SHA256SUMS. Neither is signed. Obtain downloads
+through a trusted channel; checksums alone do not authenticate them.
+
+The source revision/dirty flag and preparing compiler are observations of the
+packaging checkout. They do not attest that arbitrary supplied binaries came
+from that checkout/compiler. Exact build provenance and reproducible release
+builds remain release gates. `--tool-info` works without opening devices and
+records the actual compiled feature/debug flags, but is not a signature.
+
+## Notices
+
+`licenses/inventory.json` preserves package license expressions and repositories,
+Cargo.lock checksums/source URLs and original notice paths. It covers a
+conservative union of supplied host/WASM workspace graphs, including build/test
+dependencies; it is not an exact linked-code report. Original license, copyright,
+notice, README, manifest and nested font license files accompany pinned SPDX
+reference texts. MPL dependencies include unmodified `.crate` sources verified
+against Cargo.lock. The preparing compiler's original standard-library copyright
+report is included. The example font retains its license.
+
+Some internal package manifests omit a package license. Their inventory value
+remains null; the workspace declares `MIT OR Apache-2.0`. This implementation
+does not invent or rewrite a copyright/license grant. These declarations and
+exact binary provenance still need release review. No OS/driver libraries or
+preparation tools are redistributed by this archive.
+
+## Tested requirements and remaining platform gates
+
+Tested: Linux x86_64, X11 via Xvfb, Chromium SwiftShader/software graphics and
+ALSA null output. Linux needs compatible glibc and display/GPU/audio/controller
+system libraries. `bundle.json.system_observations` records each native ELF's
+direct DT_NEEDED libraries and highest referenced GLIBC symbol. This local build
+references GLIBC 2.39, libasound.so.2 and (editor/player) libudev.so.1, in addition
+to libgcc_s, libm, libc and the ELF loader. It does not
+resolve dynamic graphics/audio plugins or prove complete library closure. Driver
+compatibility, physical audio and Intel HD 520 performance are unverified.
+Windows/macOS bundles and installation are unverified. The debug archive exceeds
+the <40 MB release installer target; no budget exception was granted.
+
+Run `python3 -m unittest discover -s tests/native -p test_portable_package.py`
+for producer regressions. Full software acceptance:
+
+```sh
+python3 tests/native/portable_editor_smoke.py target/dist/kiln-portable-development.tar.gz
+```
+
+It extracts then moves the installation outside the repository, checks identities
+and corruption rejection, initializes/exports all three templates with empty
+PATH, launches the installed editor from an unrelated directory, edits/saves and
+exports Native and Browser through the real UI, then plays only relocated
+artifacts with original project copies unavailable. Menus/audio APIs/settings,
+save/restart/Continue and browser consent/storage/error behavior reuse existing
+acceptance tests. The installation must still verify after use. Evidence lives
+under `target/task8-portable-evidence`; selected inspected evidence is retained in
+[evidence/task8-portable/README.md](evidence/task8-portable/README.md).

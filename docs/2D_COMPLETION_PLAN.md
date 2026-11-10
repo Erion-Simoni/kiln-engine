@@ -151,19 +151,19 @@ saves and browser quota failures preserve the old slot/live world. Software
 acceptance is complete; physical-controller, audible-device and remote CI checks
 remain explicitly separate. Real editor export/distribution is Task 8.
 
-### 8. Real build/export and distribution — IN PROGRESS (native and browser exports)
+### 8. Real build/export and distribution — IN PROGRESS (exports and portable development editor)
 
 - [x] Replace simulated Build/Export with a real asynchronous native/browser CLI process, bounded streamed stdout/stderr, actual exit status, job-specific receipt/resource validation off the UI thread and cancellation/cleanup. Real editor Save & Export and UI Cancel pass on Linux/Xvfb. Unsupported targets/options fail explicitly; Browser also rejects authored physics/joints and material overrides pending host integration.
 - [x] Bundle resources/runtimes for the current supported native/browser targets. Native packs/verifies a KAR and includes a matching player; Browser includes the normalized project tree, hash-verified prepared JS/WASM and actual loading/start/error shell. Export/play need no Cargo. Browser capabilities remain explicitly bounded; other target/toolchain support is pending.
 - [ ] Deliver clean-machine desktop acceptance, then browser export with loading/input/audio-unlock/save behavior. Relocated Linux export passes menus/settings/save/restart/Continue with no archive argument or Rust on PATH; a separate clean-machine dependency/OS test remains pending. The relocated editor-produced Browser artifact passes nested HTTP deployment, loading/error/retry, input, explicit audio unlock and reload/save/resume.
-- [ ] Add portable editor distribution and document supported OS/GPU requirements; validate other platforms on appropriate machines.
+- [ ] Finish portable editor release distribution and validate other platforms on appropriate machines. Linux development archive now includes matched tools, browser runtime, templates/sample, SHA-256 inventory, original dependency/font/Rust notices and verified MPL sources. Moved installation passes both real editor export and relocated gameplay with no Rust on PATH; GLIBC 2.39/system dependency requirements are recorded. Release provenance/licensing review, budgets, clean-machine and other OS/GPU checks remain open. See [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md).
 
 Acceptance: author and export from the editor, move the artifact outside the repository to a machine without Rust, and play the full game. A failing exporter produces failure, never a success message.
 
 Native checkpoint: [NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md), ADR-0059 and
 [evidence/task8-native/README.md](evidence/task8-native/README.md). Task 8 remains
 open for clean-machine/other-platform checks, browser physics/material parity and
-portable editor distribution. See [BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md) for
+release editor distribution (development relocation checkpoint passes). See [BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md) for
 the tested browser contract. Task 9 is not started.
 
 ### 9. Reference games and release gate — PENDING
@@ -524,3 +524,31 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
   that guidance branch is unverified, and file launching is not supported.
   Clean-machine desktop/release/other-platform/device and portable editor gates
   remain open. Task 9/full 3D were not started.
+
+### 2026-11-10 — Task 8 portable development editor checkpoint
+
+- Added prebuilt portable editor packaging and device-free tool identities. The
+  installation contains editor/CLI/player, prepared JS/WASM, three working
+  templates and the saved-UI example. Authoring/export requires no development
+  toolchain; the producer uses Python standard library, Cargo metadata inputs and
+  the preparing compiler's notices. ADR-0061 records scope and remaining gates.
+- Added offline CLI installation verification of host/version/features,
+  sizes/SHA-256/modes and browser metadata; reject missing/extra files,
+  incompatible identities, traversal/duplicates and symlinks/special files.
+  Private staging, normalized tar/gzip metadata and exclusive publication protect
+  existing outputs. Checksums are unsigned integrity checks, not authentication.
+- Preserve dependency expressions/attributions, original and pinned reference
+  notices, Cargo.lock, font licenses, compiler standard-library copyright report
+  and checksum-verified MPL sources. Inventory covers 433 host/WASM workspace
+  packages conservatively, including build/test packages, with 17 source archives.
+  Internal manifests with no package license remain null; exact binary provenance
+  and release licensing review remain open.
+- CLI empty template now has a real main scene/script and initialization refuses
+  nonempty output. Moved installation in a path containing spaces initializes and
+  exports all three templates to Native/Browser with empty PATH. Installed editor
+  runs from an unrelated cwd; actual unsaved edits/save/export, prior-output
+  preservation/cancel and both relocated gameplay/save/resume suites pass.
+- Record Linux ELF/glibc observations (this build needs GLIBC 2.39), document
+  runtime requirements and keep clean-machine, release budgets/provenance,
+  Windows/macOS and physical devices separate. CI is configured to prepare and
+  exercise the bundle; remote execution is unobserved. Task 9 remains unstarted.

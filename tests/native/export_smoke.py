@@ -26,7 +26,7 @@ def main():
     (output/'result.json').unlink(missing_ok=True)
     run = Path(tempfile.mkdtemp(prefix='profile-', dir=output))
     project = run/'project'
-    shutil.copytree(REPO/'samples/ui2d_editor', project)
+    shutil.copytree(Path(os.environ.get('KILN_EXPORT_PROJECT', REPO/'samples/ui2d_editor')), project)
     manifest = project/'kiln.toml'
     display = os.environ.get('KILN_EXPORT_DISPLAY', ':87')
     socket = Path('/tmp/.X11-unix')/f'X{display.removeprefix(":")}'
@@ -67,7 +67,7 @@ def main():
         xdo = executable('xdotool')
 
         def launch():
-            process = subprocess.Popen([binary], cwd=REPO, env=env,
+            process = subprocess.Popen([binary], cwd=os.environ.get('KILN_EXPORT_CWD', REPO), env=env,
                                        stdout=editor_log.open('a'), stderr=subprocess.STDOUT)
 
             def search():

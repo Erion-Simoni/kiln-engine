@@ -2,6 +2,24 @@
 
 All budgets are enforced via `just size`. Exceeding a budget requires an ADR entry with justification.
 
+## Task 8 portable editor observations — 2026-11-10
+
+The verified Linux development archive is **56,605,832 bytes** compressed,
+containing **287,905,643 bytes across 1,530 listed files**, plus bundle.json.
+It includes three debug native tools, debug WASM/bindings, templates/sample,
+433-package conservative dependency notices, 17 verified MPL source archives and
+the compiler standard-library copyright report. Native debug information was
+disabled; debug assertions remain enabled. This exceeds the <40 MB release
+installer target and does not certify release budgets. No budget was waived.
+
+Installation verification caps the manifest at 8 MiB, file count at 20,000,
+each file at 512 MiB and total listed contents at 2 GiB. Native hashing streams
+64 KiB chunks. Verification is an explicit CLI preparation/installation check,
+not an automatic editor startup cost. No new rendering pass or performance claim
+is introduced. This build references GLIBC 2.39; direct ELF requirements are
+observations, not clean-machine/system-plugin dependency closure. See
+[PORTABLE_EDITOR.md](PORTABLE_EDITOR.md) and evidence/task8-portable/.
+
 ## Task 8 browser export observations — 2026-11-10
 
 The editor-exported saved-UI fixture contains a **40,080,403-byte debug WASM**,

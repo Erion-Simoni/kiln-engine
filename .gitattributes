@@ -1,0 +1,2 @@
+# Preserve pinned upstream license bytes, including their original EOL whitespace.
+packaging/licenses/*.txt -text whitespace=-blank-at-eol

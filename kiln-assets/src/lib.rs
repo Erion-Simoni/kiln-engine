@@ -15,3 +15,6 @@ pub use settings::{ImportSettings, TextureFilter};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod web_bundle;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod distribution;

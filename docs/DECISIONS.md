@@ -1570,3 +1570,35 @@ resource loading. Reject authored physics/joints and material overrides that the
 host has not integrated, rather than exporting silently degraded behavior. Other
 browsers/devices, clean-machine desktop dependency closure,
 release budgets and portable editor packaging remain separate Task 8 gates.
+
+## ADR-0061: Relocatable editor bundles and installed-tool identity
+
+**Date:** 2026-11-10
+**Status:** accepted (Task 8 portable development bundle checkpoint)
+
+Prepare a portable editor archive from matching prebuilt editor/exporter/player
+binaries and a verified browser runtime. Add a no-window `--tool-info` protocol to
+all three tools and a CLI `verify-editor-bundle` command. Record host/version,
+features and native debug-assertion flags; validate file sizes/SHA-256/executable
+permissions and the browser descriptor before publication and after extraction.
+Keep the browser and native export paths relative to the installed editor.
+
+Use a Python standard-library packaging tool for preparation only, with normalized
+tar/gzip metadata, a private staging directory, checksums and no replacement of
+existing archives. Include working templates, the saved-UI example, instructions,
+Cargo.lock and dependency notices. Inventory the union of Cargo's host/WASM
+resolved workspace graphs (a conservative superset, not an exact link analysis).
+Preserve package declarations and original notices/readmes; include pinned SPDX
+reference texts and MPL dependency source archives with verified Cargo checksums.
+Record workspace licensing as declared, without rewriting package license grants.
+No new executable third-party dependency is introduced.
+
+Add minimal template initialization when a CLI template has no scene so the
+installed CLI produces a playable starter without finding repository files. Test
+archive extraction, moved installation verification/tamper rejection, template
+initialization, native/browser GUI exports and resulting gameplay with no tools
+on PATH and an unrelated working directory. No generated binary/archive enters
+Git. Local debug bundles remain development evidence; release budgets, dependency
+closure/clean-machine execution, other OS/GPU/device checks and signing remain
+Task 8 gates. Include direct Linux ELF/glibc observations rather than claiming a
+self-contained system-library closure.

@@ -55,6 +55,9 @@ struct Args {
     /// Print the export runtime protocol without opening a window or audio device.
     #[arg(long)]
     runtime_info: bool,
+    /// Print installed-tool identity without graphics/audio initialization.
+    #[arg(long, exclusive = true)]
+    tool_info: bool,
 
     /// Scene to start (defaults to the first scene in the project)
     #[arg(long)]
@@ -69,6 +72,25 @@ fn main() -> Result<()> {
     env_logger::init();
 
     let args = Args::parse();
+    if args.tool_info {
+        let mut features = Vec::new();
+        if cfg!(feature = "audio") {
+            features.push("audio".into());
+        }
+        if cfg!(feature = "fonts") {
+            features.push("fonts".into());
+        }
+        if cfg!(feature = "gamepad") {
+            features.push("gamepad".into());
+        }
+        let info = kiln_core::distribution::ToolInfo::current(
+            "kiln-player",
+            features,
+            cfg!(debug_assertions),
+        );
+        println!("{}", serde_json::to_string(&info)?);
+        return Ok(());
+    }
     if args.runtime_info {
         let runtime = kiln_core::export::RuntimeInfo {
             protocol: kiln_core::export::EXPORT_PROTOCOL,

@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "health": 66,
+  "script_starts": 1,
+  "saved_x": 214.0,
+  "resumed_x": 260.0,
+  "fresh_process_resume": true,
+  "corrupt_slot_preserved": true,
+  "evidence": "/workspace/kiln-engine/target/task8-portable-evidence/native-gameplay",
+  "screenshots": [
+    "/workspace/kiln-engine/target/task8-portable-evidence/native-gameplay/gameplay.png",
+    "/workspace/kiln-engine/target/task8-portable-evidence/native-gameplay/load_error.png",
+    "/workspace/kiln-engine/target/task8-portable-evidence/native-gameplay/pause.png",
+    "/workspace/kiln-engine/target/task8-portable-evidence/native-gameplay/restarted_title.png",
+    "/workspace/kiln-engine/target/task8-portable-evidence/native-gameplay/resumed_pause.png",
+    "/workspace/kiln-engine/target/task8-portable-evidence/native-gameplay/settings.png",
+    "/workspace/kiln-engine/target/task8-portable-evidence/native-gameplay/settings_changed.png",
+    "/workspace/kiln-engine/target/task8-portable-evidence/native-gameplay/title.png"
+  ]
+}

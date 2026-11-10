@@ -4,7 +4,9 @@ This document contains manual and planned packaging/signing guidance.
 **Current implementation (2026-11-10):** the CLI exports a portable game folder
 for the current desktop host using a matching prebuilt player, or a Browser folder
 using a prepared JS/WASM bundle. See [BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md). Installers, signing,
-cross-target and portable editor distribution remain Task 8 work. See
+cross-target and clean-machine/release editor distribution remain Task 8 work.
+A Linux development editor archive now bundles the editor/exporter/player,
+browser runtime, templates, sample and notices; see [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md). See
 [NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md) for the supported command and evidence.
 
 ---

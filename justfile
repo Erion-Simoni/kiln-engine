@@ -75,3 +75,10 @@ web-runtime:
     cargo build --target wasm32-unknown-unknown -p kiln-web
     wasm-bindgen target/wasm32-unknown-unknown/debug/kiln_web.wasm --target web --out-dir target/debug/web-runtime
     cargo run -p kiln-cli -- web-runtime --input target/debug/web-runtime
+
+# Linux development bundle from prebuilt default-feature tools and prepared browser runtime.
+# Refuses to replace the output; see docs/PORTABLE_EDITOR.md for release gates.
+portable-editor:
+    cargo metadata --locked --format-version 1 --filter-platform x86_64-unknown-linux-gnu > target/portable-metadata.json
+    cargo metadata --locked --format-version 1 --filter-platform wasm32-unknown-unknown > target/portable-web-metadata.json
+    python3 tools/package_editor.py --binaries target/debug --web-runtime target/debug/web-runtime --metadata target/portable-metadata.json --metadata target/portable-web-metadata.json --output target/dist/kiln-portable-development.tar.gz
