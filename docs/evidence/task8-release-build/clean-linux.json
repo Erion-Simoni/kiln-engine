@@ -1,0 +1,88 @@
+{
+  "passed": true,
+  "scope": "Clean Ubuntu 24.04 userspace; shared host kernel/software graphics",
+  "uid": 1000,
+  "absent_development_tools": [
+    "cargo",
+    "rustc",
+    "gcc",
+    "cc",
+    "clang",
+    "make",
+    "git"
+  ],
+  "runtime_package_requirements": [
+    "libasound2t64",
+    "libudev1",
+    "libgcc-s1",
+    "libgl1",
+    "libegl1",
+    "libxkbcommon0",
+    "libxkbcommon-x11-0",
+    "libx11-6",
+    "libxcursor1",
+    "libxi6",
+    "libxrandr2",
+    "libxrender1",
+    "libwayland-client0",
+    "libwayland-cursor0",
+    "libwayland-egl1",
+    "libvulkan1",
+    "mesa-vulkan-drivers",
+    "libgl1-mesa-dri"
+  ],
+  "repository_or_development_sysroot_mounted": false,
+  "installed_tools": {
+    "kiln-editor": {
+      "schema": 1,
+      "tool": "kiln-editor",
+      "version": "0.1.0",
+      "platform": "linux",
+      "arch": "x86_64",
+      "debug_assertions": false,
+      "features": [
+        "audio",
+        "fonts",
+        "gamepad"
+      ]
+    },
+    "kiln-cli": {
+      "schema": 1,
+      "tool": "kiln-cli",
+      "version": "0.1.0",
+      "platform": "linux",
+      "arch": "x86_64",
+      "debug_assertions": false,
+      "features": [
+        "native-export",
+        "browser-export",
+        "bundle-verify"
+      ]
+    },
+    "kiln-player": {
+      "schema": 1,
+      "tool": "kiln-player",
+      "version": "0.1.0",
+      "platform": "linux",
+      "arch": "x86_64",
+      "debug_assertions": false,
+      "features": [
+        "audio",
+        "fonts",
+        "gamepad"
+      ]
+    }
+  },
+  "native_library_resolution": {
+    "kiln-editor": "\tlinux-vdso.so.1 (0x00007f7d1ad66000)\n\tlibasound.so.2 => /lib/x86_64-linux-gnu/libasound.so.2 (0x00007f7d19ef8000)\n\tlibudev.so.1 => /lib/x86_64-linux-gnu/libudev.so.1 (0x00007f7d19ec5000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007f7d19e97000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f7d19dae000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f7d19b9b000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007f7d1ad68000)\n\tlibcap.so.2 => /lib/x86_64-linux-gnu/libcap.so.2 (0x00007f7d19b8c000)\n",
+    "kiln-cli": "\tlinux-vdso.so.1 (0x00007fbc3e8d3000)\n\tlibasound.so.2 => /lib/x86_64-linux-gnu/libasound.so.2 (0x00007fbc3e1b4000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007fbc3e186000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007fbc3e09d000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007fbc3de8a000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007fbc3e8d5000)\n",
+    "kiln-player": "\tlinux-vdso.so.1 (0x00007f4cb9687000)\n\tlibasound.so.2 => /lib/x86_64-linux-gnu/libasound.so.2 (0x00007f4cb8ade000)\n\tlibudev.so.1 => /lib/x86_64-linux-gnu/libudev.so.1 (0x00007f4cb8aab000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007f4cb8a7d000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f4cb8994000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f4cb8781000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007f4cb9689000)\n\tlibcap.so.2 => /lib/x86_64-linux-gnu/libcap.so.2 (0x00007f4cb8772000)\n"
+  },
+  "sprite_material_pixels_editor_and_player": true,
+  "editor_save_export_cancel_and_failure_preservation": true,
+  "relocated_gameplay_save_restart_continue": true,
+  "source_project_unavailable": true,
+  "installation_unchanged_after_use": true,
+  "physical_gpu_audio_controller": false,
+  "browser_tested_in_this_container": false
+}

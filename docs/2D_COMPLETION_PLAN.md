@@ -156,7 +156,7 @@ remain explicitly separate. Real editor export/distribution is Task 8.
 - [x] Replace simulated Build/Export with a real asynchronous native/browser CLI process, bounded streamed stdout/stderr, actual exit status, job-specific receipt/resource validation off the UI thread and cancellation/cleanup. Real editor Save & Export and UI Cancel pass on Linux/Xvfb. Unsupported targets/options fail explicitly; Browser gates authored physics/joints/solid tilemaps against the selected runtime capability and validates/gates authored sprite materials against the selected runtime.
 - [x] Bundle resources/runtimes for the current supported native/browser targets. Native packs/verifies a KAR and includes a matching player; Browser includes the normalized project tree, hash-verified prepared JS/WASM and actual loading/start/error shell. Export/play need no Cargo. Default Browser builds now include shared 2D physics; capabilities remain explicit and other target/toolchain support is pending.
 - [x] Deliver clean Linux userspace acceptance plus relocated Browser loading/input/audio-unlock/save behavior. A pinned Ubuntu 24.04 container runs the installed editor and exported game offline/unprivileged without Rust, repository or development sysroot mounts; real edit/save/export/cancel and game settings/save/restart/Continue pass. Shipped runtime requirements include the discovered dynamic X11 dependency. Browser artifact passes nested HTTP deployment, loading/error/retry, input, explicit audio unlock and reload/save/resume. Physical machines/other OS and driver/device coverage remain in the platform gate below.
-- [ ] Finish portable editor release distribution and validate other platforms on appropriate machines. Linux development archive now includes matched tools, browser runtime, templates/sample, SHA-256 inventory, original dependency/font/Rust notices and verified MPL sources. Moved installation passes both real editor export and relocated gameplay with no Rust on PATH; GLIBC 2.39/system dependency requirements are recorded. Release provenance/licensing review, physical-machine and other OS/GPU checks remain open. Package-size goals are removed by owner request (ADR-0062). See [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md).
+- [ ] Finish portable editor release distribution and validate other platforms on appropriate machines. Linux development and captured release-candidate archives include matched tools, browser runtime, templates/sample, SHA-256 inventory, original dependency/font/Rust notices and verified MPL sources. Moved installation passes both real editor export and relocated gameplay with no Rust on PATH; GLIBC 2.39/system dependency requirements are recorded. Release provenance/licensing review, physical-machine and other OS/GPU checks remain open. Package-size goals are removed by owner request (ADR-0062). See [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md).
 
 Acceptance: author and export from the editor, move the artifact outside the repository to a machine without Rust, and play the full game. A failing exporter produces failure, never a success message.
 
@@ -165,6 +165,12 @@ Native checkpoint: [NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md), ADR-0059 and
 open for physical-machine/other-platform checks, release provenance and
 other-platform editor distribution (development relocation checkpoint passes). See [BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md) for
 the tested browser contract. Task 9 is not started.
+
+`just portable-release` now captures the actual source/lockfile, builds native and
+WASM hosts offline/locked into a fresh target directory and packages a checked
+unsigned local build record. See [BUILD_PROVENANCE.md](BUILD_PROVENANCE.md).
+This adds source-to-artifact execution evidence; it does not close signing,
+byte-reproducibility, licensing or physical/other-platform gates.
 
 ### 9. Reference games and release gate — PENDING
 
@@ -629,3 +635,21 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Remaining Task 8 work is physical/other-platform validation, startup/frame-time/
   memory evidence on reference hardware and release provenance/licensing; shader
   host APIs alone are no longer the evidence for material support.
+
+### 2026-11-10 — Task 8 captured release-profile build
+
+- Added `just portable-release`: snapshot actual source/Cargo.lock, build native
+  and default WASM offline/locked into a fresh directory, retain command logs and
+  package a checked unsigned local build record. Prebuilt preparation remains
+  available with explicit preparation-only provenance. ADR-0065 documents scope.
+- Built/verified a real release candidate; native debug assertions are disabled.
+  Clean Ubuntu acceptance now also checks material pixels in installed editor/
+  player. Native export/cancel/failure, moved gameplay/save/Continue and unchanged
+  installation verification pass. Release browser material/physics/UI regressions
+  and actual installed-editor Browser export/relocated loading/consent/save pass.
+- `just check` passed; 665 Rust and ten producer/build tests passed. Selected
+  record/results/inspected captures: evidence/task8-release-build. See
+  BUILD_PROVENANCE.md for precise source/archive identity and limitations.
+- Task 8 remains open for physical/other-platform/reference-hardware measurements,
+  internal licensing, trusted provenance/repeated binary equality and signing.
+  Package size remains informational. Task 9/full 3D have not started.

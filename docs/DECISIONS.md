@@ -1690,3 +1690,25 @@ real native/browser pixels (including numeric and texture overrides, alpha/order
 rotation, scene/save restoration), failure feedback and existing workflows.
 No release-size goal is reintroduced. Physical hardware/other OS and provenance
 checks remain separate Task 8 gates.
+### ADR-0065 — Captured portable builds and local build records (2026-11-10)
+
+- Task 8's prebuilt packager records preparation observations, which cannot link
+  arbitrary supplied binaries to source. Add an explicit Linux build driver that
+  snapshots tracked/nonignored files plus Cargo.lock, rejects links/special files,
+  hashes and archives that snapshot, and uses it as the build working directory.
+- Build native/default-WASM hosts offline and locked into a fresh target directory;
+  capture compiler/Cargo/wasm-bindgen versions, fixed commands, logs and artifact
+  hashes. Clear inherited Cargo profile/target/compiler-wrapper/rustflags overrides
+  rather than letting ambient flags silently alter the selected profile. Preserve
+  normal package-manager/proxy/CA and platform SDK discovery; record only selected
+  build settings and configuration hashes, never credential contents.
+- An optional local build record is checked by the packager against the snapshot,
+  lockfile, compiled profile and exact six native/browser payload files. Include it
+  in the verified installation. Prebuilt packaging remains supported without a
+  record, explicitly labeled as preparation-only observations.
+- This is an unsigned local execution record, not remote attestation, a hermetic
+  toolchain/sysroot/dependency audit or proof of byte-reproducible binaries. Keep
+  source/lock archive and logs beside the candidate for inspection. External Cargo
+  configuration/SDK/system dependencies still affect builds. Repeated builds and
+  trusted CI/signing remain release gates; size has no acceptance threshold.
+- No new dependency; Python standard library and existing Rust/build tools only.

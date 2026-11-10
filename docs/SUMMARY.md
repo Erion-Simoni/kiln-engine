@@ -73,6 +73,7 @@
 
 * [Editor Roadmap](EDITOR_ROADMAP.md)
 * [Portable Development Editor](PORTABLE_EDITOR.md)
+* [Captured Portable Builds](BUILD_PROVENANCE.md)
 * [Browser 2D Physics](BROWSER_PHYSICS_2D.md)
 * [Sprite Materials](SPRITE_MATERIALS_2D.md)
 * [UI Integration](UI_INTEGRATION.md)

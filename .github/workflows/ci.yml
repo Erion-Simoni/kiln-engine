@@ -69,8 +69,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libgl1-mesa-dri mesa-vulkan-drivers
       - name: Run tests
         run: cargo nextest run --workspace
-      - name: Test portable package preparation
-        run: python3 -m unittest discover -s tests/native -p test_portable_package.py
+      - name: Test portable package preparation and captured builds
+        run: python3 -m unittest discover -s tests/native -p 'test_*.py'
 
   build:
     name: Build

@@ -5,9 +5,9 @@ prepared browser JS/WASM, three project templates, saved-UI, physics and materia
 notices. Keep the extracted directory together. Authoring and both export targets
 use those prebuilt files without Cargo, Rust, Python, Node or wasm-bindgen.
 
-This checkpoint proves relocation within the tested Linux cloud machine. Release
-builds, installers/signing, another-machine dependency closure, Windows/macOS and
-physical GPU/audio/controller acceptance remain open. Task 8 is not complete.
+Development and captured release-profile candidates pass relocation and clean
+Ubuntu software acceptance. Installers/signing, trusted reproducible provenance,
+physical machines/devices and Windows/macOS remain open. Task 8 is not complete.
 
 ## Prepare once
 
@@ -88,6 +88,13 @@ packaging checkout. They do not attest that arbitrary supplied binaries came
 from that checkout/compiler. Exact build provenance and reproducible release
 builds remain release gates. `--tool-info` works without opening devices and
 records the actual compiled feature/debug flags, but is not a signature.
+
+For a fresh source-to-bundle execution record, use `just portable-release`.
+It captures source and Cargo.lock, builds offline/locked into a new directory,
+checks native/browser artifact hashes against the build record and includes the
+record in the installation. See [BUILD_PROVENANCE.md](BUILD_PROVENANCE.md).
+This narrows the prebuilt-input gap without claiming signed attestation or
+byte-reproducible/hermetic builds. Physical/platform acceptance remains separate.
 
 ## Notices
 

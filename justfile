@@ -69,3 +69,7 @@ portable-editor:
     cargo metadata --locked --format-version 1 --filter-platform x86_64-unknown-linux-gnu > target/portable-metadata.json
     cargo metadata --locked --format-version 1 --filter-platform wasm32-unknown-unknown > target/portable-web-metadata.json
     python3 tools/package_editor.py --binaries target/debug --web-runtime target/debug/web-runtime --metadata target/portable-metadata.json --metadata target/portable-web-metadata.json --output target/dist/kiln-portable-development.tar.gz
+
+# Fresh offline release build from a captured source/lock snapshot; output must not exist.
+portable-release output="target/portable-release":
+    python3 tools/build_editor.py --profile release --output {{quote(output)}}

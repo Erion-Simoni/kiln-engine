@@ -16,7 +16,7 @@ def main():
     output=Path(os.environ.get('KILN_MATERIAL_EVIDENCE',REPO/'target/task8-material-native-evidence')).resolve()
     output.mkdir(parents=True,exist_ok=True);(output/'result.json').unlink(missing_ok=True)
     run=Path(tempfile.mkdtemp(prefix='profile-',dir=output));project=run/'project'
-    shutil.copytree(REPO/'samples/materials2d',project)
+    shutil.copytree(Path(os.environ.get('KILN_MATERIAL_PROJECT',REPO/'samples/materials2d')),project)
     env=os.environ.copy();env.update(DISPLAY=':84',XDG_DATA_HOME=str(run/'data'),XDG_CONFIG_HOME=str(run/'config'),XDG_CACHE_HOME=str(run/'cache'),XDG_RUNTIME_DIR=str(run/'runtime'),LIBGL_ALWAYS_SOFTWARE='1',ALSA_CONFIG_PATH=str(run/'alsa.conf'),RUST_LOG='warn,kiln_player=info,kiln_editor=info')
     if TOOLS.is_dir():env['LD_LIBRARY_PATH']=str(TOOLS/'usr/lib/x86_64-linux-gnu')+':'+env.get('LD_LIBRARY_PATH','')
     if Path('/usr/lib/chromium/vk_swiftshader_icd.json').exists():env['VK_ICD_FILENAMES']='/usr/lib/chromium/vk_swiftshader_icd.json'
@@ -28,7 +28,8 @@ def main():
         xdo=executable('xdotool')
         wait_for(lambda:subprocess.run([xdo,'getdisplaygeometry'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0,server,server_log)
         destination=run/'export';export_env=env.copy();export_env['PATH']=''
-        subprocess.run([str(REPO/'target/debug/kiln-cli'),'export','--project',str(project/'kiln.toml'),'--output',str(destination)],env=export_env,check=True,stdout=(output/'export.log').open('w'))
+        cli=Path(os.environ.get('KILN_CLI_PATH',REPO/'target/debug/kiln-cli')).resolve()
+        subprocess.run([str(cli),'export','--project',str(project/'kiln.toml'),'--output',str(destination)],env=export_env,check=True,stdout=(output/'export.log').open('w'))
         moved=Path(tempfile.mkdtemp(prefix='kiln-native-materials-'))/'game folder';shutil.move(destination,moved)
         receipt=json.loads((moved/'export.json').read_text());assert receipt['runtime']['materials']
         log=output/'player.log'
@@ -66,7 +67,8 @@ def main():
         # Editor uses a disposable working copy; verify the same project is previewed.
         config=run/'config/kiln';config.mkdir(parents=True,exist_ok=True)
         (config/'project_hub.json').write_text(json.dumps([{'path':str(project/'kiln.toml'),'name':'Materials','last_opened':0}]))
-        log=output/'editor.log';process,window=launch(REPO/'target/debug/kiln-editor','Kiln Editor -')
+        editor=Path(os.environ.get('KILN_EDITOR_PATH',REPO/'target/debug/kiln-editor')).resolve()
+        log=output/'editor.log';process,window=launch(editor,'Kiln Editor -')
         editor_shot=shot(window,'editor-materials')
         # Count unmistakable saturated red/green pixels inside the actual scene panel.
         crop=subprocess.check_output([executable('convert'),str(editor_shot),'-crop','850x570+245+85','-depth','8','rgba:-'])

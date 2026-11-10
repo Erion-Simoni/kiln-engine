@@ -216,6 +216,32 @@ def system_observations(binary_dir, info):
     return observation
 
 
+def verify_build_record(path, root, identity):
+    if path.is_symlink() or path.stat().st_size > 8*1024*1024:
+        raise ValueError('Invalid bounded build record')
+    record = json.loads(path.read_text())
+    if record.get('schema') != 1 or record.get('kind') != 'unsigned-local-build':
+        raise ValueError('Unsupported build record')
+    profile = record.get('profile')
+    if profile not in ('dev', 'release') or identity['debug_assertions'] != (profile == 'dev'):
+        raise ValueError('Build record profile does not match compiled tools')
+    expected = {*TOOLS, 'web-runtime/kiln_web.js', 'web-runtime/kiln_web_bg.wasm',
+                'web-runtime/runtime.json'}
+    entries = record.get('artifacts', [])
+    if len(entries) != len(expected) or {e['path'] for e in entries} != expected:
+        raise ValueError('Build record must cover exactly the native/browser payload')
+    for entry in entries:
+        payload = root/entry['path']
+        if payload.stat().st_size != entry['bytes'] or digest(payload) != entry['sha256']:
+            raise ValueError(f"Build record artifact mismatch: {entry['path']}")
+    source = record['source']
+    if digest(REPO/'Cargo.lock') != source['cargo_lock_sha256'] or file_entries(REPO) != source['files']:
+        raise ValueError('Build record source snapshot mismatch')
+    if hashlib.sha256(json.dumps(source['files'], sort_keys=True).encode()).hexdigest() != source['files_sha256']:
+        raise ValueError('Build record source inventory hash mismatch')
+    return record
+
+
 def prepare(args):
     if args.output.exists() or args.output.is_symlink():
         raise ValueError('Refusing to replace existing output')
@@ -230,6 +256,10 @@ def prepare(args):
             copy_file(args.binaries/name, root/name, executable=True)
         for name in ('kiln_web.js', 'kiln_web_bg.wasm', 'runtime.json'):
             copy_file(args.web_runtime/name, root/'web-runtime'/name)
+        record = None
+        if getattr(args, 'build_record', None) is not None:
+            record = verify_build_record(args.build_record, root, identity)
+            copy_file(args.build_record, root/'build-record.json')
         copy_tree(REPO/'templates', root/'templates')
         copy_tree(REPO/'samples/ui2d_editor', root/'examples/ui2d_editor')
         copy_tree(REPO/'samples/browser_physics2d', root/'examples/browser_physics2d')
@@ -239,6 +269,8 @@ def prepare(args):
             copy_file(REPO/'packaging/linux-runtime-packages.txt', root/'linux-runtime-packages.txt')
         package_notices(args.metadata, root/'licenses')
         compiler = compiler_notices(root/'licenses')
+        if record is not None and compiler != record['toolchain']['rustc']:
+            raise ValueError('Build record compiler does not match preparing compiler')
         (root/'README.txt').write_text(
             'Kiln portable editor build candidate\n\n'
             'Extract the complete directory somewhere writable; keep its contents together.\n'
@@ -259,11 +291,15 @@ def prepare(args):
             'Checksums detect changes; this unsigned manifest does not authenticate a download.\n', encoding='utf-8')
         initial = file_entries(root)
         (root/'SHA256SUMS').write_text(''.join(f"{e['sha256']}  {e['path']}\n" for e in initial), encoding='utf-8')
-        revision = subprocess.run(['git', '-C', str(REPO), 'rev-parse', 'HEAD'], check=True, capture_output=True, text=True).stdout.strip()
-        dirty = bool(subprocess.run(['git', '-C', str(REPO), 'status', '--porcelain'], check=True, capture_output=True, text=True).stdout)
+        if record is not None:
+            revision, dirty = record['source']['revision'], record['source']['dirty']
+        else:
+            revision = subprocess.run(['git', '-C', str(REPO), 'rev-parse', 'HEAD'], check=True, capture_output=True, text=True).stdout.strip()
+            dirty = bool(subprocess.run(['git', '-C', str(REPO), 'status', '--porcelain'], check=True, capture_output=True, text=True).stdout)
         manifest = {k: identity[k] for k in ('schema', 'version', 'platform', 'arch')}
         manifest.update(tools=identities_by_tool, files=file_entries(root), source_revision=revision,
                         source_dirty=dirty, preparing_compiler=compiler,
+                        provenance='unsigned-local-build' if record is not None else 'preparation-observations-only',
                         distribution='development' if identity['debug_assertions'] else 'release-candidate', system_observations=system_observations(args.binaries, identity))
         write_json(root/'bundle.json', manifest)
         subprocess.run([str(root/('kiln-cli.exe' if os.name == 'nt' else 'kiln-cli')),
@@ -281,6 +317,7 @@ def main():
     parser.add_argument('--web-runtime', type=Path, required=True)
     parser.add_argument('--metadata', type=Path, action='append', required=True, help='Host/WASM filtered Cargo metadata JSON (repeat)')
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--build-record', type=Path, help='Optional record from build_editor.py and its captured source snapshot')
     args = parser.parse_args()
     args.binaries = args.binaries.resolve()
     args.web_runtime = args.web_runtime.resolve()

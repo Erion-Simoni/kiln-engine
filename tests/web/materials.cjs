@@ -7,7 +7,7 @@ const evidence=path.resolve(process.env.WEB_MATERIAL_EVIDENCE||'target/task8-mat
  await fs.mkdir(evidence,{recursive:true});await fs.rm(path.join(evidence,'result.json'),{force:true});
  const work=await fs.mkdtemp(path.join(os.tmpdir(),'kiln-materials-')),project=path.join(work,'project'),output=path.join(work,'export');
  await fs.cp(path.join(repo,'samples/materials2d'),project,{recursive:true});
- const cli=path.resolve('target/debug/kiln-cli');
+ const cli=path.resolve(process.env.KILN_CLI_PATH||'target/debug/kiln-cli');
  const log=execFileSync(cli,['export','--platform','web','--project',path.join(project,'kiln.toml'),'--web-runtime',runtime,'--output',output],{cwd:work,env:{...process.env,PATH:''},encoding:'utf8'});
  await fs.writeFile(path.join(evidence,'export.log'),log);
  const receipt=JSON.parse(await fs.readFile(path.join(output,'export.json')));assert.equal(receipt.runtime.materials,true);

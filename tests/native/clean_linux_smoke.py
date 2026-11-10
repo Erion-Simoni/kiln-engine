@@ -68,12 +68,21 @@ def main():
     gameplay = json.loads((evidence/'gameplay/result.json').read_text())
     if not gameplay['passed']:
         raise RuntimeError('Relocated game acceptance failed')
+    material_env = os.environ.copy()
+    material_env.update(KILN_EDITOR_PATH=str(installation/'kiln-editor'),
+                        KILN_CLI_PATH=str(cli), KILN_MATERIAL_PROJECT=str(installation/'examples/materials2d'),
+                        KILN_MATERIAL_EVIDENCE=str(evidence/'materials'))
+    run([sys.executable, '/acceptance/tests/native/materials_smoke.py'], cwd=unrelated, env=material_env)
+    materials = json.loads((evidence/'materials/result.json').read_text())
+    if not materials['passed']:
+        raise RuntimeError('Material acceptance did not complete')
     run([cli, 'verify-editor-bundle', '--input', installation], cwd=unrelated)
     result = {'passed': True, 'scope': 'Clean Ubuntu 24.04 userspace; shared host kernel/software graphics',
               'uid': os.geteuid(), 'absent_development_tools': absent_tools,
               'runtime_package_requirements': Path('/acceptance/linux-runtime-packages.txt').read_text().splitlines(),
               'repository_or_development_sysroot_mounted': False,
               'installed_tools': identities, 'native_library_resolution': dependencies,
+              'sprite_material_pixels_editor_and_player': True,
               'editor_save_export_cancel_and_failure_preservation': True,
               'relocated_gameplay_save_restart_continue': True,
               'source_project_unavailable': True, 'installation_unchanged_after_use': True,

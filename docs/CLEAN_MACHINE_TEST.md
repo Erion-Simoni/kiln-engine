@@ -21,7 +21,7 @@ python3 tools/test_clean_linux.py target/dist/kiln-portable-development.tar.gz
 
 The runner uses the local Unix Docker socket explicitly, keeping the existing
 Docker credential/proxy configuration. It builds a small sanitized context
-containing only the Dockerfile and four native test scripts. The pinned official
+containing only the Dockerfile and five native test scripts. The pinned official
 Ubuntu base and exact runtime/test package versions are recorded in evidence.
 The image and shipped archive share `packaging/linux-runtime-packages.txt`; it
 includes runtime-loaded X11 support (`libxkbcommon-x11-0`) in addition to ELF
@@ -50,6 +50,9 @@ requires rebuilding and executing the same acceptance on that baseline.
 - Relocate the exported native game and make its project source copy unavailable.
   Launch without an archive argument and exercise title/settings/gameplay/pause,
   inventory, saving, fresh-process restart/Continue and corrupt-save preservation.
+- Export/play the shipped material playground with the installed CLI/player, check
+  numeric/texture overrides, alpha order, flip/rotation and save/scene restoration,
+  then open it in the installed editor and verify actual material preview pixels.
 - Verify the installed files remain unchanged after use. Browser files are
   validated as part of installation verification; browser gameplay uses the
   separate [browser export acceptance](BROWSER_EXPORT_2D.md).

@@ -42,7 +42,7 @@ def main():
         shutil.copyfile(REPO/'packaging/linux-runtime-packages.txt', context/'linux-runtime-packages.txt')
         scripts = context/'tests/native'
         scripts.mkdir(parents=True)
-        for name in ('clean_linux_smoke.py', 'export_smoke.py', 'ui_smoke.py', 'task7_smoke.py'):
+        for name in ('clean_linux_smoke.py', 'export_smoke.py', 'ui_smoke.py', 'task7_smoke.py', 'materials_smoke.py'):
             shutil.copyfile(REPO/'tests/native'/name, scripts/name)
         iid = context/'image-id'
         with (evidence/'build.log').open('w') as log:

@@ -6,6 +6,16 @@ measurements, with no release ceiling or size-based completion gate. Frame-time,
 startup, memory/resource budgets and bounded-input limits remain active.
 `just size` only reports sizes; it does not enforce these other budgets.
 
+## Task 8 captured portable builds — 2026-11-10
+
+Source capture, offline compilation and build-record checks run only during
+candidate preparation. They add no game frame pass or editor startup requirement.
+The source inventory uses existing 20,000-file/512 MiB per-file/2 GiB total
+technical limits, and the optional build record is capped at 8 MiB. These are
+bounded-input protections, not release-size targets. A release profile alone
+does not establish startup/frame-time/memory budgets on reference hardware.
+See [BUILD_PROVENANCE.md](BUILD_PROVENANCE.md).
+
 ## Task 8 authored sprite materials — 2026-11-10
 
 Material pipelines are cached across unchanged frames. Preparation is bounded at

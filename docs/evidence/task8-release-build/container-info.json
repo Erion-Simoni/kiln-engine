@@ -1,0 +1,15 @@
+{
+  "image_id": "sha256:9fd7255d2a5345b0f24686cc6f0ecd0ec5312f4a92c556b60056ea0b40fffba0",
+  "dockerfile_base": "ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852",
+  "archive_sha256": "d5ca032d975c5761a267c24c60d03b97efad1d019e46915b89baab5c4ce15b4a",
+  "archive_bytes": 16665981,
+  "user": "1000:1000",
+  "network": "none",
+  "read_only_root": true,
+  "mounts": [
+    "archive (read-only)",
+    "evidence (writable)"
+  ],
+  "shared_host_kernel": true,
+  "physical_hardware_acceptance": false
+}
