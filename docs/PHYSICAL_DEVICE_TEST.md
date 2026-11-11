@@ -12,6 +12,9 @@ method. This document prepares the checks; no physical-device pass is implied.
 
 ## Identify the installation and device
 
+For a hosted candidate, first use the completed-run download and attestation
+verification recipe in [BUILD_PROVENANCE.md](BUILD_PROVENANCE.md#hosted-release-candidate-workflow).
+Record that run's source SHA rather than a later documentation-only branch HEAD.
 Keep the extracted installation intact. Verify it with its included CLI:
 
 ```sh

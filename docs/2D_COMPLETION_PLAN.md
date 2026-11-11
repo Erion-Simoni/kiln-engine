@@ -151,18 +151,19 @@ saves and browser quota failures preserve the old slot/live world. Software
 acceptance is complete; physical-controller, audible-device and remote CI checks
 remain explicitly separate. Real editor export/distribution is Task 8.
 
-### 8. Real build/export and distribution — IN PROGRESS (exports, portable editor and clean Linux userspace)
+### 8. Real build/export and distribution — IN PROGRESS (hosted Linux candidate accepted and attested)
 
 - [x] Replace simulated Build/Export with a real asynchronous native/browser CLI process, bounded streamed stdout/stderr, actual exit status, job-specific receipt/resource validation off the UI thread and cancellation/cleanup. Real editor Save & Export and UI Cancel pass on Linux/Xvfb. Unsupported targets/options fail explicitly; Browser gates authored physics/joints/solid tilemaps against the selected runtime capability and validates/gates authored sprite materials against the selected runtime.
 - [x] Bundle resources/runtimes for the current supported native/browser targets. Native packs/verifies a KAR and includes a matching player; Browser includes the normalized project tree, hash-verified prepared JS/WASM and actual loading/start/error shell. Export/play need no Cargo. Default Browser builds now include shared 2D physics; capabilities remain explicit and other target/toolchain support is pending.
 - [x] Deliver clean Linux userspace acceptance plus relocated Browser loading/input/audio-unlock/save behavior. A pinned Ubuntu 24.04 container runs the installed editor and exported game offline/unprivileged without Rust, repository or development sysroot mounts; real edit/save/export/cancel and game settings/save/restart/Continue pass. Shipped runtime requirements include the discovered dynamic X11 dependency. Browser artifact passes nested HTTP deployment, loading/error/retry, input, explicit audio unlock and reload/save/resume. Physical machines/other OS and driver/device coverage remain in the platform gate below.
-- [ ] Finish portable editor release distribution and validate other platforms on appropriate machines. Linux development and captured release-candidate archives include matched tools, browser runtime, templates/sample, SHA-256 inventory, original dependency/font/Rust notices and verified MPL sources. Moved installation passes both real editor export and relocated gameplay with no Rust on PATH; GLIBC 2.39/system dependency requirements are recorded. Release provenance/licensing review, physical-machine and other OS/GPU checks remain open. Package-size goals are removed by owner request (ADR-0062). See [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md).
+- [x] Publish an accepted Linux release candidate and retain GitHub build-origin attestation as Actions artifacts. Run 43107026471 at 0b9a67b passed native quality/tests, two fresh locked/offline builds, actual six-payload comparison, browser/moved installation/export/gameplay and clean Ubuntu gates; candidate/evidence upload and separate attestation/bundle upload succeeded. Archives include matched tools, browser runtime, templates/examples, source/build records, SHA-256 inventory, original dependency/font/Rust notices and verified MPL sources. Public job conclusions establish hosted execution; independent downloaded-signature verification is separate.
+- [ ] Finish reviewed public editor releases and validate other platforms on appropriate machines. Resolve project licensing and remaining SDK/dependency provenance, OS installer/signing, physical-machine and Windows/macOS/other GPU checks. Current Linux candidate requires GLIBC 2.39 and documented system libraries. Package-size goals are removed by owner request (ADR-0062). See [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md).
 
 Acceptance: author and export from the editor, move the artifact outside the repository to a machine without Rust, and play the full game. A failing exporter produces failure, never a success message.
 
 Native checkpoint: [NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md), ADR-0059 and
 [evidence/task8-native/README.md](evidence/task8-native/README.md). Task 8 remains
-open for physical-machine/other-platform checks, release provenance and
+open for physical-machine/other-platform checks, remaining provenance/licensing review and
 other-platform editor distribution (development relocation checkpoint passes). See [BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md) for
 the tested browser contract. Task 9 is not started.
 
@@ -717,3 +718,21 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
   probe upload/download/byte comparison passed; candidate build is in progress.
   Local Rust suite rerun: 665 passed, zero failures/skips. This is early artifact
   service evidence, not yet complete candidate publication or attestation.
+
+### 2026-11-11 — Task 8 hosted publication and origin attestation passed
+
+- Observed run 43107026471 at 0b9a67b through all three jobs: overall success in
+  47m 9s. Native quality/tests, both captured builds, actual six-payload equality,
+  browser material/physics, moved installation/export/gameplay and clean Ubuntu
+  acceptance all passed. Candidate/diagnostic uploads and separate attestation /
+  bundle upload passed too. Original 404 causation remains unproven.
+- Saved public step conclusions/overall success in
+  evidence/task8-hosted-ci/hosted-run2-complete.json. Candidate contents/signatures
+  were not independently downloaded/verified here; no such claim is inferred.
+- Added a successful-run download recipe verifying all five files against that
+  run's source/signer SHA before extraction/installation checking. Linked it from
+  the main download, getting-started, portable-editor and physical-test docs.
+- just check and documentation Bash/official CLI flag/archive-root checks pass.
+  No engine/workflow changes this session. Project licensing, physical/reference
+  hardware, other-platform distribution and OS signing keep Task 8 open. Task 9
+  remains unstarted; package size remains informational.

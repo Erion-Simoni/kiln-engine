@@ -73,7 +73,9 @@ For independent rebuilding, extract source.tar.gz, preserve Cargo.lock, use the
 recorded compiler/bindgen and commands with new output paths, and compare payload
 hashes. A successful first build does not prove two builds match. Trusted CI
 attestation, dependency/SDK/toolchain provenance, repeated binary comparison,
-licensing review and installer signing remain release work. Archive size is
+licensing review and installer signing remain release work. The hosted run below
+adds GitHub workflow-origin attestation for its specific candidate; it does not
+authenticate arbitrary locally prepared builds. Archive size is
 informational; no size ceiling applies.
 
 ## Replay and compare captured payloads
@@ -134,12 +136,44 @@ fixed candidate files and invoke the official build-provenance action. It does
 not check out or execute engine code. A failed build/acceptance job cannot run
 the attestation job. This workflow does not create a GitHub Release.
 
-Use a current GitHub CLI that supports `gh attestation verify`. Download the
-candidate artifact and verify each relevant file:
+Use a current, authenticated GitHub CLI that supports `gh attestation verify`.
+Select a completed successful **Release candidate verification** run in this
+repository. Its source SHA is the candidate's revision; a later documentation-only
+branch commit need not have a candidate of its own. Download into a new directory
+and verify all five files before extracting or running the editor:
 
-```sh
-gh attestation verify kiln-portable.tar.gz --repo Erion-Simoni/kiln-engine --signer-workflow Erion-Simoni/kiln-engine/.github/workflows/release-candidate.yml
+```bash
+set -euo pipefail
+candidate_repo=Erion-Simoni/kiln-engine
+candidate_run=43107026471 # Select a successful release-candidate run.
+test "$(gh run view "$candidate_run" --repo "$candidate_repo" --json conclusion --jq .conclusion)" = success
+candidate_sha=$(gh run view "$candidate_run" --repo "$candidate_repo" --json headSha --jq .headSha)
+candidate_dir="kiln-candidate-${candidate_run}"
+mkdir "$candidate_dir"
+gh run download "$candidate_run" --repo "$candidate_repo" \
+  --name "kiln-linux-candidate-${candidate_sha}" --dir "$candidate_dir"
+for candidate_file in kiln-portable.tar.gz source.tar.gz build-record.json build-driver.py comparison.json; do
+  gh attestation verify "$candidate_dir/$candidate_file" \
+    --repo "$candidate_repo" \
+    --signer-workflow "$candidate_repo/.github/workflows/release-candidate.yml" \
+    --signer-digest "$candidate_sha" --source-digest "$candidate_sha" \
+    --deny-self-hosted-runners
+done
+mkdir "$candidate_dir/installation"
+tar -xzf "$candidate_dir/kiln-portable.tar.gz" -C "$candidate_dir/installation"
+cd "$candidate_dir/installation/kiln-0.1.0-linux-x86_64"
+./kiln-cli verify-editor-bundle --input .
+./kiln-editor
 ```
+
+The success check deliberately stops the recipe for a failed or still-running
+workflow. The first mkdir refuses to reuse an existing download directory.
+Repository, workflow and both source/signer digest checks bind verification to
+the selected run's commit. Do not substitute the current branch HEAD when it
+differs from that run. CLI authentication and access to GitHub's attestation
+service are required; local checksums are not a substitute if verification fails.
+The extraction directory above matches current version 0.1.0; use the archive's
+versioned root when consuming a later version.
 
 Match the verified source revision with build-record.json and the workflow run.
 Attestations establish GitHub workflow origin and subject digests, not OS code
@@ -153,10 +187,16 @@ failed, so attestation was not reached. The owner's screenshot supplies the exac
 CreateArtifact error: HTTP 404, "workflow run not found". This does not establish
 quota exhaustion, token expiry or a Node runtime cause. The workflow now updates
 the artifact client and fails early on a failed upload/download probe (ADR-0068).
-See [hosted evidence](evidence/task8-hosted-ci/README.md). The complete hosted
-publication/attestation gate remains open until a new run is observed to pass.
+See [hosted evidence](evidence/task8-hosted-ci/README.md).
 
-Run #2 at 0b9a67b successfully uploaded/downloaded its probe and verified identical
-bytes. The candidate build is in progress at that observation. This confirms the
-early artifact-service roundtrip, without claiming later candidate publication,
-attestation or a proven cause for run #1's 404.
+[Run #2](https://github.com/Erion-Simoni/kiln-engine/actions/runs/43107026471) at
+`0b9a67b21480a654e8d6fcc886e702dd1d2b1e33` completed successfully in 47m 9s.
+All engine/rebuild/comparison/browser/relocation/clean-Ubuntu gates passed, both
+candidate/evidence uploads succeeded, and the separate job downloaded the
+candidate, created the build-origin attestation and uploaded its bundle.
+hosted-run2-complete.json records public step conclusions and the overall success.
+The candidate files and signatures were not independently downloaded/verified in
+this cloud environment; the verification recipe above is the consumer procedure.
+This closes the observed hosted publication/attestation execution gate for that
+source revision. It does not prove the original 404's cause, independent-builder
+reproducibility, licensing, OS signing or physical/other-platform acceptance.

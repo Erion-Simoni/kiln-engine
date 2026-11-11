@@ -6,7 +6,9 @@ notices. Keep the extracted directory together. Authoring and both export target
 use those prebuilt files without Cargo, Rust, Python, Node or wasm-bindgen.
 
 Development and captured release-profile candidates pass relocation and clean
-Ubuntu software acceptance. Installers/signing, trusted reproducible provenance,
+Ubuntu software acceptance. A hosted Linux candidate also passed publication and
+GitHub build-origin attestation (run 43107026471 at 0b9a67b). Installers/OS signing,
+independent-builder/dependency provenance,
 physical machines/devices and Windows/macOS remain open. Task 8 is not complete.
 
 ## Prepare once
@@ -101,11 +103,20 @@ on 2026-11-11 and all six native/browser files matched byte for byte. Execution
 archives differ due to their records. See [repeated-build evidence](evidence/task8-repeated-build/README.md).
 This is same-host/toolchain repetition; trusted independent builders remain open.
 
-The release-candidate Actions workflow now prepares the same checks on a hosted
-Linux runner, retaining the accepted candidate/evidence and creating a build-origin
-attestation in a separate job. Root dependencies are pinned in tracked Cargo.lock.
+The release-candidate Actions workflow runs the same checks on a hosted Linux
+runner, retaining the accepted candidate/evidence and creating a build-origin
+attestation in a separate job. Run 43107026471 at 0b9a67b completed successfully,
+including candidate upload, attestation creation and bundle upload. Public job
+conclusions are recorded in [hosted evidence](evidence/task8-hosted-ci/README.md);
+candidate signatures were not independently downloaded/verified here.
+Root dependencies are pinned in tracked Cargo.lock.
 See [BUILD_PROVENANCE.md](BUILD_PROVENANCE.md#hosted-release-candidate-workflow).
-Workflow preparation alone does not establish a successful hosted run.
+For a successful hosted candidate, follow the download/verification recipe in
+[BUILD_PROVENANCE.md](BUILD_PROVENANCE.md#hosted-release-candidate-workflow). It
+selects a completed run, downloads into a new directory, verifies all five
+attested files against that run's source/workflow SHA, then extracts and checks
+the installation. Branch HEAD can be newer than the candidate after documentation
+commits; use the run's SHA rather than assuming the latest branch has an archive.
 
 ## Notices
 
@@ -123,6 +134,15 @@ remains null; the workspace declares `MIT OR Apache-2.0`. This implementation
 does not invent or rewrite a copyright/license grant. These declarations and
 exact binary provenance still need release review. No OS/driver libraries or
 preparation tools are redistributed by this archive.
+
+The current locked workspace metadata identifies missing license values in
+`kiln-ai`, `kiln-assets`, `kiln-cli`, `kiln-gameplay`, `kiln-graph`, `kiln-ir`,
+`kiln-platform` and `kiln-script`, plus the `animation`, `ai` and `gameplay`
+sample packages. The root README still says `TBD`, while workspace metadata says
+`MIT OR Apache-2.0`; no root project license text accompanies those declarations.
+The owner must resolve that policy and supply the corresponding project license
+texts before treating the candidate as a reviewed public release. Original
+third-party notices remain included; this list does not change any license grant.
 
 ## Tested requirements and remaining platform gates
 

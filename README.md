@@ -32,11 +32,20 @@ just web      # wasm demo in browser
 
 ## Download
 
-No releases are published yet. Packaging (installers, code-signing, store
-upload) is planned for M15–M16 but has not been shipped; see
-`docs/PACKAGING.md` and the packaging section of `docs/ROADMAP.md`.
+No public releases are published yet. The Linux release-candidate workflow builds
+and tests a portable editor with its exporter, player, browser runtime, templates
+and examples. Use only a completed successful run and follow the
+[verified download instructions](docs/BUILD_PROVENANCE.md#hosted-release-candidate-workflow).
+The installed editor needs no Rust, Cargo, Python or Node. Its current Linux
+requirements and remaining platform checks are in
+[PORTABLE_EDITOR.md](docs/PORTABLE_EDITOR.md). Installers, OS code signing and
+other-platform distribution remain in progress; see [PACKAGING.md](docs/PACKAGING.md).
 
-Build from source instead:
+Accepted Linux candidate: [run #2](https://github.com/Erion-Simoni/kiln-engine/actions/runs/43107026471),
+source `0b9a67b`. Candidate and attestation artifacts are retained for 14 days;
+select a later successful run if those downloads have expired.
+
+To build from source:
 
 ```bash
 cargo run --bin kiln-editor                        # editor

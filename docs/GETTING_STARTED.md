@@ -19,6 +19,13 @@ M29 (3D foundation) is in progress — see `ROADMAP_FULL_M14_PLUS.md`.
 
 ## Step 1: Prerequisites
 
+For a Linux portable candidate, use the
+[completed-run download and verification instructions](BUILD_PROVENANCE.md#hosted-release-candidate-workflow),
+then launch the installed editor and create/open a project. That installation
+bundles the export tools and needs no Rust toolchain. Its OS/library requirements
+are in [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md). The following prerequisites and
+commands apply when building from source.
+
 - **Rust 1.87+** — `rustup` to install
 - **just** — `cargo install just`
 - **Linux native audio/controllers:** ALSA and udev development headers (`sudo apt-get install libasound2-dev libudev-dev` on Debian/Ubuntu). Native editor/player enable audio, fonts and controllers by default. Use `--no-default-features` to opt out, and add selected features when needed.
