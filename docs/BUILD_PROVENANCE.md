@@ -155,3 +155,8 @@ quota exhaustion, token expiry or a Node runtime cause. The workflow now updates
 the artifact client and fails early on a failed upload/download probe (ADR-0068).
 See [hosted evidence](evidence/task8-hosted-ci/README.md). The complete hosted
 publication/attestation gate remains open until a new run is observed to pass.
+
+Run #2 at 0b9a67b successfully uploaded/downloaded its probe and verified identical
+bytes. The candidate build is in progress at that observation. This confirms the
+early artifact-service roundtrip, without claiming later candidate publication,
+attestation or a proven cause for run #1's 404.

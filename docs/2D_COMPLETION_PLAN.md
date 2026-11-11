@@ -713,3 +713,7 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Local actionlint, just check and 19 Python tests pass; actual preflight shell
   scripts accept unchanged downloads and reject altered/missing bytes. Hosted
   candidate publication/attestation still require a successful observed run.
+- Pushed 0b9a67b and verified the exact remote SHA. Hosted run 43107026471's actual
+  probe upload/download/byte comparison passed; candidate build is in progress.
+  Local Rust suite rerun: 665 passed, zero failures/skips. This is early artifact
+  service evidence, not yet complete candidate publication or attestation.

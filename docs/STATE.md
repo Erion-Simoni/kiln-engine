@@ -1,7 +1,7 @@
 # Kiln Session Handoff
 
 **Active focus:** Task 8 artifact publication repair after the owner supplied run #1's exact error. Task 8 remains IN PROGRESS. Task 9/full 3D remain unstarted.
-**Branch:** `feat/2d-production-workflow`. This checkpoint updates the release workflow after 44d56c8; commit/push and fresh hosted observation follow local validation.
+**Branch:** `feat/2d-production-workflow`. Workflow repair commit `0b9a67b21480a654e8d6fcc886e702dd1d2b1e33` is pushed and exact remote SHA verified. A documentation-only evidence checkpoint follows; it does not retrigger the build.
 **Owner preference:** package/release size is not a goal. Existing performance/startup/memory/resource and bounded-input requirements remain (ADR-0062).
 
 ## Done
@@ -18,12 +18,12 @@
 - `just check` passed: formatting, strict workspace/all-target Clippy, workspace and standalone audio sample checks.
 - 19 Python producer/replay/comparison tests passed. Official checksum-verified actionlint 1.7.7 accepts the workflow.
 - Executed the actual YAML preflight shell scripts locally: matching downloaded bytes pass; altered bytes and missing downloads fail. Parsed workflow checks confirm the candidate depends on preflight, build permissions remain contents:read and only the separate attester obtains OIDC/attestation write permission.
-- No engine Rust source changed in this checkpoint. The prior full local Rust suite passed 665 tests with zero failures/skips; the prior hosted engine gates passed too. GitHub's actual artifact service is not covered by the local script exercise.
-- The revised hosted workflow has not yet been observed at this pre-push checkpoint. Do not claim its upload/attestation or complete Task 8 success from local checks alone.
+- No engine Rust source changed. Reran `just test`: **665 passed, zero failed/skipped**.
+- New hosted run https://github.com/Erion-Simoni/kiln-engine/actions/runs/43107026471 at 0b9a67b: the actual artifact-service preflight **passed**, including upload, download and byte comparison. The candidate build job started and is in progress at this checkpoint. Candidate publication and attestation have not yet been observed. `docs/evidence/task8-hosted-ci/artifact-preflight-run2.json` records public step conclusions, not downloaded candidate contents or a complete-workflow success claim.
 
 ## Access and remaining work
 
-1. Push this checkpoint to the existing branch, verify exact remote SHA, then observe the new artifact preflight, candidate publication and separate attestation. If the same 404 recurs early, use the precise run identity and service error for GitHub diagnosis; do not suppress upload errors or assume quota.
+1. Observe run 43107026471 through candidate publication and separate attestation. The new early upload/download already passed, but that alone does not establish long-job publication success or prove the original 404 cause. If a later upload fails, obtain the exact step annotation/log; keep errors strict and do not assume quota or token expiry.
 2. api.github.com remains outside this environment's enforced network policy. The earlier network-only settings draft requires owner review/save/publish and is not active. Public GitHub status pages and Git push work; anonymous detailed logs are unavailable. No credential values are requested or extracted. The screenshot provides actionable error text without waiting for API access.
 3. Resolve README License:TBD versus workspace MIT OR Apache-2.0; eight internal crates omit license metadata. The earlier owner question has no submitted answer, so no licensing grant is invented.
 4. Execute PHYSICAL_DEVICE_TEST.md on actual Intel HD 520/other physical machines and required platforms/browsers. No laptop/device is connected here. Finish licensing, remaining SDK/dependency provenance and OS installer signing as appropriate before calling Task 8 complete.

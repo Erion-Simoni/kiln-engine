@@ -62,7 +62,14 @@ upload/download/byte-comparison preflight before the expensive build. Cargo tool
 cache entries now include installation manifests. Local actionlint and just check
 pass; 19 Python tests pass. Executing the actual probe scripts locally accepts
 matching downloads and rejects changed/missing bytes. This does not exercise
-GitHub's artifact service: hosted upload/attestation still require observation.
+GitHub's artifact service. Then the pushed workflow at `0b9a67b` started
+[run #2](https://github.com/Erion-Simoni/kiln-engine/actions/runs/43107026471):
+the actual hosted probe upload, download and byte comparison all **passed**.
+artifact-preflight-run2.json records those public step conclusions. The candidate
+build is in progress at this observation; its publication and attestation have
+not yet been observed. Rerunning the local Rust suite also passed 665 tests with
+zero failures/skips. The workflow repair was pushed and the exact remote SHA
+verified; this documentation-only checkpoint does not start another build.
 
 Next: observe the revised workflow's preflight, candidate upload and attestation.
 If the same 404 recurs immediately, investigate GitHub's run/artifact service with
