@@ -1761,3 +1761,23 @@ checks remain separate Task 8 gates.
 - No runtime dependency. actionlint v1.7.7 (official release/checksum) is a local
   development validator; Rust/Node/browser tooling already exists in the project.
   No package-size ceiling is introduced.
+
+### ADR-0068 — Early artifact-service verification and native Node 24 actions (2026-11-11)
+
+- The owner supplied run 43088213774's actual annotations: both artifact uploads
+  failed with CreateArtifact HTTP 404, "workflow run not found", after successful
+  engine acceptance. This does not establish quota exhaustion or an expired
+  token. The same run warned that Node 20 actions were forced onto Node 24.
+- Update the release workflow to immutable official Node 24 action commits,
+  including the current artifact client. Preserve zipped multi-file uploads and
+  strict publication errors. Updating the client is a remediation attempt, not
+  proof that runtime migration caused the service's 404.
+- Add a short read-only preflight job before engine builds: upload a run/attempt/
+  source identity record, download it, and compare the actual bytes. A failed
+  artifact service stops expensive builds early. Successful preflight does not
+  certify the later candidate upload or separate OIDC attestation; observe those
+  jobs too. Retain the small probe for one day and isolate reruns by attempt.
+- Cache Cargo's installation manifests alongside cached tool binaries, with a
+  new cache key. Restored executables alone do not preserve cargo install's
+  version tracking. No engine/runtime dependency, permission expansion, public
+  release, upload-error suppression or package-size ceiling is introduced.

@@ -22,9 +22,15 @@ that the complete workflow succeeded.
 ## Publication blocker
 
 Both **Upload accepted candidate** and **Retain acceptance and failure evidence**
-reported failure. The dependent attestation stage was not reached. Their exact
-error text/root cause is **not established**; storage/quota, permissions and
-service faults must not be guessed from the failed-step label alone.
+reported failure. The dependent attestation stage was not reached. The owner later
+supplied a screenshot of the run summary with two identical annotations:
+
+> Failed to CreateArtifact: Received non-retryable error: Failed request: (404) Not Found: workflow run not found
+
+The screenshot also warns that older Node 20 actions were forced onto Node 24.
+These are direct diagnostics, not proof of quota exhaustion, token expiry or a
+runtime-migration cause. The previous public observation JSON remains unchanged
+as the historical observation made before receiving the screenshot.
 
 Anonymous public pages exposed step conclusions but not detailed logs. Fresh
 summary reads also encountered upstream 502 responses. The GitHub API request
@@ -37,8 +43,8 @@ environment settings, then refresh status and retry the public diagnostics reque
 with a fresh connection. See diagnostics-blocker.json. No new secret value is
 requested for this domain-only draft. The old system gh CLI also lacks the
 attestation command; use a current GitHub CLI for independent artifact verification.
-The owner was also asked for the exact upload-step error text as a direct
-diagnostic input, which can be used while API access remains unavailable.
+The owner's screenshot answers the earlier request for the exact upload error,
+allowing remediation work to proceed while API access remains unavailable.
 
 No remote_desktop capability/cua_repl.js control tool was advertised. Public HTTPS
 pages supplied the status observations above. No signed bundle or artifact upload
@@ -51,8 +57,17 @@ local-preflight.json was recorded before hosted execution: actionlint 1.7.7,
 known root lockfile once. Root Cargo.lock SHA-256 remains
 `042a1a29202fab2e8940632cbc9f23f17e88a42572f9b2930e8d303e8de0ac17`.
 
-Next: read actual upload diagnostics after approved API access, repair the cause
-and verify candidate upload/attestation. Physical-device/reference-hardware and
+ADR-0068 updates official action pins to native Node 24 versions and adds a small
+upload/download/byte-comparison preflight before the expensive build. Cargo tool
+cache entries now include installation manifests. Local actionlint and just check
+pass; 19 Python tests pass. Executing the actual probe scripts locally accepts
+matching downloads and rejects changed/missing bytes. This does not exercise
+GitHub's artifact service: hosted upload/attestation still require observation.
+
+Next: observe the revised workflow's preflight, candidate upload and attestation.
+If the same 404 recurs immediately, investigate GitHub's run/artifact service with
+the exact run identity and error rather than spending another full build first.
+Physical-device/reference-hardware and
 other-platform checks, project licensing and OS installer signing remain open.
 PHYSICAL_DEVICE_TEST.md supplies a manual checklist, not new device evidence.
 The owner was asked to resolve README License:TBD versus workspace

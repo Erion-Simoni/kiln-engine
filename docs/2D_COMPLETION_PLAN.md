@@ -701,3 +701,15 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
   PHYSICAL_DEVICE_TEST.md with real-desktop/device/manual measurement checks for
   Intel HD 520 and other machines; no physical result is implied. Licensing policy
   remains pending the owner's answer to README:TBD versus workspace MIT/Apache.
+
+### 2026-11-11 — Task 8 artifact diagnostics and early service gate
+
+- The owner's screenshot identifies both upload failures as CreateArtifact HTTP
+  404, "workflow run not found", and warns of forced Node 20-to-24 execution.
+  Storage/quota, token expiry and runtime causation are not established.
+- Updated immutable official action pins to native Node 24 releases. Added a
+  five-minute artifact upload/download/byte-comparison gate before engine builds;
+  errors remain strict. Cached Cargo tool installation metadata with binaries.
+- Local actionlint, just check and 19 Python tests pass; actual preflight shell
+  scripts accept unchanged downloads and reject altered/missing bytes. Hosted
+  candidate publication/attestation still require a successful observed run.

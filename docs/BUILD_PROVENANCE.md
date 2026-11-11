@@ -119,7 +119,11 @@ local release evidence. Nested standalone workspace lockfiles retain their
 existing ignore behavior. The release-candidate workflow runs on selected build/
 test changes pushed to master, main and feat/2d-production-workflow, and supports
 manual dispatch. Its tested Rust/nextest versions and official Actions commits
-are pinned; bindgen is selected from Cargo.lock.
+are pinned; bindgen is selected from Cargo.lock. Official actions use their native
+Node 24 runtime. A five-minute artifact-service preflight first uploads/downloads
+this run/attempt/source identity and compares the actual bytes. A service failure
+stops engine builds early; the one-day probe does not certify later publication.
+Cargo's cached tool executables include their installation manifests.
 
 The read-only build job runs quality/tests, two fresh captured builds, actual
 payload comparison, browser material/physics, moved installation/export/gameplay
@@ -145,7 +149,9 @@ The workflow must finish successfully before hosted results are claimed.
 
 Observed run #1 for 462d17f passed the hosted native/repeated-build/comparison and
 browser/moved-installation/clean-Ubuntu acceptance gates. Both artifact uploads
-failed, so attestation was not reached. Detailed diagnostics are currently blocked
-by this environment's GitHub API domain policy; a settings draft was saved for
-review. See [hosted evidence](evidence/task8-hosted-ci/README.md). The complete
-hosted publication/attestation gate remains open.
+failed, so attestation was not reached. The owner's screenshot supplies the exact
+CreateArtifact error: HTTP 404, "workflow run not found". This does not establish
+quota exhaustion, token expiry or a Node runtime cause. The workflow now updates
+the artifact client and fails early on a failed upload/download probe (ADR-0068).
+See [hosted evidence](evidence/task8-hosted-ci/README.md). The complete hosted
+publication/attestation gate remains open until a new run is observed to pass.
