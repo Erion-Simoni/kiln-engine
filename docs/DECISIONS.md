@@ -1735,3 +1735,29 @@ checks remain separate Task 8 gates.
 - No new dependency. Package sizes remain informational, never an equality or
   release-size threshold. A changed byte is a reproducibility observation, not a
   package-size failure.
+### ADR-0067 — Locked CI release candidates and separate provenance signing (2026-11-11)
+
+- Task 8's local builds are tested, but the existing CI only triggers on main /
+  master and cannot establish a hosted build for the active feature branch.
+  Track the exact root Cargo.lock already used by the release evidence; nested
+  standalone-workspace lockfiles retain their existing ignore behavior.
+- Add a Linux release-candidate workflow on selected feature/default-branch build
+  changes and manual dispatch. Pin the tested Rust/nextest versions and immutable
+  official Actions commits. Resolve bindgen from the tracked lockfile, use locked
+  dependency preparation, then fixed offline source capture/replay into fresh
+  target directories. Run quality/tests, payload comparison, moved installation /
+  browser behavior and clean Ubuntu acceptance before uploading a candidate.
+- Build/test has contents:read only. A separate job, after successful acceptance,
+  downloads fixed artifact files and invokes pinned official provenance actions
+  with id-token:write / attestations:write. It checks out/executes no engine code.
+  This produces GitHub build-origin attestation, not OS installer signing or a
+  licensing/physical-device certification. Failed gates cannot publish a candidate
+  as successful; diagnostic evidence is retained independently.
+- Candidate contents and attestation bundles are Actions artifacts. Existing Git
+  branch publication is sufficient authorization for this CI workflow; no public
+  release or external message is sent by the driver. Scope is Linux x86_64 and
+  hosted software acceptance. Remote completion must be observed before claiming
+  that a hosted build/attestation passed.
+- No runtime dependency. actionlint v1.7.7 (official release/checksum) is a local
+  development validator; Rust/Node/browser tooling already exists in the project.
+  No package-size ceiling is introduced.

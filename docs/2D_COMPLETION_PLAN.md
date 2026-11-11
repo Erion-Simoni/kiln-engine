@@ -670,3 +670,18 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
   Physical/other-platform/reference-hardware, licensing and trusted CI/toolchain/
   SDK/dependency provenance/signing remain Task 8 gates. Size has no ceiling;
   Task 9/full 3D have not started.
+
+### 2026-11-11 — Task 8 hosted candidate verification prepared
+
+- Tracked the root Cargo.lock used by actual local release evidence. Added a
+  pinned feature/default-branch and manually dispatched release-candidate workflow:
+  native quality/tests, two fresh locked/offline builds, actual payload comparison,
+  browser material/physics, moved installation/gameplay and clean Ubuntu gates.
+- Read-only build/test precedes a separate official Actions provenance job. It
+  downloads accepted files without checking out/executing engine code, creates
+  GitHub build-origin attestations and retains the bundle as an Actions artifact.
+  Origin attestation is separate from OS signing and physical compatibility.
+- Local actionlint, 665 Rust / 19 Python tests and actual source-capture/permission
+  preflight pass. Hosted completion must be observed after pushing; prepared
+  workflow files alone are not a claim that remote gates passed. ADR-0067 and
+  BUILD_PROVENANCE.md document the workflow and verification command.

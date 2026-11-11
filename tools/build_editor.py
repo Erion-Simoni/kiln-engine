@@ -37,7 +37,7 @@ def snapshot(repo, destination):
     dirty = bool(git(repo, 'status', '--porcelain'))
     names = set(git(repo, 'ls-files', '--cached', '--others', '--exclude-standard', '-z').split(b'\0'))
     names.discard(b'')
-    names.add(b'Cargo.lock')  # Ignored by this repository; nevertheless an exact build input.
+    names.add(b'Cargo.lock')  # Required in current tracked and legacy ignored snapshots.
     for name in sorted(names):
         relative = Path(os.fsdecode(name))
         if relative.is_absolute() or '..' in relative.parts:

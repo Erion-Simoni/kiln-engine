@@ -30,7 +30,7 @@ Normal Cargo home, proxy/CA and platform SDK discovery remain available.
 ## Inspect the result
 
 - `source/` and `source.tar.gz` contain tracked and nonignored untracked files
-  plus the otherwise ignored Cargo.lock. Missing tracked files, symlinks and
+  including required Cargo.lock (also captured from older ignored snapshots). Missing tracked files, symlinks and
   special/oversized files fail capture. Executable modes are preserved. Git HEAD
   and dirty status describe the original checkout; the source inventory and
   archive hashes identify the actual inputs, including unfinished local edits.
@@ -111,3 +111,34 @@ Archive equality was separately false because their execution records differ.
 See [the comparison evidence](evidence/task8-repeated-build/README.md) for exact
 inputs/hashes and scope. This closes the local repeated-payload check for that
 snapshot while independent trusted builders and production platform gates remain.
+
+## Hosted release-candidate workflow
+
+The root Cargo.lock is tracked with the dependency versions/checksums used by the
+local release evidence. Nested standalone workspace lockfiles retain their
+existing ignore behavior. The release-candidate workflow runs on selected build/
+test changes pushed to master, main and feat/2d-production-workflow, and supports
+manual dispatch. Its tested Rust/nextest versions and official Actions commits
+are pinned; bindgen is selected from Cargo.lock.
+
+The read-only build job runs quality/tests, two fresh captured builds, actual
+payload comparison, browser material/physics, moved installation/export/gameplay
+and clean Ubuntu acceptance. Successful output is a GitHub Actions candidate
+artifact; diagnostic evidence uploads independently on success or failure.
+Only afterward does a separate job obtain OIDC/attestation permission, download
+fixed candidate files and invoke the official build-provenance action. It does
+not check out or execute engine code. A failed build/acceptance job cannot run
+the attestation job. This workflow does not create a GitHub Release.
+
+Use a current GitHub CLI that supports `gh attestation verify`. Download the
+candidate artifact and verify each relevant file:
+
+```sh
+gh attestation verify kiln-portable.tar.gz --repo Erion-Simoni/kiln-engine --signer-workflow Erion-Simoni/kiln-engine/.github/workflows/release-candidate.yml
+```
+
+Match the verified source revision with build-record.json and the workflow run.
+Attestations establish GitHub workflow origin and subject digests, not OS code
+signing, physical compatibility, complete licensing or hermetic dependency/SDK
+provenance. Availability depends on repository Actions/attestation settings.
+The workflow must finish successfully before hosted results are claimed.

@@ -101,6 +101,12 @@ on 2026-11-11 and all six native/browser files matched byte for byte. Execution
 archives differ due to their records. See [repeated-build evidence](evidence/task8-repeated-build/README.md).
 This is same-host/toolchain repetition; trusted independent builders remain open.
 
+The release-candidate Actions workflow now prepares the same checks on a hosted
+Linux runner, retaining the accepted candidate/evidence and creating a build-origin
+attestation in a separate job. Root dependencies are pinned in tracked Cargo.lock.
+See [BUILD_PROVENANCE.md](BUILD_PROVENANCE.md#hosted-release-candidate-workflow).
+Workflow preparation alone does not establish a successful hosted run.
+
 ## Notices
 
 `licenses/inventory.json` preserves package license expressions and repositories,
