@@ -1712,3 +1712,26 @@ checks remain separate Task 8 gates.
   configuration/SDK/system dependencies still affect builds. Repeated builds and
   trusted CI/signing remain release gates; size has no acceptance threshold.
 - No new dependency; Python standard library and existing Rust/build tools only.
+### ADR-0066 — Replaying captured builds and comparing actual payloads (2026-11-11)
+
+- Task 8 needs executed repeated-build evidence, not just recording one build.
+  Extend the captured builder with --source-from: validate the prior completed
+  record, source inventory/archive and lockfile, then copy the same source into a
+  new directory and use fresh compilation outputs. Require the prior profile,
+  host, compiler/bindgen, selected SDK settings and observed configuration hashes.
+- Build commands remain fixed by our driver; never execute commands supplied by
+  a build record. Replaying older engine source can use a newer build driver;
+  record the driver independently from the engine source inventory and retain
+  the actual executing driver beside its logs.
+- Add a comparison command that rehashes actual on-disk source/artifacts/logs and
+  completed archive/record receipts before comparing compatible input contracts
+  and all six native/prepared-browser payloads. Missing/changed files, different
+  inputs or unequal output must fail. Reports are exclusively created, so a stale
+  success cannot be silently overwritten or reused.
+- Compare payload bytes rather than claiming whole archive equality: build
+  records/log observations can legitimately differ between executions. Report
+  archive equality separately. Same-host/toolchain repetition does not certify
+  hermetic dependencies, independent builders, signatures or physical hardware.
+- No new dependency. Package sizes remain informational, never an equality or
+  release-size threshold. A changed byte is a reproducibility observation, not a
+  package-size failure.

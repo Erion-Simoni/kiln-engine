@@ -653,3 +653,20 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Task 8 remains open for physical/other-platform/reference-hardware measurements,
   internal licensing, trusted provenance/repeated binary equality and signing.
   Package size remains informational. Task 9/full 3D have not started.
+
+### 2026-11-11 — Task 8 repeated release payload verification
+
+- Added validated source replay into fresh source/target directories and a
+  comparison command that rehashes actual source/lock, artifacts, receipts and
+  logs. Fixed commands are executed by the driver; records cannot supply code.
+  Incompatible inputs, changed/missing/linked files or unequal native/WASM files
+  fail, including a nonzero CLI exit and failed report. Existing evidence is kept.
+- Rebuilt the exact earlier release snapshot on the same host/toolchain. All six
+  editor/CLI/player/JS/WASM/descriptor payloads match byte for byte. Execution
+  records make whole archive hashes different; this distinction is recorded.
+  Both completed installations pass their CLI verifier. See ADR-0066,
+  BUILD_PROVENANCE.md and evidence/task8-repeated-build/README.md.
+- `just check` passed; 665 Rust and 19 producer/replay/comparison tests pass.
+  Physical/other-platform/reference-hardware, licensing and trusted CI/toolchain/
+  SDK/dependency provenance/signing remain Task 8 gates. Size has no ceiling;
+  Task 9/full 3D have not started.

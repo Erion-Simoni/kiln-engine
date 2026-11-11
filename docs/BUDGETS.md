@@ -16,6 +16,13 @@ bounded-input protections, not release-size targets. A release profile alone
 does not establish startup/frame-time/memory budgets on reference hardware.
 See [BUILD_PROVENANCE.md](BUILD_PROVENANCE.md).
 
+Replay/comparison (2026-11-11) also runs only during preparation. Record/receipt
+JSON is capped at 8 MiB in the comparison command; hashing streams actual source,
+logs and payloads with existing bounded-file limits. Completed source/distribution
+archives are limited to 2 GiB for this integrity check. All six native/browser
+payloads must match for an equality result. This is reproducibility validation,
+not a package-size goal, runtime optimization or reference-hardware measurement.
+
 ## Task 8 authored sprite materials — 2026-11-10
 
 Material pipelines are cached across unchanged frames. Preparation is bounded at

@@ -1,0 +1,30 @@
+{
+  "archive_bytes_equal": false,
+  "different_artifacts": [],
+  "first": {
+    "archive_sha256": "d5ca032d975c5761a267c24c60d03b97efad1d019e46915b89baab5c4ce15b4a",
+    "build_record_sha256": "0044c2a27117602a5c416010964a345110a2948e5e99145e9b5584f18f6e92eb",
+    "passed": true,
+    "profile": "release",
+    "source_archive_sha256": "966223e8534b274670c62bb0d1e139741bd5781ee48fdf6a08f0449aec9914e0"
+  },
+  "input_differences": [],
+  "inputs_match": true,
+  "matching_artifacts": [
+    "kiln-cli",
+    "kiln-editor",
+    "kiln-player",
+    "web-runtime/kiln_web.js",
+    "web-runtime/kiln_web_bg.wasm",
+    "web-runtime/runtime.json"
+  ],
+  "passed": true,
+  "scope": "Same-host/toolchain native and prepared-browser payload bytes",
+  "second": {
+    "archive_sha256": "af30962be428316c0e87bac43ff292a99f319289be0c5ab8a3e0db64200012b5",
+    "build_record_sha256": "d1abd2ae3f0ccb7530c468e44073de9f1882c05b1f2d00a190c6ae8fb0fb4d22",
+    "passed": true,
+    "profile": "release",
+    "source_archive_sha256": "966223e8534b274670c62bb0d1e139741bd5781ee48fdf6a08f0449aec9914e0"
+  }
+}

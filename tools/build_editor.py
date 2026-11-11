@@ -82,6 +82,32 @@ def artifacts(binary_dir, runtime):
             for name, path in sorted(paths.items())]
 
 
+def replay_source(previous, destination, profile):
+    """Validate/copy frozen inputs; command strings in a record are never executed."""
+    path = previous/'build-record.json'
+    if path.is_symlink() or path.stat().st_size > 8*1024*1024:
+        raise ValueError('Invalid replay record')
+    record = json.loads(path.read_text())
+    result = json.loads((previous/'result.json').read_text())
+    if (record.get('schema') != 1 or record.get('kind') != 'unsigned-local-build'
+            or record.get('profile') != profile or record.get('host') != HOST
+            or result.get('passed') is not True
+            or package.digest(path) != result['build_record_sha256']):
+        raise ValueError('Incompatible/incomplete replay build')
+    captured = record['source']
+    if ((previous/'source').is_symlink()
+            or hashlib.sha256(json.dumps(captured['files'], sort_keys=True).encode()).hexdigest() != captured['files_sha256']
+            or package.digest(previous/'source.tar.gz') != captured['archive_sha256']
+            or package.file_entries(previous/'source') != captured['files']
+            or package.digest(previous/'source/Cargo.lock') != captured['cargo_lock_sha256']):
+        raise ValueError('Replay source/archive/lock changed')
+    for entry in captured['files']:
+        package.copy_file(previous/'source'/entry['path'], destination/entry['path'], executable=entry['executable'])
+    if package.file_entries(destination) != captured['files']:
+        raise ValueError('Replay copy changed')
+    return dict(captured), record
+
+
 def build(args):
     if args.output.exists() or args.output.is_symlink():
         raise FileExistsError('Build output already exists')
@@ -92,8 +118,11 @@ def build(args):
     builder_hash = package.digest(Path(__file__))
     source = output/'source'
     source.mkdir()
-    captured = snapshot(REPO, source)
+    previous = getattr(args, 'source_from', None)
+    captured, prior = replay_source(previous.resolve(), source, args.profile) if previous else (snapshot(REPO, source), None)
     package.normalized_archive(source, output/'source.tar.gz')
+    if prior is not None and package.digest(output/'source.tar.gz') != captured['archive_sha256']:
+        raise ValueError('Replayed source archive is not identical')
     captured['archive_sha256'] = package.digest(output/'source.tar.gz')
     env = build_environment(output, args.jobs)
     versions = {name: subprocess.check_output(command, cwd=source, env=env, text=True).strip()
@@ -101,6 +130,11 @@ def build(args):
                                       ('wasm_bindgen', ['wasm-bindgen', '--version'])]}
     if f'host: {HOST}' not in versions['rustc']:
         raise ValueError('Captured portable builds currently require Linux x86_64')
+    settings = {key: env[key] for key in BUILD_SETTINGS if key in env}
+    configurations = config_observations(env, source)
+    if prior is not None and (versions != prior['toolchain'] or settings != prior['build_settings']
+                              or configurations != prior['configuration_hashes']):
+        raise ValueError('Replay compiler/SDK/configuration differs from the original build')
     commands = []
     flags = ['--release'] if args.profile == 'release' else []
     run(['cargo', 'build', '--offline', '--locked', '--target', HOST, *flags,
@@ -128,11 +162,14 @@ def build(args):
     record = {'schema': 1, 'kind': 'unsigned-local-build', 'profile': args.profile,
               'host': HOST, 'source': captured, 'toolchain': versions,
               'builder_sha256': builder_hash,
-              'build_settings': {key: env[key] for key in BUILD_SETTINGS if key in env},
-              'configuration_hashes': config_observations(env, source), 'commands': commands,
+              'build_settings': settings,
+              'configuration_hashes': configurations, 'commands': commands,
               'artifacts': artifacts(binaries, runtime),
               'limitations': 'Unsigned local execution record; not hermetic, signed or byte-reproducibility proof.'}
     record_path = output/'build-record.json'
+    if prior is not None:
+        record['rebuild_of'] = package.digest(previous.resolve()/'build-record.json')
+    package.copy_file(Path(__file__), output/'build-driver.py')
     package.write_json(record_path, record)
     package.REPO = source
     package.prepare(argparse.Namespace(output=output/'kiln-portable.tar.gz', binaries=binaries,
@@ -148,6 +185,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True, help='New evidence/build directory, never reused')
     parser.add_argument('--profile', choices=('release', 'dev'), default='release')
     parser.add_argument('--jobs', type=int, choices=range(1, 17), default=2)
+    parser.add_argument('--source-from', type=Path, help='Replay a completed build directory, with identical captured inputs/toolchain')
     build(parser.parse_args())
 
 

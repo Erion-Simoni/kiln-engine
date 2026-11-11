@@ -96,6 +96,11 @@ record in the installation. See [BUILD_PROVENANCE.md](BUILD_PROVENANCE.md).
 This narrows the prebuilt-input gap without claiming signed attestation or
 byte-reproducible/hermetic builds. Physical/platform acceptance remains separate.
 
+The captured release payloads were rebuilt in a second source/target directory
+on 2026-11-11 and all six native/browser files matched byte for byte. Execution
+archives differ due to their records. See [repeated-build evidence](evidence/task8-repeated-build/README.md).
+This is same-host/toolchain repetition; trusted independent builders remain open.
+
 ## Notices
 
 `licenses/inventory.json` preserves package license expressions and repositories,

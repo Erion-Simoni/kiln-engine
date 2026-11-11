@@ -1,0 +1,7 @@
+{
+  "archive_sha256": "af30962be428316c0e87bac43ff292a99f319289be0c5ab8a3e0db64200012b5",
+  "build_record_sha256": "d1abd2ae3f0ccb7530c468e44073de9f1882c05b1f2d00a190c6ae8fb0fb4d22",
+  "passed": true,
+  "profile": "release",
+  "source_archive_sha256": "966223e8534b274670c62bb0d1e139741bd5781ee48fdf6a08f0449aec9914e0"
+}

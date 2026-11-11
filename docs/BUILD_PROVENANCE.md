@@ -75,3 +75,39 @@ hashes. A successful first build does not prove two builds match. Trusted CI
 attestation, dependency/SDK/toolchain provenance, repeated binary comparison,
 licensing review and installer signing remain release work. Archive size is
 informational; no size ceiling applies.
+
+## Replay and compare captured payloads
+
+```sh
+just portable-replay target/my-release-candidate target/my-second-build
+just compare-builds target/my-release-candidate target/my-second-build target/my-comparison.json
+```
+
+Replay checks the completed prior record, source archive/content/modes and lockfile,
+copies those frozen inputs to a new source directory, then runs fixed offline/locked
+build commands with fresh outputs. It requires the recorded profile, host, compiler/
+Cargo/bindgen versions, selected SDK settings and observed Cargo configuration to
+match. It never executes command strings from a record. The replaying driver can
+be newer than the engine snapshot: its own hash/copy is retained independently as
+build-driver.py beside its logs, and rebuild_of identifies the prior record.
+
+The comparison command rehashes actual source, lockfile, driver, command diagnostics,
+completed record/archive receipts and all six native/browser payload files. It
+compares source/toolchain/settings and command inputs after normalizing the build
+directory arguments. Missing/changed files, different input contracts or unequal
+payloads produce passed=false and a failing process exit. Existing reports are
+never replaced. A saved hash alone is not treated as proof that a file still matches.
+
+Only all-six-payload equality with compatible inputs passes. Archive equality is
+reported separately: per-execution local records/log hashes can make archives
+different even when their executables, JS/WASM and runtime descriptor match. This
+is same-host/toolchain payload repetition, not independent-builder authentication,
+general cross-directory/platform reproducibility or a hermetic dependency audit.
+Keep physical/platform/performance and trusted signing gates separate.
+
+Executed on 2026-11-11: two fresh source/target directories on the same host
+produced identical editor, CLI, player, JS, WASM and runtime descriptor bytes.
+Archive equality was separately false because their execution records differ.
+See [the comparison evidence](evidence/task8-repeated-build/README.md) for exact
+inputs/hashes and scope. This closes the local repeated-payload check for that
+snapshot while independent trusted builders and production platform gates remain.

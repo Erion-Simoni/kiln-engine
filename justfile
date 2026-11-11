@@ -73,3 +73,11 @@ portable-editor:
 # Fresh offline release build from a captured source/lock snapshot; output must not exist.
 portable-release output="target/portable-release":
     python3 tools/build_editor.py --profile release --output {{quote(output)}}
+
+# Replay the same captured source/lock with fresh outputs and matching recorded tools/settings.
+portable-replay previous output="target/portable-replay":
+    python3 tools/build_editor.py --profile release --source-from {{quote(previous)}} --output {{quote(output)}}
+
+# Rehash real inputs/outputs; unequal or incompatible builds return failure.
+compare-builds first second output="target/build-comparison.json":
+    python3 tools/compare_builds.py {{quote(first)}} {{quote(second)}} --output {{quote(output)}}
