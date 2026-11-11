@@ -142,3 +142,10 @@ Attestations establish GitHub workflow origin and subject digests, not OS code
 signing, physical compatibility, complete licensing or hermetic dependency/SDK
 provenance. Availability depends on repository Actions/attestation settings.
 The workflow must finish successfully before hosted results are claimed.
+
+Observed run #1 for 462d17f passed the hosted native/repeated-build/comparison and
+browser/moved-installation/clean-Ubuntu acceptance gates. Both artifact uploads
+failed, so attestation was not reached. Detailed diagnostics are currently blocked
+by this environment's GitHub API domain policy; a settings draft was saved for
+review. See [hosted evidence](evidence/task8-hosted-ci/README.md). The complete
+hosted publication/attestation gate remains open.

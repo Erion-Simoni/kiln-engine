@@ -1,0 +1,10 @@
+{
+  "host": "api.github.com",
+  "observed_network_response": "CONNECT tunnel failed, response 403",
+  "applied_environment_revision": "1",
+  "api_host_currently_allowed": false,
+  "settings_draft_saved": true,
+  "settings_draft_applied": false,
+  "requires_publish": true,
+  "requested_change": "Add api.github.com to restricted network custom domains"
+}

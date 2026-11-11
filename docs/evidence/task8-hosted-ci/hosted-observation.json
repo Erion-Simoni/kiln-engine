@@ -1,0 +1,151 @@
+{
+  "run_url": "https://github.com/Erion-Simoni/kiln-engine/actions/runs/43088213774",
+  "source_revision": "462d17f5cbede3af7993e260281215db8a0d65c3",
+  "observed_at": "2026-11-11T20:35:24.531303+00:00",
+  "scope": "Public GitHub job step conclusions; authenticated logs and final refreshed run summary unavailable",
+  "passed": false,
+  "engine_acceptance_passed": true,
+  "publication_passed": false,
+  "attestation_reached": false,
+  "jobs": [
+    {
+      "id": "130758075508",
+      "job_state_at_observation": "in_progress",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success",
+          "started-at": "2026-11-11T19:32:58Z",
+          "completed-at": "2026-11-11T19:32:59Z"
+        },
+        {
+          "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "conclusion": "success",
+          "started-at": "2026-11-11T19:32:59Z",
+          "completed-at": "2026-11-11T19:33:00Z"
+        },
+        {
+          "name": "Run actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830",
+          "conclusion": "success",
+          "started-at": "2026-11-11T19:33:00Z",
+          "completed-at": "2026-11-11T19:33:00Z"
+        },
+        {
+          "name": "Install the tested toolchain and standard library notices",
+          "conclusion": "success",
+          "started-at": "2026-11-11T19:33:00Z",
+          "completed-at": "2026-11-11T19:33:15Z"
+        },
+        {
+          "name": "Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+          "conclusion": "success",
+          "started-at": "2026-11-11T19:33:15Z",
+          "completed-at": "2026-11-11T19:33:16Z"
+        },
+        {
+          "name": "Install Linux build and software acceptance requirements",
+          "conclusion": "success",
+          "started-at": "2026-11-11T19:33:16Z",
+          "completed-at": "2026-11-11T19:33:39Z"
+        },
+        {
+          "name": "Prepare locked dependencies and matching build tools",
+          "conclusion": "success",
+          "started-at": "2026-11-11T19:33:39Z",
+          "completed-at": "2026-11-11T19:47:13Z"
+        },
+        {
+          "name": "Run native quality gates and tests",
+          "conclusion": "success",
+          "started-at": "2026-11-11T19:47:13Z",
+          "completed-at": "2026-11-11T19:56:56Z"
+        },
+        {
+          "name": "Build a captured release candidate",
+          "conclusion": "success",
+          "started-at": "2026-11-11T19:56:56Z",
+          "completed-at": "2026-11-11T20:12:53Z"
+        },
+        {
+          "name": "Rebuild frozen inputs into fresh outputs",
+          "conclusion": "success",
+          "started-at": "2026-11-11T20:12:53Z",
+          "completed-at": "2026-11-11T20:29:38Z"
+        },
+        {
+          "name": "Require all native and browser payloads to match",
+          "conclusion": "success",
+          "started-at": "2026-11-11T20:29:38Z",
+          "completed-at": "2026-11-11T20:29:39Z"
+        },
+        {
+          "name": "Prepare browser acceptance",
+          "conclusion": "success",
+          "started-at": "2026-11-11T20:29:39Z",
+          "completed-at": "2026-11-11T20:30:00Z"
+        },
+        {
+          "name": "Accept release browser material and physics behavior",
+          "conclusion": "success",
+          "started-at": "2026-11-11T20:30:00Z",
+          "completed-at": "2026-11-11T20:30:08Z"
+        },
+        {
+          "name": "Accept moved editor and exported native/browser games",
+          "conclusion": "success",
+          "started-at": "2026-11-11T20:30:08Z",
+          "completed-at": "2026-11-11T20:30:57Z"
+        },
+        {
+          "name": "Accept clean Ubuntu runtime without source or Rust",
+          "conclusion": "success",
+          "started-at": "2026-11-11T20:30:57Z",
+          "completed-at": "2026-11-11T20:31:54Z"
+        },
+        {
+          "name": "Stage the accepted candidate and its records",
+          "conclusion": "success",
+          "started-at": "2026-11-11T20:31:54Z",
+          "completed-at": "2026-11-11T20:31:54Z"
+        },
+        {
+          "name": "Upload accepted candidate",
+          "conclusion": "failure",
+          "started-at": "2026-11-11T20:31:54Z",
+          "completed-at": "2026-11-11T20:34:03Z"
+        },
+        {
+          "name": "Retain acceptance and failure evidence",
+          "conclusion": "failure",
+          "started-at": "2026-11-11T20:34:03Z",
+          "completed-at": "2026-11-11T20:34:04Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+          "conclusion": "skipped",
+          "started-at": "2026-11-11T20:34:04Z",
+          "completed-at": "2026-11-11T20:34:04Z"
+        },
+        {
+          "name": "Post Run actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830",
+          "conclusion": "skipped",
+          "started-at": "2026-11-11T20:34:04Z",
+          "completed-at": "2026-11-11T20:34:04Z"
+        },
+        {
+          "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "conclusion": "success",
+          "started-at": "2026-11-11T20:34:04Z",
+          "completed-at": "2026-11-11T20:34:04Z"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success",
+          "started-at": "2026-11-11T20:34:04Z",
+          "completed-at": "2026-11-11T20:34:04Z"
+        }
+      ]
+    }
+  ],
+  "root_cause_of_upload_failure": "Not established; detailed diagnostics require GitHub API access or authenticated logs"
+}

@@ -9,6 +9,8 @@ This isolates library/application dependencies from the development environment.
 Containers share the host kernel and this run uses software graphics/ALSA null;
 it is not separate physical-machine, audible-device or Intel HD 520 evidence.
 Windows, macOS and physical Linux devices need their own acceptance runs.
+Use [PHYSICAL_DEVICE_TEST.md](PHYSICAL_DEVICE_TEST.md) to record those checks,
+including actual graphics/audio/controller devices and reference measurements.
 
 ## Run
 

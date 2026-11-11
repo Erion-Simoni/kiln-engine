@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "scope": "Local release-candidate workflow preflight only",
+  "rust_tests_passed": 665,
+  "python_tests_passed": 19,
+  "actionlint_version": "1.7.7",
+  "workflow_sha256": "03514789b7477bd6ed2e59982c712adfbd0098f38ecde5ec7830165e3537e480",
+  "root_lock_sha256": "042a1a29202fab2e8940632cbc9f23f17e88a42572f9b2930e8d303e8de0ac17",
+  "actual_source_capture_files": 561,
+  "tracked_or_unignored_lock_captured_once": true,
+  "read_only_build_and_separate_attestation_job": true,
+  "hosted_run_observed": false
+}

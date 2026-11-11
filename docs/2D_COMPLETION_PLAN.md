@@ -685,3 +685,19 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
   preflight pass. Hosted completion must be observed after pushing; prepared
   workflow files alone are not a claim that remote gates passed. ADR-0067 and
   BUILD_PROVENANCE.md document the workflow and verification command.
+
+### 2026-11-11 — Task 8 hosted acceptance observed; publication blocked
+
+- Actual GitHub run 43088213774 for 462d17f passed native quality/tests, both fresh
+  release builds, six-payload comparison, browser material/physics, moved editor /
+  export/gameplay and clean Ubuntu gates. Source/lock/workflow changes were pushed
+  and the remote SHA verified.
+- Candidate and diagnostic artifact uploads failed; attestation was not reached.
+  Exact upload diagnostics are unavailable through the anonymous view, and this
+  environment explicitly blocks api.github.com. Saved a restricted-network draft
+  adding that host, requiring review/save/publish; it is not applied. This is a
+  blocked publication result, not a fully successful CI/attestation claim.
+- Recorded public step conclusions/preflight in evidence/task8-hosted-ci. Added
+  PHYSICAL_DEVICE_TEST.md with real-desktop/device/manual measurement checks for
+  Intel HD 520 and other machines; no physical result is implied. Licensing policy
+  remains pending the owner's answer to README:TBD versus workspace MIT/Apache.
