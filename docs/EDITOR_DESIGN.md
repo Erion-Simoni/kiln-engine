@@ -79,3 +79,50 @@ Play input; display scale is now read before taking the input lock.
 
 Cloud software graphics is useful regression evidence; remote CI execution,
 other desktop platforms and hardware acceptance remain separately tracked.
+
+## Workspace polish and Quick Actions
+
+The native editor uses a cooler charcoal palette, clearer text hierarchy, larger
+interaction targets and softly rounded controls. Transform tools show both their
+shortcut and name on wide windows; compact windows retain Q/W/E/R and tooltips.
+The status bar distinguishes saved edits, unsaved changes and active play.
+
+Use **Quick Actions** in the menu bar, or **Ctrl+K** (**Cmd+K** on macOS), to
+search commands and panels. Search supports multiple terms and categories, for
+example `panel asset` or `workspace layout`. Up/Down selects a result, Enter
+runs it and Escape closes the palette. Existing panels are focused rather than
+opened again. Save, Undo and Redo are disabled when unavailable; project lifecycle
+prompts dismiss Quick Actions. Search is session-only and bounded to 128 characters.
+
+This pass draws on familiar scene/hierarchy/inspector organization, discoverable
+commands and a content shelf. It preserves Kiln's native implementation and
+existing authoring workflows; it does not add engine features or advance 3D.
+
+## Character scripts in the editor
+
+1. Select a character with a Transform in the Hierarchy.
+2. In the Inspector's **Character Script** section, choose **Create Movement
+   Script**. Kiln creates a new `scripts/character_movement.ks` (using a unique
+   suffix if needed), attaches it through undoable scene history and opens it in
+   **Script Editor**. Alternatively choose **Attach Script** for an existing file.
+3. Set **speed** in the Inspector (default 180 world units per second).
+4. Edit code, choose **Validate**, then **Save Script** (or Ctrl/Cmd+S while the
+   code field has focus). Validation uses the runtime compiler, resolves imports
+   and reports file/line/column errors. Invalid source is not saved.
+5. Save the project to persist the attachment. Press Play, focus the Game view,
+   and move with arrows/WASD. Stop restores the authored scene.
+
+Reopen attached code with **Open Script**, double-click a `.ks` asset, or find
+**Script Editor** through Quick Actions / View. A dot marks unsaved source.
+Closing its dock tab retains the buffer. Unsaved code blocks opening another
+file, project replacement/exit, Save As, export and Play until Save or explicit
+**Discard Edits**. Source changes run on the next Play; there is no hot reload.
+**Reload from Disk** is available for clean buffers. External changes prevent
+Save from overwriting the file. Save As clears the clean source buffer to avoid
+editing the original project's scripts from its copy.
+
+The movement starter moves a Transform directly; it does not implement collision
+sliding, jumping or a physics character controller. Undo removes the attachment
+but retains the created resource file. Source-file edits use the text editor's
+undo, independently of scene undo. The rapidly changing status-bar FPS readout
+has been removed; performance tools remain in the Profiler panel.
