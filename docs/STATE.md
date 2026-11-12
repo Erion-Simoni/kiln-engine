@@ -1,7 +1,7 @@
 # Kiln Session Handoff
 
 **Active focus:** Task 9's three reference games, explicitly requested by the owner now. Game creation and local software acceptance are complete; independent tutorial/hardware/stress/release gates keep Task 9 IN PROGRESS. Task 8 platform/distribution review remains open. Full 3D is paused.
-**Branch:** feat/task9-editor-reference-games, created from 8ec785237997147964580bd79cad603310c16235 at the start of this request. Feature commit/push and its new CI checkpoint are recorded at session completion.
+**Branch:** feat/task9-editor-reference-games, created from 8ec785237997147964580bd79cad603310c16235 at the start of this request. Editor commit 0b5b03b and game/test commit 135c7f17d5fb7043268278719e66bbac1cabf4dc are pushed; exact remote source SHA verified and the working tree was clean after push. New CI run 43317157963 is in progress, not yet accepted. Later documentation-only HEAD does not change its source identity.
 **Owner preferences:** no package/release-size goal; performance/resource and bounded-input requirements remain. Project code uses the settled MIT OR Apache-2.0 license. No licensing decision is pending.
 
 ## Done
@@ -26,7 +26,7 @@
 
 ## Next / known issues
 
-1. Commit/push this validated Task 9 work, verify the exact new-branch remote SHA and observe the new reference-games workflow. Local success is separate from hosted results; record actual hosted source/run identity.
+1. Observe https://github.com/Erion-Simoni/kiln-engine/actions/runs/43317157963 for source 135c7f1 to completion. Public overall state was in progress at the checkpoint; no hosted acceptance is claimed. Local results are complete and separate. See docs/evidence/task9-games/hosted-checkpoint.json. The public monitor /tmp/kiln_watch_task9.py writes target/task9-hosted/latest.json and result.json; refresh actual conclusions before claiming hosted success.
 2. Have another developer follow the game/editor tutorial unaided and fix ordinary workflows that still require engine or manifest edits. Automation is not independent human acceptance.
 3. Measure actual reference hardware startup/frame time/memory; test long sessions, large asset sets, recovery and clean exports. No physical i7-6600U/Intel HD 520, controller or audible device is attached here.
 4. Reconcile roadmap/support claims against executed evidence. Finish Task 8's full Windows GUI workflow, physical/other GPU tests, macOS, SDK/dependency/exact-linked-code review, independent artifact signature/capture review, OS signing and public release preparation. Existing Linux candidate requires GLIBC 2.39/system libraries; binaries are not Authenticode-signed.

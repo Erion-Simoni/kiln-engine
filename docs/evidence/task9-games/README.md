@@ -98,3 +98,13 @@ and browser victories/restore checks, 680 passing Rust tests (zero skipped),
 sources by SHA-256 and retains the preparing tool archive's honest dirty/source
 observations. `prior-task8-hosted-success.json` records the preceding a0f1d85
 Windows/Linux candidates separately; those runs do not cover Task 9.
+
+## Pushed source and hosted checkpoint
+
+Editor changes `0b5b03b` and game/test source
+`135c7f17d5fb7043268278719e66bbac1cabf4dc` are pushed to the requested new
+branch; the exact remote source SHA was verified. New
+[run 43317157963](https://github.com/Erion-Simoni/kiln-engine/actions/runs/43317157963)
+is in progress at `hosted-checkpoint.json`'s observation. Complete hosted success
+is pending; local acceptance is recorded independently. Later documentation-only
+commits do not retrigger this source-pinned workflow.

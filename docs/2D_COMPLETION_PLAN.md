@@ -806,3 +806,6 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
   authoring/export and native/browser gameplay with read-only permissions.
   Independent tutorial/hardware/long-session/large-project and final support
   claims remain open; Task 9 is not marked release-complete.
+- Pushed editor commit 0b5b03b and games/test commit 135c7f1 to the new branch,
+  verifying the exact remote source SHA. New hosted reference-game run 43317157963
+  is in progress; no complete new hosted acceptance is claimed.
