@@ -129,6 +129,26 @@ class PortablePackageTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'regular bounded file'):
                     package.project_notices(root/'incomplete')
 
+    def test_cargo_metadata_unicode_survives_windows_legacy_default_encoding(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root/'Cargo.toml').write_text('[package]\nname="fixture"\n', encoding='utf-8')
+            record = {'id': 'fixture', 'name': 'fixture', 'version': '1',
+                      'manifest_path': str(root/'Cargo.toml'), 'license': 'MIT',
+                      'repository': 'https://example.invalid/Łukasz', 'source': None}
+            metadata = root/'metadata.json'
+            metadata.write_text(json.dumps({'version': 1, 'resolve': {'nodes': []},
+                                            'packages': [record]}, ensure_ascii=False), encoding='utf-8')
+            original = Path.read_text
+            def read(path, *args, **kwargs):
+                if path == metadata and kwargs.get('encoding') is None:
+                    kwargs['encoding'] = 'cp1252'
+                return original(path, *args, **kwargs)
+            with patch.object(Path, 'read_text', read):
+                package.package_notices([metadata], root/'notices')
+            inventory = json.loads((root/'notices/inventory.json').read_text(encoding='utf-8'))
+            self.assertEqual(inventory['packages'][0]['repository'], record['repository'])
+
     def test_existing_archive_is_preserved_before_running_tools(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)/'existing.tgz'

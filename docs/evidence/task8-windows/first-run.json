@@ -1,0 +1,136 @@
+{
+  "run_url": "https://github.com/Erion-Simoni/kiln-engine/actions/runs/43205341357",
+  "source_revision": "c812b1a44c9a471d72241679a068f6ba051282b6",
+  "observed_at": "2026-11-12T11:06:06.743823+00:00",
+  "jobs": [
+    {
+      "id": "131138981629",
+      "state": "completed",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:00:37Z",
+          "completed-at": "2026-11-12T11:00:38Z"
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:00:38Z",
+          "completed-at": "2026-11-12T11:00:47Z"
+        },
+        {
+          "name": "Run actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:00:47Z",
+          "completed-at": "2026-11-12T11:00:47Z"
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:00:47Z",
+          "completed-at": "2026-11-12T11:00:48Z"
+        },
+        {
+          "name": "Install pinned toolchain and matching bindgen",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:00:48Z",
+          "completed-at": "2026-11-12T11:04:56Z"
+        },
+        {
+          "name": "Test Windows ZIP validation",
+          "conclusion": "failure",
+          "started-at": "2026-11-12T11:04:56Z",
+          "completed-at": "2026-11-12T11:04:57Z"
+        },
+        {
+          "name": "Build matched release tools and browser runtime",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T11:04:57Z",
+          "completed-at": "2026-11-12T11:04:57Z"
+        },
+        {
+          "name": "Inspect Windows DLL requirements and reject dynamic MSVC runtime",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T11:04:57Z",
+          "completed-at": "2026-11-12T11:04:57Z"
+        },
+        {
+          "name": "Package Windows portable ZIP with original notices",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T11:04:57Z",
+          "completed-at": "2026-11-12T11:04:57Z"
+        },
+        {
+          "name": "Accept moved editor, exports and visible Windows startup",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T11:04:57Z",
+          "completed-at": "2026-11-12T11:04:57Z"
+        },
+        {
+          "name": "Record accepted candidate inputs and observations",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T11:04:57Z",
+          "completed-at": "2026-11-12T11:04:57Z"
+        },
+        {
+          "name": "Upload accepted Windows candidate",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T11:04:57Z",
+          "completed-at": "2026-11-12T11:04:57Z"
+        },
+        {
+          "name": "Retain Windows acceptance and failure evidence",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:04:57Z",
+          "completed-at": "2026-11-12T11:04:58Z"
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T11:04:58Z",
+          "completed-at": "2026-11-12T11:04:58Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T11:04:58Z",
+          "completed-at": "2026-11-12T11:04:58Z"
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:04:58Z",
+          "completed-at": "2026-11-12T11:04:59Z"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:04:59Z",
+          "completed-at": "2026-11-12T11:04:59Z"
+        }
+      ]
+    },
+    {
+      "id": "131141246757",
+      "state": null,
+      "steps": []
+    }
+  ],
+  "missing_successful_gates": [
+    "Accept moved editor, exports and visible Windows startup",
+    "Build matched release tools and browser runtime",
+    "Create Windows candidate build-origin attestation",
+    "Inspect Windows DLL requirements and reject dynamic MSVC runtime",
+    "Package Windows portable ZIP with original notices",
+    "Record accepted candidate inputs and observations",
+    "Retain Windows attestation bundle",
+    "Test Windows ZIP validation",
+    "Upload accepted Windows candidate"
+  ],
+  "failed_gates": [
+    "Test Windows ZIP validation"
+  ],
+  "complete_workflow_success_observed": false,
+  "scope": "Public first-run step conclusions; authenticated detailed logs were not retrieved. Local Windows-style filename normalization failure was independently reproduced and fixed."
+}

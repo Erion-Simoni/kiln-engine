@@ -48,7 +48,11 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.13'
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      - name: Observe hosted image identity
+        id: image
+        run: echo "version=${ImageVersion:-}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        id: tools-cache
         with:
           path: |
             ~/.cargo/registry
@@ -57,6 +61,15 @@ jobs:
             ~/.cargo/.crates.toml
             ~/.cargo/.crates2.json
           key: windows-candidate-tools-v1-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        id: output-cache
+        if: steps.image.outputs.version != ''
+        with:
+          path: |
+            target/release
+            target/x86_64-pc-windows-msvc/release
+            target/wasm32-unknown-unknown/release
+          key: windows-outputs-staticcrt-v1-${{ env.RUST_TOOLCHAIN }}-${{ steps.image.outputs.version }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'kiln-*/**') }}
       - name: Install pinned toolchain and matching bindgen
         run: |
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rust-docs --target wasm32-unknown-unknown
@@ -64,14 +77,35 @@ jobs:
           cargo fetch --locked
           wasm_bindgen_version=$(python -c 'import tomllib; p=tomllib.load(open("Cargo.lock","rb")); v={p["version"] for p in p["package"] if p["name"]=="wasm-bindgen"}; assert len(v)==1; print(v.pop())')
           cargo install wasm-bindgen-cli --version "$wasm_bindgen_version" --locked
+      - name: Save installed tools before acceptance
+        if: steps.tools-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+          key: ${{ steps.tools-cache.outputs.cache-primary-key }}
       - name: Test Windows ZIP validation
         run: python -m unittest discover -s tests/native -p test_windows_package.py
       - name: Build matched release tools and browser runtime
         run: |
-          cargo build --release --locked --target x86_64-pc-windows-msvc -p kiln-editor -p kiln-cli -p kiln-player --bins
-          cargo build --release --locked --target wasm32-unknown-unknown -p kiln-web
+          mkdir -p target
+          cargo build --release --locked --target x86_64-pc-windows-msvc -p kiln-editor -p kiln-cli -p kiln-player --bins 2>&1 | tee target/windows-native-build.log
+          cargo build --release --locked --target wasm32-unknown-unknown -p kiln-web 2>&1 | tee target/windows-web-build.log
           wasm-bindgen target/wasm32-unknown-unknown/release/kiln_web.wasm --target web --out-dir target/windows-web-runtime
           target/x86_64-pc-windows-msvc/release/kiln-cli.exe web-runtime --input target/windows-web-runtime
+      - name: Save successful compiler outputs before acceptance
+        if: steps.image.outputs.version != '' && steps.output-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            target/release
+            target/x86_64-pc-windows-msvc/release
+            target/wasm32-unknown-unknown/release
+          key: ${{ steps.output-cache.outputs.cache-primary-key }}
       - name: Inspect Windows DLL requirements and reject dynamic MSVC runtime
         shell: pwsh
         run: |
@@ -93,7 +127,18 @@ jobs:
         run: |
           cargo metadata --offline --locked --format-version 1 --filter-platform x86_64-pc-windows-msvc > target/windows-metadata.json
           cargo metadata --offline --locked --format-version 1 --filter-platform wasm32-unknown-unknown > target/windows-web-metadata.json
-          python tools/package_editor.py --binaries target/x86_64-pc-windows-msvc/release --web-runtime target/windows-web-runtime --metadata target/windows-metadata.json --metadata target/windows-web-metadata.json --output target/windows-candidate/kiln-windows-x64.zip
+          python - <<'PYTHON' 2>&1 | tee target/windows-package.log
+          import runpy, sys
+          sys.argv = ['tools/package_editor.py', '--binaries', 'target/x86_64-pc-windows-msvc/release',
+                      '--web-runtime', 'target/windows-web-runtime', '--metadata', 'target/windows-metadata.json',
+                      '--metadata', 'target/windows-web-metadata.json', '--output', 'target/windows-candidate/kiln-windows-x64.zip']
+          try:
+              runpy.run_path(sys.argv[0], run_name='__main__')
+          except Exception as error:
+              message = str(error).replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print('::error title=Windows portable packaging::'+message, flush=True)
+              raise
+          PYTHON
       - name: Accept moved editor, exports and visible Windows startup
         run: python tests/windows/portable_editor_smoke.py target/windows-candidate/kiln-windows-x64.zip target/windows-acceptance
       - name: Record accepted candidate inputs and observations
@@ -112,6 +157,8 @@ jobs:
                     'rustc': subprocess.check_output(['rustc', '-vV'], text=True).strip(),
                     'wasm_bindgen': subprocess.check_output(['wasm-bindgen', '--version'], text=True).strip(),
                     'native_rustflags': os.environ['CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS'],
+                    'compiler_outputs_may_be_cached': True,
+                    'runner_image': os.environ.get('ImageVersion'),
                     'cargo_lock_sha256': digest(pathlib.Path('Cargo.lock')),
                     'archive_sha256': acceptance['archive_sha256'], 'acceptance': acceptance,
                     'dll_requirements': json.loads(pathlib.Path('target/windows-dll-requirements.json').read_text(encoding='utf-8-sig')),
@@ -134,6 +181,9 @@ jobs:
           path: |
             target/windows-acceptance/
             target/windows-dll-requirements.json
+            target/windows-native-build.log
+            target/windows-web-build.log
+            target/windows-package.log
           if-no-files-found: warn
           retention-days: 7
 

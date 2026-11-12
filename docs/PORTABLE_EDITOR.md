@@ -144,6 +144,14 @@ Use a newly prepared candidate for the updated license payload. Existing evidenc
 is not retroactively presented as having shipped those files. Exact linked-code,
 SDK/dependency provenance and platform release review remain separate.
 
+When distributing an exported game, also copy the complete installed `licenses`
+directory beside its `game`/`game.exe`, or beside the browser output's index.html.
+Keep original notices for your game's own assets too. The current exporter writes
+the runtime and project resources; automatic propagation of the installed runtime
+notice inventory remains Task 8 work. The additional license copy is manual and
+is not covered by the existing export receipt. The engine's dual license does
+not choose a license for your own game code or assets.
+
 ## Tested requirements and remaining platform gates
 
 Tested: Linux x86_64, X11 via Xvfb, Chromium SwiftShader/software graphics and

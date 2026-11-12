@@ -1820,3 +1820,23 @@ checks remain separate Task 8 gates.
   candidates require new packaging from the updated source; this does not imply
   prior archived downloads contained the newly added project license files.
 - No engine/runtime dependency or release-size ceiling.
+
+### ADR-0071 — Windows UTF-8 metadata and observable packaging failures (2026-11-12)
+
+- Windows run 43206825541 passed native/WASM release compilation and static-CRT
+  DLL inspection, then failed packaging before acceptance. Public annotations
+  expose only exit code 1. Existing .gitattributes already preserves pinned
+  license bytes; do not claim a newline-conversion cause or change those hashes.
+- Cargo/tool JSON is UTF-8. Read it explicitly as UTF-8 rather than a Windows
+  locale default, which can corrupt names or fail on valid Unicode. Exercise a
+  Unicode repository value with a simulated CP1252 default and check its actual
+  inventory roundtrip. The detailed remote exception still needs observation.
+- Emit escaped packaging exceptions as public workflow annotations and retain
+  build/package diagnostics. Keep failed preparation from publishing a candidate.
+- Save successful tool installation and compiler-output caches before later
+  acceptance can fail. Compiler caches are keyed by Rust, tracked crate inputs,
+  lockfile and hosted runner image; disable output caching if image identity is
+  absent. These Windows outputs are prebuilt preparation observations, not fresh
+  captured/replayed or hermetic builds. Cache hits never bypass DLL, installation,
+  export, desktop or publication gates. The captured Linux builder stays fresh.
+- No new engine dependency, permission expansion, error suppression or size goal.

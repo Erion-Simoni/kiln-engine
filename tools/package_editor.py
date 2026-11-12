@@ -55,7 +55,7 @@ def copy_tree(source, destination):
 
 def run_json(command):
     result = subprocess.run(list(map(str, command)), check=True, capture_output=True,
-                            text=True, timeout=60)
+                            text=True, encoding='utf-8', timeout=60)
     if len(result.stdout) > 65536:
         raise ValueError('Oversized tool response')
     return json.loads(result.stdout)
@@ -79,7 +79,7 @@ def identities(binary_dir):
 
 
 def reference_notices(destination):
-    records = json.loads((REPO/'packaging/license-data.json').read_text())
+    records = json.loads((REPO/'packaging/license-data.json').read_text(encoding='utf-8'))
     for name, record in records.items():
         source = REPO/'packaging/licenses'/f'{name}.txt'
         if digest(source) != record['sha256']:
@@ -103,12 +103,12 @@ def package_notices(metadata_paths, destination):
     project_licenses = project_notices(destination)
     packages = {}
     for path in metadata_paths:
-        metadata = json.loads(path.read_text())
+        metadata = json.loads(path.read_text(encoding='utf-8'))
         if metadata.get('version') != 1 or not metadata.get('resolve'):
             raise ValueError('Expected full Cargo metadata format-version 1')
         for package in metadata['packages']:
             packages[package['id']] = package
-    lock = tomllib.loads((REPO/'Cargo.lock').read_text())
+    lock = tomllib.loads((REPO/'Cargo.lock').read_text(encoding='utf-8'))
     checksums = {(p['name'], p['version'], p.get('source')): p.get('checksum') for p in lock['package']}
     inventory = []
     for package in sorted(packages.values(), key=lambda p: (p['name'], p['version'])):
