@@ -47,8 +47,8 @@ requirements and remaining platform checks are in
 [PORTABLE_EDITOR.md](docs/PORTABLE_EDITOR.md). Installers, OS code signing and
 other-platform distribution remain in progress; see [PACKAGING.md](docs/PACKAGING.md).
 
-Accepted Linux candidate: [run #2](https://github.com/Erion-Simoni/kiln-engine/actions/runs/43107026471),
-source `0b9a67b`. Candidate and attestation artifacts are retained for 14 days;
+Accepted Linux candidate: [licensed candidate](https://github.com/Erion-Simoni/kiln-engine/actions/runs/43215982528),
+source `3ff72d3`. Candidate and attestation artifacts are retained for 14 days;
 select a later successful run if those downloads have expired.
 
 To build from source:

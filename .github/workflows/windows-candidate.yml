@@ -17,6 +17,7 @@ on:
       - tests/windows/**
       - tests/native/test_windows_package.py
       - tests/native/test_portable_package.py
+      - tests/native/export_notices.py
 
 permissions:
   contents: read
@@ -70,6 +71,7 @@ jobs:
             target/x86_64-pc-windows-msvc/release
             target/wasm32-unknown-unknown/release
           key: windows-outputs-staticcrt-v1-${{ env.RUST_TOOLCHAIN }}-${{ steps.image.outputs.version }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'kiln-*/**') }}
+          restore-keys: windows-outputs-staticcrt-v1-${{ env.RUST_TOOLCHAIN }}-${{ steps.image.outputs.version }}-
       - name: Install pinned toolchain and matching bindgen
         run: |
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rust-docs --target wasm32-unknown-unknown

@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 use std::{collections::BTreeSet, fs, io::Read, path::Path};
 
 const LIMIT: u64 = 2 * 1024 * 1024 * 1024;
-fn digest(path: &Path) -> Result<String, String> {
+pub(crate) fn digest(path: &Path) -> Result<String, String> {
     let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
     let mut hash = Sha256::new();
     let mut buffer = [0; 65536];
@@ -17,7 +17,7 @@ fn digest(path: &Path) -> Result<String, String> {
     }
     Ok(hex::encode(hash.finalize()))
 }
-fn valid_path(path: &str) -> bool {
+pub(crate) fn valid_path(path: &str) -> bool {
     !path.is_empty()
         && !path.chars().any(char::is_control)
         && !path.contains(['\\', ':'])
@@ -25,7 +25,7 @@ fn valid_path(path: &str) -> bool {
             .split('/')
             .all(|part| !part.is_empty() && part != "." && part != "..")
 }
-fn inspect_tree(root: &Path) -> Result<BTreeSet<String>, String> {
+pub(crate) fn inspect_tree(root: &Path) -> Result<BTreeSet<String>, String> {
     let mut files = BTreeSet::new();
     for item in walkdir::WalkDir::new(root).follow_links(false) {
         let item = item.map_err(|e| e.to_string())?;

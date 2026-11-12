@@ -1,0 +1,235 @@
+{
+  "run_url": "https://github.com/Erion-Simoni/kiln-engine/actions/runs/43215982528",
+  "source_revision": "3ff72d37f2a05641eac78098e5bc4e928ff8581f",
+  "observed_at": "2026-11-12T12:59:00.631808+00:00",
+  "jobs": [
+    {
+      "id": "131175352543",
+      "state": "completed",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:14:04Z",
+          "completed-at": "2026-11-12T12:14:05Z"
+        },
+        {
+          "name": "Write this run's artifact probe",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:14:05Z",
+          "completed-at": "2026-11-12T12:14:05Z"
+        },
+        {
+          "name": "Upload artifact probe",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:14:05Z",
+          "completed-at": "2026-11-12T12:14:06Z"
+        },
+        {
+          "name": "Download artifact probe",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:14:06Z",
+          "completed-at": "2026-11-12T12:14:06Z"
+        },
+        {
+          "name": "Require unchanged artifact bytes",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:14:06Z",
+          "completed-at": "2026-11-12T12:14:06Z"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:14:06Z",
+          "completed-at": "2026-11-12T12:14:06Z"
+        }
+      ]
+    },
+    {
+      "id": "131175410733",
+      "state": "completed",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:14:11Z",
+          "completed-at": "2026-11-12T12:14:11Z"
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:14:11Z",
+          "completed-at": "2026-11-12T12:14:13Z"
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:14:13Z",
+          "completed-at": "2026-11-12T12:14:19Z"
+        },
+        {
+          "name": "Install the tested toolchain and standard library notices",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:14:19Z",
+          "completed-at": "2026-11-12T12:14:36Z"
+        },
+        {
+          "name": "Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:14:36Z",
+          "completed-at": "2026-11-12T12:14:38Z"
+        },
+        {
+          "name": "Install Linux build and software acceptance requirements",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:14:38Z",
+          "completed-at": "2026-11-12T12:14:59Z"
+        },
+        {
+          "name": "Prepare locked dependencies and matching build tools",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:14:59Z",
+          "completed-at": "2026-11-12T12:14:59Z"
+        },
+        {
+          "name": "Run native quality gates and tests",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:14:59Z",
+          "completed-at": "2026-11-12T12:25:01Z"
+        },
+        {
+          "name": "Build a captured release candidate",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:25:01Z",
+          "completed-at": "2026-11-12T12:40:36Z"
+        },
+        {
+          "name": "Rebuild frozen inputs into fresh outputs",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:40:36Z",
+          "completed-at": "2026-11-12T12:56:11Z"
+        },
+        {
+          "name": "Require all native and browser payloads to match",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:56:11Z",
+          "completed-at": "2026-11-12T12:56:12Z"
+        },
+        {
+          "name": "Prepare browser acceptance",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:56:12Z",
+          "completed-at": "2026-11-12T12:56:30Z"
+        },
+        {
+          "name": "Accept release browser material and physics behavior",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:56:30Z",
+          "completed-at": "2026-11-12T12:56:39Z"
+        },
+        {
+          "name": "Accept moved editor and exported native/browser games",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:56:39Z",
+          "completed-at": "2026-11-12T12:57:27Z"
+        },
+        {
+          "name": "Accept clean Ubuntu runtime without source or Rust",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:57:27Z",
+          "completed-at": "2026-11-12T12:58:28Z"
+        },
+        {
+          "name": "Stage the accepted candidate and its records",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:58:28Z",
+          "completed-at": "2026-11-12T12:58:28Z"
+        },
+        {
+          "name": "Upload accepted candidate",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:58:28Z",
+          "completed-at": "2026-11-12T12:58:30Z"
+        },
+        {
+          "name": "Retain acceptance and failure evidence",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:58:30Z",
+          "completed-at": "2026-11-12T12:58:31Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:58:31Z",
+          "completed-at": "2026-11-12T12:58:31Z"
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:58:31Z",
+          "completed-at": "2026-11-12T12:58:32Z"
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:58:32Z",
+          "completed-at": "2026-11-12T12:58:32Z"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:58:32Z",
+          "completed-at": "2026-11-12T12:58:32Z"
+        }
+      ]
+    },
+    {
+      "id": "131198501899",
+      "state": "completed",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:58:36Z",
+          "completed-at": "2026-11-12T12:58:39Z"
+        },
+        {
+          "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:58:39Z",
+          "completed-at": "2026-11-12T12:58:41Z"
+        },
+        {
+          "name": "Create GitHub build-origin attestation",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:58:41Z",
+          "completed-at": "2026-11-12T12:58:43Z"
+        },
+        {
+          "name": "Retain the attestation bundle",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:58:43Z",
+          "completed-at": "2026-11-12T12:58:45Z"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:58:45Z",
+          "completed-at": "2026-11-12T12:58:45Z"
+        }
+      ]
+    }
+  ],
+  "missing_successful_gates": [],
+  "failed_gates": [],
+  "complete_workflow_success_observed": true,
+  "overall_run_state": {
+    "status": "WORKFLOW_RUN_STATUS_COMPLETED",
+    "conclusion": "WORKFLOW_RUN_CONCLUSION_SUCCESS"
+  },
+  "overall_run_timing": {
+    "kind": "WORKFLOW_RUN_TIMING_KIND_DURATION",
+    "text": "45m 2s"
+  },
+  "scope": "Public licensed Linux candidate job conclusions/overall success at 3ff72d3; predates automatic runtime notice propagation. Artifact contents/signatures not independently downloaded here."
+}

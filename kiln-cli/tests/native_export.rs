@@ -104,6 +104,9 @@ fn export_preserves_relative_paths_excludes_private_data_and_refuses_overwrite()
     let receipt: ExportReceipt =
         serde_json::from_slice(&fs::read(output.join(export::RECEIPT_FILE)).unwrap()).unwrap();
     receipt.validate(&output, "success", "export-test").unwrap();
+    assert!(receipt.runtime_notice_manifest_sha256.is_none());
+    assert!(String::from_utf8_lossy(&result.stdout)
+        .contains("no verified installation notice inventory"));
     let archive = kiln_assets::Archive::load(&output.join("assets.kar")).unwrap();
     assert_eq!(
         archive.extract("art/nested/data.txt").unwrap(),

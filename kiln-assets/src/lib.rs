@@ -18,3 +18,9 @@ pub mod web_bundle;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod distribution;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod runtime_notices;
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod runtime_notices_tests;

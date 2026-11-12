@@ -35,9 +35,10 @@ exporter/player/browser runtime beside its executable. Authoring, Native/Browser
 export and exported-game startup need no Rust, Cargo, Node, Python or bindgen.
 Serve browser outputs over HTTP(S). Preserve all exported files when moving a
 game, and start its `game.exe` directly.
-For distribution, also copy the complete installation's `licenses` directory
-beside the exported game (or browser index.html), retaining your own asset notices.
-Automatic runtime-notice propagation is still pending; see
+Current exporters include and verify the selected installation's complete
+runtime notices automatically. Historical candidate 3ff72d3 predates this feature:
+copy its installation's `licenses` directory beside exported game/browser files
+before distribution. Retain your own asset notices. See
 [the portable notice contract](PORTABLE_EDITOR.md#notices).
 
 The installation manifest detects damage; it does not authenticate a publisher.

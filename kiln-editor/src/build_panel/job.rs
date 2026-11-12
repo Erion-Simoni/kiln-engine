@@ -220,6 +220,7 @@ fn verify_output(output: &Path, job: &str, project: &str, target: &str) -> Resul
         serde_json::from_slice(&fs::read(path).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
     receipt.validate(output, job, project)?;
+    kiln_assets::runtime_notices::verify_export(output, &receipt)?;
     if receipt.runtime.platform != target {
         return Err("Receipt target does not match this export".into());
     }

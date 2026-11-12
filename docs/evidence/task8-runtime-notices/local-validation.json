@@ -1,0 +1,111 @@
+{
+  "observed_at": "2026-11-12T13:23:43.547029+00:00",
+  "scope": "Local prebuilt development bundle, Xvfb/SwiftShader/ALSA null; not a captured release, clean machine, physical device or Windows acceptance",
+  "preparing_checkout": {
+    "source_revision": "358df2a2a02fd1e1c19c6e99451efc9232c6df8d",
+    "source_dirty": true,
+    "platform": "linux",
+    "arch": "x86_64",
+    "version": "0.1.0"
+  },
+  "archive_sha256": "a1d00b4124719c42e71cab3f03865344a04695db6dc9fb778d43dd083a3f1844",
+  "installation_file_count": 1546,
+  "original_notice_files": 1514,
+  "original_notice_bytes": 7846211,
+  "portable_acceptance": {
+    "installation": "/tmp/kiln-portable-acceptance-wdqzich6/moved installation",
+    "working_directory": "/tmp/kiln-portable-acceptance-wdqzich6/unrelated working directory",
+    "archive": "/workspace/kiln-engine/target/task8-notices-portable.tar.gz",
+    "installed_tools_verified": true,
+    "tamper_missing_permissions_mixed_version_symlink_rejected": true,
+    "templates_initialized_and_exported_native_web": [
+      "empty_2d",
+      "platformer",
+      "topdown"
+    ],
+    "native_browser_gui_export_and_relocated_gameplay": true,
+    "installation_unchanged_after_use": true,
+    "clean_machine": false,
+    "runtime_notices_preserved_bound_and_receipted": true,
+    "physical_gpu_audio_controller": false
+  },
+  "gui": {
+    "native": {
+      "passed": true,
+      "authored_x": 88,
+      "saved_by_export": true,
+      "failure_preserves_previous_output": true,
+      "relocated_export": "/tmp/kiln-relocated-wsf3_fe9/game folder",
+      "source_project_unavailable": true,
+      "rust_required_at_export": false,
+      "cancelled_from_ui": true,
+      "receipt_file_count": 1517
+    },
+    "browser": {
+      "passed": true,
+      "target": "web",
+      "authored_x": 88,
+      "saved_by_export": true,
+      "failure_preserves_previous_output": true,
+      "relocated_export": "/tmp/kiln-browser-relocated-ub0il3x7/game folder",
+      "source_project_unavailable": true,
+      "rust_required_at_export": false,
+      "receipt_file_count": 1529
+    }
+  },
+  "gameplay": {
+    "native": {
+      "passed": true,
+      "health": 66,
+      "script_starts": 1,
+      "saved_x": 216.0,
+      "resumed_x": 262.0,
+      "fresh_process_resume": true,
+      "corrupt_slot_preserved": true,
+      "evidence": "/workspace/kiln-engine/target/task8-runtime-notices-local/native-gameplay"
+    },
+    "browser": {
+      "passed": true,
+      "exported_artifact": true,
+      "nested_deployment": true,
+      "preparation_does_not_advance": true,
+      "loading_failure_feedback": true,
+      "reload_retry": true,
+      "bootstrap_failure_feedback": true,
+      "controller_navigation": true,
+      "touch_once": true,
+      "audio": {
+        "music": true,
+        "sounds": 1,
+        "contexts": [
+          "running",
+          "running"
+        ],
+        "gains": [
+          0.25,
+          0.25
+        ]
+      },
+      "health": 66,
+      "saved_actor_x": 150,
+      "resumed_actor_x": 178,
+      "script_starts": 1,
+      "preferences_independent": true,
+      "quota_preserves_slot": true,
+      "corrupt_load_preserves_slot": true
+    }
+  },
+  "checks": {
+    "just_check": "passed",
+    "just_test": {
+      "passed": 672,
+      "skipped": 0
+    },
+    "python_unittest": {
+      "passed": 29
+    },
+    "kiln_web_wasm_check": "passed",
+    "actionlint": "passed"
+  },
+  "prior_sandbox_attempt": "CLI checks ran, then Xvfb could not bind display sockets; complete smoke reran successfully outside display restriction; no engine failure inferred"
+}

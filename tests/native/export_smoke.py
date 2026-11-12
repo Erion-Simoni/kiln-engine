@@ -129,7 +129,8 @@ def main():
         key('Return')
         shot('ready_unsaved')
         click(75, 326)
-        wait_for(lambda: (destination/'export.json').exists(), editor, editor_log)
+        # Installed exports also hash the complete runtime/notice inventory.
+        wait_for(lambda: (destination/'export.json').exists(), editor, editor_log, attempts=300)
         wait_for(lambda: 'Export result: Success' in editor_log.read_text(), editor, editor_log, attempts=300)
         shot('export_verified')
         assert authored_x() == 88, 'Save & Export missed the actual scene edit'

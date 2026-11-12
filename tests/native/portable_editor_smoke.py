@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+from export_notices import verify_export_notices
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -67,6 +68,11 @@ def main():
     with native.open('ab') as stream:
         stream.write(b'tamper')
     verify(success=False)
+    corrupt_output = outside/'corrupt-installation-export'
+    run(cli, 'export', '--platform', 'linux', '--project', installed/'examples/ui2d_editor/kiln.toml',
+        '--output', corrupt_output, '--job-id', 'notice-corrupt', success=False)
+    if corrupt_output.exists() or (outside/'.kiln-export-notice-corrupt').exists():
+        raise RuntimeError('Corrupt installation export published or left staging')
     native.write_bytes(original)
     original_mode = native.stat().st_mode
     native.chmod(0o644)
@@ -94,8 +100,9 @@ def main():
         run(cli, 'init', '--name', 'Installed starter', '--template', template, '--output', project)
         run(cli, 'init', '--name', 'Do not replace', '--output', project, success=False)
         for platform in ('linux', 'web'):
-            run(cli, 'export', '--platform', platform, '--project', project/'kiln.toml',
-                '--output', outside/f'{template}-{platform}-export')
+            output = outside/f'{template}-{platform}-export'
+            run(cli, 'export', '--platform', platform, '--project', project/'kiln.toml', '--output', output)
+            verify_export_notices(installed, output, platform == 'web')
         initialized.append(template)
     env = os.environ.copy()
     env.update(KILN_EDITOR_PATH=str(installed/'kiln-editor'),
@@ -109,6 +116,8 @@ def main():
     browser_result = json.loads((evidence/'browser-export/result.json').read_text())
     if not all(r['source_project_unavailable'] for r in (native_result, browser_result)):
         raise RuntimeError('Exported source must be unavailable for final gameplay')
+    verify_export_notices(installed, native_result['relocated_export'], False)
+    verify_export_notices(installed, browser_result['relocated_export'], True)
     env.update(PATH='/usr/bin:/bin', KILN_PLAYER_PATH=str(Path(native_result['relocated_export'])/'game'),
                KILN_TASK7_NO_ARCHIVE='1', KILN_TASK7_DISPLAY=':88',
                KILN_TASK7_EVIDENCE_DIR=str(evidence/'native-gameplay'),
@@ -125,6 +134,7 @@ def main():
               'templates_initialized_and_exported_native_web': initialized,
               'native_browser_gui_export_and_relocated_gameplay': True,
               'installation_unchanged_after_use': True, 'clean_machine': False,
+              'runtime_notices_preserved_bound_and_receipted': True,
               'physical_gpu_audio_controller': False}
     (evidence/'result.json').write_text(json.dumps(result, indent=2)+'\n')
     print(json.dumps(result, indent=2))

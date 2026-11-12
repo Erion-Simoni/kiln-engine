@@ -5,6 +5,16 @@ use std::path::{Path, PathBuf};
 pub const EXPORT_PROTOCOL: u32 = 1;
 pub const MAX_RECEIPT_BYTES: u64 = 16 * 1024 * 1024;
 pub const RECEIPT_FILE: &str = "export.json";
+/// Inventory binding runtime notice bytes to the exported runtime payload.
+pub const RUNTIME_NOTICES_FILE: &str = "licenses/runtime-notices.json";
+/// Required grants/attribution in a verified portable installation's notices.
+pub const REQUIRED_RUNTIME_NOTICES: [&str; 5] = [
+    "licenses/inventory.json",
+    "licenses/README.txt",
+    "licenses/project/LICENSE-MIT",
+    "licenses/project/LICENSE-APACHE",
+    "licenses/rust/COPYRIGHT-library.html",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeInfo {
@@ -60,6 +70,9 @@ pub struct ExportReceipt {
     pub game_version: String,
     pub runtime: RuntimeInfo,
     pub files: Vec<ExportFile>,
+    /// Hash of the attached notice manifest; absent for loose developer runtimes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_notice_manifest_sha256: Option<String>,
 }
 impl ExportReceipt {
     /// Require this job's complete output rather than stale files or log text.
@@ -70,7 +83,7 @@ impl ExportReceipt {
         if self.protocol != EXPORT_PROTOCOL
             || self.job_id != job
             || self.project_id != project
-            || (!web && self.files.len() != 2)
+            || (!web && self.runtime_notice_manifest_sha256.is_none() && self.files.len() != 2)
             || self.files.len() > 100_010
         {
             return Err("Export receipt identity or file list is invalid".into());
@@ -93,6 +106,23 @@ impl ExportReceipt {
         {
             return Err("Export output is missing a required file".into());
         }
+        if let Some(hash) = &self.runtime_notice_manifest_sha256 {
+            if hash.len() != 64 || !hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                return Err("Invalid runtime notice manifest hash".into());
+            }
+            for name in REQUIRED_RUNTIME_NOTICES
+                .into_iter()
+                .chain([RUNTIME_NOTICES_FILE])
+            {
+                if !self
+                    .files
+                    .iter()
+                    .any(|file| file.path == name && file.bytes > 0)
+                {
+                    return Err(format!("Export output is missing runtime notices: {name}"));
+                }
+            }
+        }
         let mut seen = std::collections::HashSet::new();
         for file in &self.files {
             let path = Path::new(&file.path);
@@ -101,6 +131,12 @@ impl ExportReceipt {
                     .components()
                     .any(|c| !matches!(c, std::path::Component::Normal(_)))
                 || file.path.is_empty()
+                || file.path.contains(['\\', ':'])
+                || file.path.chars().any(char::is_control)
+                || (!web
+                    && !required.contains(&file.path.as_str())
+                    && !(self.runtime_notice_manifest_sha256.is_some()
+                        && file.path.starts_with("licenses/")))
             {
                 return Err("Invalid or duplicate export resource path".into());
             }

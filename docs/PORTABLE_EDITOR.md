@@ -7,7 +7,7 @@ use those prebuilt files without Cargo, Rust, Python, Node or wasm-bindgen.
 
 Development and captured release-profile candidates pass relocation and clean
 Ubuntu software acceptance. A hosted Linux candidate also passed publication and
-GitHub build-origin attestation (run 43107026471 at 0b9a67b). Installers/OS signing,
+GitHub build-origin attestation (run 43215982528 at 3ff72d3, including project grants). Installers/OS signing,
 independent-builder/dependency provenance,
 physical machines/devices, full Windows release acceptance and macOS remain open.
 Task 8 is not complete.
@@ -112,7 +112,7 @@ This is same-host/toolchain repetition; trusted independent builders remain open
 
 The release-candidate Actions workflow runs the same checks on a hosted Linux
 runner, retaining the accepted candidate/evidence and creating a build-origin
-attestation in a separate job. Run 43107026471 at 0b9a67b completed successfully,
+attestation in a separate job. Run 43215982528 at 3ff72d3 completed successfully,
 including candidate upload, attestation creation and bundle upload. Public job
 conclusions are recorded in [hosted evidence](evidence/task8-hosted-ci/README.md);
 candidate signatures were not independently downloaded/verified here.
@@ -151,13 +151,23 @@ Use a newly prepared candidate for the updated license payload. Existing evidenc
 is not retroactively presented as having shipped those files. Exact linked-code,
 SDK/dependency provenance and platform release review remain separate.
 
-When distributing an exported game, also copy the complete installed `licenses`
-directory beside its `game`/`game.exe`, or beside the browser output's index.html.
-Keep original notices for your game's own assets too. The current exporter writes
-the runtime and project resources; automatic propagation of the installed runtime
-notice inventory remains Task 8 work. The additional license copy is manual and
-is not covered by the existing export receipt. The engine's dual license does
-not choose a license for your own game code or assets.
+Current exporters automatically copy the complete `licenses` tree from the
+selected runtime's verified installation beside `game`/`game.exe` or browser
+`index.html`. `licenses/runtime-notices.json` records exact notice bytes and the
+matching native player or browser JS/WASM/descriptor hashes; `export.json` binds
+that manifest's SHA-256. Both the CLI and the editor's background verifier reject
+missing, changed, extra or unreceipted notices and mismatched runtime payloads.
+An incomplete or modified installation fails export before publication. Keep
+working projects outside the installation and distribute the entire export.
+
+Loose developer runtimes without an installation inventory still export, with an
+explicit missing-notices warning and no verified notice claim. They require
+matching runtime notices before distribution. Historical candidates, including
+3ff72d3, predate automatic copying and require the manual installation `licenses`
+copy. Use a newly prepared candidate for the automatic behavior. Keep original
+notices for your game's own assets too; the engine's dual license does not choose
+a license for your game code/assets. These integrity checks do not authenticate
+publishers or prove legal completeness/exact linked-code coverage.
 
 ## Tested requirements and remaining platform gates
 
@@ -172,7 +182,8 @@ references GLIBC 2.39, libasound.so.2 and (editor/player) libudev.so.1, in addit
 to libgcc_s, libm, libc and the ELF loader. It does not
 resolve dynamic graphics/audio plugins or prove complete library closure. Driver
 compatibility, physical audio and Intel HD 520 performance are unverified.
-Windows/macOS bundles and installation are unverified. Package-size goals were removed by the project owner (ADR-0062); archive sizes
+Windows hosted startup/CLI export is accepted separately; full Windows GUI,
+physical-device and macOS acceptance remain open. Package-size goals were removed by the project owner (ADR-0062); archive sizes
 are informational and do not block completion.
 
 Run `python3 -m unittest discover -s tests/native -p test_portable_package.py`

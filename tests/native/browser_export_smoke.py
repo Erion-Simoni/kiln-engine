@@ -129,7 +129,8 @@ def main():
         key('Return')
         shot('browser_ready_unsaved')
         click(75, 326)
-        wait_for(lambda: (destination/'export.json').exists(), editor, editor_log)
+        # Installed exports also hash the complete runtime/notice inventory.
+        wait_for(lambda: (destination/'export.json').exists(), editor, editor_log, attempts=300)
         wait_for(lambda: 'Export result: Success' in editor_log.read_text(), editor, editor_log, attempts=300)
         time.sleep(1.0)  # Let the software GPU present the frame after async verification.
         shot('browser_export_verified')

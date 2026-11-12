@@ -156,10 +156,11 @@ remain explicitly separate. Real editor export/distribution is Task 8.
 - [x] Replace simulated Build/Export with a real asynchronous native/browser CLI process, bounded streamed stdout/stderr, actual exit status, job-specific receipt/resource validation off the UI thread and cancellation/cleanup. Real editor Save & Export and UI Cancel pass on Linux/Xvfb. Unsupported targets/options fail explicitly; Browser gates authored physics/joints/solid tilemaps against the selected runtime capability and validates/gates authored sprite materials against the selected runtime.
 - [x] Bundle resources/runtimes for the current supported native/browser targets. Native packs/verifies a KAR and includes a matching player; Browser includes the normalized project tree, hash-verified prepared JS/WASM and actual loading/start/error shell. Export/play need no Cargo. Default Browser builds now include shared 2D physics; capabilities remain explicit and other target/toolchain support is pending.
 - [x] Deliver clean Linux userspace acceptance plus relocated Browser loading/input/audio-unlock/save behavior. A pinned Ubuntu 24.04 container runs the installed editor and exported game offline/unprivileged without Rust, repository or development sysroot mounts; real edit/save/export/cancel and game settings/save/restart/Continue pass. Shipped runtime requirements include the discovered dynamic X11 dependency. Browser artifact passes nested HTTP deployment, loading/error/retry, input, explicit audio unlock and reload/save/resume. Physical machines/other OS and driver/device coverage remain in the platform gate below.
-- [x] Publish an accepted Linux release candidate and retain GitHub build-origin attestation as Actions artifacts. Run 43107026471 at 0b9a67b passed native quality/tests, two fresh locked/offline builds, actual six-payload comparison, browser/moved installation/export/gameplay and clean Ubuntu gates; candidate/evidence upload and separate attestation/bundle upload succeeded. Archives include matched tools, browser runtime, templates/examples, source/build records, SHA-256 inventory, original dependency/font/Rust notices and verified MPL sources. Public job conclusions establish hosted execution; independent downloaded-signature verification is separate.
+- [x] Publish an accepted Linux release candidate and retain GitHub build-origin attestation as Actions artifacts. Refreshed licensed run 43215982528 at 3ff72d3 passed native quality/tests, two fresh locked/offline builds, actual six-payload comparison, browser/moved installation/export/gameplay and clean Ubuntu gates; candidate/evidence upload and separate attestation/bundle upload succeeded. Archives include matched tools, browser runtime, templates/examples, source/build records, SHA-256 inventory, project grants, original dependency/font/Rust notices and verified MPL sources. Public job conclusions establish hosted execution; independent downloaded-signature verification is separate.
 - [x] Resolve the project license policy and include its grant files in new portable packages. Owner delegated the choice; MIT OR Apache-2.0 is retained with full root texts, consistent metadata for all 34 workspace packages and original third-party/font notices. Actual local packaging verified both exact project grant files; historical candidate contents remain unchanged.
 - [x] Prepare a Windows x64 portable ZIP with static MSVC CRT and accept its relocated installation on a Windows runner. Run 43215982526 at 3ff72d3 passed package verification/corruption rejection, all-template Windows/browser CLI exports without build tools on child PATH, source-unavailable standalone game relocation, visible editor/player captures and normal close. Candidate upload and separate origin attestation/bundle upload passed. Full GUI authoring/gameplay and physical devices remain separate.
-- [ ] Finish reviewed public editor releases and validate other platforms on appropriate machines. Automate propagation of matched runtime project/dependency notices into game exports (currently copy the installation's licenses directory manually). Remaining SDK/dependency provenance, OS installer/signing, physical-machine, full Windows GUI authoring/gameplay, macOS and other GPU checks stay open. Current Linux candidate requires GLIBC 2.39 and documented system libraries. Package-size goals are removed by owner request (ADR-0062). See [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md).
+- [x] Propagate complete matched runtime project/dependency/Rust notices into native/browser game exports from verified portable installations. Receipt-bound SHA-256 inventories cover original notice bytes and selected runtime payloads. CLI/editor reject damaged or incomplete inventories; loose developer runtimes warn explicitly. See ADR-0072 and [runtime notice evidence](evidence/task8-runtime-notices/README.md).
+- [ ] Finish reviewed public editor releases and validate other platforms on appropriate machines. Remaining SDK/dependency provenance, OS installer/signing, physical-machine, full Windows GUI authoring/gameplay, macOS and other GPU checks stay open. Current Linux candidate requires GLIBC 2.39 and documented system libraries. Package-size goals are removed by owner request (ADR-0062). See [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md).
 
 Acceptance: author and export from the editor, move the artifact outside the repository to a machine without Rust, and play the full game. A failing exporter produces failure, never a success message.
 
@@ -760,3 +761,25 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Remaining Task 8: automated game runtime-notice propagation (manual copy documented),
   full Windows GUI/physical tests, macOS, SDK/dependency review and OS signing.
   Task 9/full 3D stay unstarted; package size remains informational.
+
+### 2026-11-12 — Task 8 verified runtime notice propagation
+
+- Completed native/browser notice copying from the selected runtime's verified
+  installation. Exact original bytes and runtime payload hashes are inventoried
+  in a receipt-bound manifest; CLI/editor verify integrity off the UI thread.
+  Modified/incomplete installations fail without publishing; loose developer
+  runtimes warn explicitly. No dependency or execution protocol change (ADR-0072).
+- Local moved development installation passes all-template native/browser exports,
+  GUI Save & Export with unsaved edits, overwrite preservation, native UI Cancel,
+  source-unavailable relocation and actual native/browser gameplay/save/resume.
+  Every export preserves 1514 original notice files; final installation verification
+  passes. Seven new integrity tests, all 672 Rust tests (zero skipped), 29 Python
+  tests, just check, WASM check and workflow lint pass. See
+  [notice evidence](evidence/task8-runtime-notices/README.md).
+- Refreshed licensed Linux run 43215982528 at 3ff72d3 completed successfully in
+  45m 2s, including captured/repeated builds, moved/clean-Ubuntu acceptance, upload
+  and separate origin attestation. This prior run predates automatic copying and
+  does not validate the new feature; new hosted results remain separate.
+- Task 8 stays open for full Windows GUI/physical tests, macOS, remaining
+  SDK/dependency/exact-linked-code review and OS signing. No release-size goal or
+  public GitHub Release was introduced; Task 9/full 3D remain unstarted.

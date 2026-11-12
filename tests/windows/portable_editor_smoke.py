@@ -18,6 +18,9 @@ import tempfile
 import time
 import zipfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'native'))
+from export_notices import verify_export_notices
+
 WINDOWS_RESERVED_NAMES = {'CON', 'PRN', 'AUX', 'NUL'} | {
     f'{prefix}{number}' for prefix in ('COM', 'LPT') for number in range(1, 10)
 }
@@ -169,6 +172,11 @@ def accept(archive, evidence):
     with player.open('ab') as stream:
         stream.write(b'tamper')
     run(cli, 'verify-editor-bundle', '--input', installed, success=False)
+    corrupt_output = outside/'corrupt installation export'
+    run(cli, 'export', '--platform', 'windows', '--project', installed/'examples/ui2d_editor/kiln.toml',
+        '--output', corrupt_output, '--job-id', 'notice-corrupt', success=False)
+    if corrupt_output.exists() or (outside/'.kiln-export-notice-corrupt').exists():
+        raise RuntimeError('Corrupt installation export published or left staging')
     with player.open('r+b') as stream:
         stream.truncate(player.stat().st_size-len(b'tamper'))
     run(cli, 'verify-editor-bundle', '--input', installed)
@@ -182,12 +190,14 @@ def accept(archive, evidence):
             receipt = json.loads((output/'export.json').read_text())
             if receipt['runtime']['platform'] != target:
                 raise RuntimeError('Wrong export runtime platform')
+            verify_export_notices(installed, output, target == 'web')
     project = outside/'game project'
     shutil.copytree(installed/'examples/ui2d_editor', project)
     exported = outside/'original export'
     run(cli, 'export', '--platform', 'windows', '--project', project/'kiln.toml', '--output', exported)
     moved = Path(shutil.move(str(exported), outside/'moved standalone game'))
     project.rename(outside/'unavailable game source')
+    verify_export_notices(installed, moved, False)
     run(moved/'game.exe', '--runtime-info')
     accept_window([installed/'kiln-editor.exe'], cwd, env, evidence, 'editor-startup')
     accept_window([moved/'game.exe', '--game-name', 'kiln-windows-acceptance'], cwd, env, evidence, 'player-startup')
@@ -198,6 +208,7 @@ def accept(archive, evidence):
             'archive_sha256': checksum, 'source_revision': json.loads((installed/'bundle.json').read_text())['source_revision'],
             'relocated_installation_and_corruption_rejection': True, 'build_tools_absent_from_path': True,
             'all_templates_export_windows_and_web': True, 'source_project_unavailable': True,
+            'runtime_notices_preserved_bound_and_receipted': True,
             'visible_editor_and_exported_player_startup_and_normal_close': True,
             'limits': 'Hosted Windows/DX12 startup and CLI exports, not full GUI authoring/gameplay, audible devices or physical hardware.'}
 

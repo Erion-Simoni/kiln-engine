@@ -1840,3 +1840,31 @@ checks remain separate Task 8 gates.
   captured/replayed or hermetic builds. Cache hits never bypass DLL, installation,
   export, desktop or publication gates. The captured Linux builder stays fresh.
 - No new engine dependency, permission expansion, error suppression or size goal.
+
+### ADR-0072 — Runtime-matched notices in native and browser exports (2026-11-12)
+
+- Task 8 currently requires manually copying the installation's notice directory
+  into exported games. Automatically copy it from the actual selected runtime's
+  verified portable installation, including project grants, original dependency /
+  font/Rust notices, inventory and included source archives. Reject incomplete or
+  changed installations; never attach an unrelated exporter's license inventory
+  to a custom runtime. Loose developer runtimes without an installation remain
+  supported, with a visible missing-notices warning and no verified-notice claim.
+- Add an optional notice-manifest SHA-256 to the export receipt. The attached
+  manifest inventories exact copied notice bytes and selected exported runtime
+  payload hashes. Native receipts allow only core payloads plus the declared
+  notice subtree. Existing receipts without notice metadata retain their prior
+  shape. No project/save format or runtime execution protocol changes.
+- Keep hashing in kiln-assets using its existing dependencies. Both exporter and
+  editor's background output verifier check the manifest hash, exact notice tree,
+  copied bytes and runtime binding. A copy/verification/cancellation failure must
+  preserve existing output and clean staging rather than publish partial success.
+- This verifies consistency with the matched installation's conservative notice
+  inventory, not legal completeness, signatures or SDK provenance. Project asset
+  notices remain the game author's responsibility. Full matching tool bundles are
+  required; mixing developer snapshots is not a supported distribution workflow.
+- Windows may restore compiler/dependency outputs from the same Rust/runner-image
+  cache prefix across source changes; Cargo invalidation and every downstream
+  acceptance gate still run. The captured Linux release builder remains fresh.
+- No new dependency or release-size threshold. Existing bounded-input limits
+  remain; no resource budget is weakened.

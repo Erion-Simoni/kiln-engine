@@ -187,19 +187,27 @@ pub fn run(options: Options) -> Result<()> {
         fs::copy(&player, &game_path)?;
         fs::remove_dir_all(&snapshot)?;
     }
-    let output_files: Vec<String> = if browser {
-        crate::collect_files(&stage.0)?
-            .into_iter()
-            .map(|p| {
-                p.strip_prefix(&stage.0)
-                    .unwrap()
-                    .to_string_lossy()
-                    .replace('\\', "/")
-            })
-            .collect()
+    let runtime_notice_manifest_sha256 = kiln_assets::runtime_notices::attach(
+        if browser { &bundle } else { &player },
+        &stage.0,
+        browser,
+        || cancelled(&marker).map_err(|error| error.to_string()),
+    )
+    .map_err(anyhow::Error::msg)?;
+    if runtime_notice_manifest_sha256.is_some() {
+        println!("Included verified runtime project/dependency notices");
     } else {
-        vec![export::game_binary().into(), "assets.kar".into()]
-    };
+        println!("Warning: selected developer runtime has no verified installation notice inventory. Include matching runtime licenses before distributing this export.");
+    }
+    let output_files: Vec<String> = crate::collect_files(&stage.0)?
+        .into_iter()
+        .map(|p| {
+            p.strip_prefix(&stage.0)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/")
+        })
+        .collect();
     let receipt = ExportReceipt {
         protocol: EXPORT_PROTOCOL,
         job_id: job.clone(),
@@ -207,6 +215,7 @@ pub fn run(options: Options) -> Result<()> {
         game_name: project.name,
         game_version: project.version,
         runtime,
+        runtime_notice_manifest_sha256,
         files: output_files
             .into_iter()
             .map(|name| {
@@ -220,6 +229,7 @@ pub fn run(options: Options) -> Result<()> {
     receipt
         .validate(&stage.0, &job, &project.id)
         .map_err(anyhow::Error::msg)?;
+    kiln_assets::runtime_notices::verify_export(&stage.0, &receipt).map_err(anyhow::Error::msg)?;
     let receipt_bytes = serde_json::to_vec_pretty(&receipt)?;
     if receipt_bytes.len() as u64 > export::MAX_RECEIPT_BYTES {
         bail!("Export receipt exceeds 16 MiB");

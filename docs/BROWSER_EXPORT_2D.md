@@ -58,6 +58,14 @@ Upload the **complete** output folder to an HTTP(S) static host:
 - `runtime/`: verified prebuilt JS/WASM and its descriptor.
 - `project/`: saved manifest, scripts, textures, audio, fonts and other resources.
 - `export.json`: job/project/runtime receipt; `_headers`: optional isolation headers.
+- `licenses/`: notices copied from the selected verified runtime installation;
+  a manifest binds original notice bytes to all three browser runtime files.
+
+The CLI and editor verify notice hashes and exact receipt/tree coverage. Modified
+or incomplete installations fail export before publication. A loose prepared
+developer runtime without an installation inventory still works, but warns that
+matching runtime notices must be added before distribution. Preserve your own
+asset notices too. See [the notice contract](PORTABLE_EDITOR.md#notices).
 
 Nested URLs work, for example `https://example.com/games/demo/`. Serve `.wasm` as
 `application/wasm` and JS as JavaScript. No source repository, Rust, Node or editor
