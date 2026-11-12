@@ -1,0 +1,16 @@
+{
+  "installation": "/tmp/kiln-portable-acceptance-jadm98va/moved installation",
+  "working_directory": "/tmp/kiln-portable-acceptance-jadm98va/unrelated working directory",
+  "archive": "/workspace/kiln-engine/target/dist/kiln-portable-development-verified.tar.gz",
+  "installed_tools_verified": true,
+  "tamper_missing_permissions_mixed_version_symlink_rejected": true,
+  "templates_initialized_and_exported_native_web": [
+    "empty_2d",
+    "platformer",
+    "topdown"
+  ],
+  "native_browser_gui_export_and_relocated_gameplay": true,
+  "installation_unchanged_after_use": true,
+  "clean_machine": false,
+  "physical_gpu_audio_controller": false
+}

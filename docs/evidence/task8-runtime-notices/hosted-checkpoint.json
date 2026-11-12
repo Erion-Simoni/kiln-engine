@@ -1,0 +1,47 @@
+{
+  "scope": "Public pending workflow checkpoint for new notice feature; no full hosted success claimed",
+  "runs": [
+    {
+      "platform": "windows",
+      "run_url": "https://github.com/Erion-Simoni/kiln-engine/actions/runs/43227026649",
+      "source_revision": "a0f1d85fb5bc3562701390041f06f4c28ff3a5ed",
+      "observed_at": "2026-11-12T13:27:07.742136+00:00",
+      "complete_workflow_success_observed": false,
+      "failed_gates": [],
+      "jobs": [
+        {
+          "id": "131212716528",
+          "state": "in_progress",
+          "last_success": "Run actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "in_progress_steps": [
+            "Install pinned toolchain and matching bindgen"
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "linux",
+      "run_url": "https://github.com/Erion-Simoni/kiln-engine/actions/runs/43227026505",
+      "source_revision": "a0f1d85fb5bc3562701390041f06f4c28ff3a5ed",
+      "observed_at": "2026-11-12T13:27:09.344332+00:00",
+      "complete_workflow_success_observed": false,
+      "failed_gates": [],
+      "jobs": [
+        {
+          "id": "131212716616",
+          "state": "completed",
+          "last_success": "Complete job",
+          "in_progress_steps": []
+        },
+        {
+          "id": "131212782968",
+          "state": "in_progress",
+          "last_success": "Prepare locked dependencies and matching build tools",
+          "in_progress_steps": [
+            "Run native quality gates and tests"
+          ]
+        }
+      ]
+    }
+  ]
+}

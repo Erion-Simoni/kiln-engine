@@ -178,17 +178,16 @@ The `kiln.toml` manifest lists scenes and entity textures as project-relative pa
 
 `renderer.has_post()` gates `apply_post`. `scene_target()` returns the intermediate target when post is enabled, else `None` (render to swap chain). The sprite pipeline targets `scene_format()` so it always renders into the right target.
 
-### Output size budget
+### Optional output size observation
 
-M2 budget: Web WASM < 1.5 MB brotli-compressed (`docs/BUDGETS.md`). Keep `kiln-web` dependency footprint minimal:
-- No editor crates (`kiln-editor`, `egui`, `egui_dock`)
-- Feature-gate physics/audio off for web
-- Measure with `wasm-opt -Oz` + brotli (`just size`)
+Package-size ceilings were removed by owner request (ADR-0062). WASM sizes can
+be recorded with the build profile for information; no compressed-size result
+blocks completion. Browser startup, rendering and gameplay still need tests.
 
 ### Acceptance criteria (testable)
 
 1. **Command:** `cargo build --target wasm32-unknown-unknown --release -p kiln-web` produces `kiln_web.wasm`.
-2. **Command:** `wasm-opt -Oz -o out.wasm kiln_web.wasm && brotli out.wasm` → `out.wasm.br` < 1.5 MB.
+2. **Optional observation:** record WASM bytes and build profile; no size acceptance threshold (ADR-0062).
 3. **Runtime:** A minimal HTML page with a `<canvas id="game">` calls `KilnWeb.run("game", "kiln.toml")` and renders a sprite at the world origin.
 4. **Runtime:** Arrow keys / WASD move the sprite (input axis reaches `SliceSession`).
 5. **Runtime:** `get_coin_count()` / `collect_coin()` work; HUD score updates.
@@ -204,7 +203,7 @@ M2 budget: Web WASM < 1.5 MB brotli-compressed (`docs/BUDGETS.md`). Keep `kiln-w
 
 ## See Also
 
-- `docs/BUDGETS.md` — Web WASM <1.5 MB brotli budget
+- `docs/BUDGETS.md` — performance/resource goals; package size is informational
 - `kiln-web/src/lib.rs` — current stub to replace
 - `kiln-render/src/renderer.rs` — desktop surface/device setup (mirror for web)
 - `demo/src/main.rs` — desktop sprite batch reference (same `SpriteInstance` layout)

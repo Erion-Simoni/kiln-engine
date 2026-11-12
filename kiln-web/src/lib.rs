@@ -9,6 +9,7 @@
 #![cfg(target_arch = "wasm32")]
 
 mod audio;
+mod export_info;
 mod input;
 mod resources;
 mod storage;
@@ -30,8 +31,52 @@ pub fn start() {
     console_error_panic_hook::set_once();
 }
 
+thread_local! {
+    static PREPARED_GAME: std::cell::RefCell<Option<App>> = const { std::cell::RefCell::new(None) };
+}
+
 #[wasm_bindgen]
 pub async fn run(canvas_id: &str, project_path: &str) -> Result<(), JsValue> {
+    let (app, window) = load_app(canvas_id, project_path).await?;
+    app.run(&window);
+    Ok(())
+}
+
+/// Load all runtime resources without starting gameplay or installing input handlers.
+#[wasm_bindgen]
+pub async fn prepare_game(canvas_id: &str, project_path: &str) -> Result<(), JsValue> {
+    if PREPARED_GAME.with(|app| app.borrow().is_some()) {
+        return Err(JsValue::from_str("A game is already prepared"));
+    }
+    let (app, _) = load_app(canvas_id, project_path).await?;
+    PREPARED_GAME.with(|pending| *pending.borrow_mut() = Some(app));
+    Ok(())
+}
+
+/// Call from a trusted start gesture; resume audio before advancing the first tick.
+#[wasm_bindgen]
+pub async fn start_game() -> Result<(), JsValue> {
+    let audio = PREPARED_GAME
+        .with(|pending| {
+            pending
+                .borrow()
+                .as_ref()
+                .map(|app| app.audio_context.clone())
+        })
+        .ok_or_else(|| JsValue::from_str("Prepare the game before starting"))?;
+    if let Some(context) = audio {
+        wasm_bindgen_futures::JsFuture::from(context.resume()?).await?;
+    }
+    let mut app = PREPARED_GAME
+        .with(|pending| pending.borrow_mut().take())
+        .ok_or_else(|| JsValue::from_str("Game was already started"))?;
+    app.game_loop = GameLoop::new();
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("No window"))?;
+    app.run(&window);
+    Ok(())
+}
+
+async fn load_app(canvas_id: &str, project_path: &str) -> Result<(App, web_sys::Window), JsValue> {
     console_error_panic_hook::set_once();
     let window = web_sys::window().ok_or_else(|| JsValue::from_str("No window"))?;
     let document = window
@@ -69,8 +114,7 @@ pub async fn run(canvas_id: &str, project_path: &str) -> Result<(), JsValue> {
     let app = App::new(&instance, surface, canvas, width, height, project_path)
         .await
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    app.run(&window);
-    Ok(())
+    Ok((app, window))
 }
 
 #[derive(Default, Clone)]
@@ -170,6 +214,7 @@ impl App {
 
         // Load project first to get audio assets and scene script
         let project = load_project(project_path).await?;
+        kiln_render::materials::plans(&project)?;
 
         let textures = load_textures(
             renderer.device(),
@@ -179,6 +224,12 @@ impl App {
             project_path,
         )
         .await?;
+
+        sprite_renderer
+            .prepare_project_materials(renderer.device(), &project, |p| {
+                textures.get(p).map(|t| t.0)
+            })
+            .await?;
 
         let scene_id = project.default_scene_id().ok_or("Project has no scenes")?;
         let scripts = resources::scripts(&project, project_path).await?;
@@ -484,9 +535,11 @@ impl App {
         // Tilemaps are drawn first so entities appear on top of them.
         // Only the chunks inside the camera view are submitted.
         let view_bounds = self.camera.view_bounds();
-        for (texture, instance) in
-            kiln_runtime::visual::collect_scene_draws(&self.world, view_bounds)
-        {
+        for (texture, instance) in kiln_runtime::visual::collect_scene_draws_with_materials(
+            &self.world,
+            view_bounds,
+            |name| self.sprite_renderer.material_id(name),
+        ) {
             self.sprite_renderer.push_textured(texture, instance);
         }
 
@@ -639,6 +692,7 @@ async fn load_textures(
 ) -> Result<resources::Textures, Box<dyn std::error::Error>> {
     let mut texture_paths = Vec::new();
 
+    texture_paths.extend(kiln_render::materials::texture_paths(project));
     // Collect all unique texture paths from the project
     for scene in project.scenes.values() {
         for entity in &scene.entities {
@@ -667,6 +721,7 @@ async fn load_textures(
         }
     }
     texture_paths.sort();
+    texture_paths.dedup();
     let mut textures = HashMap::new();
 
     // Load each texture

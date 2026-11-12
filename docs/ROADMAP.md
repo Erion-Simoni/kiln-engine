@@ -221,7 +221,7 @@ hardware is not measured.
 - [x] Web Audio API playback implemented.
 - [x] Mouse input, window resize handling implemented.
 - [x] UI rendering from script commands (UiButton, UiLabel, UiPanel).
-- [ ] Brotli wasm size recorded toward `<1.5 MB` budget (deferred: wasm-opt not installed).
+- Package-size goal removed by owner request (ADR-0062); optional size observations do not gate completion.
 
 **Verdict: Done** — the web export now runs a full game loop with input, audio, UI, and sprite rendering.
 

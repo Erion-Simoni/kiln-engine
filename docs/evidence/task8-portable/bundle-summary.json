@@ -1,0 +1,86 @@
+{
+  "archive_bytes": 56605832,
+  "payload_bytes": 287905643,
+  "payload_files": 1530,
+  "inventory_packages": 433,
+  "mpl_source_archives": 17,
+  "tools": {
+    "kiln-cli": {
+      "arch": "x86_64",
+      "debug_assertions": true,
+      "features": [
+        "native-export",
+        "browser-export",
+        "bundle-verify"
+      ],
+      "platform": "linux",
+      "schema": 1,
+      "tool": "kiln-cli",
+      "version": "0.1.0"
+    },
+    "kiln-editor": {
+      "arch": "x86_64",
+      "debug_assertions": true,
+      "features": [
+        "audio",
+        "fonts",
+        "gamepad"
+      ],
+      "platform": "linux",
+      "schema": 1,
+      "tool": "kiln-editor",
+      "version": "0.1.0"
+    },
+    "kiln-player": {
+      "arch": "x86_64",
+      "debug_assertions": true,
+      "features": [
+        "audio",
+        "fonts",
+        "gamepad"
+      ],
+      "platform": "linux",
+      "schema": 1,
+      "tool": "kiln-player",
+      "version": "0.1.0"
+    }
+  },
+  "system_observations": {
+    "kiln-cli": {
+      "elf_needed": [
+        "libasound.so.2",
+        "libgcc_s.so.1",
+        "libm.so.6",
+        "libc.so.6",
+        "ld-linux-x86-64.so.2"
+      ],
+      "max_glibc_symbol": "2.39"
+    },
+    "kiln-editor": {
+      "elf_needed": [
+        "libasound.so.2",
+        "libudev.so.1",
+        "libgcc_s.so.1",
+        "libm.so.6",
+        "libc.so.6",
+        "ld-linux-x86-64.so.2"
+      ],
+      "max_glibc_symbol": "2.39"
+    },
+    "kiln-player": {
+      "elf_needed": [
+        "libasound.so.2",
+        "libudev.so.1",
+        "libgcc_s.so.1",
+        "libm.so.6",
+        "libc.so.6",
+        "ld-linux-x86-64.so.2"
+      ],
+      "max_glibc_symbol": "2.39"
+    },
+    "rust_standard_library_copyright_report_included": true,
+    "system_libraries_bundled": false
+  },
+  "source_revision_observed": "566aad7abcb8059167ac7df1a87c5c5665c2b1fd",
+  "source_dirty_observed": true
+}

@@ -1,9 +1,20 @@
-//! Native export protocol shared by the editor, exporter and standalone player.
+//! Export protocol shared by the editor, exporter and standalone player.
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 pub const EXPORT_PROTOCOL: u32 = 1;
+pub const MAX_RECEIPT_BYTES: u64 = 16 * 1024 * 1024;
 pub const RECEIPT_FILE: &str = "export.json";
+/// Inventory binding runtime notice bytes to the exported runtime payload.
+pub const RUNTIME_NOTICES_FILE: &str = "licenses/runtime-notices.json";
+/// Required grants/attribution in a verified portable installation's notices.
+pub const REQUIRED_RUNTIME_NOTICES: [&str; 5] = [
+    "licenses/inventory.json",
+    "licenses/README.txt",
+    "licenses/project/LICENSE-MIT",
+    "licenses/project/LICENSE-APACHE",
+    "licenses/rust/COPYRIGHT-library.html",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeInfo {
@@ -14,21 +25,31 @@ pub struct RuntimeInfo {
     pub audio: bool,
     pub fonts: bool,
     pub gamepad: bool,
+    /// Legacy runtimes omit this field and cannot export authored physics.
+    #[serde(default)]
+    pub physics: bool,
+    /// Authored fragment pipelines, constants and texture parameters.
+    #[serde(default)]
+    pub materials: bool,
 }
 impl RuntimeInfo {
     pub fn validate(&self, platform: &str) -> Result<(), String> {
+        let target_matches = if platform == "web" {
+            self.platform == "web" && self.arch == "wasm32"
+        } else {
+            self.platform == platform
+                && self.platform == std::env::consts::OS
+                && self.arch == std::env::consts::ARCH
+        };
         if self.protocol != EXPORT_PROTOCOL
             || self.version != env!("CARGO_PKG_VERSION")
-            || self.platform != platform
-            || self.platform != std::env::consts::OS
-            || self.arch != std::env::consts::ARCH
+            || !target_matches
             || !self.audio
             || !self.fonts
             || !self.gamepad
         {
             return Err(
-                "Player runtime does not match this host/engine or lacks audio/fonts/gamepad"
-                    .into(),
+                "Runtime does not match this target/engine or lacks audio/fonts/gamepad".into(),
             );
         }
         Ok(())
@@ -49,27 +70,82 @@ pub struct ExportReceipt {
     pub game_version: String,
     pub runtime: RuntimeInfo,
     pub files: Vec<ExportFile>,
+    /// Hash of the attached notice manifest; absent for loose developer runtimes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_notice_manifest_sha256: Option<String>,
 }
 impl ExportReceipt {
-    /// Require this job's complete native output rather than stale files or log text.
+    /// Require this job's complete output rather than stale files or log text.
     pub fn validate(&self, dir: &Path, job: &str, project: &str) -> Result<(), String> {
-        self.runtime.validate(std::env::consts::OS)?;
+        let web = self.runtime.platform == "web";
+        self.runtime
+            .validate(if web { "web" } else { std::env::consts::OS })?;
         if self.protocol != EXPORT_PROTOCOL
             || self.job_id != job
             || self.project_id != project
-            || self.files.len() != 2
+            || (!web && self.runtime_notice_manifest_sha256.is_none() && self.files.len() != 2)
+            || self.files.len() > 100_010
         {
             return Err("Export receipt identity or file list is invalid".into());
         }
-        for name in [game_binary(), "assets.kar"] {
-            let file = self
-                .files
-                .iter()
-                .find(|f| f.path == name)
-                .ok_or("Export output is missing a required file")?;
-            let meta = std::fs::symlink_metadata(dir.join(name)).map_err(|e| e.to_string())?;
-            if !meta.is_file() || meta.len() == 0 || meta.len() != file.bytes {
-                return Err(format!("Export output is incomplete: {name}"));
+        let required: &[&str] = if web {
+            &[
+                "index.html",
+                "game.js",
+                "runtime/kiln_web.js",
+                "runtime/kiln_web_bg.wasm",
+                "runtime/runtime.json",
+                "project/kiln.toml",
+            ]
+        } else {
+            &[game_binary(), "assets.kar"]
+        };
+        if required
+            .iter()
+            .any(|name| !self.files.iter().any(|f| f.path == *name))
+        {
+            return Err("Export output is missing a required file".into());
+        }
+        if let Some(hash) = &self.runtime_notice_manifest_sha256 {
+            if hash.len() != 64 || !hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                return Err("Invalid runtime notice manifest hash".into());
+            }
+            for name in REQUIRED_RUNTIME_NOTICES
+                .into_iter()
+                .chain([RUNTIME_NOTICES_FILE])
+            {
+                if !self
+                    .files
+                    .iter()
+                    .any(|file| file.path == name && file.bytes > 0)
+                {
+                    return Err(format!("Export output is missing runtime notices: {name}"));
+                }
+            }
+        }
+        let mut seen = std::collections::HashSet::new();
+        for file in &self.files {
+            let path = Path::new(&file.path);
+            if !seen.insert(&file.path)
+                || path
+                    .components()
+                    .any(|c| !matches!(c, std::path::Component::Normal(_)))
+                || file.path.is_empty()
+                || file.path.contains(['\\', ':'])
+                || file.path.chars().any(char::is_control)
+                || (!web
+                    && !required.contains(&file.path.as_str())
+                    && !(self.runtime_notice_manifest_sha256.is_some()
+                        && file.path.starts_with("licenses/")))
+            {
+                return Err("Invalid or duplicate export resource path".into());
+            }
+            let meta = std::fs::symlink_metadata(dir.join(path)).map_err(|e| e.to_string())?;
+            if !meta.is_file()
+                || meta.len() != file.bytes
+                || (required.contains(&file.path.as_str()) && meta.len() == 0)
+            {
+                return Err(format!("Export output is incomplete: {}", file.path));
             }
         }
         Ok(())
@@ -95,4 +171,29 @@ pub fn staging_path(output: &Path, job: &str) -> PathBuf {
 }
 pub fn cancel_path(output: &Path, job: &str) -> PathBuf {
     output.with_file_name(format!(".kiln-export-{job}.cancel"))
+}
+
+#[cfg(test)]
+mod capability_tests {
+    #[test]
+    fn legacy_runtime_json_does_not_claim_physics() {
+        let legacy = format!(
+            r#"{{"protocol":1,"version":"{}","platform":"web","arch":"wasm32","audio":true,"fonts":true,"gamepad":true}}"#,
+            env!("CARGO_PKG_VERSION")
+        );
+        let runtime: super::RuntimeInfo = serde_json::from_str(&legacy).unwrap();
+        runtime.validate("web").unwrap();
+        assert!(!runtime.physics);
+        assert!(!runtime.materials);
+        let current = super::RuntimeInfo {
+            physics: true,
+            ..runtime
+        };
+        let encoded = serde_json::to_string(&current).unwrap();
+        assert!(
+            serde_json::from_str::<super::RuntimeInfo>(&encoded)
+                .unwrap()
+                .physics
+        );
+    }
 }

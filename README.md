@@ -13,7 +13,7 @@ For remaining production workflow gaps and test evidence, see [the 2D completion
 
 ## Goals
 
-- **Tiny:** Web runtime <1.5 MB, editor installer <40 MB
+- **Portable:** Native and browser exports use prebuilt runtimes; package size is not a release goal
 - **Fast:** 60 FPS on 2015 laptops with integrated GPUs
 - **Beautiful:** Art-directed 2D/2.5D with render tiers
 - **One codebase:** Export to Web (WASM), desktop, and later mobile
@@ -32,11 +32,26 @@ just web      # wasm demo in browser
 
 ## Download
 
-No releases are published yet. Packaging (installers, code-signing, store
-upload) is planned for M15–M16 but has not been shipped; see
-`docs/PACKAGING.md` and the packaging section of `docs/ROADMAP.md`.
+Windows x64 portable candidate: [successful build and startup/export tests](https://github.com/Erion-Simoni/kiln-engine/actions/runs/43215982526),
+source `3ff72d3`. Follow [WINDOWS_PORTABLE.md](docs/WINDOWS_PORTABLE.md) to download,
+extract the complete ZIP, verify it and launch `kiln-editor.exe` without Rust.
+This is a hosted startup/CLI-export checkpoint; physical-device and full Windows
+GUI authoring acceptance remain separate.
 
-Build from source instead:
+No public releases are published yet. The Linux release-candidate workflow builds
+and tests a portable editor with its exporter, player, browser runtime, templates
+and examples. Use only a completed successful run and follow the
+[verified download instructions](docs/BUILD_PROVENANCE.md#hosted-release-candidate-workflow).
+The installed editor needs no Rust, Cargo, Python or Node. Its current Linux
+requirements and remaining platform checks are in
+[PORTABLE_EDITOR.md](docs/PORTABLE_EDITOR.md). Installers, OS code signing and
+other-platform distribution remain in progress; see [PACKAGING.md](docs/PACKAGING.md).
+
+Accepted Linux candidate: [licensed candidate](https://github.com/Erion-Simoni/kiln-engine/actions/runs/43215982528),
+source `3ff72d3`. Candidate and attestation artifacts are retained for 14 days;
+select a later successful run if those downloads have expired.
+
+To build from source:
 
 ```bash
 cargo run --bin kiln-editor                        # editor
@@ -66,7 +81,7 @@ New to Kiln? Start with the [Tutorial](docs/TUTORIAL.md) to build your first gam
 - **docs/ROADMAP.md** - Milestones M0-M61+
 - **ROADMAP_FULL_M14_PLUS.md** - M14+ milestones (M29+ detail)
 - **docs/DECISIONS.md** - Architecture decision records
-- **docs/BUDGETS.md** - Size and performance budgets
+- **docs/BUDGETS.md** - Performance/resource goals and optional size observations
 - **docs/STATE.md** - Session handoff (current status)
 - **docs/TUTORIAL.md** - Build your first game
 - **docs/GETTING_STARTED.md** - Make a 2D game from scratch
@@ -83,4 +98,7 @@ New to Kiln? Start with the [Tutorial](docs/TUTORIAL.md) to build your first gam
 
 ## License
 
-TBD
+Kiln source code is dual-licensed under [MIT](LICENSE-MIT) or
+[Apache-2.0](LICENSE-APACHE), at your option. Commercial use is permitted under
+those terms. Dependencies, fonts and other third-party materials retain their
+own licenses and notices; portable installations include their license inventory.

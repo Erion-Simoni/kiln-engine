@@ -1,5 +1,5 @@
 mod export;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use kiln_assets::{Archive, AssetCache};
 use kiln_updater::{dlc::DlcMetadata, generate_patch};
@@ -87,12 +87,19 @@ fn generate_steam_vdf() -> String {
 #[command(name = "kiln-cli")]
 #[command(about = "Kiln asset pipeline CLI", long_about = None)]
 struct Cli {
+    #[arg(long, exclusive = true)]
+    tool_info: bool,
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Verify a portable editor installation before use.
+    VerifyEditorBundle {
+        #[arg(long)]
+        input: PathBuf,
+    },
     /// Initialize a new project from a template
     Init {
         /// Project name
@@ -144,7 +151,12 @@ enum Commands {
         #[arg(short, long, default_value = "patch.qbsdiff")]
         output: PathBuf,
     },
-    /// Export a saved project with a matching prebuilt native runtime.
+    /// Record a generated JS/WASM runtime pair for offline browser export.
+    WebRuntime {
+        #[arg(long)]
+        input: PathBuf,
+    },
+    /// Export a saved project with a matching prebuilt native or browser runtime.
     Export {
         #[arg(short, long, default_value = std::env::consts::OS)]
         platform: String,
@@ -157,6 +169,9 @@ enum Commands {
         /// Prebuilt player (defaults to kiln-player beside this exporter).
         #[arg(long)]
         player: Option<PathBuf>,
+        /// Prepared browser runtime directory (defaults beside the exporter).
+        #[arg(long)]
+        web_runtime: Option<PathBuf>,
         /// Correlate an editor request with its output receipt.
         #[arg(long)]
         job_id: Option<String>,
@@ -232,13 +247,41 @@ enum Commands {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    match cli.command {
+    if cli.tool_info {
+        let features = vec![
+            "native-export".into(),
+            "browser-export".into(),
+            "bundle-verify".into(),
+        ];
+        let info = kiln_core::distribution::ToolInfo::current(
+            "kiln-cli",
+            features,
+            cfg!(debug_assertions),
+        );
+        println!("{}", serde_json::to_string(&info)?);
+        return Ok(());
+    }
+    match cli.command.context("Choose a subcommand or --tool-info")? {
+        Commands::VerifyEditorBundle { input } => {
+            let manifest = kiln_assets::distribution::verify(&input).map_err(anyhow::Error::msg)?;
+            println!(
+                "Editor installation verified: {} {} {} ({} files)",
+                manifest.version,
+                manifest.platform,
+                manifest.arch,
+                manifest.files.len()
+            );
+        }
         Commands::Init {
             name,
             template,
             output,
         } => {
             let output_dir = output.unwrap_or_else(|| PathBuf::from(&name));
+
+            if output_dir.exists() && fs::read_dir(&output_dir)?.next().is_some() {
+                anyhow::bail!("Refusing to initialize a nonempty output directory");
+            }
 
             println!(
                 "Initializing project '{}' from template '{}'...",
@@ -267,6 +310,23 @@ fn main() -> Result<()> {
             // Update project name
             project.name = name.clone();
             project.id = uuid::Uuid::new_v4().to_string();
+            if project.scenes.is_empty() {
+                project.scenes.insert(
+                    "main".into(),
+                    kiln_core::Scene {
+                        id: "main".into(),
+                        name: "Main".into(),
+                        script: Some("scripts/main.ks".into()),
+                        entities: Vec::new(),
+                        nested_scenes: Vec::new(),
+                    },
+                );
+                fs::create_dir_all(output_dir.join("scripts"))?;
+                fs::write(
+                    output_dir.join("scripts/main.ks"),
+                    "// Add your game rules here.\nlet dt = get_delta_time();\n",
+                )?;
+            }
 
             // Create output directory
             fs::create_dir_all(&output_dir)?;
@@ -594,11 +654,16 @@ fn main() -> Result<()> {
                 .map_err(|e| anyhow::anyhow!("Failed to write metadata '{:?}': {e}", metadata))?;
             println!("Font metadata written to: {}", metadata.display());
         }
+        Commands::WebRuntime { input } => {
+            kiln_assets::web_bundle::prepare(&input).map_err(anyhow::Error::msg)?;
+            println!("Browser runtime prepared: {}", input.display());
+        }
         Commands::Export {
             platform,
             project,
             output,
             player,
+            web_runtime,
             job_id,
         } => {
             export::run(export::Options {
@@ -606,6 +671,7 @@ fn main() -> Result<()> {
                 project,
                 output,
                 player,
+                web_runtime,
                 job_id,
             })?;
         }

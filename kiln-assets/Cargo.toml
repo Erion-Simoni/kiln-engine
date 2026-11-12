@@ -1,9 +1,11 @@
 [package]
 name = "kiln-assets"
+license.workspace = true
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
+kiln-core = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true }

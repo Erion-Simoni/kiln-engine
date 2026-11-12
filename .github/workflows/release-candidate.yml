@@ -1,0 +1,203 @@
+name: Release candidate verification
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master, main, feat/2d-production-workflow]
+    paths:
+      - .github/workflows/release-candidate.yml
+      - Cargo.toml
+      - Cargo.lock
+      - LICENSE-*
+      - kiln-*/**
+      - tools/**
+      - packaging/**
+      - templates/**
+      - samples/**
+      - tests/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  CARGO_BUILD_JOBS: '1'
+  CARGO_PROFILE_DEV_DEBUG: '0'
+  CARGO_PROFILE_TEST_DEBUG: '0'
+  PYTHONDONTWRITEBYTECODE: '1'
+  RUST_TOOLCHAIN: '1.99.1'
+
+jobs:
+  artifact-preflight:
+    name: Verify artifact service before building
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Write this run's artifact probe
+        run: |
+          mkdir -p artifact-probe
+          python3 - <<'PYTHON'
+          import json
+          import os
+          from pathlib import Path
+
+          keys = ("GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA")
+          identity = {key: os.environ[key] for key in keys}
+          Path("artifact-probe/identity.json").write_text(json.dumps(identity, sort_keys=True) + "\n")
+          PYTHON
+      - name: Upload artifact probe
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: kiln-artifact-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifact-probe/identity.json
+          if-no-files-found: error
+          retention-days: 1
+      - name: Download artifact probe
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: kiln-artifact-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifact-probe-downloaded
+      - name: Require unchanged artifact bytes
+        run: |
+          cmp artifact-probe/identity.json artifact-probe-downloaded/identity.json
+          echo 'Artifact upload/download roundtrip passed for this run and source.' >> "$GITHUB_STEP_SUMMARY"
+
+  candidate:
+    name: Build and accept a locked Linux candidate
+    needs: artifact-preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+          key: release-tools-v2-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}
+      - name: Install the tested toolchain and standard library notices
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt,clippy,rust-docs --target wasm32-unknown-unknown
+          rustup default "$RUST_TOOLCHAIN"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: tests/web/package-lock.json
+      - name: Install Linux build and software acceptance requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev libssl-dev pkg-config xvfb xdotool imagemagick
+          sudo xargs -a packaging/linux-runtime-packages.txt apt-get install -y
+      - name: Prepare locked dependencies and matching build tools
+        run: |
+          cargo fetch --locked
+          cargo install cargo-nextest --version 0.9.151 --locked
+          wasm_bindgen_version=$(python3 -c 'import tomllib; p=tomllib.load(open("Cargo.lock","rb")); v={p["version"] for p in p["package"] if p["name"]=="wasm-bindgen"}; assert len(v)==1; print(v.pop())')
+          cargo install wasm-bindgen-cli --version "$wasm_bindgen_version" --locked
+      - name: Run native quality gates and tests
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo check --workspace --locked
+          cargo check --manifest-path samples/audio/Cargo.toml
+          cargo nextest run --workspace --locked
+          python3 -m unittest discover -s tests/native -p 'test_*.py'
+      - name: Build a captured release candidate
+        run: python3 tools/build_editor.py --profile release --jobs 1 --output target/ci-release
+      - name: Rebuild frozen inputs into fresh outputs
+        run: python3 tools/build_editor.py --profile release --jobs 1 --source-from target/ci-release --output target/ci-replay
+      - name: Require all native and browser payloads to match
+        run: python3 tools/compare_builds.py target/ci-release target/ci-replay --output target/ci-release-comparison.json
+      - name: Prepare browser acceptance
+        working-directory: tests/web
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+      - name: Accept release browser material and physics behavior
+        env:
+          KILN_CLI_PATH: ${{ github.workspace }}/target/ci-release/target/x86_64-unknown-linux-gnu/release/kiln-cli
+          WEB_MATERIAL_EVIDENCE: target/ci-material-evidence
+          WEB_PHYSICS_EVIDENCE: target/ci-physics-evidence
+        run: |
+          node tests/web/materials.cjs target/ci-release/web-runtime
+          node tests/web/physics.cjs target/ci-release/web-runtime
+      - name: Accept moved editor and exported native/browser games
+        env:
+          KILN_PORTABLE_EVIDENCE_DIR: target/ci-portable-evidence
+        run: python3 tests/native/portable_editor_smoke.py target/ci-release/kiln-portable.tar.gz
+      - name: Accept clean Ubuntu runtime without source or Rust
+        run: python3 tools/test_clean_linux.py target/ci-release/kiln-portable.tar.gz --evidence target/ci-clean-linux-evidence
+      - name: Stage the accepted candidate and its records
+        run: |
+          mkdir target/ci-candidate
+          cp target/ci-release/kiln-portable.tar.gz target/ci-release/source.tar.gz target/ci-release/build-record.json target/ci-release/build-driver.py target/ci-candidate/
+          cp target/ci-release-comparison.json target/ci-candidate/comparison.json
+      - name: Upload accepted candidate
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: kiln-linux-candidate-${{ github.sha }}
+          path: target/ci-candidate/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain acceptance and failure evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: kiln-candidate-evidence-${{ github.sha }}
+          path: |
+            target/ci-release/logs/
+            target/ci-release/build-record.json
+            target/ci-release/result.json
+            target/ci-replay/logs/
+            target/ci-replay/build-record.json
+            target/ci-replay/result.json
+            target/ci-release-comparison.json
+            target/ci-material-evidence/
+            target/ci-physics-evidence/
+            target/ci-portable-evidence/
+            target/ci-clean-linux-evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+  attest:
+    name: Attest accepted candidate origin
+    needs: candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: kiln-linux-candidate-${{ github.sha }}
+          path: candidate
+      - name: Create GitHub build-origin attestation
+        id: provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: |
+            candidate/kiln-portable.tar.gz
+            candidate/source.tar.gz
+            candidate/build-record.json
+            candidate/build-driver.py
+            candidate/comparison.json
+      - name: Retain the attestation bundle
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: kiln-candidate-attestation-${{ github.sha }}
+          path: ${{ steps.provenance.outputs.bundle-path }}
+          if-no-files-found: error
+          retention-days: 14

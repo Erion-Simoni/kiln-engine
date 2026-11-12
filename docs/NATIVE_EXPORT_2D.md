@@ -8,9 +8,11 @@ Closing the panel does not stop supervision. Cancel requests cooperative shutdow
 after three seconds the editor kills/reaps the exporter and cleans private staging.
 Exiting the editor also reaps its export process.
 
-This checkpoint supports the current desktop host and matching CPU architecture.
-It was exercised on Linux x86_64. Browser export, cross-target toolchains,
-installers/signing and portable editor packages remain Task 8 work; unsupported
+The native target supports the current desktop host and matching CPU architecture.
+It was exercised on Linux x86_64. Browser export is now available through the
+Browser target; see [BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md). Cross-target
+toolchains and installers/signing remain Task 8 work; Linux/Windows portable
+candidate checkpoints are documented in [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md). Unsupported
 platforms/options fail rather than producing a placeholder success.
 
 ## Build tools once, then export without Rust
@@ -22,8 +24,8 @@ cargo build -p kiln-editor -p kiln-cli -p kiln-player --bins
 ```
 
 The editor defaults to `kiln-cli` and `kiln-player` beside its executable. Runtime
-tools can be changed in the panel. Distributions must ship matching prebuilt tools;
-the portable editor distribution is still pending. Export does not invoke Cargo.
+tools can be changed in the panel. Distributions must ship matching prebuilt tools
+and keep their verified installation intact. Export does not invoke Cargo.
 A `--no-default-features` player lacks required audio/fonts/gamepad support and is
 rejected by the runtime handshake. A release runtime can be selected instead of a
 debug one; exporting never silently rebuilds or changes its profile/features.
@@ -52,6 +54,15 @@ editor/receipt correlation token and normally need not be supplied manually.
 - `game` (`game.exe` on Windows): a copy of the matching prebuilt standalone player.
 - `assets.kar`: the normalized project manifest and relative project resources.
 - `export.json`: versioned job/project/runtime identity and expected file sizes.
+- `licenses/`: complete original project/dependency/Rust notices from the selected
+  runtime's verified portable installation, plus a runtime-bound hash manifest.
+
+The CLI and editor verify notice bytes, exact tree/receipt coverage and matching
+player hashes before reporting success. Damaged/incomplete installations fail
+without publishing an export. A loose developer player has no installation
+inventory: export warns explicitly and omits the verified notice claim. Include
+matching runtime notices before distributing such output. Keep your game's own
+asset notices too. See [the notice contract](PORTABLE_EDITOR.md#notices).
 
 Launch the game executable directly. By default it opens `assets.kar` beside
 itself, independent of the working directory. `--archive PATH` remains supported
@@ -99,6 +110,6 @@ Selected real captures/results are in [evidence/task8-native](evidence/task8-nat
 This is relocated/no-toolchain execution on the cloud runner, not a clean-machine
 OS/dependency test. Xvfb/software graphics and ALSA null output do not certify an
 Intel HD 520, real controller/speakers, Windows/macOS or a signed distribution.
-Debug runtime size measurements are not release-budget results. Full clean-machine
-native acceptance, browser export and portable editor/other-platform packaging
+Package-size goals are removed (ADR-0062); sizes are informational. Clean Ubuntu 24.04 container acceptance now passes (see [CLEAN_MACHINE_TEST.md](CLEAN_MACHINE_TEST.md)); physical-machine
+native acceptance and remaining other-platform distribution
 must still pass before Task 8 is complete. Task 9 has not started.

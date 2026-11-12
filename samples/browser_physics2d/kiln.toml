@@ -1,0 +1,241 @@
+id = "kiln-browser-physics"
+name = "Browser physics acceptance"
+version = "0.1.0"
+features = ["physics"]
+
+[window]
+width = 640
+height = 360
+
+[cameras.main]
+position = [0.0, 0.0]
+pixel_perfect = true
+[cameras.next]
+position = [0.0, 0.0]
+pixel_perfect = true
+
+[scenes.main]
+id = "main"
+name = "Physics playground"
+script = "scripts/game.ks"
+
+[[scenes.main.entities]]
+id = "floor"
+name = "floor"
+components = [
+  { type = "Transform", x = 320.0, y = 10.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [0.2, 0.35, 0.5, 1.0], width = 640.0, height = 20.0 },
+  { type = "Physics", body = { body_type = "Static", linear_velocity = [0.0, 0.0], angular_velocity = 0.0, gravity_scale = 60.0, can_sleep = true }, collider = { shape = { Rectangle = { half_width = 320.0, half_height = 10.0 } }, is_sensor = false, friction = 1.0, restitution = 0.0, density = 1.0, layer = 1, mask = 2 } },
+]
+
+[[scenes.main.entities]]
+id = "hero"
+name = "hero"
+components = [
+  { type = "Transform", x = 100.0, y = 120.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [0.1, 0.65, 1.0, 1.0], width = 20.0, height = 20.0 },
+  { type = "Physics", body = { body_type = "Dynamic", linear_velocity = [0.0, 0.0], angular_velocity = 0.0, gravity_scale = 60.0, can_sleep = true }, collider = { shape = { Circle = { radius = 10.0 } }, is_sensor = false, friction = 1.0, restitution = 0.0, density = 1.0, layer = 2, mask = 5 } },
+  { type = "Script", path = "scripts/hero.ks", properties = {} },
+]
+
+[[scenes.main.entities]]
+id = "sensor"
+name = "sensor"
+components = [
+  { type = "Transform", x = 100.0, y = 60.0, rotation = 0.0, scale = 1.0 },
+  { type = "Physics", body = { body_type = "Static", linear_velocity = [0.0, 0.0], angular_velocity = 0.0, gravity_scale = 60.0, can_sleep = true }, collider = { shape = { Rectangle = { half_width = 17.5, half_height = 20.0 } }, is_sensor = true, friction = 1.0, restitution = 0.0, density = 1.0, layer = 4, mask = 2 } },
+]
+
+[[scenes.main.entities]]
+id = "filtered"
+name = "filtered"
+components = [
+  { type = "Transform", x = 100.0, y = 100.0, rotation = 0.0, scale = 1.0 },
+  { type = "Physics", body = { body_type = "Static", linear_velocity = [0.0, 0.0], angular_velocity = 0.0, gravity_scale = 60.0, can_sleep = true }, collider = { shape = { Rectangle = { half_width = 10.0, half_height = 100.0 } }, is_sensor = false, friction = 1.0, restitution = 0.0, density = 1.0, layer = 8, mask = 8 } },
+]
+
+[[scenes.main.entities]]
+id = "mover"
+name = "mover"
+components = [
+  { type = "Transform", x = 300.0, y = 80.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [0.9, 0.65, 0.2, 1.0], width = 40.0, height = 10.0 },
+  { type = "Physics", body = { body_type = "Kinematic", linear_velocity = [30.0, 0.0], angular_velocity = 0.0, gravity_scale = 0.0, can_sleep = true }, collider = { shape = { Rectangle = { half_width = 20.0, half_height = 5.0 } }, is_sensor = false, friction = 1.0, restitution = 0.0, density = 1.0, layer = 1, mask = 2 } },
+]
+
+[[scenes.main.entities]]
+id = "anchor"
+name = "anchor"
+components = [
+  { type = "Transform", x = 450.0, y = 140.0, rotation = 0.0, scale = 1.0 },
+  { type = "Physics", body = { body_type = "Static", linear_velocity = [0.0, 0.0], angular_velocity = 0.0, gravity_scale = 60.0, can_sleep = true }, collider = { shape = { Circle = { radius = 4.0 } }, is_sensor = false, friction = 1.0, restitution = 0.0, density = 1.0, layer = 16, mask = 16 } },
+]
+
+[[scenes.main.entities]]
+id = "bob"
+name = "bob"
+components = [
+  { type = "Transform", x = 450.0, y = 100.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [0.8, 0.3, 0.75, 1.0], width = 10.0, height = 10.0 },
+  { type = "Physics", body = { body_type = "Dynamic", linear_velocity = [35.0, 0.0], angular_velocity = 0.0, gravity_scale = 60.0, can_sleep = true }, collider = { shape = { Circle = { radius = 5.0 } }, is_sensor = false, friction = 1.0, restitution = 0.0, density = 1.0, layer = 16, mask = 16 } },
+]
+
+[[scenes.main.entities]]
+id = "rope"
+name = "Distance joint"
+components = [
+ { type = "Joint", joint = { entity_a = "anchor", entity_b = "bob", joint_type = "Distance", anchor_a = [0.0, 0.0], anchor_b = [0.0, 0.0], reference_angle = 0.0, length = 40.0, lower_translation = 0.0, upper_translation = 0.0, enable_limit = false, motor_speed = 0.0, max_motor_torque = 0.0, enable_motor = false } },
+]
+[[scenes.main.entities]]
+id = "tiles"
+name = "Solid tile floor"
+components = [
+ { type = "Transform", x = 200.0, y = 20.0, rotation = 0.0, scale = 1.0 },
+ { type = "Tilemap", map = "solid" },
+]
+
+[[scenes.main.entities]]
+id = "tile_ball"
+name = "tile_ball"
+components = [
+  { type = "Transform", x = 210.0, y = 120.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [0.25, 0.95, 0.5, 1.0], width = 16.0, height = 16.0 },
+  { type = "Physics", body = { body_type = "Dynamic", linear_velocity = [0.0, 0.0], angular_velocity = 0.0, gravity_scale = 60.0, can_sleep = true }, collider = { shape = { Circle = { radius = 8.0 } }, is_sensor = false, friction = 1.0, restitution = 0.0, density = 1.0, layer = 2, mask = 1 } },
+]
+
+[[scenes.main.entities]]
+id = "hinge_anchor"
+name = "hinge_anchor"
+components = [
+ { type = "Transform", x = 520.0, y = 150.0, rotation = 0.0, scale = 1.0 },
+ { type = "Sprite", color = [0.8, 0.6, 0.4, 1.0], width = 10.0, height = 10.0 },
+ { type = "Physics", body = { body_type = "Static", linear_velocity = [0.0, 0.0], angular_velocity = 0.0, gravity_scale = 60.0, can_sleep = true }, collider = { shape = { Circle = { radius = 5.0 } }, is_sensor = false, friction = 1.0, restitution = 0.0, density = 1.0, layer = 32, mask = 32 } },
+]
+
+[[scenes.main.entities]]
+id = "hinge_bob"
+name = "hinge_bob"
+components = [
+ { type = "Transform", x = 520.0, y = 120.0, rotation = 0.0, scale = 1.0 },
+ { type = "Sprite", color = [0.8, 0.6, 0.4, 1.0], width = 10.0, height = 10.0 },
+ { type = "Physics", body = { body_type = "Dynamic", linear_velocity = [30.0, 0.0], angular_velocity = 0.0, gravity_scale = 60.0, can_sleep = true }, collider = { shape = { Circle = { radius = 5.0 } }, is_sensor = false, friction = 1.0, restitution = 0.0, density = 1.0, layer = 32, mask = 32 } },
+]
+
+[[scenes.main.entities]]
+id = "revolute_joint"
+name = "Revolute joint"
+components = [
+ { type = "Joint", joint = { entity_a = "hinge_anchor", entity_b = "hinge_bob", joint_type = "Revolute", anchor_a = [0.0, 0.0], anchor_b = [0.0, 30.0], reference_angle = 0.0, length = 30.0, lower_translation = -20.0, upper_translation = 20.0, enable_limit = false, motor_speed = 15.0, max_motor_torque = 5000.0, enable_motor = false } },
+]
+
+[[scenes.main.entities]]
+id = "slider_anchor"
+name = "slider_anchor"
+components = [
+ { type = "Transform", x = 580.0, y = 150.0, rotation = 0.0, scale = 1.0 },
+ { type = "Sprite", color = [0.5, 0.8, 0.9, 1.0], width = 10.0, height = 10.0 },
+ { type = "Physics", body = { body_type = "Static", linear_velocity = [0.0, 0.0], angular_velocity = 0.0, gravity_scale = 60.0, can_sleep = true }, collider = { shape = { Circle = { radius = 5.0 } }, is_sensor = false, friction = 1.0, restitution = 0.0, density = 1.0, layer = 64, mask = 64 } },
+]
+
+[[scenes.main.entities]]
+id = "slider"
+name = "slider"
+components = [
+ { type = "Transform", x = 580.0, y = 120.0, rotation = 0.0, scale = 1.0 },
+ { type = "Sprite", color = [0.5, 0.8, 0.9, 1.0], width = 10.0, height = 10.0 },
+ { type = "Physics", body = { body_type = "Dynamic", linear_velocity = [0.0, 0.0], angular_velocity = 0.0, gravity_scale = 60.0, can_sleep = true }, collider = { shape = { Circle = { radius = 5.0 } }, is_sensor = false, friction = 1.0, restitution = 0.0, density = 1.0, layer = 64, mask = 64 } },
+]
+
+[[scenes.main.entities]]
+id = "prismatic_joint"
+name = "Prismatic joint"
+components = [
+ { type = "Joint", joint = { entity_a = "slider_anchor", entity_b = "slider", joint_type = "Prismatic", anchor_a = [0.0, -30.0], anchor_b = [0.0, 0.0], reference_angle = 0.0, length = 30.0, lower_translation = -20.0, upper_translation = 20.0, enable_limit = true, motor_speed = 15.0, max_motor_torque = 5000.0, enable_motor = true } },
+]
+
+[scenes.next]
+id = "next"
+name = "Fresh physics world"
+script = "scripts/game.ks"
+
+[[scenes.next.entities]]
+id = "floor"
+name = "floor"
+components = [
+  { type = "Transform", x = 320.0, y = 110.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [0.4, 0.5, 0.2, 1.0], width = 640.0, height = 20.0 },
+  { type = "Physics", body = { body_type = "Static", linear_velocity = [0.0, 0.0], angular_velocity = 0.0, gravity_scale = 60.0, can_sleep = true }, collider = { shape = { Rectangle = { half_width = 320.0, half_height = 10.0 } }, is_sensor = false, friction = 1.0, restitution = 0.0, density = 1.0, layer = 1, mask = 2 } },
+]
+
+[[scenes.next.entities]]
+id = "hero"
+name = "hero"
+components = [
+  { type = "Transform", x = 100.0, y = 180.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [0.1, 0.65, 1.0, 1.0], width = 20.0, height = 20.0 },
+  { type = "Physics", body = { body_type = "Dynamic", linear_velocity = [0.0, 0.0], angular_velocity = 0.0, gravity_scale = 60.0, can_sleep = true }, collider = { shape = { Circle = { radius = 10.0 } }, is_sensor = false, friction = 1.0, restitution = 0.0, density = 1.0, layer = 2, mask = 1 } },
+]
+
+[action_map.actions.capture]
+id = "capture"
+name = "capture"
+bindings = [{ binding_type = { Key = "s" } }]
+
+[action_map.actions.checkpoint]
+id = "checkpoint"
+name = "checkpoint"
+bindings = [{ binding_type = { Key = "c" } }]
+
+[action_map.actions.restore]
+id = "restore"
+name = "restore"
+bindings = [{ binding_type = { Key = "l" } }]
+
+[action_map.actions.jump]
+id = "jump"
+name = "jump"
+bindings = [{ binding_type = { Key = "j" } }]
+
+[action_map.actions.next]
+id = "next"
+name = "next"
+bindings = [{ binding_type = { Key = "n" } }]
+
+[tilesets.solid]
+texture = "assets/solid.png"
+tile_size = [16, 16]
+columns = 1
+rows = 1
+solid = [true]
+[tilemaps.solid]
+id = "solid"
+name = "Solid tile"
+tile_size = [20.0, 20.0]
+[[tilemaps.solid.layers]]
+name = "floor"
+tileset = "solid"
+z = -1
+
+[tilemaps.solid.layers.chunks."0,0"]
+x = 0
+y = 0
+tiles = [0, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535]
+
+[ui]
+reference_size = [640.0, 360.0]
+initial_screen = "hud"
+[ui.screens.hud]
+name = "Physics controls"
+pause_game = false
+modal = false
+allow_cancel = false
+[[ui.screens.hud.widgets]]
+id = "help"
+kind = "Label"
+blocks_pointer = false
+text = "J jump | C checkpoint | L load | S snapshot | N next scene"
+font_size = 14.0
+text_align = [0.0, 0.0]
+[ui.screens.hud.widgets.layout]
+offset = [10.0, 10.0]
+size = [620.0, 28.0]

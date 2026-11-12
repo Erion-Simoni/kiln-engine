@@ -8,7 +8,7 @@ mesh/material types (`Mesh`, `Material`, `Vertex`, `SubMesh`, `MeshBounds`,
 `PrimitiveTopology`, `VertexFormat`, `AlphaMode`, `Model`, `MeshHandle`) to
 `kiln-core`. What remains for M29 is glTF import, depth buffer, perspective
 camera, frustum culling, the 3D editor scene view with gizmos, and the
-`3d`-off build-size check. See the "Prepare before M29" section below.
+`3d`-off feature-isolation check. See the "Prepare before M29" section below.
 This file replaces the old "M14+" section of `ROADMAP.md` and **supersedes**
 `ROADMAP_M14_PLUS.md` and `ROADMAP_DOWNLOADABLE_GAMES.md` (merged/renumbered).
 
@@ -26,8 +26,9 @@ chat: split into `Mxx-a` / `Mxx-b` and keep each half testable.
    native-only.
 2. **Core stays small.** 3D, networking, physics, audio, threads, XR are Cargo
    features and compile out. A 2D web game never pays for 3D code.
-3. **Every milestone ends with a demo scene** in `samples/` and a recorded
-   frame-time and size number in `BUDGETS.md`.
+3. **Every milestone ends with a demo scene** in `samples/` and recorded
+   frame-time/resource evidence in `BUDGETS.md`. Package-size observations are
+   optional and have no completion threshold (ADR-0062).
 4. **Profile before optimizing.** From M28 on, GPU timing exists, so
    performance claims need a measurement.
 5. **No new dependency without an ADR** (size, license, maintenance).
@@ -68,9 +69,9 @@ planned, verify these on the existing code. Fix gaps now; they get expensive lat
 - [ ] **Audio (M11):** device selection, hot-plug and sample-rate changes work
       on desktop.
       Deferred to M49 (ADR-0014): the engine opens the default device only.
-- [x] **Budgets (M12):** `BUDGETS.md` has a native player size budget (suggested
-      start: under 15 MB executable without assets, adjust after measuring) and
-      a startup budget (under 2 s to first frame).
+- [x] **Performance (M12):** `BUDGETS.md` retains the startup goal (under 2 s
+      to first frame). Package-size ceilings were removed by owner request
+      (ADR-0062); size observations are optional and never gate completion.
 - [x] **Input/settings:** window options exist in project settings (fullscreen,
       borderless, resolution, vsync, high-DPI, multi-monitor) (ADR-0015).
 - [ ] **M13 sample:** the "N minutes" placeholder is replaced with a real
@@ -363,7 +364,7 @@ mobile build has been produced.
 - [x] Measured speedup on 4+ cores recorded in `BUDGETS.md`.
 - [x] Web: Web Workers path works when the page is cross-origin isolated;
       automatic single-thread fallback otherwise.
-- [x] `threads` off: single-threaded build size and behavior unchanged.
+- [x] `threads` off: single-threaded behavior unchanged; package size is informational.
 
 **Verdict: Done** — the job system, the access sets and the numbers are
 in place. It is not yet used by a game.
@@ -419,9 +420,9 @@ items are testable and the 2D build is not regressed:
     builds on the existing engine-drawn scene view (ADR-0032) — decide how
     gizmos are drawn and how the viewport switches between 2D ortho and
     3D perspective.
-- [ ] **Size baseline recorded.** Measure the 2D web WASM size with `3d` off
-    now (`just size`), so the M29 acceptance "`3d` off: 2D web build size
-    unchanged" has a number to compare against.
+- [ ] **Feature isolation verified.** Confirm that optional 3D implementations
+    and dependencies are excluded when `3d` is off; no package-size gate
+    (owner request, ADR-0062).
 - [ ] **Old-hardware test target.** Pick a reference Low/Medium GPU and plan
     to test the 3D paths on it (not only the dev machine), per Principle 8.
 
@@ -433,12 +434,12 @@ items are testable and the 2D build is not regressed:
 - [ ] glTF 2.0 import (meshes, materials, textures, hierarchy) with meshopt.
 - [ ] Depth buffer, perspective camera, frustum culling.
 - [ ] 3D scene view in the editor with gizmos.
-- [ ] `3d` off: 2D web build size unchanged (measured).
+- [ ] `3d` off: optional 3D implementations/dependencies excluded.
 
 **Verdict: In progress** — `kiln-core` now has the feature-gated `3d` feature
 and mesh/material types (commit `4556431`); glTF import, depth buffer,
 perspective camera, frustum culling, 3D scene view with gizmos and the
-`3d`-off size check remain.
+`3d`-off feature-isolation check remain.
 ## M30 — PBR lighting (clustered forward)
 **Crates:** `kiln-render`.
 **Acceptance:**

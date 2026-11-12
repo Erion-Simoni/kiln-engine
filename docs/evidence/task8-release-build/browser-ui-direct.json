@@ -1,0 +1,30 @@
+{
+  "passed": true,
+  "exported_artifact": false,
+  "nested_deployment": false,
+  "preparation_does_not_advance": false,
+  "loading_failure_feedback": false,
+  "reload_retry": false,
+  "bootstrap_failure_feedback": false,
+  "controller_navigation": true,
+  "touch_once": true,
+  "audio": {
+    "music": true,
+    "sounds": 1,
+    "contexts": [
+      "running",
+      "running"
+    ],
+    "gains": [
+      0.25,
+      0.25
+    ]
+  },
+  "health": 66,
+  "saved_actor_x": 114,
+  "resumed_actor_x": 140,
+  "script_starts": 1,
+  "preferences_independent": true,
+  "quota_preserves_slot": true,
+  "corrupt_load_preserves_slot": true
+}

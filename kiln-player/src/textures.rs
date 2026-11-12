@@ -130,7 +130,9 @@ pub fn texture_paths(project: &Project) -> Vec<String> {
             paths.push(clip.texture.clone());
         }
     }
+    paths.extend(kiln_render::materials::texture_paths(project));
     paths.sort();
+    paths.dedup();
     paths
 }
 

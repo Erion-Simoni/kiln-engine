@@ -310,7 +310,9 @@ pub fn texture_paths(project: &Project) -> Vec<String> {
     for clip in project.animation_clips.values() {
         push(&clip.texture);
     }
+    paths.extend(kiln_render::materials::texture_paths(project));
     paths.sort();
+    paths.dedup();
     paths
 }
 

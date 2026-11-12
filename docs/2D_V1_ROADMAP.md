@@ -31,7 +31,7 @@ editor truth (engine-drawn scene view, PIE, undo/redo).
 | V1-4 | Web end-to-end export test automated (CI) | ✅ Done |
 | V1-5 | Clean machine run documented + tested | ✅ Done (results pending hardware) |
 | V1-6 | SDF font pipeline automated | ✅ Done |
-| V1-7 | Brotli WASM size under 1.5 MB | ✅ Done |
+| V1-7 | Former package-size goal | Removed by owner request (ADR-0062) |
 | V1-8 | Frame budget on reference Low/Medium GPU | ⏳ Phase G — needs hardware |
 | V1-9 | All remaining TODO_LIST.md 2D items complete | ✅ Done |
 | V1-10 | v0.5 gate re-verified | ⏳ Phase I — needs device testing |
@@ -50,8 +50,8 @@ editor truth (engine-drawn scene view, PIE, undo/redo).
 ### ✅ Phase C: Editor scene view post effects (V1-3)
 - C-1: Already implemented in `kiln-editor/src/app.rs` — post framebuffer + pipeline applied via `pipeline.apply()`
 
-### ✅ Phase D: Web end-to-end export test (V1-4, V1-7)
-- D-1: `wasm` CI job designed for `.github/workflows/ci.yml` — builds `kiln-web` for `wasm32-unknown-unknown --release`, runs `wasm-opt -Oz` + `brotli`, fails if >1.5 MB. Ready to add when workflows permission available. `docs/BUDGETS.md` updated.
+### ✅ Phase D: Web end-to-end export test (V1-4)
+- D-1: Browser build/Clippy/export/playback smoke tests are configured in `.github/workflows/ci.yml`. Package-size ceilings and size-failing CI are not goals (ADR-0062).
 
 ### ✅ Phase E: Clean machine run (V1-5)
 - E-1: `docs/CLEAN_MACHINE_TEST.md` already documents the full procedure

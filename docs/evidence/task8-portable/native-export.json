@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "authored_x": 88,
+  "saved_by_export": true,
+  "failure_preserves_previous_output": true,
+  "runtime_files": [
+    {
+      "path": "game",
+      "bytes": 86623744
+    },
+    {
+      "path": "assets.kar",
+      "bytes": 109324
+    }
+  ],
+  "relocated_export": "/tmp/kiln-relocated-_464wxe4/game folder",
+  "source_project_unavailable": true,
+  "rust_required_at_export": false,
+  "cancelled_from_ui": true
+}

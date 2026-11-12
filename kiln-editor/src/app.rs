@@ -671,7 +671,7 @@ impl EditorApp {
             let device = renderer.device();
             let queue = renderer.queue();
             let format = renderer.format();
-            let sr = SpriteRenderer::new(device, queue, format);
+            let sr = SpriteRenderer::new(device, queue, renderer.scene_format());
             let overlay = SpriteRenderer::new(device, queue, format);
             let er = egui_wgpu::Renderer::new(device, format, None, 1, false);
             (sr, overlay, er)
@@ -2544,10 +2544,6 @@ impl EditorApp {
                         self.dock_state.add_window(vec![Tab::ShaderEditor]);
                         ui.close_menu();
                     }
-                    if ui.button("Shader Editor").clicked() {
-                        self.dock_state.add_window(vec![Tab::ShaderEditor]);
-                        ui.close_menu();
-                    }
                     if ui.button("UI Layout Editor").clicked() {
                         self.dock_state.add_window(vec![Tab::UiLayoutEditor]);
                         ui.close_menu();
@@ -3117,6 +3113,23 @@ impl EditorApp {
                 let origin_x = viewport.x;
                 let origin_y = viewport.y;
 
+                if let Some(project) = &self.current_project {
+                    let previous = gpu
+                        .scene_view_sprite_renderer
+                        .material_error()
+                        .map(str::to_owned);
+                    if let Err(error) = pollster::block_on(
+                        gpu.scene_view_sprite_renderer.prepare_project_materials(
+                            gpu.renderer.device(),
+                            project,
+                            |p| gpu.scene_textures.get(p).map(|t| t.id),
+                        ),
+                    ) {
+                        if previous.as_ref() != Some(&error) {
+                            log::warn!("{error}");
+                        }
+                    }
+                }
                 // Queue the world: background, grid, tilemaps, sprites.
                 gpu.scene_view_sprite_renderer.begin_frame();
                 gpu.scene_view_sprite_renderer.push(scene_view::background(
@@ -3132,9 +3145,11 @@ impl EditorApp {
                 let camera = &scene_camera;
                 let view_bounds = camera.view_bounds();
                 let _ = kiln_runtime::update_global_transforms(&mut self.world);
-                for (texture, instance) in
-                    kiln_runtime::visual::collect_scene_draws(&self.world, view_bounds)
-                {
+                for (texture, instance) in kiln_runtime::visual::collect_scene_draws_with_materials(
+                    &self.world,
+                    view_bounds,
+                    |name| gpu.scene_view_sprite_renderer.material_id(name),
+                ) {
                     gpu.scene_view_sprite_renderer
                         .push_textured(texture, instance);
                 }
@@ -6032,9 +6047,22 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 });
             }
             Tab::ShaderEditor => {
+                if self.editing_locked() {
+                    ui.disable();
+                }
                 ui.vertical(|ui| {
                     if let Some(project) = self.current_project.as_mut() {
+                        let before =
+                            serde_json::to_value((&project.shaders, &project.materials)).ok();
                         crate::shader_editor::render_shader_editor(ui, self.shader_editor, project);
+                        if before
+                            != serde_json::to_value((&project.shaders, &project.materials)).ok()
+                        {
+                            self.project_requests.push(ProjectRequest::RefreshVisuals);
+                        }
+                        if let Some(error) = self.gpu.scene_view_sprite_renderer.material_error() {
+                            ui.colored_label(egui::Color32::RED, error);
+                        }
                     } else {
                         ui.heading("Shader Editor");
                         ui.add_space(8.0);

@@ -1,0 +1,3393 @@
+{
+  "artifacts": [
+    {
+      "bytes": 6315552,
+      "path": "kiln-cli",
+      "sha256": "af8a7d3723c3bef362c8e38d8664e4b5ec6187b2a611b49e91914ccf113d7290"
+    },
+    {
+      "bytes": 13971360,
+      "path": "kiln-editor",
+      "sha256": "a2063644e817e27d15597b89eddc9e4506407cae64776301de7282c6f9723898"
+    },
+    {
+      "bytes": 11068440,
+      "path": "kiln-player",
+      "sha256": "9956784f62cf2fa6feaef886d0f4a94f790f51c6dbea2e75f639730c7144ab94"
+    },
+    {
+      "bytes": 116070,
+      "path": "web-runtime/kiln_web.js",
+      "sha256": "983741e85ac36e6826b1ca8eaf941de5e61c9bb4adf82eb7171a458d07aa8bc1"
+    },
+    {
+      "bytes": 6113096,
+      "path": "web-runtime/kiln_web_bg.wasm",
+      "sha256": "763faf82584d250bda36a07ddf26bb49d46ff17f2e015482e58a45c78e944e7c"
+    },
+    {
+      "bytes": 388,
+      "path": "web-runtime/runtime.json",
+      "sha256": "4a74d491f68a4076df6ee094c651cd0e210e98165f81d8c581a2ea24ef211960"
+    }
+  ],
+  "build_settings": {
+    "PKG_CONFIG_PATH": "/workspace/.kiln-tools/sysroot/usr/lib/x86_64-linux-gnu/pkgconfig",
+    "PKG_CONFIG_SYSROOT_DIR": "/workspace/.kiln-tools/sysroot"
+  },
+  "builder_sha256": "645a28f9dd3258105cf1538a7d387f6962fea40588ccbba9b1155b8f3636cfb6",
+  "commands": [
+    {
+      "argv": [
+        "cargo",
+        "build",
+        "--offline",
+        "--locked",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--release",
+        "-p",
+        "kiln-editor",
+        "-p",
+        "kiln-cli",
+        "-p",
+        "kiln-player",
+        "--bins"
+      ],
+      "log": "logs/native.log",
+      "log_sha256": "7976242b63a9a67fa0efaf858ab272b848a7289407e94a4627c94956ef6b59c8",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "argv": [
+        "cargo",
+        "build",
+        "--offline",
+        "--locked",
+        "--target",
+        "wasm32-unknown-unknown",
+        "--release",
+        "-p",
+        "kiln-web"
+      ],
+      "log": "logs/wasm.log",
+      "log_sha256": "3613956d0328eec92405c4dfa846c82f257cc5dd6ab763e54899019a24d199f2",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "argv": [
+        "wasm-bindgen",
+        "/workspace/kiln-engine/target/task8-replayed-release/target/wasm32-unknown-unknown/release/kiln_web.wasm",
+        "--target",
+        "web",
+        "--out-dir",
+        "/workspace/kiln-engine/target/task8-replayed-release/web-runtime"
+      ],
+      "log": "logs/bindgen.log",
+      "log_sha256": "3e3688a2f389097516e738e6b593fc5ea7adfa959b4967fc269a0c878a6441d6",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "argv": [
+        "/workspace/kiln-engine/target/task8-replayed-release/target/x86_64-unknown-linux-gnu/release/kiln-cli",
+        "web-runtime",
+        "--input",
+        "/workspace/kiln-engine/target/task8-replayed-release/web-runtime"
+      ],
+      "log": "logs/runtime-prepare.log",
+      "log_sha256": "6ab2ae31096b7678a12f204bbdb7a4585f50c66e142cf94e381c6689852840e2",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "argv": [
+        "cargo",
+        "metadata",
+        "--offline",
+        "--locked",
+        "--format-version",
+        "1",
+        "--filter-platform",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "log": "logs/metadata-native.log",
+      "log_sha256": "fd7cc1a36301ec38cc235ee82c14d79e99578e5919609dd44197c6d2cb2926d0",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "argv": [
+        "cargo",
+        "metadata",
+        "--offline",
+        "--locked",
+        "--format-version",
+        "1",
+        "--filter-platform",
+        "wasm32-unknown-unknown"
+      ],
+      "log": "logs/metadata-wasm.log",
+      "log_sha256": "11045bc3c716dc40fe8d2a260b404bb3fa6490aad27102a22bb46fdd444ce3d0",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "configuration_hashes": [],
+  "host": "x86_64-unknown-linux-gnu",
+  "kind": "unsigned-local-build",
+  "limitations": "Unsigned local execution record; not hermetic, signed or byte-reproducibility proof.",
+  "profile": "release",
+  "rebuild_of": "0044c2a27117602a5c416010964a345110a2948e5e99145e9b5584f18f6e92eb",
+  "schema": 1,
+  "source": {
+    "archive_sha256": "966223e8534b274670c62bb0d1e139741bd5781ee48fdf6a08f0449aec9914e0",
+    "cargo_lock_sha256": "042a1a29202fab2e8940632cbc9f23f17e88a42572f9b2930e8d303e8de0ac17",
+    "dirty": true,
+    "files": [
+      {
+        "bytes": 58,
+        "executable": false,
+        "path": ".cursor/rules/project.mdc",
+        "sha256": "bbf8fb7e8710eab4dd1a50eaf03c2f171e21732b7b8f0755e6d6519ea022c0f4"
+      },
+      {
+        "bytes": 139,
+        "executable": false,
+        "path": ".gitattributes",
+        "sha256": "ffef8d23acdaddc5b74289e477357fc4fb8df00f50497714d2bdd7dbc8f4003e"
+      },
+      {
+        "bytes": 12605,
+        "executable": false,
+        "path": ".github/workflows/ci.yml",
+        "sha256": "a4c7767fca5eff52636d48daf0f9372671ae0058d6514d8dc690e38be2f01871"
+      },
+      {
+        "bytes": 397,
+        "executable": false,
+        "path": ".gitignore",
+        "sha256": "b2651b4573ad66d8db694a93879a7da17e6793dd2635d65ead9a3d195a994190"
+      },
+      {
+        "bytes": 58,
+        "executable": false,
+        "path": ".windsurf/rules/project.md",
+        "sha256": "bbf8fb7e8710eab4dd1a50eaf03c2f171e21732b7b8f0755e6d6519ea022c0f4"
+      },
+      {
+        "bytes": 3707,
+        "executable": false,
+        "path": "AGENTS.md",
+        "sha256": "0593b006e241d804e6b4ab691eca5c43229e7bbc1a9fb04ad5c9d932884c2076"
+      },
+      {
+        "bytes": 58,
+        "executable": false,
+        "path": "CLAUDE.md",
+        "sha256": "bbf8fb7e8710eab4dd1a50eaf03c2f171e21732b7b8f0755e6d6519ea022c0f4"
+      },
+      {
+        "bytes": 160486,
+        "executable": false,
+        "path": "Cargo.lock",
+        "sha256": "042a1a29202fab2e8940632cbc9f23f17e88a42572f9b2930e8d303e8de0ac17"
+      },
+      {
+        "bytes": 2890,
+        "executable": false,
+        "path": "Cargo.toml",
+        "sha256": "a4e8eca6eb9d02bf33bebc5966d5ba3c6bf7c21aa8974aaabea741b5379e128a"
+      },
+      {
+        "bytes": 58,
+        "executable": false,
+        "path": "GEMINI.md",
+        "sha256": "bbf8fb7e8710eab4dd1a50eaf03c2f171e21732b7b8f0755e6d6519ea022c0f4"
+      },
+      {
+        "bytes": 3088,
+        "executable": false,
+        "path": "README.md",
+        "sha256": "4ef3b1fe64f0e0ef8196378b7b8103cda2fe8fb48111e04c44b870617e511055"
+      },
+      {
+        "bytes": 35332,
+        "executable": false,
+        "path": "ROADMAP_FULL_M14_PLUS.md",
+        "sha256": "93f9474da0d1604cd1c799c8393278c770537dffafae7b93947d0e79f3fb7fa5"
+      },
+      {
+        "bytes": 26,
+        "executable": false,
+        "path": "assets/.gitkeep",
+        "sha256": "1b78969373cc7312e1b9e70557c856e4ccf7293adb4bddf5959a92483d2d6d2f"
+      },
+      {
+        "bytes": 19,
+        "executable": false,
+        "path": "assets/test.txt",
+        "sha256": "7b8ce520d606b4a78c841d23bd9f5103b622cbaedbfd409e60c4176e9b74207f"
+      },
+      {
+        "bytes": 387,
+        "executable": false,
+        "path": "cargo-dist.toml",
+        "sha256": "fa233b316f7b5057c45cefb6b03f7eb06dcda4005692ae3faa0b728c3498ded9"
+      },
+      {
+        "bytes": 477,
+        "executable": false,
+        "path": "demo/Cargo.toml",
+        "sha256": "f014f9349fa3ef1f1ebf4e5855cc93f130dab5e1af862aba67390fd259ab7fb8"
+      },
+      {
+        "bytes": 10398,
+        "executable": false,
+        "path": "demo/src/main.rs",
+        "sha256": "8efdbc9179139c9322e7f81bd553db0fd28f982137e05e56822a09b6ca47c008"
+      },
+      {
+        "bytes": 376,
+        "executable": false,
+        "path": "demo/src/shader.wgsl",
+        "sha256": "f2c321867176d810ae0e9d6b64b35965628530c5fd55ddd0ae1ce358fea40e79"
+      },
+      {
+        "bytes": 75043,
+        "executable": false,
+        "path": "docs/2D_COMPLETION_PLAN.md",
+        "sha256": "476b8f7400fed3fb3d95a0fdd802a26db5d290be7a81899a0f923e8b4722d58e"
+      },
+      {
+        "bytes": 7418,
+        "executable": false,
+        "path": "docs/2D_GATE_VERIFICATION.md",
+        "sha256": "ca5d424966bcdb60c8451f806ec157cb32370763692b7498ce7dbdbef5090b41"
+      },
+      {
+        "bytes": 8215,
+        "executable": false,
+        "path": "docs/2D_READINESS_AUDIT.md",
+        "sha256": "96c05e5016121b8d4026c115f988ef41110060174fcda7314538494c3dcb70f9"
+      },
+      {
+        "bytes": 4144,
+        "executable": false,
+        "path": "docs/2D_V1_ROADMAP.md",
+        "sha256": "e78e0301dc3b7acfb508acd684814a66edf608d031ad5fe5b43a1077c7e05639"
+      },
+      {
+        "bytes": 5156,
+        "executable": false,
+        "path": "docs/ANDROID.md",
+        "sha256": "9fd14c44de8878e00d206fb4a18bef472cd767453a8106f420026ed0fc342ed0"
+      },
+      {
+        "bytes": 5822,
+        "executable": false,
+        "path": "docs/ANIMATION_INTEGRATION.md",
+        "sha256": "bc0e258a1c9949a3df1fa60e8f7cbd62e5c8d07429b177a1563b21f637c3d3f2"
+      },
+      {
+        "bytes": 18715,
+        "executable": false,
+        "path": "docs/API_REFERENCE.md",
+        "sha256": "10138f6cf5d318ef1e090918558957eb306ec9ffa083249f2bb327d28aecd296"
+      },
+      {
+        "bytes": 9217,
+        "executable": false,
+        "path": "docs/ARCHITECTURE.md",
+        "sha256": "f8948c925b3d78456859e00864b7d4d82a0cf2e936f03bba8905abb24382a614"
+      },
+      {
+        "bytes": 6013,
+        "executable": false,
+        "path": "docs/AUDIO_AUTHORING_2D.md",
+        "sha256": "5a8cb2362876ed22f2ecdde16e5d9ce8998761d5133f2766db076286caa52a6f"
+      },
+      {
+        "bytes": 5007,
+        "executable": false,
+        "path": "docs/AUDIO_INTEGRATION.md",
+        "sha256": "e3d48e894f518d9be873518792e78450716bff62a102c1514929b110ad8f2b6e"
+      },
+      {
+        "bytes": 6021,
+        "executable": false,
+        "path": "docs/BROWSER_EXPORT_2D.md",
+        "sha256": "e85db54c57f3fcb7fa9092773ae2325bf8bf4f88fb287ec58be67637f5a6614d"
+      },
+      {
+        "bytes": 4805,
+        "executable": false,
+        "path": "docs/BROWSER_PHYSICS_2D.md",
+        "sha256": "15555c3674e1b9234970ca5578e4e73aea2eaeca9f045e6719cd5d6631b4efb3"
+      },
+      {
+        "bytes": 19044,
+        "executable": false,
+        "path": "docs/BUDGETS.md",
+        "sha256": "b8bd10a0b27ddf83a26c19ad66b19201ea9f80f5f23bbd4fcdc252b51e9b8be6"
+      },
+      {
+        "bytes": 4140,
+        "executable": false,
+        "path": "docs/CLEAN_MACHINE_TEST.md",
+        "sha256": "2240e2f8121e9abfa885b5bbf1fd0545fb86460b96f52e6a58b4520afb9bbfcc"
+      },
+      {
+        "bytes": 92348,
+        "executable": false,
+        "path": "docs/DECISIONS.md",
+        "sha256": "30eb6897e6d405bc8526b61e12d5bff4ba49bc9567ee13d241e982dd4d6128a0"
+      },
+      {
+        "bytes": 4350,
+        "executable": false,
+        "path": "docs/EDITOR_DESIGN.md",
+        "sha256": "713cd9fa3f3fdd57ff98394f24dd5e32610c8d56415675ebd3e6b3ec40f1fa44"
+      },
+      {
+        "bytes": 4093,
+        "executable": false,
+        "path": "docs/EDITOR_ROADMAP.md",
+        "sha256": "d91a15f91989e71e6f9ccab6e82de5ac36acea29efa4f69810550e8a80357bf2"
+      },
+      {
+        "bytes": 5522,
+        "executable": false,
+        "path": "docs/ENGINE_OVERVIEW.md",
+        "sha256": "d5f320a1a5620c3da28f5438132663ebee52bf414a59e9d5df92752751846426"
+      },
+      {
+        "bytes": 9170,
+        "executable": false,
+        "path": "docs/FIX_EDITOR_PLAN.md",
+        "sha256": "e14f539a459768642b19ee19f4e2bf6badb237cdc5d1e88c4ea0f02069a14e24"
+      },
+      {
+        "bytes": 6589,
+        "executable": false,
+        "path": "docs/GAME_SAVING_2D.md",
+        "sha256": "8bf09c9d8cc7dd5b1629da6e3170e6514bb476ff15d1e3b0b8074f92855b3aea"
+      },
+      {
+        "bytes": 6568,
+        "executable": false,
+        "path": "docs/GETTING_STARTED.md",
+        "sha256": "77cde6c14a36af5239d6ec8ed8ad9b521da366887010e0e540b825dcfcf5e302"
+      },
+      {
+        "bytes": 9570,
+        "executable": false,
+        "path": "docs/IOS.md",
+        "sha256": "4fdde91eeffba34eb5046bccc56804359afbab28ebe7b0d9d2a20bddd58ee47f"
+      },
+      {
+        "bytes": 17171,
+        "executable": false,
+        "path": "docs/KILNSCRIPT.md",
+        "sha256": "3d05a4660a6af581a7847cd9d786e941b7841f4613c1bfa45e30052c2c631d38"
+      },
+      {
+        "bytes": 28667,
+        "executable": false,
+        "path": "docs/KILN_2D_V1_ROADMAP.md",
+        "sha256": "ea0395bf008469efd37909c5bf1bfec3f14be734c8041243aa9f9493d82ef4b7"
+      },
+      {
+        "bytes": 2805,
+        "executable": false,
+        "path": "docs/M29_BASELINE_AND_HARDWARE.md",
+        "sha256": "0d01a3f52d5c51cf0f5ff6df4c3a6f055d24f32e675ac9694bc556319bf8cc25"
+      },
+      {
+        "bytes": 3912,
+        "executable": false,
+        "path": "docs/M29_EDITOR_3D_PLAN.md",
+        "sha256": "03ab2dc750cfe202c5be6ef514afba806f4acbcdbe309006ad85abb2a5fd8469"
+      },
+      {
+        "bytes": 1921,
+        "executable": false,
+        "path": "docs/M29_FEATURE_GATE_VERIFICATION.md",
+        "sha256": "fe649e4aa66712cce23e8558c022ce9e4a079c8e920bc4c7ca3822c5843706f3"
+      },
+      {
+        "bytes": 3633,
+        "executable": false,
+        "path": "docs/M29_RENDERER_PLAN.md",
+        "sha256": "2db3f5475a51e0627799d83a5d080add1a33fb96d0671f8f3eeff0552ab941e1"
+      },
+      {
+        "bytes": 9352,
+        "executable": false,
+        "path": "docs/M2_WEB_GAME_LOOP.md",
+        "sha256": "1f4b7f7c00f4ef41cbd356385ba8811571e18e01ec16d61876d227cf69547f90"
+      },
+      {
+        "bytes": 6200,
+        "executable": false,
+        "path": "docs/NATIVE_EXPORT_2D.md",
+        "sha256": "fc4285e62db628b889ed656e536bf21f888a6c5227fb8860b5a1e48c27440493"
+      },
+      {
+        "bytes": 12983,
+        "executable": false,
+        "path": "docs/PACKAGING.md",
+        "sha256": "f2339bfdef81d3c557eb0c8f891d9199ae758bbbe086b25d58cac6dbfc2ab37d"
+      },
+      {
+        "bytes": 5972,
+        "executable": false,
+        "path": "docs/PHYSICS_2D.md",
+        "sha256": "e4b1af8be77e3cdae337e6f403d47e23c85cde7a6c48f0deb0deeef7c3ed4947"
+      },
+      {
+        "bytes": 5513,
+        "executable": false,
+        "path": "docs/PHYSICS_INTEGRATION.md",
+        "sha256": "5a362cc5a1b34809ba207de0e339c0da588904decc996ede82354fa130b9467f"
+      },
+      {
+        "bytes": 8582,
+        "executable": false,
+        "path": "docs/PORTABLE_EDITOR.md",
+        "sha256": "2a49e7be660a1ff3a056b5e03720c667caa3c48814b7c1ae9c70e74cac505c1f"
+      },
+      {
+        "bytes": 2337,
+        "executable": false,
+        "path": "docs/PROGRESS_F6_NEXT.md",
+        "sha256": "8c6a775d42c6e72beaddcfcb2ea58d427fc8a822f6d0a2966b29cfaa42b123e4"
+      },
+      {
+        "bytes": 7676,
+        "executable": false,
+        "path": "docs/PROJECT_FORMAT.md",
+        "sha256": "1a7173cee9edb15925a5707b8a2552d5e9a2550f42d352704d5501b17f211b6c"
+      },
+      {
+        "bytes": 15768,
+        "executable": false,
+        "path": "docs/ROADMAP.md",
+        "sha256": "166ba39dee71132ac443ce4e550bd4b3d477b5c069914337ee3db136e0cd1347"
+      },
+      {
+        "bytes": 2440,
+        "executable": false,
+        "path": "docs/SDF_TEXT.md",
+        "sha256": "62f22e8b3448fa927870ae3759959a8101f894774dca28efc4a2b3af0ec1eb14"
+      },
+      {
+        "bytes": 5722,
+        "executable": false,
+        "path": "docs/SPRITE_MATERIALS_2D.md",
+        "sha256": "60e9522021cb42c2e247d843683a47a04262de07517b5052be0f9e4b8fcbe0e2"
+      },
+      {
+        "bytes": 8296,
+        "executable": false,
+        "path": "docs/STATE.md",
+        "sha256": "51e33b7244bf57295b7a086e259bf8f86ee63f97f46603a060c7f0e27adb4d1b"
+      },
+      {
+        "bytes": 2122,
+        "executable": false,
+        "path": "docs/SUMMARY.md",
+        "sha256": "fd6acc15439e509e4e34bed2e7926488029479e0889603aa4cdb8d62a638ca4c"
+      },
+      {
+        "bytes": 4178,
+        "executable": false,
+        "path": "docs/TILEMAPS.md",
+        "sha256": "5fd99fdad16c1210ca42b54f3aa90858816a64d593d46934c0d8c5bd6079412a"
+      },
+      {
+        "bytes": 1813,
+        "executable": false,
+        "path": "docs/TODO_LIST.md",
+        "sha256": "659a5f684bf6fd6d1a941812301207ce71cbb675054718a0c921d8e8027083c2"
+      },
+      {
+        "bytes": 9878,
+        "executable": false,
+        "path": "docs/TUTORIAL.md",
+        "sha256": "ba050434bac5853db261530e30b07b916b5739719e53f291fa0320499d92c1f1"
+      },
+      {
+        "bytes": 8902,
+        "executable": false,
+        "path": "docs/UI_AUTHORING_2D.md",
+        "sha256": "ae4799395979f759c0b366dbc70a7a32088489bcc990b3a4a93ccc764ac566ce"
+      },
+      {
+        "bytes": 5823,
+        "executable": false,
+        "path": "docs/UI_INTEGRATION.md",
+        "sha256": "7df92cc9a69d7a6ee21b623c16302d6d8d84c62914e51cd77fef9c40c81bdd9e"
+      },
+      {
+        "bytes": 5897,
+        "executable": false,
+        "path": "docs/VFX_INTEGRATION.md",
+        "sha256": "c2dc481e4d4fdd65736776b7968f5d809eeb558f05c731bb482aaf754a3b8e93"
+      },
+      {
+        "bytes": 8528,
+        "executable": false,
+        "path": "docs/VISUAL_AUTHORING_2D.md",
+        "sha256": "df74e87cad3df19019dfa5aedf488fd64e601ac8ddae73ede258cfa2ea166494"
+      },
+      {
+        "bytes": 2926,
+        "executable": false,
+        "path": "docs/WEB_EXPORT_TESTING.md",
+        "sha256": "2f2da7a0256db542070abf9d28c25f1f2dcc158984cbbcd55102bccc27000a4d"
+      },
+      {
+        "bytes": 890,
+        "executable": false,
+        "path": "docs/book.toml",
+        "sha256": "f6b0590e6ea854a356d67442657bd33c9de70e8b0e5312b67d0c3b782545f681"
+      },
+      {
+        "bytes": 79744,
+        "executable": false,
+        "path": "docs/evidence/editor-design/2d_editor.png",
+        "sha256": "5d7fa58ff3102c931486fa61336c0c2b7deaa8bfc1bd692be8246b4f1c486d52"
+      },
+      {
+        "bytes": 139799,
+        "executable": false,
+        "path": "docs/evidence/editor-design/3d_orbit.png",
+        "sha256": "ad6ae3e945b8f80f6e1d558f1f2c954ed96c3b5052bea6414fe29143e6f262bb"
+      },
+      {
+        "bytes": 141977,
+        "executable": false,
+        "path": "docs/evidence/editor-design/3d_preview.png",
+        "sha256": "b506879cf762afbb8b02d162700d252a9f077bd9c0295497758c60eeb074001b"
+      },
+      {
+        "bytes": 1111,
+        "executable": false,
+        "path": "docs/evidence/editor-design/README.md",
+        "sha256": "07383667456b6b27a0951ef4058ba021205d8c4fef47cbe7f59821cff229c4a0"
+      },
+      {
+        "bytes": 60951,
+        "executable": false,
+        "path": "docs/evidence/editor-design/play_paused.png",
+        "sha256": "06cd6830a7b5043ff15f9881dd62643a7abffda2dfb4e2d8b59d63cf5f2022ed"
+      },
+      {
+        "bytes": 301,
+        "executable": false,
+        "path": "docs/evidence/editor-design/result.json",
+        "sha256": "43b8a56d0878a37867b44b5b49c1b08a89f986de76706a58ca313e6103f8d61b"
+      },
+      {
+        "bytes": 2133,
+        "executable": false,
+        "path": "docs/evidence/task7-complete/README.md",
+        "sha256": "e1eefb75ea246b7569d930ef5e3fa6815bab1caac37d93d808df058c76e3b484"
+      },
+      {
+        "bytes": 12992,
+        "executable": false,
+        "path": "docs/evidence/task7-complete/browser-load-error.png",
+        "sha256": "c13034fab508d4dffeba1156c68b641d7c31ac3c1c56730fc1578ac82e44db03"
+      },
+      {
+        "bytes": 426,
+        "executable": false,
+        "path": "docs/evidence/task7-complete/browser-result.json",
+        "sha256": "d787f0d09d93c3873605cfb2d169c66c65bcd4eb6e4041a8a693062349e39dc5"
+      },
+      {
+        "bytes": 15141,
+        "executable": false,
+        "path": "docs/evidence/task7-complete/browser-save-error.png",
+        "sha256": "daaf265a3f62f9aba32b2306425bd4f6927fd0b13836787b2cb88b3dd6d5c9cb"
+      },
+      {
+        "bytes": 15615,
+        "executable": false,
+        "path": "docs/evidence/task7-complete/browser-saved-pause.png",
+        "sha256": "a84f83cd0a196021e821310d1baab31e08258162fe0bfd88c82bf939d00b1b0c"
+      },
+      {
+        "bytes": 12598,
+        "executable": false,
+        "path": "docs/evidence/task7-complete/browser-settings.png",
+        "sha256": "12e8fa680ac2756ba53d89fd7710bda8ae1a159c9354ac67790183345eec65e0"
+      },
+      {
+        "bytes": 80515,
+        "executable": false,
+        "path": "docs/evidence/task7-complete/editor-label-dragged.png",
+        "sha256": "196670497c74c77584100da82ad2171692c59134d6e8db3e72795d877e96288a"
+      },
+      {
+        "bytes": 186,
+        "executable": false,
+        "path": "docs/evidence/task7-complete/editor-result.json",
+        "sha256": "205e1899b61d52102e45af9fe4435ff1951aedb9066e5830aeb1eb2fb8bbaf63"
+      },
+      {
+        "bytes": 70553,
+        "executable": false,
+        "path": "docs/evidence/task7-complete/editor-resumed-hud.png",
+        "sha256": "708b728a1e23c082ed2cab86494f140be7d9bf5c0e3fe78676d4b36d6ecf728d"
+      },
+      {
+        "bytes": 167,
+        "executable": false,
+        "path": "docs/evidence/task7-complete/player-kar-result.json",
+        "sha256": "b0ef1efb8a1d3d06c9119beb601ce8795af067222425d3188fa01e79192f8b32"
+      },
+      {
+        "bytes": 11218,
+        "executable": false,
+        "path": "docs/evidence/task7-complete/player-kar-resume.png",
+        "sha256": "5a11f077b4213732c4a85910dffe072dc1e5ab7779579ee50e4c10e6f8e1cf4b"
+      },
+      {
+        "bytes": 8075,
+        "executable": false,
+        "path": "docs/evidence/task7-ui/game_over.png",
+        "sha256": "e6a3110c865e0c7c473b24b5e32db1391a5da5d85058259417a5799e51035247"
+      },
+      {
+        "bytes": 9203,
+        "executable": false,
+        "path": "docs/evidence/task7-ui/pause.png",
+        "sha256": "7ff1ace0b857d5574f2ab35239acc5493f059c0711206090466bdb582a00a18e"
+      },
+      {
+        "bytes": 8980,
+        "executable": false,
+        "path": "docs/evidence/task7-ui/settings_changed.png",
+        "sha256": "4ffa53323281949d735bd7909f4a8e2bf829978870255c7dd78f49e3cad8ab40"
+      },
+      {
+        "bytes": 7518,
+        "executable": false,
+        "path": "docs/evidence/task7-ui/title.png",
+        "sha256": "ea6e9e218e4c58f166766a1bd640f67dc61a0d4ccf694acd14f0d008e669a573"
+      },
+      {
+        "bytes": 2498,
+        "executable": false,
+        "path": "docs/evidence/task8-browser/README.md",
+        "sha256": "8cc571a58bf3b0007004be6a68ff432a024a0d70d8f9fafb941485a5d94a5181"
+      },
+      {
+        "bytes": 13092,
+        "executable": false,
+        "path": "docs/evidence/task8-browser/asset-load-error.png",
+        "sha256": "e0cfe4daea2587d1de9b10a7acf0f74c78538b83066c132b9819777c91265701"
+      },
+      {
+        "bytes": 622,
+        "executable": false,
+        "path": "docs/evidence/task8-browser/browser-result.json",
+        "sha256": "4efa674dbda452c49f9b3ddd70cf4f9e8340a4d9ec23c20888141732662c2351"
+      },
+      {
+        "bytes": 99626,
+        "executable": false,
+        "path": "docs/evidence/task8-browser/editor-export-verified.png",
+        "sha256": "923bda04b36acf58a0b6de8226ff8aca12b1f7086a50a76263404d91f3311e78"
+      },
+      {
+        "bytes": 92475,
+        "executable": false,
+        "path": "docs/evidence/task8-browser/editor-output-preserved.png",
+        "sha256": "c1435a72ebe53777c346478f5d9ab5186cbe9efa78b2b3a154d64796d893a769"
+      },
+      {
+        "bytes": 1246,
+        "executable": false,
+        "path": "docs/evidence/task8-browser/editor-result.json",
+        "sha256": "62ffd027ac6a819bdbfdac479c6442b65176152da70ea70f027b24feca643bfb"
+      },
+      {
+        "bytes": 13723,
+        "executable": false,
+        "path": "docs/evidence/task8-browser/loader-error.png",
+        "sha256": "ba4b5fbcd3e90224ec6400d534c8ee5e2a5ab52f33ee6656e2f6f257aa05974a"
+      },
+      {
+        "bytes": 10372,
+        "executable": false,
+        "path": "docs/evidence/task8-browser/loading.png",
+        "sha256": "704e903af539c45057ca31f5aae034e87ee8ac37d5ed4c3cc3044efcec261b9a"
+      },
+      {
+        "bytes": 12602,
+        "executable": false,
+        "path": "docs/evidence/task8-browser/ready-to-play.png",
+        "sha256": "949523a40c3b3858236026f8756403313d341b40ec005597a9efb7e026faa895"
+      },
+      {
+        "bytes": 11098,
+        "executable": false,
+        "path": "docs/evidence/task8-browser/resumed-pause.png",
+        "sha256": "a7ab7f3076f575b8e7582b951bbc8d4c780700e9c3297c10d105429a69e59058"
+      },
+      {
+        "bytes": 4077,
+        "executable": false,
+        "path": "docs/evidence/task8-clean-linux/README.md",
+        "sha256": "17228e33c1618c0df957fccb81fd2cb60778c483e5e0a02e8dbbfa699fa23710"
+      },
+      {
+        "bytes": 3368,
+        "executable": false,
+        "path": "docs/evidence/task8-clean-linux/acceptance.json",
+        "sha256": "c675792774dfe990dd5cc28880c68fba2bbfc1b9d4d013ffb92d4a6dcafb993a"
+      },
+      {
+        "bytes": 531,
+        "executable": false,
+        "path": "docs/evidence/task8-clean-linux/container-info.json",
+        "sha256": "2ef171ca5478fd6c7431869432c8c595fce9491380cf03b2c7dc4d7fcf7f59e9"
+      },
+      {
+        "bytes": 429,
+        "executable": false,
+        "path": "docs/evidence/task8-clean-linux/editor-export.json",
+        "sha256": "7384e4d12e138c102449ed82af8b5bcc45fcb629f3890a5e5448d762d53d3e5b"
+      },
+      {
+        "bytes": 99553,
+        "executable": false,
+        "path": "docs/evidence/task8-clean-linux/editor_export_verified.png",
+        "sha256": "639324ad14580115fd1173620f713439d4e56d363e5309d0d0051cd74e141f31"
+      },
+      {
+        "bytes": 554,
+        "executable": false,
+        "path": "docs/evidence/task8-clean-linux/gameplay.json",
+        "sha256": "762b860505f8b7de7c9c719b2f621568f46e9e4cfef58427105f2f425deca1e7"
+      },
+      {
+        "bytes": 11218,
+        "executable": false,
+        "path": "docs/evidence/task8-clean-linux/resumed_pause.png",
+        "sha256": "5a11f077b4213732c4a85910dffe072dc1e5ab7779579ee50e4c10e6f8e1cf4b"
+      },
+      {
+        "bytes": 6350,
+        "executable": false,
+        "path": "docs/evidence/task8-clean-linux/system-packages.tsv",
+        "sha256": "f0405d652fd1b3cd9aa5bba9f22fd0bed7d8702e6172d0571caceaa906c1e2cf"
+      },
+      {
+        "bytes": 4146,
+        "executable": false,
+        "path": "docs/evidence/task8-materials/README.md",
+        "sha256": "8b6e81f4d1db8a1402a8a6144072ccbdf46e714f33080a88f2b157973dc52b5b"
+      },
+      {
+        "bytes": 1930,
+        "executable": false,
+        "path": "docs/evidence/task8-materials/browser-materials.png",
+        "sha256": "2ac1d7748a5561fa555eb7be945ed840e542e689a2cf44b5f849b1c04d0d3d7c"
+      },
+      {
+        "bytes": 1384,
+        "executable": false,
+        "path": "docs/evidence/task8-materials/browser.json",
+        "sha256": "122f8aabdb9a79c36f09756cb11fcf566d613de9442cfb82357307941ac33e65"
+      },
+      {
+        "bytes": 3368,
+        "executable": false,
+        "path": "docs/evidence/task8-materials/clean-linux.json",
+        "sha256": "77d18f1a85dd6cb2cbcf44cfd5ea83d6a1ce1d39eb9ca162cb1405eff3ead07a"
+      },
+      {
+        "bytes": 531,
+        "executable": false,
+        "path": "docs/evidence/task8-materials/container-info.json",
+        "sha256": "d3f04b4c6195f6b752f5feedfad9956fb34b58fbd2e68ee02f2895b7b5b1a06f"
+      },
+      {
+        "bytes": 1320,
+        "executable": false,
+        "path": "docs/evidence/task8-materials/editor-browser-export.json",
+        "sha256": "18420946b4155cb580ab16772844b4ccd25c959fafb3c4a28d9e98089335b538"
+      },
+      {
+        "bytes": 69975,
+        "executable": false,
+        "path": "docs/evidence/task8-materials/editor-materials.png",
+        "sha256": "20b4f90e0babe2cc5c65a86080630e866f57baa566f7b148b2b4f56d73cf1fd3"
+      },
+      {
+        "bytes": 622,
+        "executable": false,
+        "path": "docs/evidence/task8-materials/exported-ui-regression.json",
+        "sha256": "4efa674dbda452c49f9b3ddd70cf4f9e8340a4d9ec23c20888141732662c2351"
+      },
+      {
+        "bytes": 46649,
+        "executable": false,
+        "path": "docs/evidence/task8-materials/invalid-shader.png",
+        "sha256": "2187856f359480c29966a552716ecd4df2e7cf6fc206a19afda04dc6b59c830b"
+      },
+      {
+        "bytes": 771,
+        "executable": false,
+        "path": "docs/evidence/task8-materials/native-materials.png",
+        "sha256": "d942ed5d00b8758160c4d9ec052c3f866d0091165232dd2e944fbe6194aa0c4f"
+      },
+      {
+        "bytes": 1307,
+        "executable": false,
+        "path": "docs/evidence/task8-materials/native.json",
+        "sha256": "33e6a0a65b1f2bf9e7b5a925b4a07a0bccc5bb5fc19c8b0c530e6e8e3c31c662"
+      },
+      {
+        "bytes": 2018,
+        "executable": false,
+        "path": "docs/evidence/task8-native/README.md",
+        "sha256": "b30e7c845eee95260654920bfd19c48f596f167440c4dab5e9da5633198a9adf"
+      },
+      {
+        "bytes": 363,
+        "executable": false,
+        "path": "docs/evidence/task8-native/editor-result.json",
+        "sha256": "af1778addc32cc01c67c91558b1b19d019ab331a01eb25c77d1f3a856854033b"
+      },
+      {
+        "bytes": 91980,
+        "executable": false,
+        "path": "docs/evidence/task8-native/export-active.png",
+        "sha256": "6dab44ab4573950cb79e87722ecb132dc4e02aa2be5df656685edec9ecf61652"
+      },
+      {
+        "bytes": 93634,
+        "executable": false,
+        "path": "docs/evidence/task8-native/export-cancelled.png",
+        "sha256": "1a9472a0b76a0772cc65d5bc106aa73959fcfb7165cd317d22b40f4dabdad5b8"
+      },
+      {
+        "bytes": 91476,
+        "executable": false,
+        "path": "docs/evidence/task8-native/export-failed-preserved.png",
+        "sha256": "7a50f27910651744cc1ae9287ccbfc51645cd7012dfb6217f7757febcfeeb80f"
+      },
+      {
+        "bytes": 100855,
+        "executable": false,
+        "path": "docs/evidence/task8-native/export-verified.png",
+        "sha256": "3425b3aed65a8dcda34583ccc6acc22624c65a2f424d4eb2020285204ae0d6a0"
+      },
+      {
+        "bytes": 264,
+        "executable": false,
+        "path": "docs/evidence/task8-native/relocated-result.json",
+        "sha256": "4438015660706d228b96241122571aa8b9e5f66885933c0048b0f8dc999f697d"
+      },
+      {
+        "bytes": 11218,
+        "executable": false,
+        "path": "docs/evidence/task8-native/relocated-resumed.png",
+        "sha256": "5a11f077b4213732c4a85910dffe072dc1e5ab7779579ee50e4c10e6f8e1cf4b"
+      },
+      {
+        "bytes": 4704,
+        "executable": false,
+        "path": "docs/evidence/task8-physics/README.md",
+        "sha256": "691c262caa95dd004db520a8c12b96f5e66ebd0f882b8536d2511c704229728b"
+      },
+      {
+        "bytes": 3368,
+        "executable": false,
+        "path": "docs/evidence/task8-physics/clean-linux.json",
+        "sha256": "b95da30681fdbbfebe93874bcdc38bebd649ce8a4d5695cd54366b9f6746726a"
+      },
+      {
+        "bytes": 531,
+        "executable": false,
+        "path": "docs/evidence/task8-physics/container-info.json",
+        "sha256": "2a244a594ab90e87287cc476208a63bb2016f02a0876ce0fb8f3f3b4d526f110"
+      },
+      {
+        "bytes": 1320,
+        "executable": false,
+        "path": "docs/evidence/task8-physics/editor-browser-export.json",
+        "sha256": "d0ee7b17a720a4abbfa3ea8f3e706f8165e379f5d427b5de9f2cf234c990cee8"
+      },
+      {
+        "bytes": 622,
+        "executable": false,
+        "path": "docs/evidence/task8-physics/exported-ui-regression.json",
+        "sha256": "4efa674dbda452c49f9b3ddd70cf4f9e8340a4d9ec23c20888141732662c2351"
+      },
+      {
+        "bytes": 24672,
+        "executable": false,
+        "path": "docs/evidence/task8-physics/missing-physics.png",
+        "sha256": "8a4a5f9e900815e20872e7fa1bc8740e05fc4d036fcf171f0c565ea13ee493f9"
+      },
+      {
+        "bytes": 1969,
+        "executable": false,
+        "path": "docs/evidence/task8-physics/next-scene.png",
+        "sha256": "f2b1a87e6fe950100e2ef6b5b088f0f541b43fd489fbfb41d4cc097bd13d1a1b"
+      },
+      {
+        "bytes": 2125,
+        "executable": false,
+        "path": "docs/evidence/task8-physics/restored.png",
+        "sha256": "a5aba78a892ab24ded0d89b0ad1c7b3a8fa0eb109c6c8710e43a0c0a68d35181"
+      },
+      {
+        "bytes": 873,
+        "executable": false,
+        "path": "docs/evidence/task8-physics/result.json",
+        "sha256": "a2983ca11cf7e6a335c8a5a57a019b068ab4774bc01e214ba9b08ffe09bc5e7b"
+      },
+      {
+        "bytes": 2111,
+        "executable": false,
+        "path": "docs/evidence/task8-physics/settled.png",
+        "sha256": "bdd50eaf0d8ee838f73086a88af57a79e48f3829d36b43868c4acd87bbf59944"
+      },
+      {
+        "bytes": 3191,
+        "executable": false,
+        "path": "docs/evidence/task8-physics/snapshot-summary.json",
+        "sha256": "536178e921ff9e0adf7afafe2c5d043b8fb21c6b3bbbe6b9d6c50d13c6b6c369"
+      },
+      {
+        "bytes": 3839,
+        "executable": false,
+        "path": "docs/evidence/task8-portable/README.md",
+        "sha256": "26aa22c4af440b6c08c2eda46383e4c83735d3290e36bca2896d9f7b36758e74"
+      },
+      {
+        "bytes": 651,
+        "executable": false,
+        "path": "docs/evidence/task8-portable/acceptance.json",
+        "sha256": "dcbfd0b3a4bdc5fbbdfe6ba4ba143726fc166152d0fb506f185eccec95394d25"
+      },
+      {
+        "bytes": 1320,
+        "executable": false,
+        "path": "docs/evidence/task8-portable/browser-export.json",
+        "sha256": "e0fa73e048e2c57dfb8b3a93bc19790915b45ee5d5f4611693b9b15901132a25"
+      },
+      {
+        "bytes": 622,
+        "executable": false,
+        "path": "docs/evidence/task8-portable/browser-gameplay.json",
+        "sha256": "7d77db36c2803337a86c1faacf5eb6692cf0d5f077a184a16764bdd9e0dd0a26"
+      },
+      {
+        "bytes": 100096,
+        "executable": false,
+        "path": "docs/evidence/task8-portable/browser_export_verified.png",
+        "sha256": "27d3fee154e47d54c1bdf464d642ff1f348849a8bba6e244437667b8573a5b87"
+      },
+      {
+        "bytes": 11098,
+        "executable": false,
+        "path": "docs/evidence/task8-portable/browser_resumed_pause.png",
+        "sha256": "435f74b7d719bfb495812f1e8e806083a43ab2178e293ff7442588b6ab7c2c4d"
+      },
+      {
+        "bytes": 1905,
+        "executable": false,
+        "path": "docs/evidence/task8-portable/bundle-summary.json",
+        "sha256": "6238fb5c0e345ce4c5710bcf2062497a9c49e50ac6e7ac6a0ae62e845c483cc2"
+      },
+      {
+        "bytes": 429,
+        "executable": false,
+        "path": "docs/evidence/task8-portable/native-export.json",
+        "sha256": "4efc5594603ba47a1d1616885b68f492438f8fc458dbc55f908906315126e83c"
+      },
+      {
+        "bytes": 1013,
+        "executable": false,
+        "path": "docs/evidence/task8-portable/native-gameplay.json",
+        "sha256": "60220a84e0e6c2af9f75c7ac4e75b956f422cc9cc8539a47420c9d90c755da3d"
+      },
+      {
+        "bytes": 102060,
+        "executable": false,
+        "path": "docs/evidence/task8-portable/native_export_verified.png",
+        "sha256": "c350df87d307500425e4fc12bd9da9ea653ff0f4c276ca8aa531ee4ed4899096"
+      },
+      {
+        "bytes": 11218,
+        "executable": false,
+        "path": "docs/evidence/task8-portable/native_resumed_pause.png",
+        "sha256": "5a11f077b4213732c4a85910dffe072dc1e5ab7779579ee50e4c10e6f8e1cf4b"
+      },
+      {
+        "bytes": 14,
+        "executable": false,
+        "path": "docs/favicon.ico",
+        "sha256": "d5558cd419c8d46bdc958064cb97f963d1ea793866414c025906ec15033512ed"
+      },
+      {
+        "bytes": 3598,
+        "executable": false,
+        "path": "docs/fixes m1-29.md",
+        "sha256": "26fc4919f41bdc5f93470462f1eebc62383e20ebbf231bdb6965ec0cdc9aef36"
+      },
+      {
+        "bytes": 2817,
+        "executable": false,
+        "path": "justfile",
+        "sha256": "0e94b6ff19a61985976e3d3ad47bc4190be71784d167db62ab3ab8ed62b2c3f6"
+      },
+      {
+        "bytes": 116,
+        "executable": false,
+        "path": "kiln-ai/Cargo.toml",
+        "sha256": "2420019e335f6906592e8ae96c0abe3be3d2a0214d5b74441201938f976c3c17"
+      },
+      {
+        "bytes": 3398,
+        "executable": false,
+        "path": "kiln-ai/src/debug.rs",
+        "sha256": "fcf2543bddf98ab69fc408bfaf41b47f3e41fda5ae779f6207888f1187a18a8e"
+      },
+      {
+        "bytes": 4582,
+        "executable": false,
+        "path": "kiln-ai/src/dynamic.rs",
+        "sha256": "2eb7fdfbeefb4202777f7e5d70a717890a3a98a7da5a89e4cb1966b3469e7957"
+      },
+      {
+        "bytes": 7973,
+        "executable": false,
+        "path": "kiln-ai/src/grid.rs",
+        "sha256": "3b4e348ea6a89f460b442526408887c12e95904a4f6a117f583456b570de14af"
+      },
+      {
+        "bytes": 349,
+        "executable": false,
+        "path": "kiln-ai/src/lib.rs",
+        "sha256": "9199ef143c2872b084d4be6843963eecde604e0c8fefbdd985b4641c6f6c67f5"
+      },
+      {
+        "bytes": 11880,
+        "executable": false,
+        "path": "kiln-ai/src/navmesh.rs",
+        "sha256": "808e7245bc6ae880b0008c2a24c246611bd7388d8580cab1e240b3b0a4c16354"
+      },
+      {
+        "bytes": 245,
+        "executable": false,
+        "path": "kiln-anim/Cargo.toml",
+        "sha256": "22e0ed24dc7917040e0cd2710413f184145e9e2d00bbbe36a1b4b1151d637d7b"
+      },
+      {
+        "bytes": 136,
+        "executable": false,
+        "path": "kiln-anim/src/clip.rs",
+        "sha256": "e73ad7a70e2d34d8bcb602c71ddca0c3cb6c5203010e1fc11991346af6188a82"
+      },
+      {
+        "bytes": 2270,
+        "executable": false,
+        "path": "kiln-anim/src/lib.rs",
+        "sha256": "1efcee03178af892ae91734cc2de2492183b1a3b19041c07c2c5db7cd7d6b068"
+      },
+      {
+        "bytes": 9463,
+        "executable": false,
+        "path": "kiln-anim/src/tween.rs",
+        "sha256": "ddfaf2f85b6287fe2bb14e3fc90c7d237aa67d7098c573ba517e9c79904236a9"
+      },
+      {
+        "bytes": 630,
+        "executable": false,
+        "path": "kiln-assets/Cargo.toml",
+        "sha256": "314aa818165a8dc2c63b43498684cad93526f649ee2448cb2386ebc8c3d27804"
+      },
+      {
+        "bytes": 20133,
+        "executable": false,
+        "path": "kiln-assets/src/archive.rs",
+        "sha256": "628080ba55f0c6e6294c460e4a21dee16c996b6118a65e994121517500d98e55"
+      },
+      {
+        "bytes": 5521,
+        "executable": false,
+        "path": "kiln-assets/src/atlas.rs",
+        "sha256": "94d89b7926fca0726846f1b919e7b364b513b0abced87f032f62edf5dff85fe5"
+      },
+      {
+        "bytes": 10061,
+        "executable": false,
+        "path": "kiln-assets/src/cache.rs",
+        "sha256": "a3007d4aa98baa9b5c594fe0d280a7996a8755aa6ca791adfe97953fff9b9b8c"
+      },
+      {
+        "bytes": 8346,
+        "executable": false,
+        "path": "kiln-assets/src/distribution.rs",
+        "sha256": "1dc4ef949578cb0adce8a640b4ca70d395b7f2c0d8d88dd6301a0420da666379"
+      },
+      {
+        "bytes": 1519,
+        "executable": false,
+        "path": "kiln-assets/src/hash.rs",
+        "sha256": "56897abb4102bedbf2fcb84e6540f9764e89e02d3a446110a7b6a4c5cb24eec1"
+      },
+      {
+        "bytes": 9418,
+        "executable": false,
+        "path": "kiln-assets/src/image.rs",
+        "sha256": "6cf5fcbcf7f51bef3f4e7a9cd571d356d2dd97baf7a6063cfd18c6a32e81189c"
+      },
+      {
+        "bytes": 517,
+        "executable": false,
+        "path": "kiln-assets/src/lib.rs",
+        "sha256": "0c45b056da7ea76345851aa7de7b72cbdd5c557a095458aa9b57257bc103938e"
+      },
+      {
+        "bytes": 2078,
+        "executable": false,
+        "path": "kiln-assets/src/settings.rs",
+        "sha256": "3115a7f24e94fae3764a29afd34cc12dce99b08b45614f78c56606eaf455b64a"
+      },
+      {
+        "bytes": 8759,
+        "executable": false,
+        "path": "kiln-assets/src/web_bundle.rs",
+        "sha256": "6b2dd86efc42a2c78cc9b9ca59668e049212735131e520e6142275e95e8ca3af"
+      },
+      {
+        "bytes": 564,
+        "executable": false,
+        "path": "kiln-cli/Cargo.toml",
+        "sha256": "0aa055fcb02983a1a5ddcf4d71033538f1472291bc75c77188b7e2cd101c67d8"
+      },
+      {
+        "bytes": 8818,
+        "executable": false,
+        "path": "kiln-cli/src/export/mod.rs",
+        "sha256": "442578d47a54f3084c1d0a0776f1e735a54cf91739baf3d5fb5522721bf261e0"
+      },
+      {
+        "bytes": 5858,
+        "executable": false,
+        "path": "kiln-cli/src/export/resources.rs",
+        "sha256": "81dc7b5f93a6545f82f7a6b72f1d697ca02838ed29db95c17f0da0bdd28e9a07"
+      },
+      {
+        "bytes": 1257,
+        "executable": false,
+        "path": "kiln-cli/src/export/web.rs",
+        "sha256": "c60360a1d892e13b3c4a2fb7131b542fcf18b26cb8e68613bd6d35af22f1a52b"
+      },
+      {
+        "bytes": 2169,
+        "executable": false,
+        "path": "kiln-cli/src/export/web_shell.html",
+        "sha256": "812c2afa1db99b2ace8b55469775904af61095069f4c25f744006b9417343ff6"
+      },
+      {
+        "bytes": 2110,
+        "executable": false,
+        "path": "kiln-cli/src/export/web_shell.js",
+        "sha256": "4579a14cd29d3d708444ebdcde5b91b4b3acb8d065cce1b0f398c475d0d3dc4a"
+      },
+      {
+        "bytes": 25604,
+        "executable": false,
+        "path": "kiln-cli/src/main.rs",
+        "sha256": "e05085f15e7d8a7e5739b0cc7d275b10b63755509fb575d28754da92529de8cf"
+      },
+      {
+        "bytes": 1628,
+        "executable": false,
+        "path": "kiln-cli/tests/installed_templates.rs",
+        "sha256": "f3443208b9bd232be61336160aba788ca2908d142b4641e8ccdbf26d9aee2595"
+      },
+      {
+        "bytes": 17792,
+        "executable": false,
+        "path": "kiln-cli/tests/native_export.rs",
+        "sha256": "c2bf4e1be966af4ba31d709c3631f0897633946148ac0bd0ccd561d75cdfacbc"
+      },
+      {
+        "bytes": 467,
+        "executable": false,
+        "path": "kiln-core/Cargo.toml",
+        "sha256": "2a65b68a5576e9d8c95166a6db8693f491083c4d93cee6283fb7776c3a803eb8"
+      },
+      {
+        "bytes": 5389,
+        "executable": false,
+        "path": "kiln-core/src/access.rs",
+        "sha256": "e8912e6a4a8262b40efa4fcbf72d8d2918eea3bdf35705b42728e59716180281"
+      },
+      {
+        "bytes": 1749,
+        "executable": false,
+        "path": "kiln-core/src/audio.rs",
+        "sha256": "d6086055423c497bb12b332f3f39f812722268719d7474f9d8137c2d93470602"
+      },
+      {
+        "bytes": 1870,
+        "executable": false,
+        "path": "kiln-core/src/camera.rs",
+        "sha256": "47feac1b24931c30d6867c8985534608c399a839e634ab50f04e63597b76a575"
+      },
+      {
+        "bytes": 5406,
+        "executable": false,
+        "path": "kiln-core/src/clip.rs",
+        "sha256": "77f53cba2db645c15ee30a09addd91841474c6121ec804f66a9faabee0a0ea3f"
+      },
+      {
+        "bytes": 6597,
+        "executable": false,
+        "path": "kiln-core/src/device_tier.rs",
+        "sha256": "afc4370e72e95f699f44d8ad780e6f0a5d6c6e683492b4b9947e14ee68093d3e"
+      },
+      {
+        "bytes": 2889,
+        "executable": false,
+        "path": "kiln-core/src/distribution.rs",
+        "sha256": "91d87afdf1708c6f7266bc3b2dd56afc7839ba91ab73e0f7fd512991965be8da"
+      },
+      {
+        "bytes": 5407,
+        "executable": false,
+        "path": "kiln-core/src/export.rs",
+        "sha256": "afdd8471084c9d647f2711a9d9825e1bd46bd7cbc34c71248f23e0214afec206"
+      },
+      {
+        "bytes": 7972,
+        "executable": false,
+        "path": "kiln-core/src/hierarchy_transform.rs",
+        "sha256": "1ca1a57b764258766a748ca7c957211b99b1ed53a6cac743aaf8c88ecc2d9d67"
+      },
+      {
+        "bytes": 686,
+        "executable": false,
+        "path": "kiln-core/src/id.rs",
+        "sha256": "ebbcdd4750365cf2f07f004362fc9ff9f5fba58caab65dafb89f980fb0e8920c"
+      },
+      {
+        "bytes": 4528,
+        "executable": false,
+        "path": "kiln-core/src/input.rs",
+        "sha256": "c5d2d451bda96221069197c37f711207a8de6f3753010569120d82476def78de"
+      },
+      {
+        "bytes": 1414,
+        "executable": false,
+        "path": "kiln-core/src/lib.rs",
+        "sha256": "407f583028a9cda24c345a85edfb77638095e0f5a173bc50a6babeee266b9a80"
+      },
+      {
+        "bytes": 89,
+        "executable": false,
+        "path": "kiln-core/src/math.rs",
+        "sha256": "549c0a02bbbb4d4b0b01c03d3e5b129d3122d97471993719172e7f470378bee9"
+      },
+      {
+        "bytes": 6578,
+        "executable": false,
+        "path": "kiln-core/src/mesh.rs",
+        "sha256": "1fdbd1a9e743dd2df306e65f65ef8acb35ebc35ef921a660d8f1e303bd7d4be0"
+      },
+      {
+        "bytes": 1188,
+        "executable": false,
+        "path": "kiln-core/src/paths.rs",
+        "sha256": "f3b6ae1c194344f6277581f9d171347fc2bf75976db5fef5a71ce0c91f5ce911"
+      },
+      {
+        "bytes": 9399,
+        "executable": false,
+        "path": "kiln-core/src/physics_data.rs",
+        "sha256": "91259667062d2cd5a3a817df434363172dc18168bb0b3840bc70559afc3f3938"
+      },
+      {
+        "bytes": 11377,
+        "executable": false,
+        "path": "kiln-core/src/prefab.rs",
+        "sha256": "abaa652ede91b21d81ab52d43860cdfff58e15052f1666c56cf122c2da5ed5df"
+      },
+      {
+        "bytes": 26123,
+        "executable": false,
+        "path": "kiln-core/src/project.rs",
+        "sha256": "e1cb90be19283c20d3fb8db9e213a6d4f6a025659d79998ace3120fb3a31437e"
+      },
+      {
+        "bytes": 2831,
+        "executable": false,
+        "path": "kiln-core/src/project_test.rs",
+        "sha256": "248cab54c6780e49e067ff933f98b9dab264f548d8247aafceeb58895a615756"
+      },
+      {
+        "bytes": 13873,
+        "executable": false,
+        "path": "kiln-core/src/tilemap.rs",
+        "sha256": "b10410b0472012f70e73aa5079cae4053a5ed4eebc9cfe0fa3bf467bcd4b3cf7"
+      },
+      {
+        "bytes": 1092,
+        "executable": false,
+        "path": "kiln-core/src/time.rs",
+        "sha256": "43fece188fe7ec4d904568279883e2a73f946015c14fae4c4a0a4711daab111c"
+      },
+      {
+        "bytes": 876,
+        "executable": false,
+        "path": "kiln-core/src/transform.rs",
+        "sha256": "157bc04973eed5b9028ffdd349c4798603f2934beaecc279e6b9aa72c65db6b5"
+      },
+      {
+        "bytes": 9424,
+        "executable": false,
+        "path": "kiln-core/src/ui.rs",
+        "sha256": "9fa7f42e39e73a3a5b44b7253997309b9b3a1ed8875e4d8e9782e2058042d467"
+      },
+      {
+        "bytes": 3116,
+        "executable": false,
+        "path": "kiln-core/src/vfx.rs",
+        "sha256": "a448220140c0479b80d1de8695c12219519ddc990db44e66b9d31d7b33ae1c93"
+      },
+      {
+        "bytes": 1952,
+        "executable": false,
+        "path": "kiln-core/src/visual.rs",
+        "sha256": "ebef42866df560a0180e1391f4781f4487b5aaf83d66f75c0624e8406d023db4"
+      },
+      {
+        "bytes": 1837,
+        "executable": false,
+        "path": "kiln-editor/Cargo.toml",
+        "sha256": "af45509eca9f618cd42a4fa92ba390e105410b7a8ea0aef8a2b6f93c4642d94e"
+      },
+      {
+        "bytes": 18072,
+        "executable": false,
+        "path": "kiln-editor/src/anim_editor.rs",
+        "sha256": "fac82a499cffc034da631bd42a5d6e480e799fcc8b9c66a02d547388f1c0f5d2"
+      },
+      {
+        "bytes": 285479,
+        "executable": false,
+        "path": "kiln-editor/src/app.rs",
+        "sha256": "7aebc1d06326541af08e066cb0b66507ac2558c1fe4952f8eed4b58a21877ee3"
+      },
+      {
+        "bytes": 9946,
+        "executable": false,
+        "path": "kiln-editor/src/asset_shelf.rs",
+        "sha256": "90bf19ab3586d08fdb731b6113ef08a470779cc490dd1b1be63a02a203b16d73"
+      },
+      {
+        "bytes": 12109,
+        "executable": false,
+        "path": "kiln-editor/src/assets.rs",
+        "sha256": "61365a6ab170d4451e29dc74dd6770b1135142c17accc148ac8eca7f936d870c"
+      },
+      {
+        "bytes": 9932,
+        "executable": false,
+        "path": "kiln-editor/src/audio_editor.rs",
+        "sha256": "d627247393a304afd02de58ce5aba65676073eb4157f777f6890eff347677e2f"
+      },
+      {
+        "bytes": 12685,
+        "executable": false,
+        "path": "kiln-editor/src/build_panel/job.rs",
+        "sha256": "6e4266fad04fbb3bed586b59fed5450f0c5de47517cad66f766fb18e57edcc84"
+      },
+      {
+        "bytes": 6348,
+        "executable": false,
+        "path": "kiln-editor/src/build_panel.rs",
+        "sha256": "894dbc818d9e28f7e440fa193aa667b7d46c10dc7f66b5032b751c95c57fcce9"
+      },
+      {
+        "bytes": 13353,
+        "executable": false,
+        "path": "kiln-editor/src/component_command.rs",
+        "sha256": "613f55ffc15c5be1d34c9df63f490f7af8373f71a06aca9fd18a179158ab8658"
+      },
+      {
+        "bytes": 9064,
+        "executable": false,
+        "path": "kiln-editor/src/debugger_panel.rs",
+        "sha256": "90e3adcd6d4d436be95c175cb42f768e2f527097a776384d22c94f06fe50942a"
+      },
+      {
+        "bytes": 30990,
+        "executable": false,
+        "path": "kiln-editor/src/editing.rs",
+        "sha256": "2111cc84d1c411f0e6bcc38f71eb1b1af1807b9e28624840071f9498cb274fd2"
+      },
+      {
+        "bytes": 11149,
+        "executable": false,
+        "path": "kiln-editor/src/editor_shell.rs",
+        "sha256": "9d40dc1de7be8d7645eb3cbcb0c427010b23282210e2bcc637c7cbb70948ec3e"
+      },
+      {
+        "bytes": 17290,
+        "executable": false,
+        "path": "kiln-editor/src/entity_command.rs",
+        "sha256": "aa20ca3830c245adae34d74f10183a505c9fbfa7251be7a38c0146c1f58a3065"
+      },
+      {
+        "bytes": 41567,
+        "executable": false,
+        "path": "kiln-editor/src/graph_editor.rs",
+        "sha256": "e6104084ee9978f82c4983a8bc726a11ecbd777a010161983bed23f0fd88a016"
+      },
+      {
+        "bytes": 14631,
+        "executable": false,
+        "path": "kiln-editor/src/hierarchy.rs",
+        "sha256": "c62a0abd7fe2945f6f29bd42f5e31e22f0c299626482c0f22f8a707381ad855d"
+      },
+      {
+        "bytes": 3834,
+        "executable": false,
+        "path": "kiln-editor/src/history.rs",
+        "sha256": "128c29b5c135d51031f5a386a576bc2113c065e0e4eb4d4277486e98756388c9"
+      },
+      {
+        "bytes": 2122,
+        "executable": false,
+        "path": "kiln-editor/src/image_preview.rs",
+        "sha256": "ce9085e3fda44d3bf582136e90f3fa7bbc6ba4f3a52d39698dd505c2055fa76c"
+      },
+      {
+        "bytes": 6383,
+        "executable": false,
+        "path": "kiln-editor/src/input_rebind_panel.rs",
+        "sha256": "572f98431596fe4cb9eea9cc5a646cadf6897282068beb080f78819c3363cc9f"
+      },
+      {
+        "bytes": 12714,
+        "executable": false,
+        "path": "kiln-editor/src/inspector.rs",
+        "sha256": "f92fab4e3cb58fba894ada65b6f95c01b13993a2298469f3af27f335c0a5b971"
+      },
+      {
+        "bytes": 2096,
+        "executable": false,
+        "path": "kiln-editor/src/lib.rs",
+        "sha256": "8dacd20d00c71947fe54852805e49694c2418a8a071008b4424913f8ec88cedd"
+      },
+      {
+        "bytes": 1242,
+        "executable": false,
+        "path": "kiln-editor/src/main.rs",
+        "sha256": "a563978bf46e2d136bf9691683dc802cd011e505bda238fd2b6c5c6f6334fa6a"
+      },
+      {
+        "bytes": 119,
+        "executable": false,
+        "path": "kiln-editor/src/panels.rs",
+        "sha256": "791f78c2d6e743e6f10a3c4ce1116d02101d5d8fc1103e660aac1b00ce93e6e4"
+      },
+      {
+        "bytes": 26200,
+        "executable": false,
+        "path": "kiln-editor/src/physics_editor.rs",
+        "sha256": "c6168fbf0fa7eb491340a598e27d1fad7883d633a14ce3af7e273a24a4058d62"
+      },
+      {
+        "bytes": 9116,
+        "executable": false,
+        "path": "kiln-editor/src/physics_inspector.rs",
+        "sha256": "9d90303fd59f2d216f7aa8e6a1b0a7cb135682d9dd0b12e02fc2b9351f765713"
+      },
+      {
+        "bytes": 3458,
+        "executable": false,
+        "path": "kiln-editor/src/play_changes.rs",
+        "sha256": "b1fa90f727ffa83bdecffa2e4d96926a65ac5bcb73e43e88489f99b7cb86608f"
+      },
+      {
+        "bytes": 10413,
+        "executable": false,
+        "path": "kiln-editor/src/plugin_manager_panel.rs",
+        "sha256": "553a14baaf82291651779a8e4d9ff686ee4df59945a0337bad5e8a8a1bee708d"
+      },
+      {
+        "bytes": 4707,
+        "executable": false,
+        "path": "kiln-editor/src/prefab_editor.rs",
+        "sha256": "ad96910728de479e2a2acaae2e7df2a7a32569b2b8c571c4c2307117ccd76158"
+      },
+      {
+        "bytes": 11883,
+        "executable": false,
+        "path": "kiln-editor/src/prefab_editor_panel.rs",
+        "sha256": "d307ff08281b1d868dd097abf31e18ff2d7aed35dabb9b1caade4d4db0deaea2"
+      },
+      {
+        "bytes": 17178,
+        "executable": false,
+        "path": "kiln-editor/src/preferences.rs",
+        "sha256": "9ea958327c66c8ac5b14084fc2680a5be0f157166271d5b12f4e347222397ec1"
+      },
+      {
+        "bytes": 21232,
+        "executable": false,
+        "path": "kiln-editor/src/preview_3d.rs",
+        "sha256": "eeaa8a113b689c942b07a759bb0d46af91be5520713f71e16d3144ab84a60637"
+      },
+      {
+        "bytes": 9157,
+        "executable": false,
+        "path": "kiln-editor/src/profiler_panel.rs",
+        "sha256": "e276ebdc35d3f97c63133af8cf248a490fe6adc7a5dedb4b5e92279cfedc44be"
+      },
+      {
+        "bytes": 8982,
+        "executable": false,
+        "path": "kiln-editor/src/project_files.rs",
+        "sha256": "3d379e86b5ff657e6aaaac4975330efd79a9747c43965cdd546806d31da0504b"
+      },
+      {
+        "bytes": 11141,
+        "executable": false,
+        "path": "kiln-editor/src/project_hub.rs",
+        "sha256": "1b69b3e292dce1387b5dd7a218733f0a2609f9f92957dc80cc8455faf9065580"
+      },
+      {
+        "bytes": 3163,
+        "executable": false,
+        "path": "kiln-editor/src/project_lifecycle.rs",
+        "sha256": "e3633f0913cd192f3ad1da74d6be39beb4b1b3fee429487755a6cea986252025"
+      },
+      {
+        "bytes": 3326,
+        "executable": false,
+        "path": "kiln-editor/src/property_edit.rs",
+        "sha256": "533cfa67ca353ef99230c0f59ee5fb2c613bb86d487524fed884dc72b679a2dc"
+      },
+      {
+        "bytes": 3852,
+        "executable": false,
+        "path": "kiln-editor/src/recovery.rs",
+        "sha256": "db9d6269c5552bb565eeff8bde9713a3255dd1ae30ca1031fdb957382b97b3c6"
+      },
+      {
+        "bytes": 10305,
+        "executable": false,
+        "path": "kiln-editor/src/scene_document.rs",
+        "sha256": "c5649d237664290b36bcd7bee7bc28214265318a492a0908d4134729f8416cca"
+      },
+      {
+        "bytes": 17716,
+        "executable": false,
+        "path": "kiln-editor/src/scene_view.rs",
+        "sha256": "18367f6d4c16973fca592bcb87d23aff9c3c2d674c5b36b3344a911148b6fabf"
+      },
+      {
+        "bytes": 6063,
+        "executable": false,
+        "path": "kiln-editor/src/scene_view_test.rs",
+        "sha256": "32db0ddb3f2b928e7b22623335a22894343aa49dfc0f77d1904ddc5805ac5c27"
+      },
+      {
+        "bytes": 9052,
+        "executable": false,
+        "path": "kiln-editor/src/scene_workspace.rs",
+        "sha256": "ee955c58dae19d6da2637dc85c5f7a7adf3d8bd7f646adf2f7d12ee616227aae"
+      },
+      {
+        "bytes": 15590,
+        "executable": false,
+        "path": "kiln-editor/src/shader_editor.rs",
+        "sha256": "c13ed7959c58903cddecbd896b5168b65378da22f67fd2b1aa1475600021023e"
+      },
+      {
+        "bytes": 12219,
+        "executable": false,
+        "path": "kiln-editor/src/sprite_editor.rs",
+        "sha256": "8c59516a9cca08ef135d3dbb032af72728832fca40286707b87a501241d81167"
+      },
+      {
+        "bytes": 24974,
+        "executable": false,
+        "path": "kiln-editor/src/tilemap_editor.rs",
+        "sha256": "267244ee992714137f19d57e6734faeb5f736da4baf827b5356f2c631c013286"
+      },
+      {
+        "bytes": 7604,
+        "executable": false,
+        "path": "kiln-editor/src/transform_edit.rs",
+        "sha256": "4fafd29ce355a96057344c9985b6c30fd8fffaa712a91c858198a7b8642f691f"
+      },
+      {
+        "bytes": 11602,
+        "executable": false,
+        "path": "kiln-editor/src/transform_gizmo.rs",
+        "sha256": "0b4e08beb6f6a3de96e3524a5562bdcbd865f7e791e9f08b8110bde149e0f2a9"
+      },
+      {
+        "bytes": 5529,
+        "executable": false,
+        "path": "kiln-editor/src/ui_layout_editor/fonts.rs",
+        "sha256": "1be26893aaa7b97378411424dbec5c33dfdf6fb8e496c9e3d197131266456dd9"
+      },
+      {
+        "bytes": 8788,
+        "executable": false,
+        "path": "kiln-editor/src/ui_layout_editor/inspector.rs",
+        "sha256": "1a0bc413fcd059c58485c64fec72aa1f22c0b4b11c4c9e0dfc7903e92d4bf672"
+      },
+      {
+        "bytes": 20960,
+        "executable": false,
+        "path": "kiln-editor/src/ui_layout_editor.rs",
+        "sha256": "6017c7238f0a042ffd882fd151f11ab4eed3089bb1512cc6db9ee92d2269de9a"
+      },
+      {
+        "bytes": 13956,
+        "executable": false,
+        "path": "kiln-editor/src/version_control_panel.rs",
+        "sha256": "c6ebbc8e128607edebc43bde00db29eb8349634ac2a241c175e0e4f2d8bb9c51"
+      },
+      {
+        "bytes": 7678,
+        "executable": false,
+        "path": "kiln-editor/src/vfx_editor.rs",
+        "sha256": "fff13d6d56e27081ac4e2e94f87047bef2114b58ae82c8c4d2b56413fad50249"
+      },
+      {
+        "bytes": 24822,
+        "executable": false,
+        "path": "kiln-editor/tests/component_command.rs",
+        "sha256": "32ab0130af18e07d98d2766c9874c0959ad72592a7fb1a3ea241b31361174e3d"
+      },
+      {
+        "bytes": 26144,
+        "executable": false,
+        "path": "kiln-editor/tests/entity_command.rs",
+        "sha256": "c176b4a345d8c7e290d31d41c2555b441a072ff4d63b02c7bd64fcb03ef45e00"
+      },
+      {
+        "bytes": 8288,
+        "executable": false,
+        "path": "kiln-editor/tests/project_lifecycle.rs",
+        "sha256": "c29d3c69b59cbe231b53c268e428bb8dca1cad825ab714a448592c59b1f3df75"
+      },
+      {
+        "bytes": 12896,
+        "executable": false,
+        "path": "kiln-editor/tests/project_roundtrip.rs",
+        "sha256": "328e0dd64f936f0a9026f6d532f8868d4f48db4f133f9268a7496f658979995f"
+      },
+      {
+        "bytes": 5472,
+        "executable": false,
+        "path": "kiln-editor/tests/property_edit.rs",
+        "sha256": "70ef5e3207d67e2756c4b20b4b292e9fd6c6ed0568b99d607b79e292b6120d18"
+      },
+      {
+        "bytes": 13559,
+        "executable": false,
+        "path": "kiln-editor/tests/scene_workspace.rs",
+        "sha256": "3aa91647e5e8656cbedfb04ea1d0c9e6c9f993e6666321a5616fd9bc32785411"
+      },
+      {
+        "bytes": 16165,
+        "executable": false,
+        "path": "kiln-editor/tests/transform_edit.rs",
+        "sha256": "6054415ce42d656edbe3313b0e75e90099c5eca3fd7ab121bc57815e586fb873"
+      },
+      {
+        "bytes": 10568,
+        "executable": false,
+        "path": "kiln-editor/tests/two_scene_acceptance.rs",
+        "sha256": "f294bbb18289193805edb43499085f7d591d0e7677332ff6e4d506f71bd04f11"
+      },
+      {
+        "bytes": 9722,
+        "executable": false,
+        "path": "kiln-editor/tests/vertical_slice.rs",
+        "sha256": "448d13429f6f96b4432f91aa5dd8c1b2a6eec2b763ca7826eea89eba7aa627f9"
+      },
+      {
+        "bytes": 215,
+        "executable": false,
+        "path": "kiln-gameplay/Cargo.toml",
+        "sha256": "9de91763efc1704ff8acb851d49986f7f81a4919d3ad2ae5c6122f8ba461b672"
+      },
+      {
+        "bytes": 14865,
+        "executable": false,
+        "path": "kiln-gameplay/src/datatable.rs",
+        "sha256": "3fdc403e862654f4c3e4f60ab4f77332ab561a8ba4c98194ba58175204dd9164"
+      },
+      {
+        "bytes": 11172,
+        "executable": false,
+        "path": "kiln-gameplay/src/dialogue.rs",
+        "sha256": "480bb9c05f94cd2a0e92653612044d7a7f653e1de218e9ee93d3e11493552db4"
+      },
+      {
+        "bytes": 637,
+        "executable": false,
+        "path": "kiln-gameplay/src/lib.rs",
+        "sha256": "253e6f1d6b2e41b9cd54d6d7ef1caecfa4baa7537c70d6d401bf36a58ad19dbe"
+      },
+      {
+        "bytes": 16523,
+        "executable": false,
+        "path": "kiln-gameplay/src/quest.rs",
+        "sha256": "3b739a3cad140461be204b7a77afe948f40ff61f17ae15bc33a6d96fdcfdf895"
+      },
+      {
+        "bytes": 346,
+        "executable": false,
+        "path": "kiln-graph/Cargo.toml",
+        "sha256": "de64df81441f17e11d2d5d044ca17a266af7fb680b3451c456b913f9db4c6a0b"
+      },
+      {
+        "bytes": 22701,
+        "executable": false,
+        "path": "kiln-graph/src/compiler.rs",
+        "sha256": "8f2b2d5d5a5fca6563de5b0c1557091687f200516891e909f230573fa1a66fc0"
+      },
+      {
+        "bytes": 478,
+        "executable": false,
+        "path": "kiln-graph/src/connection.rs",
+        "sha256": "4f7e0c2aa3a6d72a8c5172a5d4b202f62a4b66d93978285b20460708b71bbf7d"
+      },
+      {
+        "bytes": 1740,
+        "executable": false,
+        "path": "kiln-graph/src/graph.rs",
+        "sha256": "478e5dfddb856fd4fae30135aba0dc56df4ccab3b1884594c9cc9d6672daa4fa"
+      },
+      {
+        "bytes": 408,
+        "executable": false,
+        "path": "kiln-graph/src/lib.rs",
+        "sha256": "6ba71552e45aa5474bcc39c9737a239537deb92c46ca27a201493e03cb1fff72"
+      },
+      {
+        "bytes": 10251,
+        "executable": false,
+        "path": "kiln-graph/src/node.rs",
+        "sha256": "e07ff52d1291f5cae95cc0b88847709c61ccc95f419ed8c95178bbc07f7db05d"
+      },
+      {
+        "bytes": 1074,
+        "executable": false,
+        "path": "kiln-graph/src/pin.rs",
+        "sha256": "46184e0ef743ae81c92b972ac83bcf1505739731096949c3b196f5458288caa6"
+      },
+      {
+        "bytes": 15614,
+        "executable": false,
+        "path": "kiln-graph/src/tests.rs",
+        "sha256": "dc51b63f45800de2b8c86de4b79f87c3433f94cc05a3d8c2110d93190706c8c3"
+      },
+      {
+        "bytes": 424,
+        "executable": false,
+        "path": "kiln-input/Cargo.toml",
+        "sha256": "5aaa224efd4ba2d023312d7dc3a47f81fc80957b552389cc9b1ae709eb927cc4"
+      },
+      {
+        "bytes": 1613,
+        "executable": false,
+        "path": "kiln-input/src/action.rs",
+        "sha256": "c62b20fda08289b35305119dc38ec577c66610b36ce9e536d772d5125bc9bd7e"
+      },
+      {
+        "bytes": 94,
+        "executable": false,
+        "path": "kiln-input/src/binding.rs",
+        "sha256": "b2a15745b976bb54e41e6b5c6d45974822f4dc89dd81efcb3bc7f82768f5f06b"
+      },
+      {
+        "bytes": 5215,
+        "executable": false,
+        "path": "kiln-input/src/controller.rs",
+        "sha256": "1081417c903db662592fcba170133ea1d7948c5ee2e261cffb85353dfa358b20"
+      },
+      {
+        "bytes": 6407,
+        "executable": false,
+        "path": "kiln-input/src/gamepad.rs",
+        "sha256": "cddbfff97c0215b2e83373933d8be7b42834833c1e7a9a2b0f6b9060a2bd5070"
+      },
+      {
+        "bytes": 366,
+        "executable": false,
+        "path": "kiln-input/src/lib.rs",
+        "sha256": "9242da0925929938795b0db7318ec53c0afa21d232e3f4657c3c71556397c34c"
+      },
+      {
+        "bytes": 126,
+        "executable": false,
+        "path": "kiln-ir/Cargo.toml",
+        "sha256": "a4a9a912baf083737d883a9cc07b9f9100a6a55a056e361ab3985b94eee29fe9"
+      },
+      {
+        "bytes": 12321,
+        "executable": false,
+        "path": "kiln-ir/src/debugger.rs",
+        "sha256": "6334536a8b0f8d34429839d0ecf6b149650fbca5c3d0d30a513e220d699729ca"
+      },
+      {
+        "bytes": 403,
+        "executable": false,
+        "path": "kiln-ir/src/lib.rs",
+        "sha256": "a9ad062a8c514033912a0dffa5bc09c40e9ead9ea496b5aa1c6debc08988f315"
+      },
+      {
+        "bytes": 1382,
+        "executable": false,
+        "path": "kiln-ir/src/opcode.rs",
+        "sha256": "bb462aa8ff8d024a7c04fc778ef8294601b9d933a89bacdd4762ae91b00d5e4e"
+      },
+      {
+        "bytes": 7854,
+        "executable": false,
+        "path": "kiln-ir/src/program.rs",
+        "sha256": "2f7fae3d77584efeefcd4ca938a6dd354838889ae3f2a674b5cabe8c0164a167"
+      },
+      {
+        "bytes": 6975,
+        "executable": false,
+        "path": "kiln-ir/src/value.rs",
+        "sha256": "2c08dcf0a97189a4bfe0b0de353ce8f8dc3d8efed8382f0c09a56f1bcced56bf"
+      },
+      {
+        "bytes": 28237,
+        "executable": false,
+        "path": "kiln-ir/src/vm.rs",
+        "sha256": "a92ab981280e70ef729d0e5a3c34e0b3fc2026f6b852cea5ead3962595b8814b"
+      },
+      {
+        "bytes": 174,
+        "executable": false,
+        "path": "kiln-platform/Cargo.toml",
+        "sha256": "ae6086272ba2babb318864e2ca4920873c2c5d1f8059402ab10b4ddbfceb7d79"
+      },
+      {
+        "bytes": 9585,
+        "executable": false,
+        "path": "kiln-platform/src/lib.rs",
+        "sha256": "4fe2816b733bcb6be16b5f4da97afae2a1b23bb1ef573a63b96ac58cfef46f71"
+      },
+      {
+        "bytes": 1051,
+        "executable": false,
+        "path": "kiln-player/Cargo.toml",
+        "sha256": "1c75c1d3b8467a5821b2b8dfadc9a03a47f61ad69693948577653d1c08b51cc9"
+      },
+      {
+        "bytes": 7933,
+        "executable": false,
+        "path": "kiln-player/src/android.rs",
+        "sha256": "6acf96155424a20f85db2a3792a60ac607b3d06bd8b056d0e5575d3053e84f7c"
+      },
+      {
+        "bytes": 8170,
+        "executable": false,
+        "path": "kiln-player/src/ios.rs",
+        "sha256": "6ff4f98b765cfccfaac6d64e2067f092193284545594e20c3d98d6fa5f917780"
+      },
+      {
+        "bytes": 343,
+        "executable": false,
+        "path": "kiln-player/src/lib.rs",
+        "sha256": "7f8e4adeab7fe08af43e3b477572fd5ddff399cabed214e9f5df56fb695e686b"
+      },
+      {
+        "bytes": 11806,
+        "executable": false,
+        "path": "kiln-player/src/loader.rs",
+        "sha256": "4ab968c0f859cad2612ca2749c3bcab063bfc8452caaf832c2cc59b0e7ea5988"
+      },
+      {
+        "bytes": 57196,
+        "executable": false,
+        "path": "kiln-player/src/main.rs",
+        "sha256": "cf7252e5e0fa4a61af76e4d604fbe2a981c826a0f7aef6f3f621a9691608ec99"
+      },
+      {
+        "bytes": 3602,
+        "executable": false,
+        "path": "kiln-player/src/spawn.rs",
+        "sha256": "9b500e1a19f60383a7bf8c44f6663b0f03a7b05355b96c2f10febd25fad77522"
+      },
+      {
+        "bytes": 8792,
+        "executable": false,
+        "path": "kiln-player/src/textures.rs",
+        "sha256": "77f6c400c68b15c9d9b94fb771d937395bee758238b3749f1f499bb07c5fb853"
+      },
+      {
+        "bytes": 9290,
+        "executable": false,
+        "path": "kiln-player/tests/audio_workflow.rs",
+        "sha256": "dc3645c6c406f52457f17c21fce2e50a2a777e43f62fa9f88566901cca584a5b"
+      },
+      {
+        "bytes": 19051,
+        "executable": false,
+        "path": "kiln-player/tests/ui_workflow.rs",
+        "sha256": "f32cc9ac7acab33dc5121ac0f3602fb44579bc62c41e14487c330da9aa277678"
+      },
+      {
+        "bytes": 9802,
+        "executable": false,
+        "path": "kiln-player/tests/vertical_slice.rs",
+        "sha256": "60507b8db53d1728eb40311000c82a65edad170a185a1442309aa6cf5a26808b"
+      },
+      {
+        "bytes": 13336,
+        "executable": false,
+        "path": "kiln-player/tests/visual_workflow.rs",
+        "sha256": "c09e369734ab156e14fb1e47644755eb8c978f33b4979ece60bccdad2b3a8a80"
+      },
+      {
+        "bytes": 737,
+        "executable": false,
+        "path": "kiln-plugin-api/Cargo.toml",
+        "sha256": "bbcd1f2c3a5a01db6f184ef6e4f33ab3cf85d82b9b48930cad349910f1f2e61a"
+      },
+      {
+        "bytes": 14440,
+        "executable": false,
+        "path": "kiln-plugin-api/src/lib.rs",
+        "sha256": "0bed8ab7d8396fc6bb61d5a248ab9d68f27c18bb7e34405f293f27bfae471861"
+      },
+      {
+        "bytes": 508,
+        "executable": false,
+        "path": "kiln-render/Cargo.toml",
+        "sha256": "7853da584a3e1f3f9b1d6c35e41d68935a084b73a4873cc6d7077e0d4d8ae5e5"
+      },
+      {
+        "bytes": 9470,
+        "executable": false,
+        "path": "kiln-render/src/camera.rs",
+        "sha256": "8976dbf655c8b3e5879208d8a992ce47158460db74e6b8bf7f78cd7f04694479"
+      },
+      {
+        "bytes": 8911,
+        "executable": false,
+        "path": "kiln-render/src/frame.rs",
+        "sha256": "ee19a3460ddcc70ac395f77087c4928fbaacfd206fddbc61a905676351f8bf3a"
+      },
+      {
+        "bytes": 10303,
+        "executable": false,
+        "path": "kiln-render/src/graph.rs",
+        "sha256": "4a7f6fe15da8622c60b1202d396725e82d29597feab5fc27f898f1234f71b259"
+      },
+      {
+        "bytes": 3279,
+        "executable": false,
+        "path": "kiln-render/src/graph_tests.rs",
+        "sha256": "3a0d3c77c3fb2c850711823e341e28a16c488c2a70ed1a37282a25b8507fed16"
+      },
+      {
+        "bytes": 1318,
+        "executable": false,
+        "path": "kiln-render/src/lib.rs",
+        "sha256": "567bb7a04b9afe7b6daf9e4e07a5be4f504f92cfacb9df0b865946a844e8c8e7"
+      },
+      {
+        "bytes": 3843,
+        "executable": false,
+        "path": "kiln-render/src/lighting.rs",
+        "sha256": "b5063b08e8e1cb95ba9cb5ace883baa811a813dfd2dae63846ff5b899168ced4"
+      },
+      {
+        "bytes": 12607,
+        "executable": false,
+        "path": "kiln-render/src/materials.rs",
+        "sha256": "88692a9ea6e8749561e481a8c185702b86d3197ded2911e0d142b9f7008caf41"
+      },
+      {
+        "bytes": 3587,
+        "executable": false,
+        "path": "kiln-render/src/particle_renderer.rs",
+        "sha256": "5511bb5e786569d6724b903e938222f99e36e00fb6d518318f6e658570b00ff3"
+      },
+      {
+        "bytes": 4317,
+        "executable": false,
+        "path": "kiln-render/src/pass_config.rs",
+        "sha256": "08f006e63d0ae836c7666977a451faa7d66ed596a1fdce1b77ce4c72fb79e021"
+      },
+      {
+        "bytes": 1914,
+        "executable": false,
+        "path": "kiln-render/src/pixel_perfect.rs",
+        "sha256": "e6c53e6aeeb572dd7caae39cecc9a646c19ddffbeee1a860d26efa7c286db1ea"
+      },
+      {
+        "bytes": 9198,
+        "executable": false,
+        "path": "kiln-render/src/post.rs",
+        "sha256": "7f1761b8ca7a96d8b6cb906dcada02a84cd9e609b86f6009e38f87717acf7472"
+      },
+      {
+        "bytes": 3715,
+        "executable": false,
+        "path": "kiln-render/src/post.wgsl",
+        "sha256": "d2cc6ff02d3f5bafde70d1a2b755e2a04c2979015b319fecdb2810440f04af02"
+      },
+      {
+        "bytes": 15103,
+        "executable": false,
+        "path": "kiln-render/src/post_effects_test.rs",
+        "sha256": "e49619835b44a41f5a304a28e5d4d910080c4cb9b75ebd7fe7c9db31e691117a"
+      },
+      {
+        "bytes": 22880,
+        "executable": false,
+        "path": "kiln-render/src/post_gpu.rs",
+        "sha256": "bc642d0e874055ab4590d308591409ae1db1b4f056b722d432f1a4cccd0bb9bb"
+      },
+      {
+        "bytes": 7964,
+        "executable": false,
+        "path": "kiln-render/src/profiler.rs",
+        "sha256": "33aaff6c8818229b0dae2dfb561936450c386ea93d95c47a74754a567abbd9e7"
+      },
+      {
+        "bytes": 9619,
+        "executable": false,
+        "path": "kiln-render/src/renderer.rs",
+        "sha256": "cea5af76e13077ac01029ba213700f0561f838a2fc435004e4b5caf53ebe4c12"
+      },
+      {
+        "bytes": 10002,
+        "executable": false,
+        "path": "kiln-render/src/screenshot.rs",
+        "sha256": "464928e7e9d3a3a572bd6b6155b7e694c887ee2f88f2630a704ea1b42e20876f"
+      },
+      {
+        "bytes": 164,
+        "executable": false,
+        "path": "kiln-render/src/sprite.wgsl",
+        "sha256": "b4bcca57eb1b77a75c67764bdf0615997b980fec2124671726e07f4a10133641"
+      },
+      {
+        "bytes": 44298,
+        "executable": false,
+        "path": "kiln-render/src/sprite_renderer.rs",
+        "sha256": "8706d1bcf7a530cd2d9da0fd463d4665975898ef97c16fdd511646d34324cacd"
+      },
+      {
+        "bytes": 1479,
+        "executable": false,
+        "path": "kiln-render/src/sprite_vertex.wgsl",
+        "sha256": "22daa560c3b8dbdab7a27bd39ae6ddcee489cecc7c282361875b76c4c5354f64"
+      },
+      {
+        "bytes": 6923,
+        "executable": false,
+        "path": "kiln-render/src/texture.rs",
+        "sha256": "f5b5062030542008868df3d886fa90e96a75f9f60250e6c4a122a457c3c5619f"
+      },
+      {
+        "bytes": 3438,
+        "executable": false,
+        "path": "kiln-render/src/tier.rs",
+        "sha256": "50d203237339495dbdc112f5afec0c437cae3018a70e4596105636e643391c4e"
+      },
+      {
+        "bytes": 1089,
+        "executable": false,
+        "path": "kiln-runtime/Cargo.toml",
+        "sha256": "c5207de38d8394d9c4dab3923e35a2cf4f95610c71c3ccf860a737f005ac1fd1"
+      },
+      {
+        "bytes": 11385,
+        "executable": false,
+        "path": "kiln-runtime/src/animation_player.rs",
+        "sha256": "9d97dabe30b4f0177090505a498333ad77b823e2ebf709fab26b201c708503d4"
+      },
+      {
+        "bytes": 4808,
+        "executable": false,
+        "path": "kiln-runtime/src/audio/tests.rs",
+        "sha256": "a8fe784d1b88f7e10d53f9351a30c257e902cfad45d2e8dc2cc3d5e4e876aae0"
+      },
+      {
+        "bytes": 10327,
+        "executable": false,
+        "path": "kiln-runtime/src/audio.rs",
+        "sha256": "15dfc24cf0be7e0e42ef3074094c6b892e8d23e967ae4a6d7c29837c008598aa"
+      },
+      {
+        "bytes": 615,
+        "executable": false,
+        "path": "kiln-runtime/src/audio_backend.rs",
+        "sha256": "37d5e04d9e9f335ece23ef38a56b07b5d1d345ca3e44d67c764d4ec888f1757d"
+      },
+      {
+        "bytes": 7118,
+        "executable": false,
+        "path": "kiln-runtime/src/camera.rs",
+        "sha256": "feec9577ae90ecaf5cdbdb36e59855a06626b757d354bf898e3f8338e558698b"
+      },
+      {
+        "bytes": 942,
+        "executable": false,
+        "path": "kiln-runtime/src/input.rs",
+        "sha256": "34d14396882388295b91d1f5ea719a4b2771f908c4b1544d16be51b65d2c54b3"
+      },
+      {
+        "bytes": 6697,
+        "executable": false,
+        "path": "kiln-runtime/src/jobs.rs",
+        "sha256": "93e47776ba272f2afbfa0b12d1354af7dbc7c05cd176ca6e86a1af88aa5bef8b"
+      },
+      {
+        "bytes": 1415,
+        "executable": false,
+        "path": "kiln-runtime/src/lib.rs",
+        "sha256": "81ee819247a3b724ef3bffa221e8c90a08ebad259668274db6d28bb34328824b"
+      },
+      {
+        "bytes": 927,
+        "executable": false,
+        "path": "kiln-runtime/src/loop_.rs",
+        "sha256": "6d5fb06386c83cf814ec28c66861a6290db839d3981f59b9a26d92d6004acbf7"
+      },
+      {
+        "bytes": 11039,
+        "executable": false,
+        "path": "kiln-runtime/src/physics.rs",
+        "sha256": "0bc3b60439d6d93b3f16f4a9893cd83f2b1c3d666a2ea1a905fa27a1a2a26e6b"
+      },
+      {
+        "bytes": 9577,
+        "executable": false,
+        "path": "kiln-runtime/src/physics.rs.bak",
+        "sha256": "fa7a45bc49327689831e328a72ebf51d89ba9a1288204838a6f8ab6223dd067f"
+      },
+      {
+        "bytes": 16057,
+        "executable": false,
+        "path": "kiln-runtime/src/physics_sync.rs",
+        "sha256": "0551114d1b1fcbf495b587dd5a737d0af9ca5336868e737c251c9e8edb488b75"
+      },
+      {
+        "bytes": 5336,
+        "executable": false,
+        "path": "kiln-runtime/src/physics_tilemap.rs",
+        "sha256": "3904dbad80b4e7528520d4d44daffd266bfb5549d91de72447edbd9e07723ca4"
+      },
+      {
+        "bytes": 2228,
+        "executable": false,
+        "path": "kiln-runtime/src/play_clock.rs",
+        "sha256": "0a383e430f8d834de199f84c628403a4720dff604003044816eaa8a34147eb96"
+      },
+      {
+        "bytes": 5349,
+        "executable": false,
+        "path": "kiln-runtime/src/preferences.rs",
+        "sha256": "fd2a3eb22867b11ec528cd5095875115c21fd674f3ecb0b9a33c5f77090c9b5d"
+      },
+      {
+        "bytes": 23751,
+        "executable": false,
+        "path": "kiln-runtime/src/scene.rs",
+        "sha256": "110c8b5f92b33d13f31eb7cf40cf23045cf64efa16a2a56c30481d98347ba4a2"
+      },
+      {
+        "bytes": 8629,
+        "executable": false,
+        "path": "kiln-runtime/src/schedule.rs",
+        "sha256": "058ed167c615a0b09000b21ea3d6e668c89ec0829e6f804b9b790626f307d899"
+      },
+      {
+        "bytes": 5142,
+        "executable": false,
+        "path": "kiln-runtime/src/script_source.rs",
+        "sha256": "fe54405699186adf06ecaef9a0b9b92a3f1e233e7b71bd5af4f60e3d10b6cecd"
+      },
+      {
+        "bytes": 5039,
+        "executable": false,
+        "path": "kiln-runtime/src/settings.rs",
+        "sha256": "8282ee3d87b5ddb5a083db401cdadea119f8e4c605d57ae4c19a30d1833dc2cf"
+      },
+      {
+        "bytes": 8653,
+        "executable": false,
+        "path": "kiln-runtime/src/slice/authored_ui.rs",
+        "sha256": "8f3c70a853aa4225bb19886f7ec3bf4193e6213f2d60c3cf9674688c863ea256"
+      },
+      {
+        "bytes": 22839,
+        "executable": false,
+        "path": "kiln-runtime/src/slice/game_save/mod.rs",
+        "sha256": "c0749099f63056e8a7107421279becebc840bcdabcb19236dd33e244979a84d0"
+      },
+      {
+        "bytes": 2780,
+        "executable": false,
+        "path": "kiln-runtime/src/slice/game_save/value.rs",
+        "sha256": "7e5d0f2ffa1e4553125be2f10986cdb75a7c362a962fcef967f967cbc760bda6"
+      },
+      {
+        "bytes": 15271,
+        "executable": false,
+        "path": "kiln-runtime/src/slice/game_save/world.rs",
+        "sha256": "7da4de63495c729b9a3cd86c82da365d00552d3b381574383c9790ca96a770a4"
+      },
+      {
+        "bytes": 125666,
+        "executable": false,
+        "path": "kiln-runtime/src/slice.rs",
+        "sha256": "9092759c6dde858b062702809e3b1a5c56e69e3fd3973724318b1bdfd4f2b831"
+      },
+      {
+        "bytes": 6613,
+        "executable": false,
+        "path": "kiln-runtime/src/slice_sample.rs",
+        "sha256": "3ae1908347f102743278a9623cf893101835f4e262e0976f2eb1695808313fde"
+      },
+      {
+        "bytes": 7812,
+        "executable": false,
+        "path": "kiln-runtime/src/sprite.rs",
+        "sha256": "47f61352ff938554a190949e5b825ab18e56e707519fc8fb0ad4a59a0ec56f19"
+      },
+      {
+        "bytes": 2416,
+        "executable": false,
+        "path": "kiln-runtime/src/storage.rs",
+        "sha256": "e19ed52c6e94214c86840a94963768a4e858afe706396c40135ff9ca6433d620"
+      },
+      {
+        "bytes": 9469,
+        "executable": false,
+        "path": "kiln-runtime/src/tilemap.rs",
+        "sha256": "eec65ffc73458658c4270efde7de52475bd15ed56d611ddf7c0897f3ed7c47cb"
+      },
+      {
+        "bytes": 2438,
+        "executable": false,
+        "path": "kiln-runtime/src/tilemap_collision.rs",
+        "sha256": "7c14f059c6a3a345980acaae5ba3e0bfe5c5327a09e9a71b661e152bd8641cd3"
+      },
+      {
+        "bytes": 4528,
+        "executable": false,
+        "path": "kiln-runtime/src/tilemap_scene.rs",
+        "sha256": "ce84e6c5462eefe00f223d05fa71222fc3607f3fc1d1b22246b25e3373a12313"
+      },
+      {
+        "bytes": 3666,
+        "executable": false,
+        "path": "kiln-runtime/src/visual.rs",
+        "sha256": "b12f6592447a04d9873c604f8d6c9ac05629cb431b317f6873839158e8f866dd"
+      },
+      {
+        "bytes": 3720,
+        "executable": false,
+        "path": "kiln-runtime/src/world.rs",
+        "sha256": "13f1d986fd02e697fffac27b69027e14225770e223962c40d0ad28166893a5eb"
+      },
+      {
+        "bytes": 8099,
+        "executable": false,
+        "path": "kiln-runtime/tests/entity_scripting.rs",
+        "sha256": "4659379f8dc56ae71d76702de77e42179ab0d43a9777f864a17331f0b6ade439"
+      },
+      {
+        "bytes": 15415,
+        "executable": false,
+        "path": "kiln-runtime/tests/game_save.rs",
+        "sha256": "72d4f5ad471940b0a375106708c8bd2eac54e347432df7772ab6ef5e5a09dfcc"
+      },
+      {
+        "bytes": 27589,
+        "executable": false,
+        "path": "kiln-runtime/tests/physics_workflow.rs",
+        "sha256": "ee1ab7c799dd7d878b50691b292c62e5144e160593d34be51c5855e4649ece1f"
+      },
+      {
+        "bytes": 5289,
+        "executable": false,
+        "path": "kiln-runtime/tests/player_settings.rs",
+        "sha256": "56b9f77a5c971e4e34e0422b3c1eafbf6aed479f5de9a51be653c4da78942f2b"
+      },
+      {
+        "bytes": 8751,
+        "executable": false,
+        "path": "kiln-runtime/tests/saved_ui.rs",
+        "sha256": "f01f8b86848a24d30a6363d94e7baee755463319a8b1674e9116fa52345eb9f5"
+      },
+      {
+        "bytes": 6979,
+        "executable": false,
+        "path": "kiln-runtime/tests/visual_runtime.rs",
+        "sha256": "d3b6da20a2335262c417bc6cf2a03ceb440e569f1faba44db06c04884015291e"
+      },
+      {
+        "bytes": 405,
+        "executable": false,
+        "path": "kiln-save/Cargo.toml",
+        "sha256": "f372fc6aa78d2fab0deb1f5f5036235d66b8aefa2534f70bea877cdb1528a874"
+      },
+      {
+        "bytes": 217,
+        "executable": false,
+        "path": "kiln-save/src/lib.rs",
+        "sha256": "5463095afde9f54fd79f2fa4defecdbf0541b0149d8acc2cfcebc9308e5a1d3b"
+      },
+      {
+        "bytes": 11761,
+        "executable": false,
+        "path": "kiln-save/src/slot.rs",
+        "sha256": "2102230e1bd8bfdf8f628e73e3382ffb1a3808149c65a15e8392cb4c7f0cc9ba"
+      },
+      {
+        "bytes": 2022,
+        "executable": false,
+        "path": "kiln-save/src/version.rs",
+        "sha256": "591fb2a931461fa60b1b99c74253c312643735d10ef2600229cdbc4d9fca8144"
+      },
+      {
+        "bytes": 161,
+        "executable": false,
+        "path": "kiln-script/Cargo.toml",
+        "sha256": "b2870f60c935e5353d576bfd9b665f569eca78b5a7efd7dc58a61b159f1dd688"
+      },
+      {
+        "bytes": 15627,
+        "executable": false,
+        "path": "kiln-script/src/compiler.rs",
+        "sha256": "6c2fb2ae1934d6b2971ce70cb04176ccda1b87ce14062b3a481af34e939eaa31"
+      },
+      {
+        "bytes": 2329,
+        "executable": false,
+        "path": "kiln-script/src/diagnostic.rs",
+        "sha256": "c1d8b58df749687a208a6aa9284c469d9673262f4ed57fe93623b01240aef3ae"
+      },
+      {
+        "bytes": 11102,
+        "executable": false,
+        "path": "kiln-script/src/lexer.rs",
+        "sha256": "b1da597ee0e394cc1000ed97c604560c5840e28f94e34ddb56067765cbbb118e"
+      },
+      {
+        "bytes": 11182,
+        "executable": false,
+        "path": "kiln-script/src/lib.rs",
+        "sha256": "17a0aa8cadbac72549808f64a8bd54e5f93bd23da1ff5ee3af3f02ec14574e66"
+      },
+      {
+        "bytes": 17304,
+        "executable": false,
+        "path": "kiln-script/src/parser.rs",
+        "sha256": "3f863ec47150b8b9fee2b6626bf2af3ba24bd27b130e54a8dc039ffaf514a9ae"
+      },
+      {
+        "bytes": 404,
+        "executable": false,
+        "path": "kiln-ui/Cargo.toml",
+        "sha256": "7b1aebcb8b006ce47d508debd2e52007d318b637af8641a30f02f7f9169097f6"
+      },
+      {
+        "bytes": 3984,
+        "executable": false,
+        "path": "kiln-ui/src/authored/draw.rs",
+        "sha256": "94242e1b4dba0ac9351686dce9f37c8ef36900ee9003d847adbb5db5411939a5"
+      },
+      {
+        "bytes": 6757,
+        "executable": false,
+        "path": "kiln-ui/src/authored/fonts.rs",
+        "sha256": "2e8962eda2abdb8624b7783ac1954fd5b047023bd00db017101c8ec079030b3c"
+      },
+      {
+        "bytes": 3467,
+        "executable": false,
+        "path": "kiln-ui/src/authored/layout.rs",
+        "sha256": "7bfa393a857bb87bbe3509fed45374d581f8b9094568e759af9b446ff6e8ac9b"
+      },
+      {
+        "bytes": 11608,
+        "executable": false,
+        "path": "kiln-ui/src/authored/mod.rs",
+        "sha256": "c2e4827f1f8e02e17827e89e7341dd0d9f8f7261b0039ae55857980e57b4241f"
+      },
+      {
+        "bytes": 3200,
+        "executable": false,
+        "path": "kiln-ui/src/authored/navigation.rs",
+        "sha256": "938fb10232b6cf87ac0080fd7aa3dbf6d1ca627f468ebb772340d8e976ce51cd"
+      },
+      {
+        "bytes": 4239,
+        "executable": false,
+        "path": "kiln-ui/src/authored/save.rs",
+        "sha256": "4157506e9a760e56128b9eab4529e95150523a3b9628bfe648f013cd5fca8a6c"
+      },
+      {
+        "bytes": 4276,
+        "executable": false,
+        "path": "kiln-ui/src/font.rs",
+        "sha256": "b001303b878922e29f39ed1e4f4015ca1e6d514ca18db39326ff45597f289568"
+      },
+      {
+        "bytes": 10484,
+        "executable": false,
+        "path": "kiln-ui/src/layout.rs",
+        "sha256": "c5af7d25d9a06d41ca98677ad5603301bacd566d0da50f0cbdc3495e55f5d365"
+      },
+      {
+        "bytes": 753,
+        "executable": false,
+        "path": "kiln-ui/src/lib.rs",
+        "sha256": "6282ad74a70b729e50e04cb0b4a19d32d7acbf8ce4d6ed6fc9747433d5f26215"
+      },
+      {
+        "bytes": 3317,
+        "executable": false,
+        "path": "kiln-ui/src/localization.rs",
+        "sha256": "4ffb3ead1c3a3e18757a56a9463a94dbc51a640c1dad5d19919de72587454f60"
+      },
+      {
+        "bytes": 6679,
+        "executable": false,
+        "path": "kiln-ui/src/navigation.rs",
+        "sha256": "f5ad4b0de29cbd526206c66c833e1636e1354e7a07b18dbd8e38bfa5a44b6088"
+      },
+      {
+        "bytes": 6142,
+        "executable": false,
+        "path": "kiln-ui/src/render.rs",
+        "sha256": "a0d97da1f701acedaf349d90ae3c08d2d1dd9d7205a6e61fd1c43e0856c42213"
+      },
+      {
+        "bytes": 8375,
+        "executable": false,
+        "path": "kiln-ui/src/sdf_builder.rs",
+        "sha256": "14bca03adefa998fa47605e95a0cd37e60076fd7dea5c50e844d81e534c53264"
+      },
+      {
+        "bytes": 7950,
+        "executable": false,
+        "path": "kiln-ui/src/text.rs",
+        "sha256": "a10e2e3b79313123a20707a044d7f21acabc60d2cba84918f365970be90a8f35"
+      },
+      {
+        "bytes": 16178,
+        "executable": false,
+        "path": "kiln-ui/src/ui_renderer.rs",
+        "sha256": "78d247429dcee5b709382a493ca250b10452d5606842a69ee434a0269ce260b9"
+      },
+      {
+        "bytes": 15847,
+        "executable": false,
+        "path": "kiln-ui/src/widget.rs",
+        "sha256": "44e215edc31b023df74f7fc4ad27a5fb0b4ba01aa0ce63bc674ac2a4f62f7351"
+      },
+      {
+        "bytes": 11822,
+        "executable": false,
+        "path": "kiln-ui/tests/authored_ui.rs",
+        "sha256": "6697aae0462bfb005743ab018dd9cea38b8a37fd20358484673a5c665e98bc23"
+      },
+      {
+        "bytes": 512,
+        "executable": false,
+        "path": "kiln-updater/Cargo.toml",
+        "sha256": "ed0eaf3baa41cb51f9d519279ad7c84429cdf7895b38b7801d005904fb70412d"
+      },
+      {
+        "bytes": 1668,
+        "executable": false,
+        "path": "kiln-updater/src/crash.rs",
+        "sha256": "662aaf7875b5c9a30cbe8df0c620c1cb8ed844a4a1c926fcdf85ae094f818f92"
+      },
+      {
+        "bytes": 5513,
+        "executable": false,
+        "path": "kiln-updater/src/dlc.rs",
+        "sha256": "c6fe6b95a074a555330e8b4bd506801260fd98293e0fa281c847656380150809"
+      },
+      {
+        "bytes": 720,
+        "executable": false,
+        "path": "kiln-updater/src/lib.rs",
+        "sha256": "bc5f1b9ae2a8f40347282195a363eb0d07dba2c8d16edcbddd754f1a4d07830c"
+      },
+      {
+        "bytes": 3048,
+        "executable": false,
+        "path": "kiln-updater/src/patch.rs",
+        "sha256": "bbe84dc0c90d542c564f4a15ba07d1864ce91764068b91e3189e4f3234812469"
+      },
+      {
+        "bytes": 6258,
+        "executable": false,
+        "path": "kiln-updater/src/updater.rs",
+        "sha256": "0facffbc4aff95666c8b93785ab69f12bccc02645cb839931a407ff52c3eff76"
+      },
+      {
+        "bytes": 3028,
+        "executable": false,
+        "path": "kiln-updater/src/version.rs",
+        "sha256": "7c1fde144a8c05b22bd4e79a1679805709b00eaffa1ebc28e61426a001875d83"
+      },
+      {
+        "bytes": 304,
+        "executable": false,
+        "path": "kiln-vfx/Cargo.toml",
+        "sha256": "5ef80e5b1403198e31762afa26b34b7392e716aaad0201ad95595f2463d8b36e"
+      },
+      {
+        "bytes": 6794,
+        "executable": false,
+        "path": "kiln-vfx/src/emitter.rs",
+        "sha256": "a805eb043373b8bc5db80f1104cd5c20acba4d4056b674ddb95dc2442d8338df"
+      },
+      {
+        "bytes": 6264,
+        "executable": false,
+        "path": "kiln-vfx/src/gpu.rs",
+        "sha256": "f547de82d64a47d3a016ee5a3c16bf07988e5f211ed17311189acf95f8b3a4eb"
+      },
+      {
+        "bytes": 365,
+        "executable": false,
+        "path": "kiln-vfx/src/lib.rs",
+        "sha256": "2196a3a54051e03c522fae57fed75003239b5ed1ef0e16067487641d3a12b749"
+      },
+      {
+        "bytes": 3322,
+        "executable": false,
+        "path": "kiln-vfx/src/particle.rs",
+        "sha256": "ac4d9b45c48cf8875dc54d3faaa0622a50a2f914914db20eb755cb640da1083e"
+      },
+      {
+        "bytes": 1344,
+        "executable": false,
+        "path": "kiln-vfx/src/particle_compute.wgsl",
+        "sha256": "9920156e16994397af4981d85e7a8a784b340a30da235838a054ab5cb63089f8"
+      },
+      {
+        "bytes": 9249,
+        "executable": false,
+        "path": "kiln-vfx/src/system.rs",
+        "sha256": "292425d4042146040931dcf08ea371a191251e693a3c075e0b658b22bddec7f1"
+      },
+      {
+        "bytes": 1593,
+        "executable": false,
+        "path": "kiln-web/Cargo.toml",
+        "sha256": "405d783b90c7bea33bb54e7c9731ef989756f530c2100ee916dcc7626504b07d"
+      },
+      {
+        "bytes": 7166,
+        "executable": false,
+        "path": "kiln-web/src/audio.rs",
+        "sha256": "83b883f890a29a114f7dca8a8ed2e0c65909f0f18ef2b0650827cb18f9ec56f6"
+      },
+      {
+        "bytes": 1053,
+        "executable": false,
+        "path": "kiln-web/src/export_info.rs",
+        "sha256": "cd896ff92970dce66810e801a82857a1eeb86801473d9db47d0b49649a4a8037"
+      },
+      {
+        "bytes": 10244,
+        "executable": false,
+        "path": "kiln-web/src/input.rs",
+        "sha256": "191cbf5b10d7ad7cea8cb842f944b612439f793efebfd51ed03c3c08a6a37cac"
+      },
+      {
+        "bytes": 34564,
+        "executable": false,
+        "path": "kiln-web/src/lib.rs",
+        "sha256": "bbb586cdccef775b459d9960bcea80ea16b53b225c8ab788086ac266f6038cca"
+      },
+      {
+        "bytes": 3515,
+        "executable": false,
+        "path": "kiln-web/src/resources.rs",
+        "sha256": "3118ecae36cd9e95b28ceaef4188e6629ff34deb09f04bfe7da3ce85f71d594b"
+      },
+      {
+        "bytes": 2095,
+        "executable": false,
+        "path": "kiln-web/src/storage.rs",
+        "sha256": "8ab6fa691021c70a41758c797af8cd12eb41d6b95588cf2aadd516766fb4a9fb"
+      },
+      {
+        "bytes": 3228,
+        "executable": false,
+        "path": "kiln-web/src/threading.rs",
+        "sha256": "11eba4c57915d3aea6346364a86ade99b5872ad2bbde9d4020a654e5dcaaa882"
+      },
+      {
+        "bytes": 2990,
+        "executable": false,
+        "path": "packaging/license-data.json",
+        "sha256": "d83c95bc93451b9867bc957ae5256bc2807632ecd31a48ccd372439f38538549"
+      },
+      {
+        "bytes": 643,
+        "executable": false,
+        "path": "packaging/licenses/0BSD.txt",
+        "sha256": "e3f18c71e10d673590eb9856c1d79dd3b4b0d65404efb5e8584dbede7edd608b"
+      },
+      {
+        "bytes": 10280,
+        "executable": false,
+        "path": "packaging/licenses/Apache-2.0.txt",
+        "sha256": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff"
+      },
+      {
+        "bytes": 1267,
+        "executable": false,
+        "path": "packaging/licenses/BSD-2-Clause.txt",
+        "sha256": "f32fb3b417a194167cfad068223fc975ba96c5960513a10f66a3c28720aec1df"
+      },
+      {
+        "bytes": 1460,
+        "executable": false,
+        "path": "packaging/licenses/BSD-3-Clause.txt",
+        "sha256": "5a93d5831e1297ab10fe643e1a631e83be392896da14ee2951285a79012df69d"
+      },
+      {
+        "bytes": 1338,
+        "executable": false,
+        "path": "packaging/licenses/BSL-1.0.txt",
+        "sha256": "84c6ef3ea9e3254a54d0acf5d3e0c61ae011b8fef7dd6940591cf060e6380a8f"
+      },
+      {
+        "bytes": 7048,
+        "executable": false,
+        "path": "packaging/licenses/CC0-1.0.txt",
+        "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+      },
+      {
+        "bytes": 823,
+        "executable": false,
+        "path": "packaging/licenses/ISC.txt",
+        "sha256": "f2ec607f67bb0dd3053b49835b02110d5cd0f8eb6da3aac4dc0b142a6b299be9"
+      },
+      {
+        "bytes": 919,
+        "executable": false,
+        "path": "packaging/licenses/LLVM-exception.txt",
+        "sha256": "e34c58338bd89d43e709e226610d8f32b3e3c47f4ad9a99a8dc1d4ac7842488e"
+      },
+      {
+        "bytes": 1087,
+        "executable": false,
+        "path": "packaging/licenses/MIT.txt",
+        "sha256": "6d7c9e9d7d12c8d3753bdb24417b84819ba4d6c2f025c37948113d86dc81eef9"
+      },
+      {
+        "bytes": 16727,
+        "executable": false,
+        "path": "packaging/licenses/MPL-2.0.txt",
+        "sha256": "66a3107d5ad6a058aab753eaac2047ccb2ed0e39465dd0fe5844da3e300d5172"
+      },
+      {
+        "bytes": 4016,
+        "executable": false,
+        "path": "packaging/licenses/OFL-1.1.txt",
+        "sha256": "8eea8287e5876b539670cadb82e99f9a7afddec6f6730811be1daf25d2e9bcfd"
+      },
+      {
+        "bytes": 1995,
+        "executable": false,
+        "path": "packaging/licenses/Unicode-3.0.txt",
+        "sha256": "f7db81051789b729fea528a63ec4c938fdcb93d9d61d97dc8cc2e9df6d47f2a1"
+      },
+      {
+        "bytes": 1211,
+        "executable": false,
+        "path": "packaging/licenses/Unlicense.txt",
+        "sha256": "0bdebfeda07d45dada625ae1317c6f833186e798b171d0db640bcf32e92a8240"
+      },
+      {
+        "bytes": 838,
+        "executable": false,
+        "path": "packaging/licenses/Zlib.txt",
+        "sha256": "bfb1112d49db5b1daecdfef24bd7e2f3ea0bafb33aa67aa0ab51e2bf8407c03d"
+      },
+      {
+        "bytes": 1739,
+        "executable": false,
+        "path": "packaging/licenses/bzip2-1.0.6.txt",
+        "sha256": "0a56dbabe7d2ff65dea26e8b795fe42c6204a192b974d8e9304fe356ccda9fd1"
+      },
+      {
+        "bytes": 233,
+        "executable": false,
+        "path": "packaging/linux-runtime-packages.txt",
+        "sha256": "eac2d8fc646e7f69d17a3ad8e6b3f72b1e6c4a647d4bb0d3b2cb34db01484202"
+      },
+      {
+        "bytes": 119,
+        "executable": false,
+        "path": "samples/ai/Cargo.toml",
+        "sha256": "1367823a99943615fe34eda05a7acfc5a46e84b37f6faa02b1c5002eb4348211"
+      },
+      {
+        "bytes": 4751,
+        "executable": false,
+        "path": "samples/ai/src/main.rs",
+        "sha256": "bca1b1bdea48987d0e66d51e1715eb81d08119d76a8e6e09029a3183706dbd48"
+      },
+      {
+        "bytes": 152,
+        "executable": false,
+        "path": "samples/animation/Cargo.toml",
+        "sha256": "a742f7ae315ad59de8c8234d919308192c2da02fb10349aca1a3922c9b1290b5"
+      },
+      {
+        "bytes": 3315,
+        "executable": false,
+        "path": "samples/animation/src/main.rs",
+        "sha256": "e30b720d196b41e113d6a25e94a1e57a1014ce85e9b2068e2e47ecafdc24de86"
+      },
+      {
+        "bytes": 662,
+        "executable": false,
+        "path": "samples/audio/Cargo.toml",
+        "sha256": "3f878b2260a8a81a1a3a10f41ef586c6cc27aa7325b615d7df4af83f873026e5"
+      },
+      {
+        "bytes": 638,
+        "executable": false,
+        "path": "samples/audio/src/main.rs",
+        "sha256": "0468550fdc46be1c0ee1620fa7af11fb866bf27ccb42cbf01a777d7384dd1600"
+      },
+      {
+        "bytes": 1486,
+        "executable": false,
+        "path": "samples/audio2d_editor/README.md",
+        "sha256": "785b674b5ada79fe175aad74c7faa3ae299449e885cb75a7d49c1155e36fd9ce"
+      },
+      {
+        "bytes": 14444,
+        "executable": false,
+        "path": "samples/audio2d_editor/assets/audio/hit.wav",
+        "sha256": "01c696051eda6039aa3ef7779347e47992b750e08876d9ffafe4e72d6947792f"
+      },
+      {
+        "bytes": 48044,
+        "executable": false,
+        "path": "samples/audio2d_editor/assets/audio/theme.wav",
+        "sha256": "c9517314969e35c3b7aa7d5202724080c141e0ce4c043cda419f6ca7efdfd6a0"
+      },
+      {
+        "bytes": 1642,
+        "executable": false,
+        "path": "samples/audio2d_editor/kiln.toml",
+        "sha256": "c0ed3333efc256e8a6961bb4fab7ca0aeb18da4998ccbf5eb2e0e4ccc80a6e83"
+      },
+      {
+        "bytes": 395,
+        "executable": false,
+        "path": "samples/audio2d_editor/scripts/emitter.ks",
+        "sha256": "5705b30b4e9e1300affadec49fc232ca0a753c2ea8a4237d6feae20f250e28e4"
+      },
+      {
+        "bytes": 52,
+        "executable": false,
+        "path": "samples/audio2d_editor/scripts/main.ks",
+        "sha256": "94b414449ac6a8961b0696eeb899409b469f6cd77c6c2d743d9ac77072479fd7"
+      },
+      {
+        "bytes": 1282,
+        "executable": false,
+        "path": "samples/browser_physics2d/README.md",
+        "sha256": "9bce251ffbb9a1056b358eb48122646d5fbda5f7731ea72813bc9d61a954a15d"
+      },
+      {
+        "bytes": 82,
+        "executable": false,
+        "path": "samples/browser_physics2d/assets/solid.png",
+        "sha256": "0ec97ea305fe0802529e797f25099c6993f72578038bd2529fb6d0045dc7168b"
+      },
+      {
+        "bytes": 12289,
+        "executable": false,
+        "path": "samples/browser_physics2d/kiln.toml",
+        "sha256": "e84a463f490c5e4ea16b5264c8fc82d9f42ac7ec239bea694281e664c89f43c6"
+      },
+      {
+        "bytes": 950,
+        "executable": false,
+        "path": "samples/browser_physics2d/scripts/game.ks",
+        "sha256": "a4500778778f3c3a1a8a15d9d9b2bfdc4c05cc724dccd0d68fcb6858dd4725a2"
+      },
+      {
+        "bytes": 594,
+        "executable": false,
+        "path": "samples/browser_physics2d/scripts/hero.ks",
+        "sha256": "74aca83585a41f43b3f392399a6dd1d63ccf7749a30b68369f11295ac206e6db"
+      },
+      {
+        "bytes": 508,
+        "executable": false,
+        "path": "samples/collector/Cargo.toml",
+        "sha256": "e6923a2dabc03c6da2d16283ba55c7c94cd97fd95becfa40ebfaa2b19898ee9b"
+      },
+      {
+        "bytes": 10672,
+        "executable": false,
+        "path": "samples/collector/src/main.rs",
+        "sha256": "cd0dbe6e55676c76e4e0d269b1aeef58a5025ed35d890506054ba077392d8a85"
+      },
+      {
+        "bytes": 806,
+        "executable": false,
+        "path": "samples/editor_design/README.md",
+        "sha256": "8d19eed4d4d3d0fad5f2dfdd2ae7e2cfc3916904d935efe113b584c4c2af31ac"
+      },
+      {
+        "bytes": 123,
+        "executable": false,
+        "path": "samples/editor_design/art/coin.png",
+        "sha256": "7d0550372c5895a308872a3358dae5dcf6e9d27fabe69ea9403590672fa11db1"
+      },
+      {
+        "bytes": 926,
+        "executable": false,
+        "path": "samples/editor_design/art/generate.py",
+        "sha256": "50a7ada27668782e6f8f9e4a25be4f420e052fb4fb916df652006be8e7009408"
+      },
+      {
+        "bytes": 408,
+        "executable": false,
+        "path": "samples/editor_design/art/ground.png",
+        "sha256": "c19d81fea6c66c4c0e4fa52eb317a2766f66886aa08340493a70b98948f1ab2e"
+      },
+      {
+        "bytes": 108,
+        "executable": false,
+        "path": "samples/editor_design/art/player.png",
+        "sha256": "a24f10b3035c19002ceb72b26c68ab129e741726c846193af2fb14e30a70e41a"
+      },
+      {
+        "bytes": 208,
+        "executable": false,
+        "path": "samples/editor_design/art/rock.png",
+        "sha256": "44b56c1c12c96163ee18f2204d0f3d672ea063baa352c9d56f975c62c22f316b"
+      },
+      {
+        "bytes": 1598,
+        "executable": false,
+        "path": "samples/editor_design/kiln.toml",
+        "sha256": "d58efae6187202382b384cc227bd442699be2b5255f44035ac0fc72e0570377f"
+      },
+      {
+        "bytes": 231,
+        "executable": false,
+        "path": "samples/editor_design/scripts/main.ks",
+        "sha256": "66fba1a0a2261ced482f9a0bbc9a0bfc390b0e389111c340f3280bd782e53d2a"
+      },
+      {
+        "bytes": 131,
+        "executable": false,
+        "path": "samples/gameplay/Cargo.toml",
+        "sha256": "3a2f402e21fb8fbddcf50d053ac75ac3fe0325d084f68f842d4cb3236acd1c38"
+      },
+      {
+        "bytes": 8779,
+        "executable": false,
+        "path": "samples/gameplay/src/main.rs",
+        "sha256": "13d257529c4f8cf356e698414a1e451341ea5e0cf32bc05ad314bf6e9cd49620"
+      },
+      {
+        "bytes": 334,
+        "executable": false,
+        "path": "samples/input_save/Cargo.toml",
+        "sha256": "bbc466f6ddf5fe641edcc343a27780f92e565a56d7199ab72cb7f72541649915"
+      },
+      {
+        "bytes": 4764,
+        "executable": false,
+        "path": "samples/input_save/src/main.rs",
+        "sha256": "a1aa769e13e19277a670dc463e8f0b49502d6321559da376ae91344b33749753"
+      },
+      {
+        "bytes": 1166,
+        "executable": false,
+        "path": "samples/materials2d/README.md",
+        "sha256": "acf6eb453fcec411f03b56a98ddd4af24c52290165dda5808420c13b9f584123"
+      },
+      {
+        "bytes": 81,
+        "executable": false,
+        "path": "samples/materials2d/assets/blue.png",
+        "sha256": "03af7a6c178e570c74400b3b92550b79fdcbb3e6c41d58c14f6920738b8f90d9"
+      },
+      {
+        "bytes": 82,
+        "executable": false,
+        "path": "samples/materials2d/assets/red.png",
+        "sha256": "8916d83980b35e2ad89032559c473bff5bfe7ee5f1bba3c7e5264975b5ec9520"
+      },
+      {
+        "bytes": 87,
+        "executable": false,
+        "path": "samples/materials2d/assets/stripe.png",
+        "sha256": "f9b0b445dcc58da09f1e52131bd817c1018b65d2589f0c62800ca535f0dbfaf7"
+      },
+      {
+        "bytes": 6577,
+        "executable": false,
+        "path": "samples/materials2d/kiln.toml",
+        "sha256": "70af2c4c1c5ae70cf0dd1fcbd11b0db84a9f2d83aef757fd3f1e78fb726a16b7"
+      },
+      {
+        "bytes": 474,
+        "executable": false,
+        "path": "samples/materials2d/scripts/game.ks",
+        "sha256": "6fc12472955cf5e6818b7651fdcc6b817d99236bf213c95c6706f8d40861a29b"
+      },
+      {
+        "bytes": 464,
+        "executable": false,
+        "path": "samples/particles/Cargo.toml",
+        "sha256": "549b60ca44beb2cb558afa5974bdb14881540a26e36817bc1427e98b69736d35"
+      },
+      {
+        "bytes": 7775,
+        "executable": false,
+        "path": "samples/particles/src/main.rs",
+        "sha256": "79d0d0048d702a6d43c0e3806effad23a162d25a5201eda92e6d733080de982c"
+      },
+      {
+        "bytes": 262,
+        "executable": false,
+        "path": "samples/physics/Cargo.toml",
+        "sha256": "0f412af04a70b8d72b1ab48afee90f8edf918181bec64a1ba1fa990b809f70ad"
+      },
+      {
+        "bytes": 1371,
+        "executable": false,
+        "path": "samples/physics/src/main.rs",
+        "sha256": "5eea8b7557b87dc335f77c1eaf7f3df7e84390b86413b3d29af16e365209fa03"
+      },
+      {
+        "bytes": 518,
+        "executable": false,
+        "path": "samples/physics2d_editor/README.md",
+        "sha256": "dc7d6e5dcc55defe0383c8fe1693990b5a27aab2b4ab258add7d65c483e3e45c"
+      },
+      {
+        "bytes": 3828,
+        "executable": false,
+        "path": "samples/physics2d_editor/kiln.toml",
+        "sha256": "f306c921f291ba645e4f1d1b4431e615c1bc95e4b4cf218e62fa54a851fec06e"
+      },
+      {
+        "bytes": 893,
+        "executable": false,
+        "path": "samples/physics2d_editor/scripts/hero.ks",
+        "sha256": "c2aa8ccaf6541c8a29a68cfbd719b8dd4c3b2b1733544bd32725968b4afce140"
+      },
+      {
+        "bytes": 334,
+        "executable": false,
+        "path": "samples/physics2d_editor/scripts/platform.ks",
+        "sha256": "9ae49e7baaf9fe878430dc0be1d90a6ff93c7fa05e8735a1fc1251d5b3f88a56"
+      },
+      {
+        "bytes": 340,
+        "executable": false,
+        "path": "samples/render_graph/Cargo.toml",
+        "sha256": "c832798e39a05818cdd260227078acd4b73178b772e5fa78eb316bf07d4dac9e"
+      },
+      {
+        "bytes": 4991,
+        "executable": false,
+        "path": "samples/render_graph/src/main.rs",
+        "sha256": "31cd1f9a45d4347097f4659a7dc82d67d0cee52bb570a01d8672732580ccc64b"
+      },
+      {
+        "bytes": 411,
+        "executable": false,
+        "path": "samples/sprites/Cargo.toml",
+        "sha256": "f7182d947eadb296179b91202a02f1db72b69e5bcd0259e6901b59128c4b70a2"
+      },
+      {
+        "bytes": 6822,
+        "executable": false,
+        "path": "samples/sprites/src/main.rs",
+        "sha256": "7e5ceac23550aabbe2eb11c4381f8518144ebeef12f2634438d3ae6d7112314d"
+      },
+      {
+        "bytes": 410,
+        "executable": false,
+        "path": "samples/threads/Cargo.toml",
+        "sha256": "fb686f504628a92328bf89b555fd1c94797476da4cec098e9e66b4847ecf4029"
+      },
+      {
+        "bytes": 4479,
+        "executable": false,
+        "path": "samples/threads/src/main.rs",
+        "sha256": "695fdce70959254728e64f7706c73bac5f1930f39c9194756d6a07dba277f257"
+      },
+      {
+        "bytes": 483,
+        "executable": false,
+        "path": "samples/tilemap/Cargo.toml",
+        "sha256": "6880b4a74c6fd8246e548d11487daa885970a015eccd2b97b9c4397f6fb419a4"
+      },
+      {
+        "bytes": 7550,
+        "executable": false,
+        "path": "samples/tilemap/src/main.rs",
+        "sha256": "3eaa41e5b30147450b2baeaefd1411df6b284d5051c7ff6d5b02e5175596515d"
+      },
+      {
+        "bytes": 223,
+        "executable": false,
+        "path": "samples/ui/Cargo.toml",
+        "sha256": "e4a51d3b560a2ed40c2996a78dc5c726e4853e51289af4011c278513b479120f"
+      },
+      {
+        "bytes": 5615,
+        "executable": false,
+        "path": "samples/ui/src/main.rs",
+        "sha256": "11d967e47c046fb86bcf3a08ffd45d5fee69a6b9769dc7aa6bc13b1cb5c9c129"
+      },
+      {
+        "bytes": 2153,
+        "executable": false,
+        "path": "samples/ui2d_editor/README.md",
+        "sha256": "89b0dff6718d05efe82337c59e64019d52538c23ee5985178962066259ad066d"
+      },
+      {
+        "bytes": 14444,
+        "executable": false,
+        "path": "samples/ui2d_editor/assets/audio/hit.wav",
+        "sha256": "01c696051eda6039aa3ef7779347e47992b750e08876d9ffafe4e72d6947792f"
+      },
+      {
+        "bytes": 48044,
+        "executable": false,
+        "path": "samples/ui2d_editor/assets/audio/theme.wav",
+        "sha256": "c9517314969e35c3b7aa7d5202724080c141e0ce4c043cda419f6ca7efdfd6a0"
+      },
+      {
+        "bytes": 22352,
+        "executable": false,
+        "path": "samples/ui2d_editor/assets/fonts/KilnSampleSans.ttf",
+        "sha256": "7992ad6b3cda1d52a84a6ac1b85209500b4c6a3576c0eca428e54033852e24d4"
+      },
+      {
+        "bytes": 2481,
+        "executable": false,
+        "path": "samples/ui2d_editor/assets/fonts/LICENSE.txt",
+        "sha256": "b64ba8adc0e1752cf5b73113475f0ef5a18a401424614f4a9a3572de4082e670"
+      },
+      {
+        "bytes": 17337,
+        "executable": false,
+        "path": "samples/ui2d_editor/kiln.toml",
+        "sha256": "5f6f2b4a028d9243663aecdaeb94115df96020497745943683624f9b99d2ab39"
+      },
+      {
+        "bytes": 280,
+        "executable": false,
+        "path": "samples/ui2d_editor/scripts/main.ks",
+        "sha256": "edefc12541a74e9e6708015a3f85e8319795859f2f3597ea5a5d7824962c2f59"
+      },
+      {
+        "bytes": 1823,
+        "executable": false,
+        "path": "samples/ui2d_editor/scripts/ui.ks",
+        "sha256": "4b3b61e863a2d99829dcf055ffc8cccce767d1e4ff93e2d3679d01306f97e95b"
+      },
+      {
+        "bytes": 2368,
+        "executable": false,
+        "path": "samples/vertical_slice/README.md",
+        "sha256": "db18b619a75f89b32c98ec3e0d90932e4ee2f4e55630826ea6baf4c45f996f3c"
+      },
+      {
+        "bytes": 121,
+        "executable": false,
+        "path": "samples/vertical_slice/art/coin.png",
+        "sha256": "3117e823d1c83ca961108ed5f11be1f4777c69f8729b4cfe799f9a9a2d4bacb6"
+      },
+      {
+        "bytes": 2141,
+        "executable": false,
+        "path": "samples/vertical_slice/art/generate_art.py",
+        "sha256": "37c10b9b9547445588078309b4396fdad0d5fa9820770693998948fffe67ffe4"
+      },
+      {
+        "bytes": 3722,
+        "executable": false,
+        "path": "samples/vertical_slice/art/ground.png",
+        "sha256": "77a09a976deb7850bdf22fdb897a4766752e424a23d43f51dff8ed0ae6a91b2a"
+      },
+      {
+        "bytes": 118,
+        "executable": false,
+        "path": "samples/vertical_slice/art/hero.png",
+        "sha256": "c8349029a9c63d111dfc22168267748603a7bb1301f6dc8fbebaeab2ddc69fc3"
+      },
+      {
+        "bytes": 1909,
+        "executable": false,
+        "path": "samples/vertical_slice/kiln.toml",
+        "sha256": "c2abeb242aef45800918a71e69d5134180f44f4bd29d8d13d70be491c26b13ba"
+      },
+      {
+        "bytes": 484,
+        "executable": false,
+        "path": "samples/vertical_slice/scripts/main.ks",
+        "sha256": "dfda67db3d877002f51e57d007e58e7fc8be9987c8edfd337cf722925b3b9122"
+      },
+      {
+        "bytes": 691,
+        "executable": false,
+        "path": "samples/visual2d_editor/README.md",
+        "sha256": "44297164a925800033fac700d83ad7b1e43d2c94a351516d6265ab344de46fd3"
+      },
+      {
+        "bytes": 163,
+        "executable": false,
+        "path": "samples/visual2d_editor/art/hero.png",
+        "sha256": "d1a0dae41d48b16dc250929c30883194d83df5d9f325f0193e42ded47ad00846"
+      },
+      {
+        "bytes": 9428,
+        "executable": false,
+        "path": "samples/visual2d_editor/kiln.toml",
+        "sha256": "187ae128e3b0ecb00d20b8e537404413f707595bdcc0b1faaea775b3f87a7452"
+      },
+      {
+        "bytes": 187,
+        "executable": false,
+        "path": "samples/visual2d_editor/scripts/hero.ks",
+        "sha256": "fa47449277d365241477996ff58eae1cf8fcb08c994924d7aec13f70ac17a6f6"
+      },
+      {
+        "bytes": 58,
+        "executable": false,
+        "path": "samples/visual2d_editor/scripts/main.ks",
+        "sha256": "821de513222003aee79830872f3f92383f3ee9ddbed2f6c1ba0cf5bc0a1b33d0"
+      },
+      {
+        "bytes": 191,
+        "executable": false,
+        "path": "samples/visual2d_editor/tiles/terrain.png",
+        "sha256": "0d62c5cf0c9f70cb14eb53f49997bd431a5fae88b695dd61a7cd3064e84f6554"
+      },
+      {
+        "bytes": 339,
+        "executable": false,
+        "path": "templates/empty_2d.ron",
+        "sha256": "e62757d65e5fedcd6995b1cbe4d244556598d3a2bf487bb811361b5c3ef787c0"
+      },
+      {
+        "bytes": 1185,
+        "executable": false,
+        "path": "templates/platformer.ron",
+        "sha256": "8966d1885e8ccf4073ed40a74e697b9fd6674745e0b9b80f84e9db44881bb890"
+      },
+      {
+        "bytes": 1523,
+        "executable": false,
+        "path": "templates/topdown.ron",
+        "sha256": "b0a00398e1488f734647630810f7b07d4998e4fca8b4c405b8835f390e424774"
+      },
+      {
+        "bytes": 8159,
+        "executable": false,
+        "path": "tests/native/browser_export_smoke.py",
+        "sha256": "e3a3d23cc9f49b1a4b3129f4eaabf3c000b2630b05b4534a1fdee7b50cf1d64f"
+      },
+      {
+        "bytes": 713,
+        "executable": false,
+        "path": "tests/native/clean-linux/Dockerfile",
+        "sha256": "0f6cfccab50950ddd5e1f1c1f26f75728cf5fcafdfc10c237411a0b466d7f70c"
+      },
+      {
+        "bytes": 4572,
+        "executable": false,
+        "path": "tests/native/clean_linux_smoke.py",
+        "sha256": "078fe4a5fec46967eb412b42ef5e88d58a6f77e466a7e0a1d799f5e1fd2bbd0a"
+      },
+      {
+        "bytes": 9374,
+        "executable": false,
+        "path": "tests/native/editor_smoke.py",
+        "sha256": "cc9e4c6bbba102106fdef71e2976d89e7dad6fe3251c52cb13f676f1db2ae5ce"
+      },
+      {
+        "bytes": 8698,
+        "executable": false,
+        "path": "tests/native/export_smoke.py",
+        "sha256": "782f0acb1317dff118cde91ea7bd0e116125f5fbf0984637cb43af54a9e08b45"
+      },
+      {
+        "bytes": 6187,
+        "executable": false,
+        "path": "tests/native/materials_smoke.py",
+        "sha256": "de8a5dfd217c26df3e1993b1c94c9ad04fc117fdb3b542d2388dc9b000290ddb"
+      },
+      {
+        "bytes": 6322,
+        "executable": false,
+        "path": "tests/native/portable_editor_smoke.py",
+        "sha256": "1e393d099d314164ad35799f75ad996bd84f4a58cd249df8d268e6d20b8f0a42"
+      },
+      {
+        "bytes": 714,
+        "executable": false,
+        "path": "tests/native/relocated_browser_export.py",
+        "sha256": "00f0280ed7721c3e23f674b7dc316cac67e733f327166f14ac17e508bd788b0c"
+      },
+      {
+        "bytes": 1226,
+        "executable": false,
+        "path": "tests/native/relocated_export.py",
+        "sha256": "b9cb240e892b1258351f22820d1909584305fed7e47a7097935455bfee2797c6"
+      },
+      {
+        "bytes": 8059,
+        "executable": false,
+        "path": "tests/native/task7_editor_smoke.py",
+        "sha256": "9cc85f6b78856041a26f3e5b3dfc3351725448bb8628ed39cb49ac1ac6a56cdb"
+      },
+      {
+        "bytes": 8098,
+        "executable": false,
+        "path": "tests/native/task7_smoke.py",
+        "sha256": "3d27872d3ccb3c311e0510ae53c67dc1096d581fdac6922cb3abdcd51307679f"
+      },
+      {
+        "bytes": 5533,
+        "executable": false,
+        "path": "tests/native/test_build_editor.py",
+        "sha256": "f1f37bc28dfe5afca813e417a24451abbc9f797b4db6694de1947692a593dcac"
+      },
+      {
+        "bytes": 4291,
+        "executable": false,
+        "path": "tests/native/test_portable_package.py",
+        "sha256": "ac75e3dcd3a6d33b597d05fbe8f5c5e2945246ce36e2773676f017deea580246"
+      },
+      {
+        "bytes": 5914,
+        "executable": false,
+        "path": "tests/native/ui_smoke.py",
+        "sha256": "1d732146caacf52b93682ef7107fea015dc549222b3e05bee1d7d15b0c2c62a5"
+      },
+      {
+        "bytes": 15,
+        "executable": false,
+        "path": "tests/web/.gitignore",
+        "sha256": "ca1838cde9e4cfb493f3ea87a08bf973a9d6102aac688fc8828107d5586042aa"
+      },
+      {
+        "bytes": 2445,
+        "executable": false,
+        "path": "tests/web/README.md",
+        "sha256": "48bdbfdb2c1986851dcf32ef5b7ea957943788b56c97180d2d9869d451eb6357"
+      },
+      {
+        "bytes": 7040,
+        "executable": false,
+        "path": "tests/web/materials.cjs",
+        "sha256": "f4e52516141008a464b650a824743a2d59b5aebf3ce02fbc5d1de3a2b658aa70"
+      },
+      {
+        "bytes": 1737,
+        "executable": false,
+        "path": "tests/web/package-lock.json",
+        "sha256": "be7d27f9914e5456a1c3f258d18b8d687ee74d25474787ee9d5f20086795c417"
+      },
+      {
+        "bytes": 160,
+        "executable": false,
+        "path": "tests/web/package.json",
+        "sha256": "b1b79e90a95d77551624e6ec7ac282b73ca61c0e04122430186a59bac9504dac"
+      },
+      {
+        "bytes": 13269,
+        "executable": false,
+        "path": "tests/web/physics.cjs",
+        "sha256": "ac3f82031adb6b5a78873491d941407ac8fe64411ccc0b52fdcecaee6985f652"
+      },
+      {
+        "bytes": 6631,
+        "executable": false,
+        "path": "tests/web/smoke.cjs",
+        "sha256": "95d32ca107566803bb90832f05a10b2506c4ea07223f142d2fe58c9d4263e3f9"
+      },
+      {
+        "bytes": 13883,
+        "executable": false,
+        "path": "tests/web/task7.cjs",
+        "sha256": "cbf850f9e094ef12798d058e10da81f60c48a24b7d3f8d02e2f5a8fbf0c6ce91"
+      },
+      {
+        "bytes": 7919,
+        "executable": false,
+        "path": "tools/build_editor.py",
+        "sha256": "99a8f9fd3b186d50f55e131ad56e419371551c325d3be6ea3bbe23b81d0df707"
+      },
+      {
+        "bytes": 18278,
+        "executable": false,
+        "path": "tools/package_editor.py",
+        "sha256": "06c2d37c5fb87bfa1c8dfc08c3852621554159428500253f3a5a478cb7a86889"
+      },
+      {
+        "bytes": 629,
+        "executable": false,
+        "path": "tools/report_sizes.py",
+        "sha256": "a038d7600aa16fc9f054fb7ad30952bb48c15eabf710d554940a39d83d0c9219"
+      },
+      {
+        "bytes": 4300,
+        "executable": false,
+        "path": "tools/test_clean_linux.py",
+        "sha256": "939418cea1bb27832f74ea1762528442aec9c3a0b80b65cac64db59ee6fd62ae"
+      }
+    ],
+    "files_sha256": "f121c4c10fbffd2045bf1b792d9e696a0ee14d4a507f9d8684320cb6796fab39",
+    "revision": "a0e199bf2779bd2d0469ef84bce7ad6d12fb4c56"
+  },
+  "toolchain": {
+    "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+    "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.1\nLLVM version: 23.1.1",
+    "wasm_bindgen": "wasm-bindgen 0.2.130"
+  }
+}

@@ -13,14 +13,6 @@ use wgpu::{Device, Queue};
 use crate::camera::Camera;
 use crate::texture::{create_rgba8_texture_with_options, TextureId, FULL_UV};
 
-/// Placeholder for Material - should be imported from kiln-core once dependency is resolved
-/// TODO: Import from kiln-core::project::Material
-#[derive(Debug, Clone)]
-pub struct Material {
-    pub shader_source: String,
-    pub entry_point: String,
-}
-
 /// Maximum sprites per frame (prevents unbounded allocations).
 pub const MAX_SPRITES: usize = 16_384;
 
@@ -95,7 +87,14 @@ struct QuadVertex {
     corner: [f32; 2],
 }
 
+struct MaterialPipeline {
+    pipeline: wgpu::RenderPipeline,
+    bindings: wgpu::BindGroup,
+}
+
 struct TextureSlot {
+    view: wgpu::TextureView,
+    sampler: wgpu::Sampler,
     _texture: wgpu::Texture,
     bind_group: wgpu::BindGroup,
     pub width: u32,
@@ -109,18 +108,17 @@ pub struct SpriteRenderer {
     uniform_bind_group: wgpu::BindGroup,
     texture_bgl: wgpu::BindGroupLayout,
     textures: Vec<TextureSlot>,
-    /// Custom materials keyed by material ID (0 = default shader).
-    materials: Vec<Material>,
-    /// Compiled render pipelines for custom materials, keyed by material ID.
-    material_pipelines: std::collections::HashMap<u32, wgpu::RenderPipeline>,
+    uniform_bgl: wgpu::BindGroupLayout,
+    format: wgpu::TextureFormat,
+    material_pipelines: std::collections::HashMap<u32, MaterialPipeline>,
+    material_names: std::collections::HashMap<String, u32>,
+    material_key: Vec<u8>,
+    material_error: Option<String>,
     quad_vertices: wgpu::Buffer,
     quad_indices: wgpu::Buffer,
     instance_buffer: wgpu::Buffer,
-    /// Pending sprites queued for this frame: `(texture, material_id, layer, instance)`.
-    /// Sprites are sorted by `(layer, material_id, texture)` before drawing so that
-    /// sprites on lower layers (background) are drawn before higher layers
-    /// (foreground), preserving painter order for transparent sprites.
-    /// Within the same layer, material, and texture, submission order is preserved.
+    /// Pending sprites in transparent painter order. Only adjacent matching
+    /// texture/material runs batch; material changes never reorder sprites.
     pending: Vec<(TextureId, u32, f32, SpriteInstance)>,
     last_draw_calls: u32,
 }
@@ -142,13 +140,23 @@ const QUAD_INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 impl SpriteRenderer {
     /// Drop project bindings when a host rebuilds all affected sprites.
     pub fn clear_project_textures(&mut self) {
+        self.material_key.clear();
+        self.material_names.clear();
+        self.material_pipelines.clear();
         self.textures.truncate(1);
     }
     /// Create a new renderer (includes [`TextureId::WHITE`]).
     pub fn new(device: &Device, queue: &Queue, format: wgpu::TextureFormat) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("sprite_shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("sprite.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(
+                format!(
+                    "{}\n{}",
+                    crate::materials::VERTEX,
+                    crate::materials::DEFAULT_FRAGMENT
+                )
+                .into(),
+            ),
         });
 
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -281,7 +289,11 @@ impl SpriteRenderer {
             uniform_bind_group,
             texture_bgl,
             textures: Vec::new(),
-            materials: Vec::new(),
+            uniform_bgl,
+            format,
+            material_names: Default::default(),
+            material_key: Vec::new(),
+            material_error: None,
             material_pipelines: std::collections::HashMap::new(),
             quad_vertices,
             quad_indices,
@@ -364,6 +376,8 @@ impl SpriteRenderer {
         let id = TextureId(self.textures.len() as u32);
         self.textures.push(TextureSlot {
             _texture: texture,
+            view,
+            sampler,
             bind_group,
             width,
             height,
@@ -375,6 +389,9 @@ impl SpriteRenderer {
     /// texture IDs are invalidated; call only when replacing the owning resource library.
     pub fn clear_asset_textures(&mut self) {
         self.pending.clear();
+        self.material_key.clear();
+        self.material_names.clear();
+        self.material_pipelines.clear();
         self.textures.truncate(1);
     }
 
@@ -448,70 +465,175 @@ impl SpriteRenderer {
         self.pending.push((id, material_id, layer, instance));
     }
 
-    /// Register a material with the renderer for custom shader rendering.
-    /// Returns the material ID (starting from 1). Use `MaterialId::default()`
-    /// (0) for the default sprite shader.
-    pub fn add_material(&mut self, material: Material) -> u32 {
-        let id = self.materials.len() as u32 + 1;
-        self.materials.push(material);
-        id
+    /// Current validated ID for an authored material name.
+    pub fn material_id(&self, name: &str) -> Option<u32> {
+        self.material_names.get(name).copied()
     }
-
-    /// Compile a shader source into a render pipeline and register it with the
-    /// given material ID. Returns the material ID on success.
-    pub fn compile_shader(
+    /// Most recent material preparation error; invalid editor drafts remain visible.
+    pub fn material_error(&self) -> Option<&str> {
+        self.material_error.as_deref()
+    }
+    /// Prepare only when authored definitions or resolved textures change.
+    pub async fn prepare_project_materials(
         &mut self,
         device: &Device,
-        material_id: u32,
-        shader_source: &str,
-        entry_point: &str,
-    ) -> Result<u32, String> {
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some(&format!("custom_shader_{material_id}")),
-            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+        project: &kiln_core::Project,
+        resolve: impl Fn(&str) -> Option<TextureId>,
+    ) -> Result<(), String> {
+        let paths = crate::materials::texture_paths(project);
+        let textures: Vec<_> = paths
+            .iter()
+            .map(|p| (p, resolve(p).map(|id| id.0)))
+            .collect();
+        let mut refs: Vec<_> = project
+            .scenes
+            .values()
+            .flat_map(|s| &s.entities)
+            .chain(project.prefabs.values().map(|p| &p.root_entity))
+            .flat_map(|e| {
+                e.components.iter().filter_map(move |c| {
+                    if let kiln_core::Component::Sprite {
+                        material: Some(name),
+                        ..
+                    } = c
+                    {
+                        Some((&e.id, name))
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect();
+        refs.sort();
+        let key = serde_json::to_vec(&(&project.shaders, &project.materials, textures, refs))
+            .map_err(|e| e.to_string())?;
+        if self.material_key == key {
+            return self.material_error.clone().map_or(Ok(()), Err);
+        }
+        self.material_key = key;
+        self.material_names.clear();
+        self.material_pipelines.clear();
+        let result = self.build_project_materials(device, project, resolve).await;
+        self.material_error = result.as_ref().err().cloned();
+        result
+    }
+    async fn build_project_materials(
+        &mut self,
+        device: &Device,
+        project: &kiln_core::Project,
+        resolve: impl Fn(&str) -> Option<TextureId>,
+    ) -> Result<(), String> {
+        let plans = crate::materials::plans(project)?;
+        let mut pipelines = std::collections::HashMap::new();
+        let mut names = std::collections::HashMap::new();
+        for (index, plan) in plans.iter().enumerate() {
+            let id = index as u32 + 1;
+            let pipeline = self
+                .build_material(device, plan, &resolve)
+                .await
+                .map_err(|e| format!("Material '{}': {e}", plan.name))?;
+            pipelines.insert(id, pipeline);
+            names.insert(plan.name.clone(), id);
+        }
+        self.material_names = names;
+        self.material_pipelines = pipelines;
+        Ok(())
+    }
+    async fn build_material(
+        &self,
+        device: &Device,
+        plan: &crate::materials::MaterialPlan,
+        resolve: &impl Fn(&str) -> Option<TextureId>,
+    ) -> Result<MaterialPipeline, String> {
+        let mut slots = Vec::new();
+        for path in &plan.textures {
+            let id = resolve(path).ok_or_else(|| format!("Missing material texture '{path}'"))?;
+            slots.push(
+                self.textures
+                    .get(id.0 as usize)
+                    .ok_or("Invalid material texture ID")?,
+            );
+        }
+        let entries: Vec<_> = (0..slots.len() * 2)
+            .map(|index| wgpu::BindGroupLayoutEntry {
+                binding: index as u32,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: if index % 2 == 0 {
+                    wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    }
+                } else {
+                    wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)
+                },
+                count: None,
+            })
+            .collect();
+        device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("material_textures"),
+            entries: &entries,
         });
-
+        let resources: Vec<_> = (0..slots.len() * 2)
+            .map(|index| wgpu::BindGroupEntry {
+                binding: index as u32,
+                resource: if index % 2 == 0 {
+                    wgpu::BindingResource::TextureView(&slots[index / 2].view)
+                } else {
+                    wgpu::BindingResource::Sampler(&slots[index / 2].sampler)
+                },
+            })
+            .collect();
+        let bindings = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(&plan.name),
+            layout: &bgl,
+            entries: &resources,
+        });
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some(&plan.name),
+            bind_group_layouts: &[&self.uniform_bgl, &self.texture_bgl, &bgl],
+            push_constant_ranges: &[],
+        });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(&plan.name),
+            source: wgpu::ShaderSource::Wgsl(plan.source.clone().into()),
+        });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(&format!("sprite_pipeline_{material_id}")),
-            layout: None,
+            label: Some(&plan.name),
+            layout: Some(&layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point,
-                buffers: &[SpriteInstance::vertex_layout()],
+                entry_point: "vs_main",
+                buffers: &sprite_layouts(),
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point,
+                entry_point: &plan.entry,
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                    format: self.format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
                 compilation_options: Default::default(),
             }),
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
                 cull_mode: None,
-                unclipped_depth: false,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                conservative: false,
+                ..Default::default()
             },
             depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
+            multisample: Default::default(),
             multiview: None,
             cache: None,
         });
-
-        self.material_pipelines.insert(material_id, pipeline);
-        Ok(material_id)
-    }
-
-    /// Get a material by ID.
-    pub fn material(&self, id: u32) -> Option<&Material> {
-        self.materials.get(id as usize)
+        let error = device.pop_error_scope();
+        #[cfg(not(target_arch = "wasm32"))]
+        device.poll(wgpu::Maintain::Wait);
+        if let Some(error) = error.await {
+            return Err(error.to_string());
+        }
+        Ok(MaterialPipeline { pipeline, bindings })
     }
 
     /// Upload instances and draw one instanced call per distinct (material, texture) pair.
@@ -555,13 +677,9 @@ impl SpriteRenderer {
             }
             let count = i - start;
 
-            // Use material pipeline if material_id != 0, otherwise default pipeline
-            if mat_id != 0 && mat_id as usize <= self.materials.len() {
-                if let Some(pipeline) = self.material_pipelines.get(&mat_id) {
-                    render_pass.set_pipeline(pipeline);
-                } else {
-                    render_pass.set_pipeline(&self.pipeline);
-                }
+            if let Some(material) = self.material_pipelines.get(&mat_id) {
+                render_pass.set_pipeline(&material.pipeline);
+                render_pass.set_bind_group(2, &material.bindings, &[]);
             } else {
                 render_pass.set_pipeline(&self.pipeline);
             }
@@ -587,6 +705,18 @@ impl SpriteRenderer {
     pub fn draw_call_count(&self) -> u32 {
         self.last_draw_calls
     }
+}
+
+fn sprite_layouts() -> [wgpu::VertexBufferLayout<'static>; 2] {
+    const QUAD: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![0=>Float32x2];
+    [
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<QuadVertex>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &QUAD,
+        },
+        SpriteInstance::vertex_layout(),
+    ]
 }
 
 /// Stable sorting preserves transparent submission order within each layer.
@@ -914,5 +1044,130 @@ mod tests {
             ids.dedup();
             ids.len() as u32
         }
+    }
+}
+
+#[cfg(test)]
+mod material_target_tests {
+    use super::*;
+    #[test]
+    fn authored_material_renders_into_float_post_target() {
+        pollster::block_on(async {
+            let instance = wgpu::Instance::default();
+            let adapter = instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::LowPower,
+                    force_fallback_adapter: true,
+                    compatible_surface: None,
+                })
+                .await
+                .expect("Software GPU adapter required for material target test");
+            let (device, queue) = adapter
+                .request_device(
+                    &wgpu::DeviceDescriptor {
+                        label: None,
+                        required_features: wgpu::Features::empty(),
+                        required_limits: wgpu::Limits::downlevel_defaults(),
+                        memory_hints: Default::default(),
+                    },
+                    None,
+                )
+                .await
+                .unwrap();
+            let mut project = kiln_core::Project::default();
+            project.shaders.insert("red".into(),kiln_core::project::Shader {id:"red".into(),name:"red".into(),source:"@fragment fn fs_main()->@location(0)vec4<f32>{return vec4<f32>(1.0,0.0,0.0,1.0);}".into(),entry_point:"fs_main".into(),parameters:Default::default()});
+            project.materials.insert(
+                "red".into(),
+                kiln_core::project::SpriteMaterial {
+                    id: "red".into(),
+                    name: "red".into(),
+                    shader: "red".into(),
+                    parameters: Default::default(),
+                },
+            );
+            let mut sprites =
+                SpriteRenderer::new(&device, &queue, wgpu::TextureFormat::Rgba16Float);
+            sprites.upload_quad(&queue);
+            sprites
+                .prepare_project_materials(&device, &project, |_| None)
+                .await
+                .unwrap();
+            sprites.begin_frame();
+            sprites.push(SpriteInstance {
+                position: [0.5, 0.5],
+                size: [1.0, 1.0],
+                color: [1.0; 4],
+                material_id: sprites.material_id("red").unwrap(),
+                uv_rect: FULL_UV,
+                rotation: 0.0,
+            });
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: None,
+                size: wgpu::Extent3d {
+                    width: 1,
+                    height: 1,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba16Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&Default::default());
+            let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size: 256,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            let mut encoder = device.create_command_encoder(&Default::default());
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: None,
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                sprites.flush(&mut pass, &Camera::new(1.0, 1.0), &queue);
+            }
+            encoder.copy_texture_to_buffer(
+                texture.as_image_copy(),
+                wgpu::ImageCopyBuffer {
+                    buffer: &buffer,
+                    layout: wgpu::ImageDataLayout {
+                        offset: 0,
+                        bytes_per_row: Some(256),
+                        rows_per_image: Some(1),
+                    },
+                },
+                wgpu::Extent3d {
+                    width: 1,
+                    height: 1,
+                    depth_or_array_layers: 1,
+                },
+            );
+            queue.submit([encoder.finish()]);
+            let slice = buffer.slice(..);
+            let (tx, rx) = std::sync::mpsc::channel();
+            slice.map_async(wgpu::MapMode::Read, move |result| tx.send(result).unwrap());
+            device.poll(wgpu::Maintain::Wait);
+            rx.recv().unwrap().unwrap();
+            let mapped = slice.get_mapped_range();
+            let channels: Vec<_> = mapped[..8]
+                .chunks_exact(2)
+                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .collect();
+            assert_eq!(channels, [0x3c00, 0, 0, 0x3c00]);
+        });
     }
 }

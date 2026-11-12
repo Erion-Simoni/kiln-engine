@@ -6,6 +6,7 @@ pub mod audio;
 pub mod camera;
 pub mod clip;
 pub mod device_tier;
+pub mod distribution;
 pub mod export;
 pub mod hierarchy_transform;
 pub mod id;

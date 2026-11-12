@@ -1,10 +1,21 @@
 # Kiln Game Packaging and Signing Guide
 
 This document contains manual and planned packaging/signing guidance.
-**Current implementation (2026-11-06):** the CLI exports a portable game folder
-for the current desktop host using a matching prebuilt player. Installers, signing,
-cross-target and portable editor distribution remain Task 8 work. See
+**Current implementation (2026-11-11):** the CLI exports a portable game folder
+for the current desktop host using a matching prebuilt player, or a Browser folder
+using a prepared JS/WASM bundle. See [BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md). Installers, signing,
+cross-target, physical-machine and release-provenance work remain in Task 8.
+The prepared editor and its native export pass clean Ubuntu 24.04 userspace
+acceptance; see [CLEAN_MACHINE_TEST.md](CLEAN_MACHINE_TEST.md).
+A Linux development editor archive now bundles the editor/exporter/player,
+browser runtime, templates, sample and notices; see [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md). See
 [NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md) for the supported command and evidence.
+
+A pinned release-candidate Actions workflow performs locked builds, replay/payload
+comparison and software acceptance before uploading a candidate artifact and
+creating GitHub build-origin attestations in a separate job. See
+[BUILD_PROVENANCE.md](BUILD_PROVENANCE.md#hosted-release-candidate-workflow).
+GitHub origin attestation is separate from the OS installer signing described below.
 
 ---
 

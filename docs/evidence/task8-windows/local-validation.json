@@ -1,0 +1,23 @@
+{
+  "scope": "Executed local validation for Windows packaging and owner-selected project license; not a Windows desktop pass",
+  "just_check": "passed",
+  "rust_tests_passed": 665,
+  "rust_tests_skipped": 0,
+  "python_tests_passed": 27,
+  "windows_normalization_extraction_tests_passed": 4,
+  "actionlint": "1.7.7 passed for Linux and Windows workflows",
+  "workspace_packages_checked": 34,
+  "project_license": "MIT OR Apache-2.0",
+  "cargo_lock_sha256": "042a1a29202fab2e8940632cbc9f23f17e88a42572f9b2930e8d303e8de0ac17",
+  "real_linux_package_regression": {
+    "archive_sha256": "6eade796b6a095813d20ea0d52bbaa89bdc5aa769dae658ff3e2cb1bab3d4fb6",
+    "verified_installation_files": 1544,
+    "complete_project_license_bytes_checked": true,
+    "inventory_project_package_licenses_checked": true,
+    "limits": "Existing prebuilt Linux release binaries and fresh metadata; not a fresh captured build or a Windows result",
+    "preparing_checkout_revision": "c812b1a44c9a471d72241679a068f6ba051282b6",
+    "preparing_checkout_dirty": true,
+    "provenance": "preparation-observations-only"
+  },
+  "validation_code_checkpoint": "b1cae0c37f92de12ba484727e8636708e2968d82"
+}

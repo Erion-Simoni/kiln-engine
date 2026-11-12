@@ -19,6 +19,19 @@ M29 (3D foundation) is in progress — see `ROADMAP_FULL_M14_PLUS.md`.
 
 ## Step 1: Prerequisites
 
+For a Windows x64 portable candidate, follow
+[WINDOWS_PORTABLE.md](WINDOWS_PORTABLE.md), extract the entire installation and
+launch `kiln-editor.exe`. The bundled exporter/player/browser runtime need no
+Rust toolchain. Hosted startup and CLI exports pass; physical/full GUI authoring
+checks remain separate.
+
+For a Linux portable candidate, use the
+[completed-run download and verification instructions](BUILD_PROVENANCE.md#hosted-release-candidate-workflow),
+then launch the installed editor and create/open a project. That installation
+bundles the export tools and needs no Rust toolchain. Its OS/library requirements
+are in [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md). The following prerequisites and
+commands apply when building from source.
+
 - **Rust 1.87+** — `rustup` to install
 - **just** — `cargo install just`
 - **Linux native audio/controllers:** ALSA and udev development headers (`sudo apt-get install libasound2-dev libudev-dev` on Debian/Ubuntu). Native editor/player enable audio, fonts and controllers by default. Use `--no-default-features` to opt out, and add selected features when needed.
@@ -155,8 +168,9 @@ The complete output folder contains the executable, game archive and receipt.
 Run `game` (or `game.exe`) directly after moving that folder. Export/play do not
 need Rust; choose a new or empty destination. See [NATIVE_EXPORT_2D.md](NATIVE_EXPORT_2D.md)
 for validation, cancellation, runtime selection and the executed acceptance.
-Browser export, cross-target packaging, signing and portable editor distribution
-remain Task 8 work. [PACKAGING.md](PACKAGING.md) contains manual/future packaging
+For Browser, prepare the runtime with `just web-runtime`, choose **Browser** in
+the panel and follow [BROWSER_EXPORT_2D.md](BROWSER_EXPORT_2D.md). Cross-target
+packaging, signing and portable editor distribution remain Task 8 work. [PACKAGING.md](PACKAGING.md) contains manual/future packaging
 guidance, not a claim that the CLI creates installers today.
 
 ## Where to Go Next
@@ -171,7 +185,7 @@ guidance, not a claim that the CLI creates installers today.
 | iOS export | `docs/IOS.md` |
 | Architecture / crate map | `docs/ARCHITECTURE.md` |
 | Roadmap (M29 = 3D) | `ROADMAP_FULL_M14_PLUS.md` |
-| Budgets (size / perf) | `docs/BUDGETS.md` |
+| Performance/resource goals and optional size observations | `docs/BUDGETS.md` |
 | Session handoff / status | `docs/STATE.md` |
 
 ## Reference Sample

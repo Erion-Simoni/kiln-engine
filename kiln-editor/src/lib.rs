@@ -47,7 +47,7 @@ pub use anim_editor::AnimationEditorState;
 pub use app::{scene_from_world, EditorApp};
 pub use assets::{AssetBrowser, AssetEntry, AssetKind};
 pub use audio_editor::AudioEditorState;
-pub use build_panel::{BuildConfig, BuildPanel};
+pub use build_panel::{BuildConfig, BuildPanel, BuildTarget};
 pub use debugger_panel::DebuggerPanel;
 pub use editing::{
     add_entity, add_role, add_sprite, add_tilemap, add_transform, next_entity_id, remove_entity,

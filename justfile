@@ -26,24 +26,11 @@ demo:
 web:
     cargo build --target wasm32-unknown-unknown --release -p kiln-web
 
-# wasm/native size budgets
+# Optional artifact size observations; no package-size goal or release threshold.
 size:
-    @echo "=== Web WASM size check ==="
     cargo build --release --target wasm32-unknown-unknown -p kiln-web
-    @echo "Uncompressed WASM:"
-    @ls -lh target/wasm32-unknown-unknown/release/kiln_web.wasm
-    @echo ""
-    @echo "Note: wasm-opt and brotli tools required for full size check"
-    @echo "Install with: cargo install wasm-opt; cargo install brotli"
-    @echo ""
-    @echo "=== Editor installer size check ==="
-    @echo "Note: cargo-dist requires GitHub Actions CI for full installer builds"
-    @echo "Local build can estimate binary size:"
-    cargo build --release --bin kiln-editor
-    @echo "Editor binary:"
-    @ls -lh target/release/kiln-editor.exe 2>/dev/null || ls -lh target/release/kiln-editor 2>/dev/null || echo "Binary not found"
-    @echo ""
-    @echo "Budgets: WASM <1.5 MB brotli, Editor <40 MB installer"
+    cargo build --release --bin kiln-editor --bin kiln-player
+    python3 tools/report_sizes.py
 
 # import / pack assets
 assets:
@@ -69,3 +56,28 @@ web-smoke:
     npm ci --prefix tests/web --ignore-scripts
     node tests/web/smoke.cjs target/web-smoke
     node tests/web/task7.cjs target/web-smoke
+
+# Prepare the reusable browser export runtime beside development editor binaries.
+web-runtime:
+    cargo build --target wasm32-unknown-unknown -p kiln-web
+    wasm-bindgen target/wasm32-unknown-unknown/debug/kiln_web.wasm --target web --out-dir target/debug/web-runtime
+    cargo run -p kiln-cli -- web-runtime --input target/debug/web-runtime
+
+# Linux development bundle from prebuilt default-feature tools and prepared browser runtime.
+# Refuses to replace the output; see docs/PORTABLE_EDITOR.md for release gates.
+portable-editor:
+    cargo metadata --locked --format-version 1 --filter-platform x86_64-unknown-linux-gnu > target/portable-metadata.json
+    cargo metadata --locked --format-version 1 --filter-platform wasm32-unknown-unknown > target/portable-web-metadata.json
+    python3 tools/package_editor.py --binaries target/debug --web-runtime target/debug/web-runtime --metadata target/portable-metadata.json --metadata target/portable-web-metadata.json --output target/dist/kiln-portable-development.tar.gz
+
+# Fresh offline release build from a captured source/lock snapshot; output must not exist.
+portable-release output="target/portable-release":
+    python3 tools/build_editor.py --profile release --output {{quote(output)}}
+
+# Replay the same captured source/lock with fresh outputs and matching recorded tools/settings.
+portable-replay previous output="target/portable-replay":
+    python3 tools/build_editor.py --profile release --source-from {{quote(previous)}} --output {{quote(output)}}
+
+# Rehash real inputs/outputs; unequal or incompatible builds return failure.
+compare-builds first second output="target/build-comparison.json":
+    python3 tools/compare_builds.py {{quote(first)}} {{quote(second)}} --output {{quote(output)}}

@@ -3,6 +3,7 @@
 **/target/
 **/*.rs.bk
 Cargo.lock
+!/Cargo.lock
 
 # IDE
 .idea/
@@ -40,3 +41,7 @@ web/pkg/
 
 # Nested workspaces
 kiln-engine/
+
+# Python test/packaging caches
+__pycache__/
+*.pyc

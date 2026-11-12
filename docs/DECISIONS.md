@@ -2,6 +2,10 @@
 
 Date format: YYYY-MM-DD. Status: proposed | accepted | rejected | deprecated.
 
+**Current package-size policy:** ADR-0062 supersedes earlier size ceilings and
+size-based release/completion gates, at the project owner’s request. Historical
+measurements and earlier rationale are retained; sizes are informational.
+
 ---
 
 ## ADR-0028: Sprite texture paths are project-relative, `/`-separated (accepted)
@@ -1533,3 +1537,334 @@ kiln-core. Native editor UI and exported-game execution on Xvfb are required;
 no-Rust PATH and relocation checks are evidence, not a claim of clean-machine,
 other-OS/GPU or installer certification. Browser export, portable editor bundles
 and clean-machine/physical target checks remain Task 8 follow-up work.
+
+## ADR-0060: Prepared browser runtime bundles and relocated web exports
+
+**Date:** 2026-11-06
+**Status:** accepted (Task 8 browser checkpoint)
+
+Extend Task 8's staged export/process/receipt contract to Browser. Prepare the
+existing wasm-bindgen JS/WASM pair once, then export from prebuilt files without
+Cargo, Node or wasm-bindgen on the author's export PATH. Embed a small versioned
+custom metadata section in kiln-web; a CLI `web-runtime` preparation command reads
+it and records hashes for the JS/WASM pair. Export and editor output verification
+reject missing/changed/incompatible bundles. Reuse existing SHA-256 content_hash in kiln-assets (adding existing core protocol types);
+no new third-party dependency. Native receipts remain readable.
+
+Browser outputs contain the normalized project/resource tree, runtime files,
+job-specific receipt, and a self-contained loading HTML/JS shell using relative
+URLs and the real run(canvas_id, project_path) API. Display loading and actionable
+failure/retry state, and require a user gesture after loading for explicit audio
+unlock before exposing the playable canvas. Prevent the start gesture from
+activating an underlying game button, including a held Enter repeat after input
+installation. Add minimal WASM prepare/start entry points so loading never advances gameplay and
+audio is resumed from the start gesture before simulation begins;
+retain normal keyboard/pointer/touch/focus behavior. Serve over HTTP(S), including
+nested deployment paths; no HTML file:// launch claim. Failures and cancellation
+retain the prior export and clean staging as for native.
+
+Keep the native player/KAR branch intact. Add Browser choice/runtime-directory
+controls in the native editor and pass the selected target to output verification.
+Run artifact/hash verification off the editor UI thread so large WASM files do
+not pause rendering; cancellation after publication may retain complete output.
+Exercise actual GUI Browser export and relocate the result, then serve only that
+artifact in Chromium: loading/errors, game UI/fonts, keyboard/controller/touch,
+Web Audio unlock/overlap, localStorage settings/save/reload/resume and failed
+resource loading. Reject authored physics/joints and material overrides that the existing browser
+host has not integrated, rather than exporting silently degraded behavior. Other
+browsers/devices, clean-machine desktop dependency closure,
+release budgets and portable editor packaging remain separate Task 8 gates.
+
+## ADR-0061: Relocatable editor bundles and installed-tool identity
+
+**Date:** 2026-11-10
+**Status:** accepted (Task 8 portable development bundle checkpoint)
+
+Prepare a portable editor archive from matching prebuilt editor/exporter/player
+binaries and a verified browser runtime. Add a no-window `--tool-info` protocol to
+all three tools and a CLI `verify-editor-bundle` command. Record host/version,
+features and native debug-assertion flags; validate file sizes/SHA-256/executable
+permissions and the browser descriptor before publication and after extraction.
+Keep the browser and native export paths relative to the installed editor.
+
+Use a Python standard-library packaging tool for preparation only, with normalized
+tar/gzip metadata, a private staging directory, checksums and no replacement of
+existing archives. Include working templates, the saved-UI example, instructions,
+Cargo.lock and dependency notices. Inventory the union of Cargo's host/WASM
+resolved workspace graphs (a conservative superset, not an exact link analysis).
+Preserve package declarations and original notices/readmes; include pinned SPDX
+reference texts and MPL dependency source archives with verified Cargo checksums.
+Record workspace licensing as declared, without rewriting package license grants.
+No new executable third-party dependency is introduced.
+
+Add minimal template initialization when a CLI template has no scene so the
+installed CLI produces a playable starter without finding repository files. Test
+archive extraction, moved installation verification/tamper rejection, template
+initialization, native/browser GUI exports and resulting gameplay with no tools
+on PATH and an unrelated working directory. No generated binary/archive enters
+Git. Local debug bundles remain development evidence; release budgets, dependency
+closure/clean-machine execution, other OS/GPU/device checks and signing remain
+Task 8 gates. Include direct Linux ELF/glibc observations rather than claiming a
+self-contained system-library closure.
+
+## ADR-0062: Remove package-size release goals; verify a clean Linux userspace
+
+**Date:** 2026-11-10
+**Status:** accepted (explicit project-owner request)
+
+The owner removed release size as a project goal. Retire editor installer,
+native executable, WASM, Android and iOS package-size ceilings and associated
+completion gates. Size may be reported for information; no size result blocks
+completion, requires an exception or justifies removing working functionality.
+Keep frame-time, startup, memory/resource and bounded-input requirements.
+Earlier ADR/evidence size observations are historical, superseded by this decision.
+`just size` becomes an informational measurement command with no threshold checks.
+
+Continue Task 8 by testing the prepared installation in a clean Ubuntu 24.04
+container. Build a pinned-base test image with documented runtime system libraries
+and native GUI test drivers, copy only the required acceptance scripts, and run
+unprivileged/offline with only the archive and evidence mounted. No repository,
+Rust/Cargo, development sysroot or preinstalled editor may be present. Exercise
+installed-tool verification, real editor authoring/save/native export, relocated
+gameplay/save/restart/Continue and library resolution. Record base/image IDs,
+installed package versions and explicit absent-tool/source checks. Docker and
+Python are test infrastructure, not new engine/runtime dependencies. Containers
+share the host kernel/software graphics: other OS and physical-device validation
+remain separate, as does browser physics/material parity. The test image and
+installation share an explicit Ubuntu runtime package list, including dynamically
+loaded X11 libraries that native ELF dependency inspection alone cannot detect.
+
+## ADR-0063: Capability-checked browser 2D physics
+
+**Date:** 2026-11-10
+**Status:** accepted (Task 8 browser physics checkpoint)
+
+Enable the existing kiln-runtime/Rapier physics feature in default kiln-web builds.
+Reuse the shared scene, tilemap collider, fixed-step, collision/joint/script and
+logical save/restore paths; do not introduce a separate browser physics engine.
+Expose a `physics` Cargo opt-out alongside fonts. No new third-party dependency:
+Rapier already powers the native editor/player and is an existing optional runtime
+crate dependency. Browser minimal builds must reject authored physics explicitly.
+
+Record a backward-compatible optional physics capability in RuntimeInfo and the
+prepared WASM custom section. Legacy three-line metadata/JSON has physics=false;
+new metadata adds a strictly validated physics=0/1 line. Gate physics/joint export
+against the selected prepared runtime, including prefab definitions, so older
+runtimes still support nonphysics projects but cannot silently lose simulation.
+Keep material override rejection until the browser material host is integrated.
+
+Add shared WASM-compatible session regressions and real relocated browser export
+acceptance for simulation, collisions/filtering/raycast, kinematics/joints, logical
+save/reload and scene changes. Re-run existing browser UI/input/audio/storage and
+native/workspace checks. Software browser evidence does not certify physical
+hardware/other browsers. Package-size goals remain removed (ADR-0062).
+
+## ADR-0064: Shared authored sprite material pipelines
+
+**Date:** 2026-11-10
+**Status:** accepted (Task 8 material checkpoint)
+
+Replace the unused placeholder sprite material pipeline with one shared contract
+for editor/native/browser. Keep Kiln's vertex transform/UV/tint shader; authors
+supply a WGSL fragment entry taking VertexOutput (color, uv) and returning RGBA.
+Expose typed shader-default/material-override constants (Float/Vec2/Vec3/Vec4/Color)
+and named Texture parameters with generated texture/sampler bindings. Parameters
+are specialized per material; project edits rebuild cached pipelines, not every
+frame. Cap source/definition/parameter/texture counts as resource bounds, not
+package-size targets. Validate references/types/finiteness/WGSL/stages/bindings
+before export and capture backend pipeline failures through wgpu error scopes.
+
+Add kiln-core as an internal kiln-render dependency (core does not depend on
+render), plus direct naga 22.1 with wgsl-in, already present through wgpu 22.1
+(MIT/Apache-2.0, same compiler version, no new compiler implementation). Centralize
+material preparation/texture references and use actual render-target formats,
+quad/instance layouts and explicit compatible bind layouts. Bind per-material
+textures and preserve transparent painter order across default/custom/default runs.
+Missing/invalid authored material definitions fail export/startup; editor drafts
+surface errors and visibly mark unresolved material draws.
+
+Wire shared preparation/draw IDs into all three hosts and correct the shader
+editor's invalid new-shader template/entry defaults. Extend prepared runtime
+capabilities so old runtimes cannot silently ignore materials. Test pure validation,
+real native/browser pixels (including numeric and texture overrides, alpha/order,
+rotation, scene/save restoration), failure feedback and existing workflows.
+No release-size goal is reintroduced. Physical hardware/other OS and provenance
+checks remain separate Task 8 gates.
+### ADR-0065 — Captured portable builds and local build records (2026-11-10)
+
+- Task 8's prebuilt packager records preparation observations, which cannot link
+  arbitrary supplied binaries to source. Add an explicit Linux build driver that
+  snapshots tracked/nonignored files plus Cargo.lock, rejects links/special files,
+  hashes and archives that snapshot, and uses it as the build working directory.
+- Build native/default-WASM hosts offline and locked into a fresh target directory;
+  capture compiler/Cargo/wasm-bindgen versions, fixed commands, logs and artifact
+  hashes. Clear inherited Cargo profile/target/compiler-wrapper/rustflags overrides
+  rather than letting ambient flags silently alter the selected profile. Preserve
+  normal package-manager/proxy/CA and platform SDK discovery; record only selected
+  build settings and configuration hashes, never credential contents.
+- An optional local build record is checked by the packager against the snapshot,
+  lockfile, compiled profile and exact six native/browser payload files. Include it
+  in the verified installation. Prebuilt packaging remains supported without a
+  record, explicitly labeled as preparation-only observations.
+- This is an unsigned local execution record, not remote attestation, a hermetic
+  toolchain/sysroot/dependency audit or proof of byte-reproducible binaries. Keep
+  source/lock archive and logs beside the candidate for inspection. External Cargo
+  configuration/SDK/system dependencies still affect builds. Repeated builds and
+  trusted CI/signing remain release gates; size has no acceptance threshold.
+- No new dependency; Python standard library and existing Rust/build tools only.
+### ADR-0066 — Replaying captured builds and comparing actual payloads (2026-11-11)
+
+- Task 8 needs executed repeated-build evidence, not just recording one build.
+  Extend the captured builder with --source-from: validate the prior completed
+  record, source inventory/archive and lockfile, then copy the same source into a
+  new directory and use fresh compilation outputs. Require the prior profile,
+  host, compiler/bindgen, selected SDK settings and observed configuration hashes.
+- Build commands remain fixed by our driver; never execute commands supplied by
+  a build record. Replaying older engine source can use a newer build driver;
+  record the driver independently from the engine source inventory and retain
+  the actual executing driver beside its logs.
+- Add a comparison command that rehashes actual on-disk source/artifacts/logs and
+  completed archive/record receipts before comparing compatible input contracts
+  and all six native/prepared-browser payloads. Missing/changed files, different
+  inputs or unequal output must fail. Reports are exclusively created, so a stale
+  success cannot be silently overwritten or reused.
+- Compare payload bytes rather than claiming whole archive equality: build
+  records/log observations can legitimately differ between executions. Report
+  archive equality separately. Same-host/toolchain repetition does not certify
+  hermetic dependencies, independent builders, signatures or physical hardware.
+- No new dependency. Package sizes remain informational, never an equality or
+  release-size threshold. A changed byte is a reproducibility observation, not a
+  package-size failure.
+### ADR-0067 — Locked CI release candidates and separate provenance signing (2026-11-11)
+
+- Task 8's local builds are tested, but the existing CI only triggers on main /
+  master and cannot establish a hosted build for the active feature branch.
+  Track the exact root Cargo.lock already used by the release evidence; nested
+  standalone-workspace lockfiles retain their existing ignore behavior.
+- Add a Linux release-candidate workflow on selected feature/default-branch build
+  changes and manual dispatch. Pin the tested Rust/nextest versions and immutable
+  official Actions commits. Resolve bindgen from the tracked lockfile, use locked
+  dependency preparation, then fixed offline source capture/replay into fresh
+  target directories. Run quality/tests, payload comparison, moved installation /
+  browser behavior and clean Ubuntu acceptance before uploading a candidate.
+- Build/test has contents:read only. A separate job, after successful acceptance,
+  downloads fixed artifact files and invokes pinned official provenance actions
+  with id-token:write / attestations:write. It checks out/executes no engine code.
+  This produces GitHub build-origin attestation, not OS installer signing or a
+  licensing/physical-device certification. Failed gates cannot publish a candidate
+  as successful; diagnostic evidence is retained independently.
+- Candidate contents and attestation bundles are Actions artifacts. Existing Git
+  branch publication is sufficient authorization for this CI workflow; no public
+  release or external message is sent by the driver. Scope is Linux x86_64 and
+  hosted software acceptance. Remote completion must be observed before claiming
+  that a hosted build/attestation passed.
+- No runtime dependency. actionlint v1.7.7 (official release/checksum) is a local
+  development validator; Rust/Node/browser tooling already exists in the project.
+  No package-size ceiling is introduced.
+
+### ADR-0068 — Early artifact-service verification and native Node 24 actions (2026-11-11)
+
+- The owner supplied run 43088213774's actual annotations: both artifact uploads
+  failed with CreateArtifact HTTP 404, "workflow run not found", after successful
+  engine acceptance. This does not establish quota exhaustion or an expired
+  token. The same run warned that Node 20 actions were forced onto Node 24.
+- Update the release workflow to immutable official Node 24 action commits,
+  including the current artifact client. Preserve zipped multi-file uploads and
+  strict publication errors. Updating the client is a remediation attempt, not
+  proof that runtime migration caused the service's 404.
+- Add a short read-only preflight job before engine builds: upload a run/attempt/
+  source identity record, download it, and compare the actual bytes. A failed
+  artifact service stops expensive builds early. Successful preflight does not
+  certify the later candidate upload or separate OIDC attestation; observe those
+  jobs too. Retain the small probe for one day and isolate reruns by attempt.
+- Cache Cargo's installation manifests alongside cached tool binaries, with a
+  new cache key. Restored executables alone do not preserve cargo install's
+  version tracking. No engine/runtime dependency, permission expansion, public
+  release, upload-error suppression or package-size ceiling is introduced.
+
+### ADR-0069 — Native Windows portable candidate preparation (2026-11-12)
+
+- Task 8 has an accepted hosted Linux candidate; the owner's Windows laptop
+  needs actual Windows binaries and platform evidence. Extend the prebuilt
+  packager with deterministic ZIP output for Windows, preserving the existing
+  Linux archive format and offline installation verifier. Include matching
+  editor/exporter/player, browser runtime, templates/examples and original notices.
+- Build on a hosted Windows x86_64 MSVC runner with pinned Rust/official actions
+  and the root Cargo.lock. Prepare the browser runtime with matching bindgen.
+  Keep this separate from the captured Linux builder: Windows preparation uses
+  preparation-observations-only provenance, not a captured/replayed build claim.
+- Move the installation outside the checkout into a path with spaces, verify it,
+  reject corruption, initialize all templates and export Windows/browser games
+  with Rust/Node absent from PATH. Exercise visible editor/player startup and
+  normal window close using Windows APIs, retaining logs and screenshots where
+  available. Failures stay strict; no candidate is accepted from failed gates.
+- Publish passing Windows candidates as Actions artifacts, with a separate
+  no-checkout provenance job. This establishes hosted preparation and startup,
+  not full Windows GUI authoring/gameplay, physical Intel HD 520 performance,
+  audible/controller testing, Authenticode signing or public-release licensing.
+- No engine/runtime dependency. ZIP and acceptance use Python's standard library,
+  Windows APIs and existing hosted tools. Package sizes remain informational.
+
+### ADR-0070 — Project MIT OR Apache-2.0 license and bundled grants (2026-11-12)
+
+- The owner delegated the release license choice. Retain the workspace's existing
+  MIT OR Apache-2.0 dual license: permissive commercial use, familiar Rust
+  ecosystem terms and the option of Apache's explicit patent grant.
+- Add full root LICENSE-MIT and LICENSE-APACHE texts, replace README:TBD and make
+  all missing project crate/sample declarations inherit the workspace license.
+  Existing third-party/font licenses and attribution remain their own grants.
+- Portable packages must include the project license texts under licenses/project
+  and identify them in the inventory. Reject missing project grants or unlicensed
+  path-package metadata rather than inventing a declaration during packaging.
+- Historical artifacts/evidence preserve their original declarations. New licensed
+  candidates require new packaging from the updated source; this does not imply
+  prior archived downloads contained the newly added project license files.
+- No engine/runtime dependency or release-size ceiling.
+
+### ADR-0071 — Windows UTF-8 metadata and observable packaging failures (2026-11-12)
+
+- Windows run 43206825541 passed native/WASM release compilation and static-CRT
+  DLL inspection, then failed packaging before acceptance. Public annotations
+  expose only exit code 1. Existing .gitattributes already preserves pinned
+  license bytes; do not claim a newline-conversion cause or change those hashes.
+- Cargo/tool JSON is UTF-8. Read it explicitly as UTF-8 rather than a Windows
+  locale default, which can corrupt names or fail on valid Unicode. Exercise a
+  Unicode repository value with a simulated CP1252 default and check its actual
+  inventory roundtrip. The detailed remote exception still needs observation.
+- Emit escaped packaging exceptions as public workflow annotations and retain
+  build/package diagnostics. Keep failed preparation from publishing a candidate.
+- Save successful tool installation and compiler-output caches before later
+  acceptance can fail. Compiler caches are keyed by Rust, tracked crate inputs,
+  lockfile and hosted runner image; disable output caching if image identity is
+  absent. These Windows outputs are prebuilt preparation observations, not fresh
+  captured/replayed or hermetic builds. Cache hits never bypass DLL, installation,
+  export, desktop or publication gates. The captured Linux builder stays fresh.
+- No new engine dependency, permission expansion, error suppression or size goal.
+
+### ADR-0072 — Runtime-matched notices in native and browser exports (2026-11-12)
+
+- Task 8 currently requires manually copying the installation's notice directory
+  into exported games. Automatically copy it from the actual selected runtime's
+  verified portable installation, including project grants, original dependency /
+  font/Rust notices, inventory and included source archives. Reject incomplete or
+  changed installations; never attach an unrelated exporter's license inventory
+  to a custom runtime. Loose developer runtimes without an installation remain
+  supported, with a visible missing-notices warning and no verified-notice claim.
+- Add an optional notice-manifest SHA-256 to the export receipt. The attached
+  manifest inventories exact copied notice bytes and selected exported runtime
+  payload hashes. Native receipts allow only core payloads plus the declared
+  notice subtree. Existing receipts without notice metadata retain their prior
+  shape. No project/save format or runtime execution protocol changes.
+- Keep hashing in kiln-assets using its existing dependencies. Both exporter and
+  editor's background output verifier check the manifest hash, exact notice tree,
+  copied bytes and runtime binding. A copy/verification/cancellation failure must
+  preserve existing output and clean staging rather than publish partial success.
+- This verifies consistency with the matched installation's conservative notice
+  inventory, not legal completeness, signatures or SDK provenance. Project asset
+  notices remain the game author's responsibility. Full matching tool bundles are
+  required; mixing developer snapshots is not a supported distribution workflow.
+- Windows may restore compiler/dependency outputs from the same Rust/runner-image
+  cache prefix across source changes; Cargo invalidation and every downstream
+  acceptance gate still run. The captured Linux release builder remains fresh.
+- No new dependency or release-size threshold. Existing bounded-input limits
+  remain; no resource budget is weakened.

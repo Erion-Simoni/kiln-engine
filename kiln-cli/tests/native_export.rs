@@ -51,6 +51,8 @@ impl Fixture {
             audio: true,
             fonts: true,
             gamepad: true,
+            physics: true,
+            materials: true,
         };
         fs::write(
             &player,
@@ -102,6 +104,9 @@ fn export_preserves_relative_paths_excludes_private_data_and_refuses_overwrite()
     let receipt: ExportReceipt =
         serde_json::from_slice(&fs::read(output.join(export::RECEIPT_FILE)).unwrap()).unwrap();
     receipt.validate(&output, "success", "export-test").unwrap();
+    assert!(receipt.runtime_notice_manifest_sha256.is_none());
+    assert!(String::from_utf8_lossy(&result.stdout)
+        .contains("no verified installation notice inventory"));
     let archive = kiln_assets::Archive::load(&output.join("assets.kar")).unwrap();
     assert_eq!(
         archive.extract("art/nested/data.txt").unwrap(),
@@ -138,7 +143,7 @@ fn invalid_source_runtime_and_platform_never_publish_or_leave_staging() {
     assert!(!f.run(&output, "bad-player").status.success());
     assert!(!output.exists());
     let result = Command::new(env!("CARGO_BIN_EXE_kiln-cli"))
-        .args(["export", "--platform", "web", "--project"])
+        .args(["export", "--platform", "ios", "--project"])
         .arg(&f.project)
         .arg("--output")
         .arg(&output)
@@ -243,4 +248,231 @@ fn malformed_audio_fonts_and_images_are_rejected_without_a_device() {
     fs::write(&f.project, project.to_toml().unwrap()).unwrap();
     assert!(!f.run(&output, "image").status.success());
     assert!(!output.exists());
+}
+
+#[test]
+fn browser_exports_only_prepared_runtime_and_relative_project_with_validated_receipt() {
+    let f = Fixture::new();
+    let bundle = f.root.join("web runtime");
+    fs::create_dir(&bundle).unwrap();
+    let js =
+        "export function run(){}\nexport function prepare_game(){}\nexport function start_game(){}";
+    fs::write(bundle.join("kiln_web.js"), js).unwrap();
+    let name = b"kiln.runtime.v1";
+    let text = format!("1\n{}\nfonts=1\n", env!("CARGO_PKG_VERSION"));
+    let mut wasm = b"\0asm\x01\0\0\0".to_vec();
+    wasm.extend([0, (name.len() + 1 + text.len()) as u8, name.len() as u8]);
+    wasm.extend(name);
+    wasm.extend(text.as_bytes());
+    fs::write(bundle.join("kiln_web_bg.wasm"), wasm).unwrap();
+    let result = Command::new(env!("CARGO_BIN_EXE_kiln-cli"))
+        .args(["web-runtime", "--input"])
+        .arg(&bundle)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let mut project = Project::from_toml(&fs::read_to_string(&f.project).unwrap()).unwrap();
+    project.name = "<script>alert(1)</script> & {{WIDTH}}".into();
+    fs::write(&f.project, project.to_toml().unwrap()).unwrap();
+    let output = f.root.join("browser output");
+    let command = |job: &str| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_kiln-cli"));
+        command
+            .args(["export", "--platform", "web", "--project"])
+            .arg(&f.project)
+            .arg("--output")
+            .arg(&output)
+            .arg("--web-runtime")
+            .arg(&bundle)
+            .arg("--job-id")
+            .arg(job);
+        command
+    };
+    let result = command("browser").output().unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let receipt: ExportReceipt =
+        serde_json::from_slice(&fs::read(output.join(export::RECEIPT_FILE)).unwrap()).unwrap();
+    receipt.validate(&output, "browser", "export-test").unwrap();
+    assert_eq!(receipt.runtime.platform, "web");
+    assert_eq!(
+        fs::read(output.join("project/art/nested/data.txt")).unwrap(),
+        b"preserve me"
+    );
+    assert!(!output.join("project/.kiln-save").exists());
+    let html = fs::read_to_string(output.join("index.html")).unwrap();
+    assert!(!html.contains("<script>alert"));
+    assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt; &amp; {{WIDTH}}"));
+    assert!(fs::read_to_string(output.join("game.js"))
+        .unwrap()
+        .contains("new URL('./project/kiln.toml', import.meta.url)"));
+    let before = fs::read(output.join("index.html")).unwrap();
+    assert!(!command("again").output().unwrap().status.success());
+    assert_eq!(fs::read(output.join("index.html")).unwrap(), before);
+    fs::remove_dir_all(&output).unwrap();
+    project
+        .scenes
+        .get_mut("main")
+        .unwrap()
+        .entities
+        .push(kiln_core::Entity {
+            id: "requires-physics".into(),
+            name: "Physics".into(),
+            components: vec![kiln_core::Component::Physics {
+                body: Default::default(),
+                collider: Default::default(),
+            }],
+        });
+    fs::write(&f.project, project.to_toml().unwrap()).unwrap();
+    let physics = command("physics").output().unwrap();
+    assert!(!physics.status.success());
+    assert!(String::from_utf8_lossy(&physics.stderr).contains("uses physics"));
+    assert!(!output.exists());
+    assert!(!export::staging_path(&output, "physics").exists());
+    // The same authored body exports only with a capability-bearing prepared runtime.
+    let capable_text = format!("1\n{}\nfonts=1\nphysics=1\n", env!("CARGO_PKG_VERSION"));
+    let mut capable_wasm = b"\0asm\x01\0\0\0".to_vec();
+    capable_wasm.extend([
+        0,
+        (name.len() + 1 + capable_text.len()) as u8,
+        name.len() as u8,
+    ]);
+    capable_wasm.extend(name);
+    capable_wasm.extend(capable_text.as_bytes());
+    fs::write(bundle.join("kiln_web_bg.wasm"), capable_wasm).unwrap();
+    assert!(Command::new(env!("CARGO_BIN_EXE_kiln-cli"))
+        .args(["web-runtime", "--input"])
+        .arg(&bundle)
+        .output()
+        .unwrap()
+        .status
+        .success());
+    let capable = command("capable").output().unwrap();
+    assert!(
+        capable.status.success(),
+        "{}",
+        String::from_utf8_lossy(&capable.stderr)
+    );
+    let receipt: ExportReceipt =
+        serde_json::from_slice(&fs::read(output.join(export::RECEIPT_FILE)).unwrap()).unwrap();
+    assert!(receipt.runtime.physics);
+    fs::remove_dir_all(&output).unwrap();
+    project
+        .scenes
+        .get_mut("main")
+        .unwrap()
+        .entities
+        .last_mut()
+        .unwrap()
+        .components = vec![kiln_core::Component::Sprite {
+        color: [1.0; 4],
+        width: 32.0,
+        height: 32.0,
+        texture: None,
+        layer: 0.0,
+        material: Some("custom".into()),
+        animation_clip: None,
+    }];
+    fs::write(&f.project, project.to_toml().unwrap()).unwrap();
+    let material = command("material").output().unwrap();
+    assert!(!material.status.success());
+    assert!(String::from_utf8_lossy(&material.stderr).contains("missing material"));
+    project.scenes.get_mut("main").unwrap().entities.clear();
+    fs::write(&f.project, project.to_toml().unwrap()).unwrap();
+    fs::write(bundle.join("kiln_web.js"), format!("{js}\n// mixed build")).unwrap();
+    assert!(!command("mixed").output().unwrap().status.success());
+    assert!(!output.exists());
+    assert!(!export::staging_path(&output, "mixed").exists());
+}
+
+#[test]
+fn material_capabilities_and_bad_shader_diagnostics_preserve_output() {
+    let fixture = Fixture::new();
+    let root = fixture.project.parent().unwrap();
+    let mut project = Project::from_toml(&fs::read_to_string(&fixture.project).unwrap()).unwrap();
+    project.shaders.insert(
+        "tint".into(),
+        kiln_core::project::Shader {
+            id: "tint".into(),
+            name: "tint".into(),
+            source: kiln_runtime::materials::DEFAULT_FRAGMENT.into(),
+            entry_point: "fs_main".into(),
+            parameters: Default::default(),
+        },
+    );
+    project.materials.insert(
+        "paint".into(),
+        kiln_core::project::SpriteMaterial {
+            id: "paint".into(),
+            name: "paint".into(),
+            shader: "tint".into(),
+            parameters: Default::default(),
+        },
+    );
+    fs::write(&fixture.project, project.to_toml().unwrap()).unwrap();
+    let bundle = root.join("materials-runtime");
+    fs::create_dir(&bundle).unwrap();
+    fs::write(
+        bundle.join("kiln_web.js"),
+        "export function run(){}\nexport function prepare_game(){}\nexport function start_game(){}",
+    )
+    .unwrap();
+    let prepare = |capable: bool| {
+        let name = b"kiln.runtime.v1";
+        let text = format!(
+            "1\n{}\nfonts=1\nphysics=1\nmaterials={}\n",
+            env!("CARGO_PKG_VERSION"),
+            u8::from(capable)
+        );
+        let mut wasm = b"\0asm\x01\0\0\0".to_vec();
+        wasm.extend([0, (name.len() + 1 + text.len()) as u8, name.len() as u8]);
+        wasm.extend(name);
+        wasm.extend(text.as_bytes());
+        fs::write(bundle.join("kiln_web_bg.wasm"), wasm).unwrap();
+        assert!(Command::new(env!("CARGO_BIN_EXE_kiln-cli"))
+            .args(["web-runtime", "--input"])
+            .arg(&bundle)
+            .output()
+            .unwrap()
+            .status
+            .success());
+    };
+    let output = root.join("material-game");
+    let command = || {
+        Command::new(env!("CARGO_BIN_EXE_kiln-cli"))
+            .args(["export", "--platform", "web", "--project"])
+            .arg(&fixture.project)
+            .arg("--web-runtime")
+            .arg(&bundle)
+            .arg("--output")
+            .arg(&output)
+            .output()
+            .unwrap()
+    };
+    prepare(false);
+    let failed = command();
+    assert!(!failed.status.success());
+    assert!(String::from_utf8_lossy(&failed.stderr).contains("lacks sprite materials"));
+    assert!(!output.exists());
+    prepare(true);
+    let valid = command();
+    assert!(
+        valid.status.success(),
+        "{}",
+        String::from_utf8_lossy(&valid.stderr)
+    );
+    let before = fs::read(output.join("export.json")).unwrap();
+    project.shaders.get_mut("tint").unwrap().source = "invalid WGSL".into();
+    fs::write(&fixture.project, project.to_toml().unwrap()).unwrap();
+    let invalid = command();
+    assert!(!invalid.status.success());
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("Material 'paint'"));
+    assert_eq!(before, fs::read(output.join("export.json")).unwrap());
 }

@@ -6,10 +6,20 @@ const path = require('node:path');
 const {chromium} = require('playwright');
 const pkg = path.resolve(process.argv[2] || 'target/web-smoke');
 const game = path.resolve('samples/ui2d_editor');
+const exported = process.env.WEB_EXPORT_ROOT ? path.resolve(process.env.WEB_EXPORT_ROOT) : null;
+const deploy = '/games/nested/demo/';
 const output = path.resolve(process.env.WEB_TASK7_EVIDENCE || 'target/task7-web-evidence');
 const html = `<!doctype html><html><head><link rel="icon" href="data:,"></head><body style="margin:0;padding:30px 0 0 70px;background:#161616"><canvas id="game" style="width:800px;height:450px;touch-action:none"></canvas><script type="module">import init,{run} from '/pkg/kiln_web.js';window.ready=(async()=>{await init();await run('game','/game/kiln.toml')})();</script></body></html>`;
 const server = http.createServer(async(req,res)=>{
-  try {const url=new URL(req.url,'http://localhost');if(url.pathname==='/'){res.setHeader('Content-Type','text/html');return res.end(html);}
+  try {const url=new URL(req.url,'http://localhost');
+    if(exported){
+      if(!url.pathname.startsWith(deploy)){res.writeHead(404);return res.end();}
+      const file=path.resolve(exported,decodeURIComponent(url.pathname.slice(deploy.length)||'index.html'));
+      if(!file.startsWith(exported+path.sep)){res.writeHead(403);return res.end();}
+      res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.wasm':'application/wasm','.png':'image/png','.wav':'audio/wav','.ttf':'font/ttf'})[path.extname(file)]||'text/plain');
+      return res.end(await fs.readFile(file));
+    }
+    if(url.pathname==='/'){res.setHeader('Content-Type','text/html');return res.end(html);}
     const match=url.pathname.match(/^\/(pkg|game)\/(.+)$/);if(!match){res.writeHead(404);return res.end();}
     const base=match[1]==='pkg'?pkg:game;const file=path.resolve(base,decodeURIComponent(match[2]));if(!file.startsWith(base+path.sep)){res.writeHead(403);return res.end();}
     res.setHeader('Content-Type',({'.js':'text/javascript','.wasm':'application/wasm','.png':'image/png','.wav':'audio/wav','.ttf':'font/ttf'})[path.extname(file)]||'text/plain');res.end(await fs.readFile(file));
@@ -30,10 +40,46 @@ const server = http.createServer(async(req,res)=>{
     const pad=Object.create(Gamepad.prototype);Object.defineProperties(pad,{connected:{value:true},axes:{get:()=>[0,0,0,0]},buttons:{get:()=>window.padButtons.map(pressed=>{const b=Object.create(GamepadButton.prototype);Object.defineProperties(b,{pressed:{value:pressed},value:{value:pressed?1:0},touched:{value:pressed}});return b;})}});
     navigator.getGamepads=()=>[pad];
   });
-  const page=await context.newPage();const errors=[],requests=[],warnings=[];
-  page.on('pageerror',error=>errors.push(String(error)));page.on('console',message=>{if(message.type()==='error')errors.push(message.text());if(message.type()==='warning')warnings.push(message.text());if(process.env.WEB_TASK7_DEBUG)console.error('[browser]',message.type(),message.text());});
+  const page=await context.newPage();const errors=[],requests=[],warnings=[],pageErrors=[];
+  page.on('pageerror',error=>{errors.push(String(error));pageErrors.push(String(error));});page.on('console',message=>{if(message.type()==='error')errors.push(message.text());if(message.type()==='warning')warnings.push(message.text());if(process.env.WEB_TASK7_DEBUG)console.error('[browser]',message.type(),message.text());});
   page.on('response',r=>{if(r.status()>=400)requests.push(r.url());});
-  async function open(){await page.goto(`http://127.0.0.1:${server.address().port}/`);await page.waitForFunction(()=>window.ready!==undefined);await page.evaluate(()=>window.ready);await page.waitForTimeout(250);}
+  let boots=0;
+  async function open(){
+    let releaseWasm, requestFinished;
+    if(exported&&boots===0){
+      const loading=new Promise(resolve=>releaseWasm=resolve);
+      let requestDone;
+      requestFinished=new Promise(resolve=>requestDone=resolve);
+      await page.route('**/kiln_web_bg.wasm',async route=>{
+        await loading;await route.continue();requestDone();
+      });
+    }
+    await page.goto(`http://127.0.0.1:${server.address().port}${exported?deploy:'/'}`);
+    if(exported){
+      if(releaseWasm){
+        await page.waitForFunction(()=>document.getElementById('gate').dataset.state==='loading');
+        await page.locator('#stage').screenshot({path:path.join(output,'loading.png')});
+        releaseWasm();await requestFinished;await page.unroute('**/kiln_web_bg.wasm');
+      }
+      await page.waitForFunction(()=>['ready','error'].includes(document.getElementById('gate').dataset.state));
+      assert.equal(await page.locator('#gate').getAttribute('data-state'),'ready',await page.locator('#status').textContent());
+      await page.waitForTimeout(200);
+      assert.equal(await page.evaluate(()=>audioAudit.starts.length),0,'Preparing must not start gameplay/audio');
+      if(boots===0)await page.locator('#stage').screenshot({path:path.join(output,'ready_to_start.png')});
+      // Keyboard consent must not also activate the underlying title Start button.
+      if(boots===0){
+        await page.locator('#start').focus();await page.keyboard.down('Enter');
+        await page.waitForFunction(()=>document.getElementById('gate').hidden);
+        await page.keyboard.down('Enter'); // A held consent key repeats after game input is installed.
+        await page.waitForTimeout(100);await page.keyboard.up('Enter');
+      }
+      else await page.locator('#start').click();
+      await page.waitForFunction(()=>document.getElementById('gate').hidden);
+    }else{
+      await page.waitForFunction(()=>window.ready!==undefined);await page.evaluate(()=>window.ready);
+    }
+    boots++;await page.waitForTimeout(250);
+  }
   async function shot(name){await page.waitForTimeout(120);await page.locator('#game').screenshot({path:path.join(output,`${name}.png`)});}
   async function click(x,y){const box=await page.locator('#game').boundingBox();await page.mouse.click(box.x+x*box.width/640,box.y+y*box.height/360);await page.waitForTimeout(120);}
   async function pad(index){await page.evaluate(index=>window.padButtons[index]=true,index);await page.waitForTimeout(90);await page.evaluate(index=>window.padButtons[index]=false,index);await page.waitForTimeout(90);}
@@ -44,7 +90,7 @@ const server = http.createServer(async(req,res)=>{
   // D-pad and A use the actual browser Gamepad API, not injected engine events.
   await pad(13);await pad(0);await shot('controller_settings');
   const beforeSound=await page.evaluate(()=>audioAudit.starts.filter(s=>!s.loop).length);
-  const box=await page.locator('#game').boundingBox();await page.touchscreen.tap(box.x+320*1.25,box.y+180*1.25);await page.waitForTimeout(160);await shot('settings_changed');
+  const box=await page.locator('#game').boundingBox();await page.touchscreen.tap(box.x+320*box.width/640,box.y+180*box.height/360);await page.waitForTimeout(160);await shot('settings_changed');
   const audio=await page.evaluate(()=>({music:audioAudit.starts.some(s=>s.loop),sounds:audioAudit.starts.filter(s=>!s.loop).length,contexts:audioAudit.contexts.map(c=>c.state),gains:audioAudit.gains.map(g=>g.gain.value)}));
   assert.equal(audio.sounds,beforeSound+1,'One touch must generate exactly one button event');assert.ok(audio.music);assert.ok(audio.contexts.includes('running'));
   const preferences=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),prefsKey);
@@ -70,6 +116,32 @@ const server = http.createServer(async(req,res)=>{
   // Corrupt saves report failure without clearing or rewriting the slot.
   await page.evaluate(key=>localStorage.setItem(key,'broken'),slotKey);await open();await page.keyboard.press('F9');await page.waitForTimeout(160);await shot('load_error');assert.equal(await page.evaluate(key=>localStorage.getItem(key),slotKey),'broken');
   assert.deepEqual(errors,[]);assert.deepEqual(requests,[]);
-  const result={passed:true,controller_navigation:true,touch_once:true,audio,health:saved.game_data.health.Integer,saved_actor_x:savedActor,resumed_actor_x:resumedActor,script_starts:resumed.attached.ui.memory.values.starts.Integer,preferences_independent:true,quota_preserves_slot:true,corrupt_load_preserves_slot:true};
+  let loadingFailure=false,retry=false,bootstrapFailure=false;
+  if(exported){
+    await page.route('**/project/scripts/ui.ks',route=>route.fulfill({status:503,body:'temporarily unavailable'}));
+    await page.goto(`http://127.0.0.1:${server.address().port}${deploy}`);
+    await page.waitForFunction(()=>document.getElementById('gate').dataset.state==='error');
+    assert.match(await page.locator('#status').textContent(),/Could not load game/);
+    assert.equal(await page.locator('#start').textContent(),'Reload game');
+    await page.locator('#stage').screenshot({path:path.join(output,'loading_error.png')});
+    loadingFailure=true;
+    await page.unroute('**/project/scripts/ui.ks');
+    await page.locator('#start').click();
+    await page.waitForFunction(()=>document.getElementById('gate').dataset.state==='ready');
+    retry=true;
+    await page.route('**/game.js',route=>route.fulfill({status:503,body:'temporarily unavailable'}));
+    await page.goto(`http://127.0.0.1:${server.address().port}${deploy}`);
+    await page.waitForFunction(()=>document.getElementById('gate').dataset.state==='error');
+    assert.match(await page.locator('#status').textContent(),/Could not load game loader/);
+    assert.equal(await page.locator('#start').textContent(),'Reload game');
+    await page.locator('#stage').screenshot({path:path.join(output,'loader_error.png')});
+    bootstrapFailure=true;
+    await page.unroute('**/game.js');
+    await page.locator('#start').click();
+    await page.waitForFunction(()=>document.getElementById('gate').dataset.state==='ready');
+
+  }
+  assert.deepEqual(pageErrors,[]);
+  const result={passed:true,exported_artifact:!!exported,nested_deployment:!!exported,preparation_does_not_advance:!!exported,loading_failure_feedback:loadingFailure,reload_retry:retry,bootstrap_failure_feedback:bootstrapFailure,controller_navigation:true,touch_once:true,audio,health:saved.game_data.health.Integer,saved_actor_x:savedActor,resumed_actor_x:resumedActor,script_starts:resumed.attached.ui.memory.values.starts.Integer,preferences_independent:true,quota_preserves_slot:true,corrupt_load_preserves_slot:true};
   await fs.writeFile(path.join(output,'result.json'),JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result));
 }catch(error){console.error(error);process.exitCode=1;}finally{if(browser)await browser.close();server.close();}})();
