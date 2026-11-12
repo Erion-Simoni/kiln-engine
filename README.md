@@ -32,6 +32,12 @@ just web      # wasm demo in browser
 
 ## Download
 
+Windows x64 portable candidate: [successful build and startup/export tests](https://github.com/Erion-Simoni/kiln-engine/actions/runs/43215982526),
+source `3ff72d3`. Follow [WINDOWS_PORTABLE.md](docs/WINDOWS_PORTABLE.md) to download,
+extract the complete ZIP, verify it and launch `kiln-editor.exe` without Rust.
+This is a hosted startup/CLI-export checkpoint; physical-device and full Windows
+GUI authoring acceptance remain separate.
+
 No public releases are published yet. The Linux release-candidate workflow builds
 and tests a portable editor with its exporter, player, browser runtime, templates
 and examples. Use only a completed successful run and follow the

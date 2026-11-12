@@ -19,6 +19,12 @@ M29 (3D foundation) is in progress — see `ROADMAP_FULL_M14_PLUS.md`.
 
 ## Step 1: Prerequisites
 
+For a Windows x64 portable candidate, follow
+[WINDOWS_PORTABLE.md](WINDOWS_PORTABLE.md), extract the entire installation and
+launch `kiln-editor.exe`. The bundled exporter/player/browser runtime need no
+Rust toolchain. Hosted startup and CLI exports pass; physical/full GUI authoring
+checks remain separate.
+
 For a Linux portable candidate, use the
 [completed-run download and verification instructions](BUILD_PROVENANCE.md#hosted-release-candidate-workflow),
 then launch the installed editor and create/open a project. That installation

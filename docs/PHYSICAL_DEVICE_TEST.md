@@ -5,8 +5,11 @@ speakers/headphones and controller. Intel Core i7-6600U / Intel HD 520 is a usef
 reference configuration. A cloud VM, Xvfb, SwiftShader/Mesa CPU adapter, null audio
 or simulated gamepad result remains software evidence.
 
-The current candidate is Linux x86_64 with Ubuntu 24.04 / GLIBC 2.39 requirements.
-Windows/macOS need matching native binaries/bundles before running this checklist.
+Candidates exist for Linux x86_64 (Ubuntu 24.04 / GLIBC 2.39) and Windows x64.
+Use [WINDOWS_PORTABLE.md](WINDOWS_PORTABLE.md) for the Windows download, complete
+ZIP extraction and PowerShell commands; executables use the .exe suffix there.
+The Windows hosted startup check does not certify your laptop or Windows version.
+macOS still needs matching native binaries/bundles before running this checklist.
 Record each result as **pass**, **fail** or **not run**, with the actual device and
 method. This document prepares the checks; no physical-device pass is implied.
 

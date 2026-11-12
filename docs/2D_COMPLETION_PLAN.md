@@ -151,14 +151,15 @@ saves and browser quota failures preserve the old slot/live world. Software
 acceptance is complete; physical-controller, audible-device and remote CI checks
 remain explicitly separate. Real editor export/distribution is Task 8.
 
-### 8. Real build/export and distribution — IN PROGRESS (hosted Linux candidate accepted and attested)
+### 8. Real build/export and distribution — IN PROGRESS (Linux and Windows candidate checkpoints accepted)
 
 - [x] Replace simulated Build/Export with a real asynchronous native/browser CLI process, bounded streamed stdout/stderr, actual exit status, job-specific receipt/resource validation off the UI thread and cancellation/cleanup. Real editor Save & Export and UI Cancel pass on Linux/Xvfb. Unsupported targets/options fail explicitly; Browser gates authored physics/joints/solid tilemaps against the selected runtime capability and validates/gates authored sprite materials against the selected runtime.
 - [x] Bundle resources/runtimes for the current supported native/browser targets. Native packs/verifies a KAR and includes a matching player; Browser includes the normalized project tree, hash-verified prepared JS/WASM and actual loading/start/error shell. Export/play need no Cargo. Default Browser builds now include shared 2D physics; capabilities remain explicit and other target/toolchain support is pending.
 - [x] Deliver clean Linux userspace acceptance plus relocated Browser loading/input/audio-unlock/save behavior. A pinned Ubuntu 24.04 container runs the installed editor and exported game offline/unprivileged without Rust, repository or development sysroot mounts; real edit/save/export/cancel and game settings/save/restart/Continue pass. Shipped runtime requirements include the discovered dynamic X11 dependency. Browser artifact passes nested HTTP deployment, loading/error/retry, input, explicit audio unlock and reload/save/resume. Physical machines/other OS and driver/device coverage remain in the platform gate below.
 - [x] Publish an accepted Linux release candidate and retain GitHub build-origin attestation as Actions artifacts. Run 43107026471 at 0b9a67b passed native quality/tests, two fresh locked/offline builds, actual six-payload comparison, browser/moved installation/export/gameplay and clean Ubuntu gates; candidate/evidence upload and separate attestation/bundle upload succeeded. Archives include matched tools, browser runtime, templates/examples, source/build records, SHA-256 inventory, original dependency/font/Rust notices and verified MPL sources. Public job conclusions establish hosted execution; independent downloaded-signature verification is separate.
 - [x] Resolve the project license policy and include its grant files in new portable packages. Owner delegated the choice; MIT OR Apache-2.0 is retained with full root texts, consistent metadata for all 34 workspace packages and original third-party/font notices. Actual local packaging verified both exact project grant files; historical candidate contents remain unchanged.
-- [ ] Finish reviewed public editor releases and validate other platforms on appropriate machines. Automate propagation of matched runtime project/dependency notices into game exports (currently copy the installation's licenses directory manually). Remaining SDK/dependency provenance, OS installer/signing, physical-machine and Windows/macOS/other GPU checks stay open. Windows ZIP preparation/hosted startup acceptance is being added; no Windows pass is inferred from Linux tests. Current Linux candidate requires GLIBC 2.39 and documented system libraries. Package-size goals are removed by owner request (ADR-0062). See [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md).
+- [x] Prepare a Windows x64 portable ZIP with static MSVC CRT and accept its relocated installation on a Windows runner. Run 43215982526 at 3ff72d3 passed package verification/corruption rejection, all-template Windows/browser CLI exports without build tools on child PATH, source-unavailable standalone game relocation, visible editor/player captures and normal close. Candidate upload and separate origin attestation/bundle upload passed. Full GUI authoring/gameplay and physical devices remain separate.
+- [ ] Finish reviewed public editor releases and validate other platforms on appropriate machines. Automate propagation of matched runtime project/dependency notices into game exports (currently copy the installation's licenses directory manually). Remaining SDK/dependency provenance, OS installer/signing, physical-machine, full Windows GUI authoring/gameplay, macOS and other GPU checks stay open. Current Linux candidate requires GLIBC 2.39 and documented system libraries. Package-size goals are removed by owner request (ADR-0062). See [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md).
 
 Acceptance: author and export from the editor, move the artifact outside the repository to a machine without Rust, and play the full game. A failing exporter produces failure, never a success message.
 
@@ -737,3 +738,25 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
   No engine/workflow changes this session. Project licensing, physical/reference
   hardware, other-platform distribution and OS signing keep Task 8 open. Task 9
   remains unstarted; package size remains informational.
+
+### 2026-11-12 — Task 8 Windows portable candidate and project license
+
+- Windows run 43215982526 at 3ff72d3 completed successfully in 7m 29s. MSVC static
+  CRT/DLL inspection, ZIP/notices, moved installation/corruption rejection,
+  all-template native/browser CLI exports, source-unavailable game relocation,
+  visible editor/player client captures and normal close all passed. Candidate
+  and separate origin-attestation/bundle uploads passed too.
+- Fixed Windows ZIP original-name normalization, UTF-8 metadata reads and uppercase
+  SYSTEMROOT capture lookup. Local 29 Python tests, 665 Rust tests, just check and
+  actionlint pass. Compiler caches preserve strict downstream acceptance; Windows
+  uses prebuilt preparation, not the captured Linux replay contract.
+- Owner delegated license choice: MIT OR Apache-2.0 retained with full root grants,
+  consistent metadata across all 34 workspace packages and original third-party /
+  font notices preserved. Actual local packaging verifies both project grant bytes.
+- Recorded public success/failure history and download instructions in
+  WINDOWS_PORTABLE.md and evidence/task8-windows. Candidate signatures/captures
+  were not independently downloaded/reviewed here. Refreshed Linux run 43215982528
+  remains in progress; full new Linux success is not yet claimed.
+- Remaining Task 8: automated game runtime-notice propagation (manual copy documented),
+  full Windows GUI/physical tests, macOS, SDK/dependency review and OS signing.
+  Task 9/full 3D stay unstarted; package size remains informational.

@@ -1,8 +1,11 @@
 # Windows portable editor candidate — Task 8
 
-The Windows candidate workflow is prepared; hosted acceptance has not yet been
-observed at this checkpoint. Use a completed successful **Windows portable
-candidate** run, not an artifact from failed or incomplete acceptance.
+[Windows candidate run 43215982526](https://github.com/Erion-Simoni/kiln-engine/actions/runs/43215982526)
+completed successfully in 7m 29s for source
+`3ff72d37f2a05641eac78098e5bc4e928ff8581f`. Packaging, moved installation, all
+template exports, visible editor/player captures, normal close, candidate upload
+and separate build-origin attestation/bundle upload passed on Windows 2025/DX12.
+See [executed evidence](evidence/task8-windows/README.md) for scope and history.
 
 The ZIP contains the matched x64 MSVC release editor, CLI, player, default
 physics/material-enabled browser runtime, templates, examples and original
@@ -43,7 +46,7 @@ both `kiln-windows-x64.zip` and `preparation-record.json` before extraction:
 
 ```powershell
 $candidateRepo = 'Erion-Simoni/kiln-engine'
-$candidateSha = 'SOURCE_SHA_FROM_THE_SUCCESSFUL_WINDOWS_RUN'
+$candidateSha = '3ff72d37f2a05641eac78098e5bc4e928ff8581f'
 foreach ($file in @('kiln-windows-x64.zip', 'preparation-record.json')) {
     gh attestation verify $file --repo $candidateRepo `
       --signer-workflow "$candidateRepo/.github/workflows/windows-candidate.yml" `
@@ -60,7 +63,9 @@ screenshots retain seven. Select a later successful run after expiry.
 ## Acceptance and limits
 
 The hosted Windows 2025 runner builds from the tracked Cargo.lock using pinned
-Rust and matching bindgen. The standard-library packager verifies the staged
+Rust and matching bindgen. Compiler outputs may be cached by crate inputs,
+lockfile, Rust and runner image; this is prebuilt preparation, not a fresh-build
+reproducibility claim. The standard-library packager verifies the staged
 installation before exclusively publishing its ZIP. Acceptance then extracts
 and moves it outside the checkout to a path with spaces, uses an unrelated
 working directory and removes Rust/Node/bindgen from child PATH. It checks:
@@ -80,6 +85,9 @@ checking out or executing engine code. `preparation-record.json` records actual
 compiler/bindgen, native flags, lock/archive hashes, DLL observations and acceptance.
 This is hosted prebuilt preparation; it does **not** extend the captured Linux
 builder/replay contract or claim Windows reproducibility.
+Public job conclusions establish successful execution; the artifact contents,
+signatures and retained captures were not independently downloaded/reviewed in
+this cloud environment. Consumer origin verification remains the procedure above.
 
 Full Windows GUI author/save/undo/restart/export/gameplay acceptance, other GPUs,
 physical Intel HD 520 performance, audible/controller tests and older Windows

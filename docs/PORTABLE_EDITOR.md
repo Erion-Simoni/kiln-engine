@@ -9,7 +9,14 @@ Development and captured release-profile candidates pass relocation and clean
 Ubuntu software acceptance. A hosted Linux candidate also passed publication and
 GitHub build-origin attestation (run 43107026471 at 0b9a67b). Installers/OS signing,
 independent-builder/dependency provenance,
-physical machines/devices and Windows/macOS remain open. Task 8 is not complete.
+physical machines/devices, full Windows release acceptance and macOS remain open.
+Task 8 is not complete.
+
+A Windows x64 ZIP now passes hosted relocation, all-template native/browser CLI
+export, visible editor/player startup, nonblank capture, normal close and origin
+attestation. See [WINDOWS_PORTABLE.md](WINDOWS_PORTABLE.md). That is a separate
+Windows preparation contract; full Windows GUI authoring, physical devices,
+macOS and OS signing remain open.
 
 ## Prepare once
 

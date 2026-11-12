@@ -1,0 +1,181 @@
+{
+  "run_url": "https://github.com/Erion-Simoni/kiln-engine/actions/runs/43215982526",
+  "source_revision": "3ff72d37f2a05641eac78098e5bc4e928ff8581f",
+  "observed_at": "2026-11-12T12:21:23.759932+00:00",
+  "jobs": [
+    {
+      "id": "131175223541",
+      "state": "completed",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:13:49Z",
+          "completed-at": "2026-11-12T12:13:51Z"
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:13:51Z",
+          "completed-at": "2026-11-12T12:13:59Z"
+        },
+        {
+          "name": "Run actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:13:59Z",
+          "completed-at": "2026-11-12T12:13:59Z"
+        },
+        {
+          "name": "Observe hosted image identity",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:13:59Z",
+          "completed-at": "2026-11-12T12:13:59Z"
+        },
+        {
+          "name": "Run actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:13:59Z",
+          "completed-at": "2026-11-12T12:14:58Z"
+        },
+        {
+          "name": "Run actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:14:58Z",
+          "completed-at": "2026-11-12T12:15:12Z"
+        },
+        {
+          "name": "Install pinned toolchain and matching bindgen",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:15:12Z",
+          "completed-at": "2026-11-12T12:16:08Z"
+        },
+        {
+          "name": "Save installed tools before acceptance",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T12:16:08Z",
+          "completed-at": "2026-11-12T12:16:08Z"
+        },
+        {
+          "name": "Test Windows ZIP validation",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:16:08Z",
+          "completed-at": "2026-11-12T12:16:10Z"
+        },
+        {
+          "name": "Build matched release tools and browser runtime",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:16:10Z",
+          "completed-at": "2026-11-12T12:20:23Z"
+        },
+        {
+          "name": "Save successful compiler outputs before acceptance",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T12:20:23Z",
+          "completed-at": "2026-11-12T12:20:23Z"
+        },
+        {
+          "name": "Inspect Windows DLL requirements and reject dynamic MSVC runtime",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:20:23Z",
+          "completed-at": "2026-11-12T12:20:28Z"
+        },
+        {
+          "name": "Package Windows portable ZIP with original notices",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:20:28Z",
+          "completed-at": "2026-11-12T12:20:35Z"
+        },
+        {
+          "name": "Accept moved editor, exports and visible Windows startup",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:20:35Z",
+          "completed-at": "2026-11-12T12:20:51Z"
+        },
+        {
+          "name": "Record accepted candidate inputs and observations",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:20:51Z",
+          "completed-at": "2026-11-12T12:20:51Z"
+        },
+        {
+          "name": "Upload accepted Windows candidate",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:20:51Z",
+          "completed-at": "2026-11-12T12:20:53Z"
+        },
+        {
+          "name": "Retain Windows acceptance and failure evidence",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:20:53Z",
+          "completed-at": "2026-11-12T12:20:55Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:20:55Z",
+          "completed-at": "2026-11-12T12:20:55Z"
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:20:55Z",
+          "completed-at": "2026-11-12T12:20:57Z"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:20:57Z",
+          "completed-at": "2026-11-12T12:20:57Z"
+        }
+      ]
+    },
+    {
+      "id": "131178921006",
+      "state": "completed",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:21:02Z",
+          "completed-at": "2026-11-12T12:21:04Z"
+        },
+        {
+          "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:21:04Z",
+          "completed-at": "2026-11-12T12:21:07Z"
+        },
+        {
+          "name": "Create Windows candidate build-origin attestation",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:21:07Z",
+          "completed-at": "2026-11-12T12:21:10Z"
+        },
+        {
+          "name": "Retain Windows attestation bundle",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:21:10Z",
+          "completed-at": "2026-11-12T12:21:12Z"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:21:12Z",
+          "completed-at": "2026-11-12T12:21:12Z"
+        }
+      ]
+    }
+  ],
+  "missing_successful_gates": [],
+  "failed_gates": [],
+  "complete_workflow_success_observed": true,
+  "overall_run_state": {
+    "status": "WORKFLOW_RUN_STATUS_COMPLETED",
+    "conclusion": "WORKFLOW_RUN_CONCLUSION_SUCCESS"
+  },
+  "overall_run_timing": {
+    "kind": "WORKFLOW_RUN_TIMING_KIND_DURATION",
+    "text": "7m 29s"
+  },
+  "scope": "Public GitHub step conclusions and overall workflow success; artifact contents/signatures and retained PNGs not independently downloaded or reviewed here"
+}
