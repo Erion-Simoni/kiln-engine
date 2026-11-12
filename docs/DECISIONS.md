@@ -1804,3 +1804,19 @@ checks remain separate Task 8 gates.
   audible/controller testing, Authenticode signing or public-release licensing.
 - No engine/runtime dependency. ZIP and acceptance use Python's standard library,
   Windows APIs and existing hosted tools. Package sizes remain informational.
+
+### ADR-0070 — Project MIT OR Apache-2.0 license and bundled grants (2026-11-12)
+
+- The owner delegated the release license choice. Retain the workspace's existing
+  MIT OR Apache-2.0 dual license: permissive commercial use, familiar Rust
+  ecosystem terms and the option of Apache's explicit patent grant.
+- Add full root LICENSE-MIT and LICENSE-APACHE texts, replace README:TBD and make
+  all missing project crate/sample declarations inherit the workspace license.
+  Existing third-party/font licenses and attribution remain their own grants.
+- Portable packages must include the project license texts under licenses/project
+  and identify them in the inventory. Reject missing project grants or unlicensed
+  path-package metadata rather than inventing a declaration during packaging.
+- Historical artifacts/evidence preserve their original declarations. New licensed
+  candidates require new packaging from the updated source; this does not imply
+  prior archived downloads contained the newly added project license files.
+- No engine/runtime dependency or release-size ceiling.

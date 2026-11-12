@@ -92,4 +92,7 @@ New to Kiln? Start with the [Tutorial](docs/TUTORIAL.md) to build your first gam
 
 ## License
 
-TBD
+Kiln source code is dual-licensed under [MIT](LICENSE-MIT) or
+[Apache-2.0](LICENSE-APACHE), at your option. Commercial use is permitted under
+those terms. Dependencies, fonts and other third-party materials retain their
+own licenses and notices; portable installations include their license inventory.

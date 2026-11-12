@@ -8,6 +8,7 @@ on:
       - .github/workflows/release-candidate.yml
       - Cargo.toml
       - Cargo.lock
+      - LICENSE-*
       - kiln-*/**
       - tools/**
       - packaging/**

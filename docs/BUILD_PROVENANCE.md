@@ -55,6 +55,13 @@ manifest labels provenance `preparation-observations-only`; a checked local buil
 record labels it `unsigned-local-build`. Neither label is a signature. Both
 bundles still require the functional clean-runtime checks.
 
+Current packaging includes the owner-selected MIT OR Apache-2.0 project grants
+and requires declared licenses for path packages. A historical frozen source
+snapshot lacking those files/declarations cannot be repackaged with current
+requirements unchanged. Use its matching historical builder to reproduce its
+original payload, or capture the updated licensed source for a new candidate;
+do not label old archives as containing the new grant files.
+
 ## Validate the candidate
 
 ```sh

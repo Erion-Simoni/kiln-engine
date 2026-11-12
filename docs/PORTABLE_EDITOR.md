@@ -129,20 +129,20 @@ reference texts. MPL dependencies include unmodified `.crate` sources verified
 against Cargo.lock. The preparing compiler's original standard-library copyright
 report is included. The example font retains its license.
 
-Some internal package manifests omit a package license. Their inventory value
-remains null; the workspace declares `MIT OR Apache-2.0`. This implementation
-does not invent or rewrite a copyright/license grant. These declarations and
-exact binary provenance still need release review. No OS/driver libraries or
-preparation tools are redistributed by this archive.
+The owner delegated the project license choice on 2026-11-12. Current project
+code uses the existing workspace's `MIT OR Apache-2.0` dual license, with missing
+engine/sample declarations now inheriting it. Full root LICENSE-MIT and
+LICENSE-APACHE texts are copied into `licenses/project` and listed in the
+inventory. Packaging rejects missing project license files or unlicensed path
+package metadata; it does not silently assign a license while copying notices.
+Third-party/font grants remain unchanged. No OS/driver libraries or preparation
+tools are redistributed by this archive.
 
-The current locked workspace metadata identifies missing license values in
-`kiln-ai`, `kiln-assets`, `kiln-cli`, `kiln-gameplay`, `kiln-graph`, `kiln-ir`,
-`kiln-platform` and `kiln-script`, plus the `animation`, `ai` and `gameplay`
-sample packages. The root README still says `TBD`, while workspace metadata says
-`MIT OR Apache-2.0`; no root project license text accompanies those declarations.
-The owner must resolve that policy and supply the corresponding project license
-texts before treating the candidate as a reviewed public release. Original
-third-party notices remain included; this list does not change any license grant.
+Historical inventories, including source 0b9a67b's candidate, contain the original
+null project package declarations and lack the newly added project grant files.
+Use a newly prepared candidate for the updated license payload. Existing evidence
+is not retroactively presented as having shipped those files. Exact linked-code,
+SDK/dependency provenance and platform release review remain separate.
 
 ## Tested requirements and remaining platform gates
 

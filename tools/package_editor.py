@@ -89,8 +89,18 @@ def reference_notices(destination):
     return set(records)
 
 
+def project_notices(destination):
+    paths = []
+    for name in ('LICENSE-MIT', 'LICENSE-APACHE'):
+        output = Path('project')/name
+        copy_file(REPO/name, destination/output)
+        paths.append(output.as_posix())
+    return paths
+
+
 def package_notices(metadata_paths, destination):
     reference_ids = reference_notices(destination)
+    project_licenses = project_notices(destination)
     packages = {}
     for path in metadata_paths:
         metadata = json.loads(path.read_text())
@@ -105,6 +115,8 @@ def package_notices(metadata_paths, destination):
         root = Path(package['manifest_path']).parent
         key = f"{package['name']}-{package['version']}"
         expression = package['license']
+        if package['source'] is None and not expression:
+            raise ValueError(f'Missing project package license: {key}')
         ids = set(re.findall(r'[A-Za-z0-9][A-Za-z0-9.+-]*', expression or '')) - {'AND', 'OR', 'WITH'}
         unknown = ids-reference_ids-{'LicenseRef-UFL-1.0'}
         if unknown:
@@ -154,6 +166,7 @@ def package_notices(metadata_paths, destination):
     write_json(destination/'inventory.json', {
         'scope': 'Conservative union of supplied host and WASM Cargo workspace graphs; includes build/test dependencies.',
         'workspace_license_declaration': 'MIT OR Apache-2.0',
+        'project_license_files': project_licenses,
         'packages': inventory,
     })
     (destination/'README.txt').write_text(
@@ -162,7 +175,7 @@ def package_notices(metadata_paths, destination):
         'The inventory is a conservative host/WASM workspace superset, not an exact linked-code report.\n'
         'reference/ contains pinned SPDX reference texts; these do not replace original copyright notices.\n'
         'sources/ contains unmodified MPL dependency crate sources verified against Cargo checksums.\n'
-        'Internal manifests with no package license retain null; the workspace declares MIT OR Apache-2.0.\n'
+        'Project code is MIT OR Apache-2.0; project/ contains both complete license texts.\n'
         'rust/ contains the preparing compiler standard-library copyright report; OS drivers are not shipped.\n'
         'Keep this directory and the example font license when redistributing.\n', encoding='utf-8')
 
@@ -242,7 +255,7 @@ def installation_readme(platform):
         'Open examples/browser_physics2d/kiln.toml or examples/materials2d/kiln.toml for playgrounds.\n'
         + system +
         'This candidate does not certify physical-device compatibility.\n'
-        'Internal package license declarations and exact binary provenance require release review.\n'
+        'Keep all project and third-party license texts; provenance limits are recorded in bundle.json.\n'
         'Checksums detect changes; this unsigned manifest does not authenticate a download.\n'
     )
 

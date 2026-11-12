@@ -1,5 +1,6 @@
 [package]
 name = "kiln-graph"
+license.workspace = true
 version.workspace = true
 edition.workspace = true
 

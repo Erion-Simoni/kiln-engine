@@ -1,6 +1,6 @@
 # Kiln Session Handoff
 
-**Active focus:** Task 8 Windows x64 portable candidate implementation prepared; first hosted Windows execution still pending. Task 8 remains IN PROGRESS. Task 9/full 3D remain unstarted.
+**Active focus:** Task 8 Windows x64 candidate implementation and owner-delegated project licensing. First hosted Windows run stopped at ZIP validation; local normalization fix and licensed rebuild are prepared. Task 8 remains IN PROGRESS. Task 9/full 3D remain unstarted.
 **Branch:** feat/2d-production-workflow. Prior accepted Linux run: 43107026471, source 0b9a67b; overall success includes candidate upload and origin attestation. Session starts after documentation commit 70a0f3a.
 **Owner preference:** package/release size is not a goal. Existing performance/resource and bounded-input requirements remain.
 
@@ -8,24 +8,27 @@
 
 - ADR-0069 adds native Windows preparation alongside the existing captured Linux driver, without broadening that driver's replay/provenance claims.
 - Extended prebuilt packaging with deterministic Windows ZIP, exclusive output publication and rejection of linked/special inputs. Windows manifests classify .exe tools explicitly; Windows README uses native commands and omits Linux dependency instructions. Existing Linux tar format remains available.
-- Added Windows ZIP extraction regressions for exact payload preservation, existing-output refusal, traversal, case aliases and links. All 25 Python preparation/build/comparison/archive tests pass locally.
+- Added Windows ZIP extraction regressions for exact payload preservation, existing-output refusal, traversal, case aliases and links. All 27 Python preparation/build/comparison/archive/license tests pass locally, including the reproduced Windows ZIP normalization case.
 - Added Windows installed acceptance: move outside checkout into a path with spaces, remove Rust/Node/bindgen from child PATH, validate tool identities/inventory and corruption rejection, create all templates and export Windows/web, move a standalone game with original project path unavailable, and require visible editor/player windows, nonblank captures and normal zero-status close. This script must execute on Windows; its GUI results are not established locally.
 - Added pinned Windows 2025 workflow: Rust 1.99.1, Python 3.13, lockfile-matched bindgen, static MSVC CRT, DLL import inspection, release tools/browser builds, original notices, installed acceptance and strict artifact publication. A separate no-checkout job attests ZIP/preparation record. Build remains contents:read; only the attester gains OIDC/attestation write permission.
-- WINDOWS_PORTABLE.md describes extraction, integrity/origin verification, runtime requirements and exact acceptance scope. Hosted results remain explicitly pending.
+- WINDOWS_PORTABLE.md describes extraction, integrity/origin verification, runtime requirements and exact acceptance scope. Full hosted Windows acceptance remains pending.
+- First Windows run 43205341357 for c812b1a passed toolchain/bindgen setup and failed Test Windows ZIP validation. Reproduced a Windows-specific ZIP name normalization difference locally. Validate original central-directory names, preserve malformed raw names in fixtures, and reject reserved Windows device names. All four extraction tests now also pass with Windows-style normalization.
+- The owner delegated the license choice. ADR-0070 retains existing MIT OR Apache-2.0. Added complete root grants, fixed missing crate/sample license inheritance and README policy. All 34 workspace package licenses now resolve consistently; root Cargo.lock is unchanged. Packaging includes both project grants and rejects missing grants/unlicensed path metadata; third-party/font grants are preserved.
 
 ## Validation
 
 - just check passed: format, strict workspace/all-target Clippy, workspace/audio sample checks. Actionlint 1.7.7 accepts the new workflow. Bash snippets and parsed signing permissions pass local validation. Official setup-python v7 action metadata uses native Node 24.
 - Actual local Linux packaging with the changed producer passed the existing installation verifier for all 1542 files. Archive target/task8-windows-session-linux-regression.tar.gz has SHA-256 76a598c1af3ffb3fb4adddc626c313b33d5ca655eef3d3ef796afe89126cd20c. This uses existing release binaries/prebuilt preparation, not a new captured Linux build.
-- All 25 Python tests pass. Rust suite rerun passed 665 tests with zero failures/skips. No Rust source/dependency or Cargo.lock changed.
-- Windows build/DLL/startup/signing gates are not yet observed. Local tests must not be reported as a Windows pass.
+- All 27 Python tests pass; four extraction cases also pass under Windows-style normalization. Rust suite rerun passed 665 tests with zero failures/skips. No Rust source/dependency or Cargo.lock changed.
+- A second real Linux packaging run with current licensed metadata passed the installation verifier (1544 files), SHA-256 6eade796b6a095813d20ea0d52bbaa89bdc5aa769dae658ff3e2cb1bab3d4fb6. Inspected inventory/project grant payload. This is prebuilt preparation from existing release binaries, not a new captured build.
+- Windows native build/DLL/startup/signing gates are not yet observed; the first run stopped earlier at archive validation. Local tests must not be reported as a Windows pass.
 
 ## Next / known issues
 
-1. Push this tested checkpoint to the existing branch, verify remote SHA and observe Windows candidate workflow. Fix actual hosted compile/package/desktop failures, then record observed acceptance and upload/attestation. The Linux candidate workflow also triggers because shared packaging changed.
-2. Windows acceptance currently covers CLI export and startup, not full graphical author/save/undo/export/gameplay or physical GPU/audio/controller behavior. Windows ZIPs remain unsigned by Authenticode. Captures/color diversity are startup evidence, not complete semantic UI proof.
+1. Push the licensed/normalization-fix checkpoint to the existing branch, verify remote SHA and observe the replacement Windows and Linux runs. First Windows run 43205341357 failed early; its source c812b1a predates root grant files. Only a completed replacement run can establish licensed candidate publication.
+2. Windows acceptance currently covers CLI export and startup, not full graphical author/save/undo/export/gameplay or physical GPU/audio/controller behavior. Windows ZIP executables remain unsigned by Authenticode. Captures/color diversity are startup evidence, not complete semantic UI proof.
 3. The Linux captured source/replay builder remains Linux-only. Windows uses preparation-observations-only inventory plus its hosted preparation record and separate origin attestations; no Windows captured replay/equality claim is made.
-4. Project licensing remains unresolved: README:TBD versus workspace MIT OR Apache-2.0, eight engine crates and three samples lack license metadata, and root project license texts are absent. The prior owner policy question has no submitted answer; no grant is invented.
+4. Project license choice is resolved by owner delegation (MIT OR Apache-2.0). Earlier inventories/artifacts retain their original null metadata and missing root grant files; do not present those historical downloads as updated. Remaining third-party/SDK provenance and exact linked-code review are separate.
 5. Physical/reference-machine, macOS/full Windows authoring, remaining SDK/dependency provenance and OS signing keep Task 8 open. No laptop is connected. api.github.com remains excluded by enforced cloud policy; its older network draft is unapplied. Public status/Git push work; no credentials or policy bypass are used.
 
 ## Boundaries

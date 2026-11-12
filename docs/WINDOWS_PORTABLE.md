@@ -81,5 +81,6 @@ Full Windows GUI author/save/undo/restart/export/gameplay acceptance, other GPUs
 physical Intel HD 520 performance, audible/controller tests and older Windows
 versions remain separate. Follow [PHYSICAL_DEVICE_TEST.md](PHYSICAL_DEVICE_TEST.md)
 on an actual machine. Executables lack Authenticode signing; GitHub origin
-attestation is separate. Licensing policy remains unresolved as documented in
+attestation is separate. Project code is MIT OR Apache-2.0; both texts and original
+third-party notices accompany newly prepared candidates. See
 [PORTABLE_EDITOR.md](PORTABLE_EDITOR.md#notices). Package size has no release goal.

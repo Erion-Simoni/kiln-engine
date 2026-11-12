@@ -111,6 +111,23 @@ class PortablePackageTests(unittest.TestCase):
             record['license'] = 'LicenseRef-UFL-1.0'
             with self.assertRaisesRegex(ValueError, 'Ubuntu Font License'):
                 run()
+            record['license'] = None
+            with self.assertRaisesRegex(ValueError, 'Missing project package license'):
+                run()
+
+    def test_project_grants_are_copied_verbatim_and_missing_grants_fail(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in ('LICENSE-MIT', 'LICENSE-APACHE'):
+                (root/name).write_text(f'Complete original {name}\n')
+            with patch.object(package, 'REPO', root):
+                paths = package.project_notices(root/'notices')
+                self.assertEqual(set(paths), {'project/LICENSE-MIT', 'project/LICENSE-APACHE'})
+                for name in ('LICENSE-MIT', 'LICENSE-APACHE'):
+                    self.assertEqual((root/'notices/project'/name).read_bytes(), (root/name).read_bytes())
+                (root/'LICENSE-MIT').unlink()
+                with self.assertRaisesRegex(ValueError, 'regular bounded file'):
+                    package.project_notices(root/'incomplete')
 
     def test_existing_archive_is_preserved_before_running_tools(self):
         with tempfile.TemporaryDirectory() as temporary:

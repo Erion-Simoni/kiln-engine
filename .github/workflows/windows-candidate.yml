@@ -8,6 +8,7 @@ on:
       - .github/workflows/windows-candidate.yml
       - Cargo.toml
       - Cargo.lock
+      - LICENSE-*
       - kiln-*/**
       - tools/package_editor.py
       - packaging/**

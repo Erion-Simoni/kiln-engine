@@ -18,6 +18,10 @@ import tempfile
 import time
 import zipfile
 
+WINDOWS_RESERVED_NAMES = {'CON', 'PRN', 'AUX', 'NUL'} | {
+    f'{prefix}{number}' for prefix in ('COM', 'LPT') for number in range(1, 10)
+}
+
 
 def extract(archive, destination):
     """Validate all ZIP names/types/bounds before writing into a new directory."""
@@ -27,12 +31,15 @@ def extract(archive, destination):
             raise ValueError('Oversized installation ZIP')
         seen = set()
         for entry in entries:
-            name = entry.filename.rstrip('/')
+            # Windows ZipInfo normalizes backslashes and strips NUL suffixes.
+            # Validate the original central-directory name before those changes.
+            name = entry.orig_filename.rstrip('/')
             parts = name.split('/')
             kind = stat.S_IFMT(entry.external_attr >> 16)
             if (not name or PurePosixPath(name).is_absolute() or '\\' in name or ':' in name
                     or any(ord(char) < 32 for char in name)
                     or any(part in ('', '.', '..') or part.rstrip(' .') != part for part in parts)
+                    or any(part.split('.')[0].upper() in WINDOWS_RESERVED_NAMES for part in parts)
                     or name.casefold() in seen or entry.file_size > 512*1024**2
                     or kind not in (0, stat.S_IFREG, stat.S_IFDIR)):
                 raise ValueError('Invalid, duplicate or linked installation ZIP member')

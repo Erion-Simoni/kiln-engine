@@ -4,6 +4,7 @@ from pathlib import Path
 import stat
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 spec = importlib.util.spec_from_file_location('windows_smoke', Path(__file__).resolve().parents[1]/'windows/portable_editor_smoke.py')
@@ -26,15 +27,30 @@ class WindowsArchiveTests(unittest.TestCase):
 
     def test_invalid_paths_fail_before_creating_destination(self):
         for name in ('../escape', '/absolute', 'C:/escape', 'kiln/../escape',
-                     'kiln\\escape', 'kiln/./file', 'kiln//file', 'kiln/file.'):
+                     'kiln\\escape', 'kiln/./file', 'kiln//file', 'kiln/file.', 'kiln/NUL.txt'):
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 archive = root/'bad.zip'
                 with zipfile.ZipFile(archive, 'w') as stream:
-                    stream.writestr(name, b'bad')
+                    info = zipfile.ZipInfo(name)
+                    info.filename = name  # Preserve malformed raw names even on Windows.
+                    stream.writestr(info, b'bad')
                 with self.assertRaises(ValueError):
                     smoke.extract(archive, root/'destination')
                 self.assertFalse((root/'destination').exists())
+
+    def test_original_names_are_checked_under_windows_zip_normalization(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root/'bad.zip'
+            with zipfile.ZipFile(archive, 'w') as stream:
+                info = zipfile.ZipInfo('kiln\\escape')
+                info.filename = 'kiln\\escape'
+                stream.writestr(info, b'bad')
+            with patch.object(zipfile.os, 'sep', '\\'):
+                with self.assertRaises(ValueError):
+                    smoke.extract(archive, root/'destination')
+            self.assertFalse((root/'destination').exists())
 
     def test_windows_case_aliases_and_unix_links_are_rejected(self):
         for linked in (False, True):
