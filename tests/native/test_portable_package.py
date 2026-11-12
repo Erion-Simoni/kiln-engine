@@ -6,6 +6,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('package_editor', Path(__file__).resolve().parents[2]/'tools/package_editor.py')
@@ -14,6 +15,46 @@ spec.loader.exec_module(package)
 
 
 class PortablePackageTests(unittest.TestCase):
+    def test_zip_is_repeatable_and_preserves_exact_payload_and_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            root = directory/'kiln windows'
+            (root/'templates').mkdir(parents=True)
+            (root/'kiln-editor.exe').write_bytes(b'compiled tool')
+            (root/'templates/starter.ron').write_bytes(b'project')
+            first, second = directory/'one.zip', directory/'two.zip'
+            package.normalized_zip(root, first)
+            os.utime(root/'kiln-editor.exe', (123456789, 123456789))
+            package.normalized_zip(root, second)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            with zipfile.ZipFile(first) as archive:
+                self.assertEqual(archive.read('kiln windows/kiln-editor.exe'), b'compiled tool')
+                self.assertEqual(archive.read('kiln windows/templates/starter.ron'), b'project')
+                self.assertTrue(all(info.date_time == (1980, 1, 1, 0, 0, 0) for info in archive.infolist()))
+                archive.extractall(directory/'extracted')
+            self.assertEqual((directory/'extracted/kiln windows/kiln-editor.exe').read_bytes(), b'compiled tool')
+            with self.assertRaises(FileExistsError):
+                package.normalized_zip(root, first)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+
+    @unittest.skipIf(os.name == 'nt', 'Symlink creation requires platform privileges')
+    def test_zip_rejects_links_instead_of_following_outside_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            root = directory/'kiln'
+            root.mkdir()
+            (directory/'private').write_text('outside')
+            (root/'escape').symlink_to(directory/'private')
+            with self.assertRaisesRegex(ValueError, 'link'):
+                package.normalized_zip(root, directory/'bad.zip')
+
+    def test_windows_readme_has_native_commands_and_no_linux_dependency_instructions(self):
+        text = package.installation_readme('windows')
+        self.assertIn(r'.\kiln-cli.exe verify-editor-bundle', text)
+        self.assertNotIn('Ubuntu', text)
+        self.assertNotIn('glibc', text)
+        self.assertIn('libxkbcommon-x11', package.installation_readme('linux'))
+
     def test_normalized_archive_preserves_permissions_and_is_repeatable(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)

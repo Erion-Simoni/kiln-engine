@@ -1,0 +1,166 @@
+name: Windows portable candidate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master, main, feat/2d-production-workflow]
+    paths:
+      - .github/workflows/windows-candidate.yml
+      - Cargo.toml
+      - Cargo.lock
+      - kiln-*/**
+      - tools/package_editor.py
+      - packaging/**
+      - templates/**
+      - samples/**
+      - tests/windows/**
+      - tests/native/test_windows_package.py
+      - tests/native/test_portable_package.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  CARGO_BUILD_JOBS: '2'
+  PYTHONDONTWRITEBYTECODE: '1'
+  RUST_TOOLCHAIN: '1.99.1'
+  CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: '-C target-feature=+crt-static'
+
+jobs:
+  candidate:
+    name: Build and accept Windows x64 portable editor
+    runs-on: windows-2025
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.13'
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+          key: windows-candidate-tools-v1-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}
+      - name: Install pinned toolchain and matching bindgen
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rust-docs --target wasm32-unknown-unknown
+          rustup default "$RUST_TOOLCHAIN"
+          cargo fetch --locked
+          wasm_bindgen_version=$(python -c 'import tomllib; p=tomllib.load(open("Cargo.lock","rb")); v={p["version"] for p in p["package"] if p["name"]=="wasm-bindgen"}; assert len(v)==1; print(v.pop())')
+          cargo install wasm-bindgen-cli --version "$wasm_bindgen_version" --locked
+      - name: Test Windows ZIP validation
+        run: python -m unittest discover -s tests/native -p test_windows_package.py
+      - name: Build matched release tools and browser runtime
+        run: |
+          cargo build --release --locked --target x86_64-pc-windows-msvc -p kiln-editor -p kiln-cli -p kiln-player --bins
+          cargo build --release --locked --target wasm32-unknown-unknown -p kiln-web
+          wasm-bindgen target/wasm32-unknown-unknown/release/kiln_web.wasm --target web --out-dir target/windows-web-runtime
+          target/x86_64-pc-windows-msvc/release/kiln-cli.exe web-runtime --input target/windows-web-runtime
+      - name: Inspect Windows DLL requirements and reject dynamic MSVC runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $dumpbin = @(& $vswhere -latest -products '*' -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe') | Select-Object -First 1
+          if ($LASTEXITCODE -ne 0 -or -not $dumpbin) { throw 'Cannot locate dumpbin for runtime inspection' }
+          $requirements = @{}
+          foreach ($tool in @('kiln-editor', 'kiln-cli', 'kiln-player')) {
+            $output = & $dumpbin /DEPENDENTS "target/x86_64-pc-windows-msvc/release/$tool.exe"
+            if ($LASTEXITCODE -ne 0) { throw "dumpbin failed for $tool" }
+            $requirements[$tool] = ($output -join "`n")
+            if ($requirements[$tool] -match '(?im)^\s*(vcruntime|msvcp|concrt|ucrtbase|api-ms-win-crt)[\w.\-]*\.dll\s*$') {
+              throw "Unexpected dynamic MSVC runtime dependency in $tool"
+            }
+          }
+          $requirements | ConvertTo-Json | Set-Content -Encoding utf8 target/windows-dll-requirements.json
+      - name: Package Windows portable ZIP with original notices
+        run: |
+          cargo metadata --offline --locked --format-version 1 --filter-platform x86_64-pc-windows-msvc > target/windows-metadata.json
+          cargo metadata --offline --locked --format-version 1 --filter-platform wasm32-unknown-unknown > target/windows-web-metadata.json
+          python tools/package_editor.py --binaries target/x86_64-pc-windows-msvc/release --web-runtime target/windows-web-runtime --metadata target/windows-metadata.json --metadata target/windows-web-metadata.json --output target/windows-candidate/kiln-windows-x64.zip
+      - name: Accept moved editor, exports and visible Windows startup
+        run: python tests/windows/portable_editor_smoke.py target/windows-candidate/kiln-windows-x64.zip target/windows-acceptance
+      - name: Record accepted candidate inputs and observations
+        run: |
+          python - <<'PYTHON'
+          import hashlib, json, os, pathlib, subprocess
+          root = pathlib.Path('target/windows-candidate')
+          def digest(path):
+              with path.open('rb') as stream:
+                  return hashlib.file_digest(stream, 'sha256').hexdigest()
+          acceptance = json.loads(pathlib.Path('target/windows-acceptance/result.json').read_text())
+          assert acceptance['passed'] is True and acceptance['source_revision'] == os.environ['GITHUB_SHA']
+          assert acceptance['archive_sha256'] == digest(root/'kiln-windows-x64.zip')
+          record = {'schema': 1, 'kind': 'hosted-prebuilt-preparation-observations',
+                    'source_revision': os.environ['GITHUB_SHA'], 'target': 'x86_64-pc-windows-msvc',
+                    'rustc': subprocess.check_output(['rustc', '-vV'], text=True).strip(),
+                    'wasm_bindgen': subprocess.check_output(['wasm-bindgen', '--version'], text=True).strip(),
+                    'native_rustflags': os.environ['CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS'],
+                    'cargo_lock_sha256': digest(pathlib.Path('Cargo.lock')),
+                    'archive_sha256': acceptance['archive_sha256'], 'acceptance': acceptance,
+                    'dll_requirements': json.loads(pathlib.Path('target/windows-dll-requirements.json').read_text(encoding='utf-8-sig')),
+                    'limitations': 'Hosted preparation/startup; not a captured/replayed build, full GUI authoring/gameplay, Authenticode or physical-device certification.'}
+          (root/'preparation-record.json').write_text(json.dumps(record, indent=2)+'\n', encoding='utf-8')
+          PYTHON
+          git diff --exit-code
+      - name: Upload accepted Windows candidate
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: kiln-windows-candidate-${{ github.sha }}
+          path: target/windows-candidate/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain Windows acceptance and failure evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: kiln-windows-evidence-${{ github.sha }}
+          path: |
+            target/windows-acceptance/
+            target/windows-dll-requirements.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  attest:
+    name: Attest accepted Windows candidate origin
+    needs: candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: kiln-windows-candidate-${{ github.sha }}
+          path: candidate
+      - name: Create Windows candidate build-origin attestation
+        id: provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: |
+            candidate/kiln-windows-x64.zip
+            candidate/preparation-record.json
+      - name: Retain Windows attestation bundle
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: kiln-windows-attestation-${{ github.sha }}
+          path: ${{ steps.provenance.outputs.bundle-path }}
+          if-no-files-found: error
+          retention-days: 14

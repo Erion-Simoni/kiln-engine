@@ -1,37 +1,34 @@
 # Kiln Session Handoff
 
-**Active focus:** Task 8 hosted Linux candidate publication and build-origin attestation now pass. Task 8 remains IN PROGRESS for release review and physical/other-platform distribution. Task 9/full 3D remain unstarted.
-**Branch:** `feat/2d-production-workflow`. Accepted candidate source/workflow: `0b9a67b21480a654e8d6fcc886e702dd1d2b1e33`. Later documentation-only commits do not retrigger the candidate workflow; use the run's SHA for artifact lookup/verification.
-**Owner preference:** package/release size is not a goal. Performance/startup/memory/resource and bounded-input requirements remain (ADR-0062).
+**Active focus:** Task 8 Windows x64 portable candidate implementation prepared; first hosted Windows execution still pending. Task 8 remains IN PROGRESS. Task 9/full 3D remain unstarted.
+**Branch:** feat/2d-production-workflow. Prior accepted Linux run: 43107026471, source 0b9a67b; overall success includes candidate upload and origin attestation. Session starts after documentation commit 70a0f3a.
+**Owner preference:** package/release size is not a goal. Existing performance/resource and bounded-input requirements remain.
 
 ## Done
 
-- Observed run #2 through completion: https://github.com/Erion-Simoni/kiln-engine/actions/runs/43107026471. Overall GitHub status is completed/success, duration 47m 9s. All three jobs completed; all required gates succeeded, with no failed/missing gates.
-- Native quality/tests, first captured locked/offline release build, fresh frozen rebuild and actual six-payload equality passed. Release browser material/physics, moved installation/editor/export/gameplay and clean Ubuntu acceptance passed.
-- Accepted candidate and diagnostics uploaded successfully. The separate job downloaded the candidate, created GitHub build-origin attestation and uploaded its bundle. This closes the observed hosted publication/attestation execution gate for source 0b9a67b.
-- Saved complete public job step conclusions/timestamps and overall success in docs/evidence/task8-hosted-ci/hosted-run2-complete.json. Earlier run #1 and run #2's early preflight observations remain historical records. This is public status evidence, not independent downloaded-signature verification.
-- Added a concrete completed-run download/verification recipe: select a successful run, use its SHA, refuse an existing output directory, download its candidate, verify all five files with repository/workflow/source/signer constraints, extract, verify the installation and launch the editor. Linked it from README, GETTING_STARTED, PORTABLE_EDITOR and PHYSICAL_DEVICE_TEST.
-- Updated the 2D plan with a completed hosted Linux candidate publication/attestation item and a separate remaining public-release/platform item. Overall Task 8 is not declared finished.
-- Audited current locked workspace metadata: eight engine crates (kiln-ai/assets/cli/gameplay/graph/ir/platform/script) and animation/ai/gameplay sample packages lack license values. README says TBD, workspace says MIT OR Apache-2.0, and root project license texts are absent. Documented exact gaps; no licensing policy/grant changed.
+- ADR-0069 adds native Windows preparation alongside the existing captured Linux driver, without broadening that driver's replay/provenance claims.
+- Extended prebuilt packaging with deterministic Windows ZIP, exclusive output publication and rejection of linked/special inputs. Windows manifests classify .exe tools explicitly; Windows README uses native commands and omits Linux dependency instructions. Existing Linux tar format remains available.
+- Added Windows ZIP extraction regressions for exact payload preservation, existing-output refusal, traversal, case aliases and links. All 25 Python preparation/build/comparison/archive tests pass locally.
+- Added Windows installed acceptance: move outside checkout into a path with spaces, remove Rust/Node/bindgen from child PATH, validate tool identities/inventory and corruption rejection, create all templates and export Windows/web, move a standalone game with original project path unavailable, and require visible editor/player windows, nonblank captures and normal zero-status close. This script must execute on Windows; its GUI results are not established locally.
+- Added pinned Windows 2025 workflow: Rust 1.99.1, Python 3.13, lockfile-matched bindgen, static MSVC CRT, DLL import inspection, release tools/browser builds, original notices, installed acceptance and strict artifact publication. A separate no-checkout job attests ZIP/preparation record. Build remains contents:read; only the attester gains OIDC/attestation write permission.
+- WINDOWS_PORTABLE.md describes extraction, integrity/origin verification, runtime requirements and exact acceptance scope. Hosted results remain explicitly pending.
 
 ## Validation
 
-- This session: just check passed (formatting, strict workspace/all-target Clippy, workspace and standalone audio sample checks). Download recipe passes Bash syntax checking; verification flags match current official GitHub CLI source, and the actual local release archive root matches the documented extraction path.
-- Actual hosted native tests, replay/comparison, browser, moved installation, clean Ubuntu, upload and attestation gates all passed. Public step labels do not establish a precise hosted test count or candidate digest, so none is inferred.
-- Prior current-code local suite: 665 Rust tests passed, zero failures/skips; 19 Python tests passed. No engine source, workflow, runtime dependency or Cargo.lock changed this session. Root lock SHA-256 remains 042a1a29202fab2e8940632cbc9f23f17e88a42572f9b2930e8d303e8de0ac17 (649 packages).
-- The artifact preflight and end-of-job candidate upload both passed after ADR-0068's native Node 24 action update. Run #1's exact error was CreateArtifact HTTP 404, workflow run not found; successful remediation does not prove quota/token-expiry/runtime causation.
+- just check passed: format, strict workspace/all-target Clippy, workspace/audio sample checks. Actionlint 1.7.7 accepts the new workflow. Bash snippets and parsed signing permissions pass local validation. Official setup-python v7 action metadata uses native Node 24.
+- Actual local Linux packaging with the changed producer passed the existing installation verifier for all 1542 files. Archive target/task8-windows-session-linux-regression.tar.gz has SHA-256 76a598c1af3ffb3fb4adddc626c313b33d5ca655eef3d3ef796afe89126cd20c. This uses existing release binaries/prebuilt preparation, not a new captured Linux build.
+- All 25 Python tests pass. Rust suite rerun passed 665 tests with zero failures/skips. No Rust source/dependency or Cargo.lock changed.
+- Windows build/DLL/startup/signing gates are not yet observed. Local tests must not be reported as a Windows pass.
 
 ## Next / known issues
 
-1. Independently download and verify candidate signatures with current authenticated gh on an appropriately connected machine. This environment's enforced revision 1 excludes api.github.com; the earlier network-only settings draft is not applied. Public status/Git push work, but authenticated detailed logs and candidate contents were not fetched. No credential values are requested/extracted or policy bypassed. Consumer instructions check all five signed files against the selected run's source SHA.
-2. Resolve project licensing before calling this a reviewed public release. The owner was previously asked whether to use existing MIT OR Apache-2.0 or keep licensing undecided; no submitted answer exists. Preserve existing declarations/notices until policy is resolved, then add approved root license texts and missing package metadata.
-3. Execute PHYSICAL_DEVICE_TEST.md on actual Intel HD 520/other machines, including GPU selection, audible output/controller and startup/frame-time/memory/session/recovery measurements. No laptop/device is connected here.
-4. Finish matching Windows/macOS distribution and appropriate platform tests, remaining SDK/dependency provenance and OS installer signing. GitHub origin attestation is separate from OS signing, physical compatibility and hermetic/independent-builder certification.
-5. Complete Task 8 before starting Task 9/full 3D. Candidate/attestation Actions artifacts retain 14 days, diagnostics 7 days; use a later successful candidate run after expiry. No public GitHub Release was created.
+1. Push this tested checkpoint to the existing branch, verify remote SHA and observe Windows candidate workflow. Fix actual hosted compile/package/desktop failures, then record observed acceptance and upload/attestation. The Linux candidate workflow also triggers because shared packaging changed.
+2. Windows acceptance currently covers CLI export and startup, not full graphical author/save/undo/export/gameplay or physical GPU/audio/controller behavior. Windows ZIPs remain unsigned by Authenticode. Captures/color diversity are startup evidence, not complete semantic UI proof.
+3. The Linux captured source/replay builder remains Linux-only. Windows uses preparation-observations-only inventory plus its hosted preparation record and separate origin attestations; no Windows captured replay/equality claim is made.
+4. Project licensing remains unresolved: README:TBD versus workspace MIT OR Apache-2.0, eight engine crates and three samples lack license metadata, and root project license texts are absent. The prior owner policy question has no submitted answer; no grant is invented.
+5. Physical/reference-machine, macOS/full Windows authoring, remaining SDK/dependency provenance and OS signing keep Task 8 open. No laptop is connected. api.github.com remains excluded by enforced cloud policy; its older network draft is unapplied. Public status/Git push work; no credentials or policy bypass are used.
 
 ## Boundaries
 
-- Build/test remains contents:read; only the separate no-checkout/no-engine-execution attester has OIDC/attestation write permission. Upload errors remain strict. No permission expansion, unrelated artifact deletion or release-size ceiling.
-- Local build records remain unsigned execution records; the successful hosted job created separate origin attestations for its specific candidate. Those signatures were not independently verified here. Same-host repetition shares toolchain/SDK/dependency caches.
-- Acceptance uses Ubuntu 24.04/X11/GLIBC 2.39, Xvfb/SwiftShader/Mesa/ALSA null/simulated gamepads. It does not certify physical GPU/audio/controller performance, Windows/macOS/Wayland/older glibc/mobile. System libraries are not bundled.
-- Original notices/license policy are preserved. Generated archives/binaries remain outside Git. Package size remains informational.
+- No release-size ceiling, runtime dependency, public GitHub Release, credential extraction or unrelated milestone. Generated archives/logs/screenshots remain outside Git.
+- Earlier Linux software evidence is Ubuntu 24.04/X11/GLIBC 2.39 with virtual/software devices, not physical acceptance. Independent downloaded-signature verification is separate from observing official CI attestation steps.

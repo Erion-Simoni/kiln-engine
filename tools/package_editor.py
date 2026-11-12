@@ -16,6 +16,7 @@ import subprocess
 import tarfile
 import tempfile
 import tomllib
+import zipfile
 
 REPO = Path(__file__).resolve().parents[1]
 TOOLS = ('kiln-editor', 'kiln-cli', 'kiln-player')
@@ -171,10 +172,14 @@ def file_entries(root):
     for path in sorted(root.rglob('*')):
         if path.is_file():
             entries.append({'path': path.relative_to(root).as_posix(), 'bytes': path.stat().st_size,
-                            'sha256': digest(path), 'executable': bool(path.stat().st_mode & 0o111)})
+                            'sha256': digest(path), 'executable': executable_file(path)})
     if len(entries) > 19999 or sum(e['bytes'] for e in entries) > 2*1024*1024*1024:
         raise ValueError('Installation exceeds verifier limits')
     return entries
+
+
+def executable_file(path):
+    return path.suffix.lower() == '.exe' if os.name == 'nt' else bool(path.stat().st_mode & 0o111)
 
 
 def normalized_archive(root, archive):
@@ -192,6 +197,54 @@ def normalized_archive(root, archive):
                         tar.addfile(entry, stream)
                 else:
                     tar.addfile(entry)
+
+
+def normalized_zip(root, archive):
+    """Write a stable Windows ZIP without following input links or special files."""
+    with zipfile.ZipFile(archive, 'x', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as stream:
+        for path in [root, *sorted(root.rglob('*'))]:
+            if path.is_symlink() or not (path.is_dir() or path.is_file()):
+                raise ValueError('Archive contains a link or special file')
+            name = (Path(root.name)/path.relative_to(root)).as_posix()
+            entry = zipfile.ZipInfo(name + ('/' if path.is_dir() else ''), (1980, 1, 1, 0, 0, 0))
+            entry.create_system = 3
+            mode = 0o755 if path.is_dir() or executable_file(path) else 0o644
+            entry.external_attr = ((0o040000 if path.is_dir() else 0o100000) | mode) << 16
+            entry.compress_type = zipfile.ZIP_DEFLATED
+            if path.is_dir():
+                stream.writestr(entry, b'')
+            else:
+                with path.open('rb') as source, stream.open(entry, 'w', force_zip64=True) as target:
+                    shutil.copyfileobj(source, target, length=65536)
+
+
+def installation_readme(platform):
+    cli = r'.\kiln-cli.exe' if platform == 'windows' else './kiln-cli'
+    system = (
+        'Windows x64 requires compatible desktop graphics, audio and controller drivers.\n'
+        'Executables are not Authenticode-signed; OS runtime libraries/drivers are not bundled.\n'
+        if platform == 'windows' else
+        'Linux requires compatible glibc and system display, GPU, audio and controller libraries.\n'
+        'On Ubuntu 24.04, install the packages listed in linux-runtime-packages.txt.\n'
+        'This includes the runtime-loaded libxkbcommon-x11 dependency required for X11.\n'
+        'Drivers/system libraries are not bundled; bundle.json records direct ELF/glibc observations.\n'
+    )
+    return (
+        'Kiln portable editor build candidate\n\n'
+        'Extract the complete directory somewhere writable; keep its contents together.\n'
+        f'Run {cli} verify-editor-bundle --input . before first use.\n'
+        'Launch kiln-editor, then open examples/ui2d_editor/kiln.toml or create a project.\n'
+        'Save projects outside this installation to preserve installation verification.\n'
+        'Native and Browser exports use sibling kiln-cli, kiln-player and web-runtime.\n'
+        'No Rust, Cargo, Node, Python or wasm-bindgen is needed to author/export/play.\n'
+        'Browser output must be served over HTTP(S); open index.html through that server.\n'
+        'Authored physics and materials require matching capable prepared runtimes.\n'
+        'Open examples/browser_physics2d/kiln.toml or examples/materials2d/kiln.toml for playgrounds.\n'
+        + system +
+        'This candidate does not certify physical-device compatibility.\n'
+        'Internal package license declarations and exact binary provenance require release review.\n'
+        'Checksums detect changes; this unsigned manifest does not authenticate a download.\n'
+    )
 
 
 def compiler_notices(destination):
@@ -248,6 +301,8 @@ def prepare(args):
     args.output.parent.mkdir(parents=True, exist_ok=True)
     identities_by_tool = identities(args.binaries)
     identity = identities_by_tool[TOOLS[0]]
+    if identity['platform'] == 'windows' and args.output.suffix.lower() != '.zip':
+        raise ValueError('Windows portable candidates require a .zip output')
     with tempfile.TemporaryDirectory(prefix='.kiln-package-', dir=args.output.parent) as temporary:
         root = Path(temporary)/f"kiln-{identity['version']}-{identity['platform']}-{identity['arch']}"
         root.mkdir()
@@ -271,24 +326,7 @@ def prepare(args):
         compiler = compiler_notices(root/'licenses')
         if record is not None and compiler != record['toolchain']['rustc']:
             raise ValueError('Build record compiler does not match preparing compiler')
-        (root/'README.txt').write_text(
-            'Kiln portable editor build candidate\n\n'
-            'Extract the complete directory somewhere writable; keep its contents together.\n'
-            'Run ./kiln-cli verify-editor-bundle --input . before first use.\n'
-            'Launch kiln-editor, then open examples/ui2d_editor/kiln.toml or create a project.\n'
-            'Save projects outside this installation to preserve installation verification.\n'
-            'Native and Browser exports use sibling kiln-cli, kiln-player and web-runtime.\n'
-            'No Rust, Cargo, Node, Python or wasm-bindgen is needed to author/export/play.\n'
-            'Browser output must be served over HTTP(S); open index.html through that server.\n'
-            'Authored physics and materials require matching capable prepared runtimes.\n'
-            'Open examples/browser_physics2d/kiln.toml or examples/materials2d/kiln.toml for playgrounds.\n'
-            'Linux requires compatible glibc and system display, GPU, audio and controller libraries.\n'
-            'On Ubuntu 24.04, install the packages listed in linux-runtime-packages.txt.\n'
-            'This includes the runtime-loaded libxkbcommon-x11 dependency required for X11.\n'
-            'Drivers/system libraries are not bundled; bundle.json records direct ELF/glibc observations.\n'
-            'This is development relocation evidence, not a signed release or physical-device compatibility certification.\n'
-            'Internal package license declarations and exact binary provenance require release review.\n'
-            'Checksums detect changes; this unsigned manifest does not authenticate a download.\n', encoding='utf-8')
+        (root/'README.txt').write_text(installation_readme(identity['platform']), encoding='utf-8')
         initial = file_entries(root)
         (root/'SHA256SUMS').write_text(''.join(f"{e['sha256']}  {e['path']}\n" for e in initial), encoding='utf-8')
         if record is not None:
@@ -304,8 +342,11 @@ def prepare(args):
         write_json(root/'bundle.json', manifest)
         subprocess.run([str(root/('kiln-cli.exe' if os.name == 'nt' else 'kiln-cli')),
                         'verify-editor-bundle', '--input', str(root)], check=True, timeout=120)
-        archive = Path(temporary)/'bundle.tar.gz'
-        normalized_archive(root, archive)
+        archive = Path(temporary)/('bundle.zip' if args.output.suffix.lower() == '.zip' else 'bundle.tar.gz')
+        if args.output.suffix.lower() == '.zip':
+            normalized_zip(root, archive)
+        else:
+            normalized_archive(root, archive)
         # Same-filesystem exclusive publication; no existing output can be overwritten.
         os.link(archive, args.output)
     print(json.dumps({'archive': str(args.output), 'sha256': digest(args.output), 'bytes': args.output.stat().st_size}))

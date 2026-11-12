@@ -1781,3 +1781,26 @@ checks remain separate Task 8 gates.
   new cache key. Restored executables alone do not preserve cargo install's
   version tracking. No engine/runtime dependency, permission expansion, public
   release, upload-error suppression or package-size ceiling is introduced.
+
+### ADR-0069 — Native Windows portable candidate preparation (2026-11-12)
+
+- Task 8 has an accepted hosted Linux candidate; the owner's Windows laptop
+  needs actual Windows binaries and platform evidence. Extend the prebuilt
+  packager with deterministic ZIP output for Windows, preserving the existing
+  Linux archive format and offline installation verifier. Include matching
+  editor/exporter/player, browser runtime, templates/examples and original notices.
+- Build on a hosted Windows x86_64 MSVC runner with pinned Rust/official actions
+  and the root Cargo.lock. Prepare the browser runtime with matching bindgen.
+  Keep this separate from the captured Linux builder: Windows preparation uses
+  preparation-observations-only provenance, not a captured/replayed build claim.
+- Move the installation outside the checkout into a path with spaces, verify it,
+  reject corruption, initialize all templates and export Windows/browser games
+  with Rust/Node absent from PATH. Exercise visible editor/player startup and
+  normal window close using Windows APIs, retaining logs and screenshots where
+  available. Failures stay strict; no candidate is accepted from failed gates.
+- Publish passing Windows candidates as Actions artifacts, with a separate
+  no-checkout provenance job. This establishes hosted preparation and startup,
+  not full Windows GUI authoring/gameplay, physical Intel HD 520 performance,
+  audible/controller testing, Authenticode signing or public-release licensing.
+- No engine/runtime dependency. ZIP and acceptance use Python's standard library,
+  Windows APIs and existing hosted tools. Package sizes remain informational.
