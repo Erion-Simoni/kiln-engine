@@ -66,10 +66,20 @@ impl ProjectLifecycle {
         action: ProjectAction,
         project: Option<&Project>,
     ) -> Result<Option<ProjectAction>, String> {
+        self.request_with_external_dirty(action, project, false)
+    }
+
+    /// Protect external authoring drafts such as gameplay script source too.
+    pub fn request_with_external_dirty(
+        &mut self,
+        action: ProjectAction,
+        project: Option<&Project>,
+        external_dirty: bool,
+    ) -> Result<Option<ProjectAction>, String> {
         if self.pending.is_some() {
             return Ok(None);
         }
-        if self.is_dirty(project)? {
+        if external_dirty || self.is_dirty(project)? {
             self.pending = Some(action);
             self.save_error = None;
             Ok(None)
@@ -101,5 +111,40 @@ impl ProjectLifecycle {
         }
         self.save_error = None;
         Ok(self.pending.take())
+    }
+}
+
+#[cfg(test)]
+mod external_draft_tests {
+    use super::*;
+    #[test]
+    fn script_only_changes_prompt_and_failed_save_keeps_the_exit_pending() {
+        let project = Project::default();
+        let mut lifecycle = ProjectLifecycle::default();
+        lifecycle.mark_saved(&project);
+        assert_eq!(
+            lifecycle
+                .request_with_external_dirty(ProjectAction::Exit, Some(&project), true)
+                .unwrap(),
+            None
+        );
+        assert!(lifecycle
+            .resolve(SaveDecision::Save, Err("script conflict".into()))
+            .is_err());
+        assert_eq!(lifecycle.pending(), Some(&ProjectAction::Exit));
+        assert_eq!(
+            lifecycle.resolve(SaveDecision::Cancel, Ok(())).unwrap(),
+            None
+        );
+        assert_eq!(
+            lifecycle
+                .request_with_external_dirty(ProjectAction::Exit, Some(&project), true)
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            lifecycle.resolve(SaveDecision::Discard, Ok(())).unwrap(),
+            Some(ProjectAction::Exit)
+        );
     }
 }

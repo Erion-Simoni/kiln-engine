@@ -1868,3 +1868,25 @@ checks remain separate Task 8 gates.
   acceptance gate still run. The captured Linux release builder remains fresh.
 - No new dependency or release-size threshold. Existing bounded-input limits
   remain; no resource budget is weakened.
+
+### ADR-0073 — Editor-authored Task 9 reference games (2026-11-12)
+
+- The owner explicitly starts Task 9 on a new branch before the remaining Task 8
+  platform/release checks. Limit this session to the three reference games and
+  editor blockers they expose; hardware, independent tutorial and release review
+  stay open. Task 8's new Linux/Windows notice candidates both passed.
+- Author projects through native editor interactions, including project creation
+  or Save As, scene editing, gameplay source editing, Save/Reopen/Play and Export.
+  Automation may supply ordinary script text/assets and inspect resulting files;
+  it must not generate game manifests behind the editor or add game-specific
+  engine buttons/loaders to bypass authoring. Keep reproducible interaction
+  drivers and actual evidence with the games.
+- Add a general Script Editor for project-relative .ks files, the missing ordinary
+  authoring operation. Bound source to 1 MiB, reject traversal/links and external
+  modification, save atomically, and include drafts in Save/Discard/Cancel
+  protection. Compilation diagnostics use the existing shared runtime compiler.
+  This is not a new language/runtime/dependency or a project/save format change.
+- Reference games may start from existing example projects through Save As and
+  import their assets, then replace gameplay through the editor. Give games
+  independent project identities and document controls, goals and constraints.
+  Do not equate three games with completion of all Task 9 release gates.
