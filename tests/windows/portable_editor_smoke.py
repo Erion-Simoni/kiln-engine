@@ -91,12 +91,16 @@ class Windows:
         if not self.api.ClientToScreen(window, ctypes.byref(origin)):
             raise RuntimeError('Cannot locate window client area')
         powershell = Path(env['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'
-        subprocess.run([str(powershell), '-NoProfile', '-NonInteractive', '-File',
+        result = subprocess.run([str(powershell), '-NoProfile', '-NonInteractive', '-File',
                         str(Path(__file__).with_name('capture_window.ps1')),
                         '-Left', str(origin.x), '-Top', str(origin.y),
                         '-Width', str(rectangle.right), '-Height', str(rectangle.bottom),
-                        '-Output', str(output)], env=env, check=True, timeout=30,
-                       creationflags=subprocess.CREATE_NO_WINDOW)
+                        '-Output', str(output)], env=env, timeout=30,
+                       creationflags=subprocess.CREATE_NO_WINDOW, capture_output=True,
+                       text=True, encoding='utf-8', errors='replace')
+        if result.returncode != 0:
+            raise RuntimeError('Window capture failed: '+(result.stdout+result.stderr)[-3000:])
+        print(result.stdout, flush=True)
 
 
 def accept_window(command, cwd, env, evidence, name):
@@ -153,7 +157,8 @@ def accept(archive, evidence):
         with (evidence/'installed-cli.log').open('ab') as log:
             log.write(result.stdout+result.stderr)
         if (result.returncode == 0) != success:
-            raise RuntimeError(f'Unexpected installed command status {result.returncode}: {args}')
+            output = (result.stdout+result.stderr).decode('utf-8', errors='replace')[-3000:]
+            raise RuntimeError(f'Unexpected installed command status {result.returncode}: {args}\n{output}')
         return result.stdout
     run(cli, 'verify-editor-bundle', '--input', installed)
     for tool in ('kiln-editor', 'kiln-cli', 'kiln-player'):
@@ -204,7 +209,15 @@ def main():
     try:
         report = accept(Path(sys.argv[1]).resolve(), evidence)
     except Exception as error:
-        report['error'] = str(error)
+        diagnostics = []
+        for name in ('editor-startup.log', 'player-startup.log'):
+            path = evidence/name
+            if path.is_file():
+                diagnostics.append(name+':\n'+path.read_text(encoding='utf-8', errors='replace')[-3000:])
+        report['error'] = '\n'.join([str(error), *diagnostics])
+        if os.environ.get('GITHUB_ACTIONS') == 'true':
+            message = report['error'].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+            print('::error title=Windows installed acceptance::'+message, flush=True)
         raise
     finally:
         (evidence/'result.json').write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')

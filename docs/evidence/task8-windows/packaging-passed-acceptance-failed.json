@@ -1,0 +1,150 @@
+{
+  "run_url": "https://github.com/Erion-Simoni/kiln-engine/actions/runs/43211211300",
+  "source_revision": "1afc792c8160472939bffc753e2e8940f5557951",
+  "observed_at": "2026-11-12T11:56:12.310110+00:00",
+  "jobs": [
+    {
+      "id": "131158991117",
+      "state": "completed",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:40:51Z",
+          "completed-at": "2026-11-12T11:40:54Z"
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:40:54Z",
+          "completed-at": "2026-11-12T11:41:02Z"
+        },
+        {
+          "name": "Run actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:41:02Z",
+          "completed-at": "2026-11-12T11:41:02Z"
+        },
+        {
+          "name": "Observe hosted image identity",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:41:02Z",
+          "completed-at": "2026-11-12T11:41:02Z"
+        },
+        {
+          "name": "Run actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:41:02Z",
+          "completed-at": "2026-11-12T11:41:03Z"
+        },
+        {
+          "name": "Run actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:41:03Z",
+          "completed-at": "2026-11-12T11:41:03Z"
+        },
+        {
+          "name": "Install pinned toolchain and matching bindgen",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:41:03Z",
+          "completed-at": "2026-11-12T11:45:22Z"
+        },
+        {
+          "name": "Save installed tools before acceptance",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:45:22Z",
+          "completed-at": "2026-11-12T11:45:48Z"
+        },
+        {
+          "name": "Test Windows ZIP validation",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:45:48Z",
+          "completed-at": "2026-11-12T11:45:49Z"
+        },
+        {
+          "name": "Build matched release tools and browser runtime",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:45:49Z",
+          "completed-at": "2026-11-12T11:55:25Z"
+        },
+        {
+          "name": "Save successful compiler outputs before acceptance",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:55:25Z",
+          "completed-at": "2026-11-12T11:55:33Z"
+        },
+        {
+          "name": "Inspect Windows DLL requirements and reject dynamic MSVC runtime",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:55:33Z",
+          "completed-at": "2026-11-12T11:55:37Z"
+        },
+        {
+          "name": "Package Windows portable ZIP with original notices",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:55:37Z",
+          "completed-at": "2026-11-12T11:55:42Z"
+        },
+        {
+          "name": "Accept moved editor, exports and visible Windows startup",
+          "conclusion": "failure",
+          "started-at": "2026-11-12T11:55:42Z",
+          "completed-at": "2026-11-12T11:55:49Z"
+        },
+        {
+          "name": "Record accepted candidate inputs and observations",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T11:55:49Z",
+          "completed-at": "2026-11-12T11:55:49Z"
+        },
+        {
+          "name": "Upload accepted Windows candidate",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T11:55:49Z",
+          "completed-at": "2026-11-12T11:55:49Z"
+        },
+        {
+          "name": "Retain Windows acceptance and failure evidence",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:55:49Z",
+          "completed-at": "2026-11-12T11:55:50Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T11:55:50Z",
+          "completed-at": "2026-11-12T11:55:50Z"
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:55:50Z",
+          "completed-at": "2026-11-12T11:55:51Z"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success",
+          "started-at": "2026-11-12T11:55:51Z",
+          "completed-at": "2026-11-12T11:55:51Z"
+        }
+      ]
+    },
+    {
+      "id": "131166319586",
+      "state": null,
+      "steps": []
+    }
+  ],
+  "missing_successful_gates": [
+    "Accept moved editor, exports and visible Windows startup",
+    "Create Windows candidate build-origin attestation",
+    "Record accepted candidate inputs and observations",
+    "Retain Windows attestation bundle",
+    "Upload accepted Windows candidate"
+  ],
+  "failed_gates": [
+    "Accept moved editor, exports and visible Windows startup"
+  ],
+  "complete_workflow_success_observed": false,
+  "scope": "Public step conclusions: Windows compilation/DLL checks/packaging passed; installed acceptance failed. Candidate publication was blocked. Authenticated logs/results were not downloaded."
+}
