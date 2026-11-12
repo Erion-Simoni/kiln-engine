@@ -1,7 +1,7 @@
 # Kiln Session Handoff
 
 **Active focus:** Task 8 runtime-matched export notices. Task 8 remains IN PROGRESS for remaining distribution/platform review; Task 9/full 3D remain unstarted.
-**Branch:** feat/2d-production-workflow. Runtime notice feature is validated locally and ready for the feature commit/push; hosted feature results remain separate. Prior accepted licensed Linux/Windows candidate source is 3ff72d37f2a05641eac78098e5bc4e928ff8581f; later documentation HEAD was 358df2a.
+**Branch:** feat/2d-production-workflow. Runtime notice feature a0f1d85fb5bc3562701390041f06f4c28ff3a5ed is committed/pushed and exact remote SHA verified; working tree was clean after push. Hosted feature results remain pending and separate. Prior accepted licensed Linux/Windows candidate source is 3ff72d37f2a05641eac78098e5bc4e928ff8581f; later documentation HEAD was 358df2a.
 **Owner preference:** package/release size is not a goal. Performance/resource and bounded-input requirements remain. Owner-delegated project license is MIT OR Apache-2.0; no further licensing decision is pending.
 
 ## Done
@@ -23,7 +23,7 @@
 
 ## Next / known issues
 
-1. Commit/push the validated feature and verify exact remote SHA. Observe its new Windows/Linux workflows; prior 3ff72d3 successes do not validate new source. Local evidence is docs/evidence/task8-runtime-notices/local-validation.json.
+1. Observe Windows run 43227026649 and Linux run 43227026505 for source a0f1d85 to completion. At the public checkpoint Windows restored compiler outputs and is preparing the pinned toolchain; Linux passed artifact preflight and is running native quality gates/tests. Neither has reported a failure, but neither has completed. Prior 3ff72d3 successes do not validate new source. Local/hosted checkpoint evidence is in docs/evidence/task8-runtime-notices. The active monitors are /tmp/kiln_watch_windows_notices.py (session 43759) and /tmp/kiln_watch_linux_notices.py (session 69221), writing target/task8-{windows,linux}-runtime-notices; refresh results before drawing conclusions.
 2. Execute full Windows GUI author/save/undo/restart/export/gameplay and PHYSICAL_DEVICE_TEST.md on actual Intel HD 520/other devices. Check actual GPU/driver, audible output/controller and startup/frame-time/memory/session/recovery. No physical laptop/device is connected here.
 3. Finish macOS distribution, remaining SDK/dependency/exact-linked-code review and OS installer signing. Windows binaries are not Authenticode-signed. Origin attestation is separate from OS signing and hermetic/independent-builder reproducibility.
 4. Independently download/verify candidate signatures and review retained captures on an appropriately connected machine. api.github.com remains excluded by enforced cloud policy; the earlier network draft is unapplied. Public status/Git push work; signatures/PNGs were not independently downloaded/reviewed here. Use documented source/signer SHA constraints with current authenticated gh.

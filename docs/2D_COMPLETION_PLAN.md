@@ -783,3 +783,6 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Task 8 stays open for full Windows GUI/physical tests, macOS, remaining
   SDK/dependency/exact-linked-code review and OS signing. No release-size goal or
   public GitHub Release was introduced; Task 9/full 3D remain unstarted.
+- Pushed feature a0f1d85 and verified its exact remote SHA. New Windows run
+  43227026649 and Linux run 43227026505 are in progress, with no failed gates
+  observed at the recorded checkpoint. Complete hosted success is pending.

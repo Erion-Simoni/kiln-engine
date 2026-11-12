@@ -54,3 +54,14 @@ unchanged; signature verification and retained capture review were not performed
 through artifact downloads here because api.github.com is excluded by the active
 cloud policy. Public workflow conclusions establish hosted execution, not legal
 completeness, OS signing or physical-device acceptance.
+
+## New feature hosted checkpoint
+
+Feature commit `a0f1d85fb5bc3562701390041f06f4c28ff3a5ed` is pushed to
+feat/2d-production-workflow and its exact remote SHA was verified. New
+[Windows run 43227026649](https://github.com/Erion-Simoni/kiln-engine/actions/runs/43227026649)
+and [Linux run 43227026505](https://github.com/Erion-Simoni/kiln-engine/actions/runs/43227026505)
+are **in progress** at `hosted-checkpoint.json`'s observation. Windows restored
+compiler outputs and is preparing its pinned toolchain; Linux passed artifact preflight and is running native quality
+gates/tests. Neither has reported a failure, but no complete new hosted success
+is claimed. Refresh these actual source-pinned runs before downloading a candidate.
