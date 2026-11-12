@@ -171,6 +171,8 @@ enum MenuAction {
     PackageProject,
     OpenDocs,
     About,
+    FocusPanel(Tab),
+    ResetLayout,
 }
 
 pub struct EditorApp {
@@ -2115,7 +2117,7 @@ impl winit::application::ApplicationHandler for EditorApp {
             ..
         } = event
         {
-            if !response.consumed {
+            if !response.consumed && !self.shell.quick_actions.open {
                 match key {
                     Key::Character(key) if ["q", "w", "e", "r"].contains(&key.as_str()) => {
                         self.finish_transform_edit();
@@ -2418,6 +2420,20 @@ impl EditorApp {
         let mut save_requested = false;
         let mut load_requested = false;
 
+        if !project_blocked
+            && ctx.input_mut(|input| {
+                input.consume_shortcut(&egui::KeyboardShortcut::new(
+                    egui::Modifiers::COMMAND,
+                    egui::Key::K,
+                ))
+            })
+        {
+            self.shell.quick_actions.toggle();
+        }
+        if project_blocked {
+            self.shell.quick_actions.open = false;
+        }
+
         // Top menu bar
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             if project_blocked {
@@ -2616,6 +2632,13 @@ impl EditorApp {
                     }
                 });
 
+                if ui
+                    .button("Quick Actions  Ctrl+K")
+                    .on_hover_text("Find commands and jump to panels")
+                    .clicked()
+                {
+                    self.shell.quick_actions.toggle();
+                }
                 ui.menu_button("Help", |ui| {
                     if ui.button("Documentation").clicked() {
                         menu_actions.push(MenuAction::OpenDocs);
@@ -2647,7 +2670,7 @@ impl EditorApp {
                 .exact_height(38.0)
                 .frame(
                     egui::Frame::none()
-                        .fill(egui::Color32::from_gray(43))
+                        .fill(egui::Color32::from_rgb(31, 34, 40))
                         .inner_margin(egui::Margin::symmetric(8.0, 4.0)),
                 )
                 .show(ctx, |ui| {
@@ -2689,7 +2712,7 @@ impl EditorApp {
                         }
                     }
                 });
-            show_status_bar(ctx, fps, entity_count, tier, is_playing);
+            show_status_bar(ctx, fps, entity_count, tier, is_playing, project_dirty);
         }
 
         // Welcome screen overlay
@@ -3007,9 +3030,42 @@ impl EditorApp {
             self.gizmo.drag = None;
         }
 
+        use crate::quick_actions::QuickAction;
+        let can_save = self.current_project.is_some() && self.play.is_none();
+        let can_undo = self.scenes.history.can_undo() && self.play.is_none();
+        let can_redo = self.scenes.history.can_redo() && self.play.is_none();
+        if let Some(action) = self.shell.quick_actions.show(ctx, |action| match action {
+            QuickAction::Save => can_save,
+            QuickAction::Undo => can_undo,
+            QuickAction::Redo => can_redo,
+            _ => true,
+        }) {
+            menu_actions.push(match action {
+                QuickAction::OpenProject => MenuAction::OpenProject,
+                QuickAction::Save => MenuAction::SaveProject,
+                QuickAction::Undo => MenuAction::Undo,
+                QuickAction::Redo => MenuAction::Redo,
+                QuickAction::Scene => MenuAction::FocusPanel(Tab::SceneView),
+                QuickAction::Game => MenuAction::FocusPanel(Tab::GameView),
+                QuickAction::Hierarchy => MenuAction::FocusPanel(Tab::Hierarchy),
+                QuickAction::Inspector => MenuAction::FocusPanel(Tab::Inspector),
+                QuickAction::Assets => MenuAction::FocusPanel(Tab::Assets),
+                QuickAction::Console => MenuAction::FocusPanel(Tab::Console),
+                QuickAction::Animation => MenuAction::FocusPanel(Tab::AnimationEditor),
+                QuickAction::Graph => MenuAction::FocusPanel(Tab::GraphEditor),
+                QuickAction::Export => MenuAction::FocusPanel(Tab::BuildPanel),
+                QuickAction::Preferences => MenuAction::FocusPanel(Tab::Preferences),
+                QuickAction::ResetLayout => MenuAction::ResetLayout,
+            });
+        }
+
         // Text fields retain their own editing shortcuts. Scene shortcuts apply
         // after widgets have had a chance to consume keyboard input.
-        if !project_blocked && !ctx.wants_keyboard_input() && self.play.is_none() {
+        if !project_blocked
+            && !self.shell.quick_actions.open
+            && !ctx.wants_keyboard_input()
+            && self.play.is_none()
+        {
             ctx.input_mut(|input| {
                 for (key, action) in [
                     (egui::Key::S, MenuAction::SaveProject),
@@ -3315,6 +3371,15 @@ impl EditorApp {
         // Execute menu actions after UI pass (borrows are released)
         for action in menu_actions {
             match action {
+                MenuAction::FocusPanel(tab) => {
+                    if let Some(location) = self.dock_state.find_tab(&tab) {
+                        self.dock_state.set_active_tab(location);
+                    } else {
+                        self.dock_state.push_to_focused_leaf(tab);
+                    }
+                    self.show_welcome = false;
+                }
+                MenuAction::ResetLayout => self.dock_state = default_dock_layout(),
                 MenuAction::Exit => self
                     .project_requests
                     .push(ProjectRequest::Leave(ProjectAction::Exit)),
@@ -3443,6 +3508,7 @@ impl EditorApp {
             entity_count: u32,
             tier: kiln_render::RenderTier,
             is_playing: bool,
+            project_dirty: bool,
         ) {
             egui::TopBottomPanel::bottom("status_bar")
                 .exact_height(22.0)
@@ -3453,7 +3519,14 @@ impl EditorApp {
                 )
                 .show(ctx, |ui| {
                     ui.horizontal(|ui| {
-                        ui.weak("Ready");
+                        let (status, color) = if is_playing {
+                            ("Playing", egui::Color32::from_rgb(111, 204, 155))
+                        } else if project_dirty {
+                            ("Unsaved changes", egui::Color32::from_rgb(236, 187, 105))
+                        } else {
+                            ("All changes saved", egui::Color32::from_rgb(152, 166, 184))
+                        };
+                        ui.colored_label(color, status);
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.weak(format!(
                                 "{} · {:.0} FPS · {} entities · {:?} · wgpu",

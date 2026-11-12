@@ -6,6 +6,7 @@ use egui::{Color32, Stroke};
 
 /// Transient workspace presentation; never serialized into a game project.
 pub struct EditorShell {
+    pub(crate) quick_actions: crate::quick_actions::QuickActions,
     pub(crate) preview_3d: bool,
     pub(crate) grid: bool,
     pub(crate) gizmos: bool,
@@ -17,6 +18,7 @@ pub struct EditorShell {
 impl Default for EditorShell {
     fn default() -> Self {
         Self {
+            quick_actions: crate::quick_actions::QuickActions::default(),
             preview_3d: false,
             grid: true,
             gizmos: true,
@@ -59,9 +61,9 @@ pub fn apply_theme(ctx: &egui::Context) {
         ..Default::default()
     };
     for (text, size) in [
-        (egui::TextStyle::Body, 12.0),
-        (egui::TextStyle::Button, 12.0),
-        (egui::TextStyle::Heading, 14.0),
+        (egui::TextStyle::Body, 13.0),
+        (egui::TextStyle::Button, 13.0),
+        (egui::TextStyle::Heading, 16.0),
         (egui::TextStyle::Small, 11.0),
     ] {
         style
@@ -70,19 +72,19 @@ pub fn apply_theme(ctx: &egui::Context) {
     }
     style.spacing.item_spacing = egui::vec2(6.0, 4.0);
     style.spacing.button_padding = egui::vec2(8.0, 3.0);
-    style.spacing.interact_size.y = 22.0;
+    style.spacing.interact_size.y = 24.0;
     style.spacing.indent = 14.0;
     style.spacing.window_margin = egui::Margin::same(8.0);
     let visuals = &mut style.visuals;
     visuals.override_text_color = Some(Color32::from_gray(212));
-    visuals.panel_fill = Color32::from_gray(43);
-    visuals.window_fill = Color32::from_gray(43);
+    visuals.panel_fill = Color32::from_rgb(35, 38, 44);
+    visuals.window_fill = Color32::from_rgb(35, 38, 44);
     visuals.faint_bg_color = Color32::from_gray(38);
     visuals.extreme_bg_color = Color32::from_gray(27);
     visuals.code_bg_color = Color32::from_gray(27);
-    visuals.window_rounding = 3.0.into();
+    visuals.window_rounding = 6.0.into();
     visuals.window_stroke = Stroke::new(1.0_f32, Color32::from_gray(23));
-    visuals.selection.bg_fill = Color32::from_rgb(47, 111, 181);
+    visuals.selection.bg_fill = Color32::from_rgb(47, 100, 155);
     visuals.selection.stroke = Stroke::new(1.0_f32, Color32::WHITE);
     for widget in [
         &mut visuals.widgets.noninteractive,
@@ -91,13 +93,13 @@ pub fn apply_theme(ctx: &egui::Context) {
         &mut visuals.widgets.active,
         &mut visuals.widgets.open,
     ] {
-        widget.rounding = 2.0.into();
+        widget.rounding = 4.0.into();
         widget.bg_stroke = Stroke::new(1.0_f32, Color32::from_gray(23));
     }
-    visuals.widgets.inactive.weak_bg_fill = Color32::from_gray(58);
+    visuals.widgets.inactive.weak_bg_fill = Color32::from_rgb(47, 51, 59);
     visuals.widgets.inactive.bg_fill = Color32::from_gray(27);
-    visuals.widgets.hovered.weak_bg_fill = Color32::from_gray(70);
-    visuals.widgets.active.weak_bg_fill = Color32::from_rgb(47, 111, 181);
+    visuals.widgets.hovered.weak_bg_fill = Color32::from_rgb(61, 70, 84);
+    visuals.widgets.active.weak_bg_fill = Color32::from_rgb(47, 100, 155);
     ctx.set_style(style);
 }
 
@@ -133,9 +135,13 @@ impl EditorShell {
                 if ui
                     .add_enabled(
                         !self.preview_3d && !playing,
-                        egui::Button::new(key)
-                            .selected(*mode == tool)
-                            .min_size(egui::vec2(28.0, 24.0)),
+                        egui::Button::new(if full.width() >= 1200.0 {
+                            format!("{key}  {label}")
+                        } else {
+                            key.to_owned()
+                        })
+                        .selected(*mode == tool)
+                        .min_size(egui::vec2(28.0, 24.0)),
                     )
                     .on_hover_text(format!("{label} ({key})"))
                     .clicked()
@@ -144,10 +150,12 @@ impl EditorShell {
                 }
             }
             ui.separator();
-            ui.add_enabled(false, egui::Button::new("World"))
-                .on_disabled_hover_text(
-                    "Viewport gizmos use world space. Edit local transforms in the Inspector.",
-                );
+            if full.width() >= 1000.0 {
+                ui.add_enabled(false, egui::Button::new("World"))
+                    .on_disabled_hover_text(
+                        "Viewport gizmos use world space. Edit local transforms in the Inspector.",
+                    );
+            }
             if ui
                 .add_enabled(
                     !self.preview_3d && !playing,
@@ -164,7 +172,14 @@ impl EditorShell {
                     .speed(1.0),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                actions.reset_layout = ui.button("Layout: Default").clicked();
+                actions.reset_layout = ui
+                    .button(if full.width() >= 1000.0 {
+                        "Layout: Default"
+                    } else {
+                        "Layout"
+                    })
+                    .on_hover_text("Restore the default workspace layout")
+                    .clicked();
                 if ui
                     .add_enabled(!playing, egui::Button::new("3D").selected(self.preview_3d))
                     .on_hover_text("Open the interactive 3D visual preview (session only)")
@@ -253,56 +268,61 @@ mod tests {
 
     #[test]
     fn centered_transport_receives_real_pointer_clicks() {
-        let ctx = egui::Context::default();
-        apply_theme(&ctx);
-        let mut shell = EditorShell::default();
-        let mut mode = GizmoMode::Translate;
-        let mut snap = false;
-        let mut size = 8.0;
-        let mut clicked = false;
-        for events in [
-            vec![],
-            vec![egui::Event::PointerMoved(egui::pos2(677.0, 44.0))],
-            vec![egui::Event::PointerButton {
-                pos: egui::pos2(677.0, 44.0),
-                button: egui::PointerButton::Primary,
-                pressed: true,
-                modifiers: egui::Modifiers::NONE,
-            }],
-            vec![egui::Event::PointerButton {
-                pos: egui::pos2(677.0, 44.0),
-                button: egui::PointerButton::Primary,
-                pressed: false,
-                modifiers: egui::Modifiers::NONE,
-            }],
-        ] {
-            let _ = ctx.run(
-                egui::RawInput {
-                    screen_rect: Some(egui::Rect::from_min_size(
-                        egui::Pos2::ZERO,
-                        egui::vec2(1440.0, 900.0),
-                    )),
-                    events,
-                    ..Default::default()
-                },
-                |ctx| {
-                    egui::TopBottomPanel::top("menu")
-                        .exact_height(24.0)
-                        .show(ctx, |_| {});
-                    egui::TopBottomPanel::top("tools")
-                        .exact_height(38.0)
-                        .show(ctx, |ui| {
-                            clicked |= shell
-                                .toolbar(ui, &mut mode, &mut snap, &mut size, false, false)
-                                .toggle_play;
-                        });
-                },
+        for width in [640.0, 800.0, 1024.0, 1440.0] {
+            let ctx = egui::Context::default();
+            apply_theme(&ctx);
+            let mut shell = EditorShell::default();
+            let mut mode = GizmoMode::Translate;
+            let mut snap = false;
+            let mut size = 8.0;
+            let mut clicked = false;
+            for events in [
+                vec![],
+                vec![egui::Event::PointerMoved(egui::pos2(
+                    width / 2.0 - 43.0,
+                    44.0,
+                ))],
+                vec![egui::Event::PointerButton {
+                    pos: egui::pos2(width / 2.0 - 43.0, 44.0),
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+                vec![egui::Event::PointerButton {
+                    pos: egui::pos2(width / 2.0 - 43.0, 44.0),
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            ] {
+                let _ = ctx.run(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(width, 900.0),
+                        )),
+                        events,
+                        ..Default::default()
+                    },
+                    |ctx| {
+                        egui::TopBottomPanel::top("menu")
+                            .exact_height(24.0)
+                            .show(ctx, |_| {});
+                        egui::TopBottomPanel::top("tools")
+                            .exact_height(38.0)
+                            .show(ctx, |ui| {
+                                clicked |= shell
+                                    .toolbar(ui, &mut mode, &mut snap, &mut size, false, false)
+                                    .toggle_play;
+                            });
+                    },
+                );
+            }
+            assert!(
+                clicked,
+                "Centered Play must not be obscured at width {width}"
             );
         }
-        assert!(
-            clicked,
-            "Centered Play must not be obscured by another toolbar layout"
-        );
     }
 
     #[test]

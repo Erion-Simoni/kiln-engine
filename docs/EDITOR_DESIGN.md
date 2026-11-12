@@ -79,3 +79,21 @@ Play input; display scale is now read before taking the input lock.
 
 Cloud software graphics is useful regression evidence; remote CI execution,
 other desktop platforms and hardware acceptance remain separately tracked.
+
+## Workspace polish and Quick Actions
+
+The native editor uses a cooler charcoal palette, clearer text hierarchy, larger
+interaction targets and softly rounded controls. Transform tools show both their
+shortcut and name on wide windows; compact windows retain Q/W/E/R and tooltips.
+The status bar distinguishes saved edits, unsaved changes and active play.
+
+Use **Quick Actions** in the menu bar, or **Ctrl+K** (**Cmd+K** on macOS), to
+search commands and panels. Search supports multiple terms and categories, for
+example `panel asset` or `workspace layout`. Up/Down selects a result, Enter
+runs it and Escape closes the palette. Existing panels are focused rather than
+opened again. Save, Undo and Redo are disabled when unavailable; project lifecycle
+prompts dismiss Quick Actions. Search is session-only and bounded to 128 characters.
+
+This pass draws on familiar scene/hierarchy/inspector organization, discoverable
+commands and a content shelf. It preserves Kiln's native implementation and
+existing authoring workflows; it does not add engine features or advance 3D.

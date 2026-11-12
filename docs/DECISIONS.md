@@ -1868,3 +1868,18 @@ checks remain separate Task 8 gates.
   acceptance gate still run. The captured Linux release builder remains fresh.
 - No new dependency or release-size threshold. Existing bounded-input limits
   remain; no resource budget is weakened.
+
+### ADR-0073 — Native editor polish and Quick Actions (2026-11-12)
+
+- User-requested editor polish is a focused native workspace task; Task 8 release
+  acceptance remains separate and no additional 3D milestone begins.
+- Refine the existing charcoal theme and toolbar rather than introduce a UI
+  framework. Keep current docking, documents, undo history and project formats.
+- Add a bounded, session-only Quick Actions search (Ctrl/Cmd+K), backed by the
+  existing menu actions and dock tabs. Reuse existing tabs instead of duplicating
+  panels. Save/undo/redo follow their current state restrictions; lifecycle
+  prompts close the palette and prevent commands behind them.
+- Borrow familiar workflow ideas from Unity, Godot and Unreal: visible transform
+  tools, searchable actions, scene/hierarchy/inspector organization and an asset
+  shelf. This does not claim feature parity with those engines.
+- No new dependency, runtime feature, project format or resource-budget exception.
