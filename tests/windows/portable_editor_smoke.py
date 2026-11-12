@@ -90,7 +90,7 @@ class Windows:
             raise RuntimeError('Cannot inspect window client area')
         if not self.api.ClientToScreen(window, ctypes.byref(origin)):
             raise RuntimeError('Cannot locate window client area')
-        powershell = Path(env['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'
+        powershell = Path(env['SYSTEMROOT'])/'System32/WindowsPowerShell/v1.0/powershell.exe'
         result = subprocess.run([str(powershell), '-NoProfile', '-NonInteractive', '-File',
                         str(Path(__file__).with_name('capture_window.ps1')),
                         '-Left', str(origin.x), '-Top', str(origin.y),
@@ -145,7 +145,7 @@ def accept(archive, evidence):
     installed = Path(shutil.move(str(installed), outside/'moved installation'))
     cwd = outside/'unrelated working directory'
     cwd.mkdir()
-    env = dict(os.environ, PATH=str(Path(os.environ['SystemRoot'])/'System32'),
+    env = dict(os.environ, PATH=str(Path(os.environ['SYSTEMROOT'])/'System32'),
                APPDATA=str(outside/'profile/roaming'), LOCALAPPDATA=str(outside/'profile/local'),
                RUST_LOG='warn', WGPU_BACKEND='dx12')
     for name in ('cargo', 'rustc', 'node', 'wasm-bindgen'):

@@ -1,0 +1,141 @@
+{
+  "run_url": "https://github.com/Erion-Simoni/kiln-engine/actions/runs/43213975426",
+  "source_revision": "69472246e28d25190a441c78b6bfd88a9fcbe5e6",
+  "observed_at": "2026-11-12T12:09:06.774660+00:00",
+  "jobs": [
+    {
+      "id": "131168412692",
+      "state": "in_progress",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:00:22Z",
+          "completed-at": "2026-11-12T12:00:24Z"
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:00:24Z",
+          "completed-at": "2026-11-12T12:00:33Z"
+        },
+        {
+          "name": "Run actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:00:33Z",
+          "completed-at": "2026-11-12T12:00:34Z"
+        },
+        {
+          "name": "Observe hosted image identity",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:00:34Z",
+          "completed-at": "2026-11-12T12:00:34Z"
+        },
+        {
+          "name": "Run actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:00:34Z",
+          "completed-at": "2026-11-12T12:01:43Z"
+        },
+        {
+          "name": "Run actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:01:43Z",
+          "completed-at": "2026-11-12T12:01:56Z"
+        },
+        {
+          "name": "Install pinned toolchain and matching bindgen",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:01:56Z",
+          "completed-at": "2026-11-12T12:03:18Z"
+        },
+        {
+          "name": "Save installed tools before acceptance",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T12:03:18Z",
+          "completed-at": "2026-11-12T12:03:18Z"
+        },
+        {
+          "name": "Test Windows ZIP validation",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:03:18Z",
+          "completed-at": "2026-11-12T12:03:20Z"
+        },
+        {
+          "name": "Build matched release tools and browser runtime",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:03:20Z",
+          "completed-at": "2026-11-12T12:08:41Z"
+        },
+        {
+          "name": "Save successful compiler outputs before acceptance",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T12:08:41Z",
+          "completed-at": "2026-11-12T12:08:41Z"
+        },
+        {
+          "name": "Inspect Windows DLL requirements and reject dynamic MSVC runtime",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:08:41Z",
+          "completed-at": "2026-11-12T12:08:46Z"
+        },
+        {
+          "name": "Package Windows portable ZIP with original notices",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:08:46Z",
+          "completed-at": "2026-11-12T12:08:56Z"
+        },
+        {
+          "name": "Accept moved editor, exports and visible Windows startup",
+          "conclusion": "failure",
+          "started-at": "2026-11-12T12:08:56Z",
+          "completed-at": "2026-11-12T12:09:04Z"
+        },
+        {
+          "name": "Record accepted candidate inputs and observations",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T12:09:04Z",
+          "completed-at": "2026-11-12T12:09:04Z"
+        },
+        {
+          "name": "Upload accepted Windows candidate",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T12:09:04Z",
+          "completed-at": "2026-11-12T12:09:04Z"
+        },
+        {
+          "name": "Retain Windows acceptance and failure evidence",
+          "conclusion": "success",
+          "started-at": "2026-11-12T12:09:04Z",
+          "completed-at": "2026-11-12T12:09:05Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+          "conclusion": "skipped",
+          "started-at": "2026-11-12T12:09:05Z",
+          "completed-at": "2026-11-12T12:09:05Z"
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "conclusion": "null",
+          "started-at": "2026-11-12T12:09:05Z",
+          "completed-at": ""
+        }
+      ]
+    }
+  ],
+  "missing_successful_gates": [
+    "Accept moved editor, exports and visible Windows startup",
+    "Create Windows candidate build-origin attestation",
+    "Record accepted candidate inputs and observations",
+    "Retain Windows attestation bundle",
+    "Upload accepted Windows candidate"
+  ],
+  "failed_gates": [
+    "Accept moved editor, exports and visible Windows startup"
+  ],
+  "complete_workflow_success_observed": false,
+  "public_failure_annotation": "Process completed with exit code 1.\n                        \n                          'SystemRoot'\neditor-startup.log:\n[2026-11-12T12:09:00Z WARN  wgpu_core::instance] Missing downlevel flags: DownlevelFlags(VERTEX_AND_INSTANCE_INDEX_RESPECTS_RESPECTIVE_FIRST_VALUE_IN_INDIRECT_DRAW)\n    The underlying API or device in use does not support enough features to be a fully compliant implementation of WebGPU. A subset of the features can still be used. If you are running this program on native and not in a browser and wish to limit the features you use to the supported subset, call Adapter::downlevel_properties or Device::downlevel_properties to get a listing of the features the current platform supports.\n[2026-11-12T12:09:00Z WARN  wgpu_core::instance] DownlevelCapabilities {\n        flags: DownlevelFlags(\n            COMPUTE_SHADERS | FRAGMENT_WRITABLE_STORAGE | INDIRECT_EXECUTION | BASE_VERTEX | READ_ONLY_DEPTH_STENCIL | NON_POWER_OF_TWO_MIPMAPPED_TEXTURES | CUBE_ARRAY_TEXTURES | COMPARISON_SAMPLERS | INDEPENDENT_BLEND | VERTEX_STORAGE | ANISOTROPIC_FILTERING | FRAGMENT_STORAGE | MULTISAMPLED_SHADING | DEPTH_TEXTURE_AND_BUFFER_COPIES | WEBGPU_TEXTURE_FORMAT_SUPPORT | BUFFER_BINDINGS_NOT_16_BYTE_ALIGNED | UNRESTRICTED_INDEX_BUFFER | FULL_DRAW_INDEX_UINT32 | DEPTH_BIAS_CLAMP | VIEW_FORMATS | UNRESTRICTED_EXTERNAL_TEXTURE_COPIES | SURFACE_VIEW_FORMATS | NONBLOCKING_QUERY_RESOLVE,\n        ),\n        limits: DownlevelLimits,\n        shader_model: Sm5,\n    }\n[2026-11-12T12:09:01Z WARN  egui_wgpu::renderer] Detected a linear (sRGBA aware) framebuffer Bgra8UnormSrgb. egui prefers Rgba8Unorm or Bgra8Unorm",
+  "diagnosis": "Screenshot helper indexed a plain environment dict with SystemRoot, while Windows os.environ materializes uppercase SYSTEMROOT. Reproduced with uppercase-only environment dict; fixed canonical key.",
+  "limits": "Template exports and visible editor reached before helper failure; screenshot/normal close/player window and complete publication are not established."
+}

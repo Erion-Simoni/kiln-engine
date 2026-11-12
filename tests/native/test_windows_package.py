@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 import stat
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -69,6 +70,27 @@ class WindowsArchiveTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     smoke.extract(archive, root/'destination')
                 self.assertFalse((root/'destination').exists())
+
+
+class WindowsProcessTests(unittest.TestCase):
+    def test_capture_uses_canonical_uppercase_windows_environment_keys(self):
+        def rectangle(_, pointer):
+            pointer._obj.right, pointer._obj.bottom = 640, 480
+            return True
+        def origin(_, pointer):
+            pointer._obj.x, pointer._obj.y = 10, 20
+            return True
+        window = smoke.Windows.__new__(smoke.Windows)
+        window.api = SimpleNamespace(SetForegroundWindow=lambda _: True,
+                                     GetForegroundWindow=lambda: 123,
+                                     GetClientRect=rectangle, ClientToScreen=origin)
+        result = SimpleNamespace(returncode=0, stdout='captured', stderr='')
+        with patch.object(smoke.subprocess, 'run', return_value=result) as run:
+            with patch.object(smoke.subprocess, 'CREATE_NO_WINDOW', 0, create=True):
+                window.screenshot(123, Path('capture.png'), {'SYSTEMROOT': 'C:/Windows'})
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], str(Path('C:/Windows')/'System32/WindowsPowerShell/v1.0/powershell.exe'))
+        self.assertEqual(run.call_args.kwargs['env'], {'SYSTEMROOT': 'C:/Windows'})
 
 
 if __name__ == '__main__':
