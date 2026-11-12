@@ -322,7 +322,7 @@ mod tests {
         editor.open(root.path(), &path).unwrap();
         std::fs::write(
             root.path().join("scripts/helper.ks"),
-            "fn speed() { return 3.0; }",
+            "fn speed() { let x = 0.0; while x < 3.0 { x += 1.0; } if !false && x == 3.0 { return x; } else if false { return 0; } return 1; }",
         )
         .unwrap();
         editor.source = "import \"helper.ks\";\nlet x = speed();".into();

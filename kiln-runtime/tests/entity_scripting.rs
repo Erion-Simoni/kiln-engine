@@ -224,3 +224,56 @@ fn runtime_errors_point_into_the_imported_function_and_recursion_is_rejected() {
     };
     assert!(error.contains("Recursive"), "{error}");
 }
+
+#[test]
+fn expanded_syntax_executes_in_attached_gameplay_scripts() {
+    let (project, mut sources, mut world) = fixture();
+    sources.insert(
+        "enemy.ks".into(),
+        r#"
+if script_phase() == "update" && get_property("speed") > 0 {
+    let i = 0;
+    let distance = 0.0;
+    while i < 4 {
+        i += 1;
+        if i == 2 { continue; } else if i > 3 { break; }
+        distance += get_property("speed");
+    }
+    let position = get_entity_pos(self_entity());
+    if !(distance == 0) { set_entity_pos(self_entity(), array_get(position, 0) + distance, 0.0); }
+}
+"#
+        .into(),
+    );
+    let mut session = SliceSession::with_scene_sources(&project, "main", |path| {
+        sources
+            .get(path)
+            .cloned()
+            .ok_or_else(|| format!("Missing {path}"))
+    })
+    .unwrap();
+    session.step(&mut world, (0.0, 0.0), 0.016).unwrap();
+    let positions: HashMap<_, _> = world
+        .world_ref()
+        .query::<(&SourceId, &Transform)>()
+        .iter()
+        .map(|(id, transform)| (id.0.clone(), transform.position.x))
+        .collect();
+    assert_eq!(positions["enemy-a"], 2.0);
+    assert_eq!(positions["enemy-b"], 6.0);
+}
+
+#[test]
+fn runaway_attached_loop_reports_runtime_budget_error() {
+    let (project, mut sources, mut world) = fixture();
+    sources.insert("enemy.ks".into(), "while true { continue; }".into());
+    let mut session = SliceSession::with_scene_sources(&project, "main", |path| {
+        sources
+            .get(path)
+            .cloned()
+            .ok_or_else(|| format!("Missing {path}"))
+    })
+    .unwrap();
+    let error = session.step(&mut world, (0.0, 0.0), 0.016).unwrap_err();
+    assert!(error.to_string().contains("Instruction budget exceeded"));
+}

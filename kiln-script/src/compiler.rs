@@ -18,9 +18,17 @@ pub enum CompileError {
     DuplicateVariable(String, Span),
     #[error("Program error: {0}")]
     Program(#[from] kiln_ir::ProgramError),
+    #[error("{0} is only valid inside a loop in the same function")]
+    InvalidLoopControl(String, Span),
+}
+
+struct LoopContext {
+    condition: usize,
+    breaks: Vec<usize>,
 }
 
 pub struct Compiler {
+    loops: Vec<LoopContext>,
     functions: HashMap<String, (Vec<String>, Vec<Stmt>)>,
     function_stack: Vec<String>,
     function_returns: Vec<Vec<usize>>,
@@ -42,6 +50,7 @@ impl Compiler {
         let mut arities = HashMap::new();
         arities.insert("print".to_string(), 1u32);
         Self {
+            loops: Vec::new(),
             functions: HashMap::new(),
             function_stack: Vec::new(),
             function_returns: Vec::new(),
@@ -83,6 +92,7 @@ impl Compiler {
     }
 
     pub fn compile(&mut self, stmts: &[Stmt]) -> Result<Program, CompileError> {
+        Self::validate_loop_controls(stmts, 0)?;
         for stmt in stmts {
             if let Stmt::Function { name, params, body } = stmt {
                 if self.builtins.contains_key(name)
@@ -103,6 +113,38 @@ impl Compiler {
         self.program.set_local_slots(self.next_slot);
         self.program.validate_jump_targets()?;
         Ok(self.program.clone())
+    }
+
+    fn validate_loop_controls(stmts: &[Stmt], depth: usize) -> Result<(), CompileError> {
+        for stmt in stmts {
+            match stmt {
+                Stmt::Break(span) | Stmt::Continue(span) if depth == 0 => {
+                    return Err(CompileError::InvalidLoopControl(
+                        if matches!(stmt, Stmt::Break(_)) {
+                            "break"
+                        } else {
+                            "continue"
+                        }
+                        .into(),
+                        *span,
+                    ));
+                }
+                Stmt::While { body, .. } => Self::validate_loop_controls(body, depth + 1)?,
+                Stmt::Function { body, .. } => Self::validate_loop_controls(body, 0)?,
+                Stmt::If {
+                    then_block,
+                    else_block,
+                    ..
+                } => {
+                    Self::validate_loop_controls(then_block, depth)?;
+                    if let Some(body) = else_block {
+                        Self::validate_loop_controls(body, depth)?;
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     fn compile_stmt(&mut self, stmt: &Stmt) -> Result<(), CompileError> {
@@ -143,6 +185,50 @@ impl Compiler {
                     .ok_or_else(|| CompileError::UndefinedVariable(name.clone(), *span))?;
                 self.compile_expr(value)?;
                 self.program.add_instruction(Instruction::SetLocal(slot));
+            }
+            Stmt::While { condition, body } => {
+                let start = self.program.len();
+                self.compile_expr(condition)?;
+                let exit = self.program.len();
+                self.program
+                    .add_instruction(Instruction::JumpIfNot(Label(0)));
+                self.loops.push(LoopContext {
+                    condition: start,
+                    breaks: Vec::new(),
+                });
+                self.scopes.push(HashMap::new());
+                for stmt in body {
+                    self.compile_stmt(stmt)?;
+                }
+                self.scopes.pop();
+                self.program
+                    .add_instruction(Instruction::Jump(Label(start)));
+                let end = self.program.len();
+                self.program
+                    .set_instruction(exit, Instruction::JumpIfNot(Label(end)));
+                for index in self.loops.pop().expect("Current loop").breaks {
+                    self.program
+                        .set_instruction(index, Instruction::Jump(Label(end)));
+                }
+            }
+            Stmt::Break(span) | Stmt::Continue(span) => {
+                let is_break = matches!(stmt, Stmt::Break(_));
+                let context = self.loops.last_mut().ok_or_else(|| {
+                    CompileError::InvalidLoopControl(
+                        if is_break { "break" } else { "continue" }.into(),
+                        *span,
+                    )
+                })?;
+                let index = self.program.len();
+                let target = if is_break {
+                    context.breaks.push(index);
+                    0
+                } else {
+                    context.condition
+                };
+                self.program
+                    .add_instruction(Instruction::Jump(Label(target)));
+                self.program.record_source_offset(index, span.start);
             }
             Stmt::If {
                 condition,
@@ -210,7 +296,8 @@ impl Compiler {
                 | Expr::String(_, span)
                 | Expr::Identifier(_, span)
                 | Expr::Call { span, .. } => span.start,
-                Expr::BinaryOp { left, .. } => offset(left),
+                Expr::BinaryOp { left, .. } | Expr::Logical { left, .. } => offset(left),
+                Expr::Not(_, span) => span.start,
             }
         }
         let begin = self.program.instructions().len();
@@ -237,6 +324,56 @@ impl Compiler {
                     .find_slot(name)
                     .ok_or_else(|| CompileError::UndefinedVariable(name.clone(), *span))?;
                 self.program.add_instruction(Instruction::GetLocal(slot));
+            }
+            Expr::Not(operand, _) => {
+                self.compile_expr(operand)?;
+                let false_branch = self.program.len();
+                self.program
+                    .add_instruction(Instruction::JumpIfNot(Label(0)));
+                self.program
+                    .add_instruction(Instruction::PushConst(Value::Bool(false)));
+                let end_jump = self.program.len();
+                self.program.add_instruction(Instruction::Jump(Label(0)));
+                let true_branch = self.program.len();
+                self.program
+                    .add_instruction(Instruction::PushConst(Value::Bool(true)));
+                let end = self.program.len();
+                self.program
+                    .set_instruction(false_branch, Instruction::JumpIfNot(Label(true_branch)));
+                self.program
+                    .set_instruction(end_jump, Instruction::Jump(Label(end)));
+            }
+            Expr::Logical { and, left, right } => {
+                let mut branches = Vec::new();
+                for operand in [left, right] {
+                    self.compile_expr(operand)?;
+                    branches.push(self.program.len());
+                    self.program.add_instruction(if *and {
+                        Instruction::JumpIfNot(Label(0))
+                    } else {
+                        Instruction::JumpIf(Label(0))
+                    });
+                }
+                self.program
+                    .add_instruction(Instruction::PushConst(Value::Bool(*and)));
+                let end_jump = self.program.len();
+                self.program.add_instruction(Instruction::Jump(Label(0)));
+                let decisive = self.program.len();
+                self.program
+                    .add_instruction(Instruction::PushConst(Value::Bool(!*and)));
+                let end = self.program.len();
+                for index in branches {
+                    self.program.set_instruction(
+                        index,
+                        if *and {
+                            Instruction::JumpIfNot(Label(decisive))
+                        } else {
+                            Instruction::JumpIf(Label(decisive))
+                        },
+                    );
+                }
+                self.program
+                    .set_instruction(end_jump, Instruction::Jump(Label(end)));
             }
             Expr::BinaryOp { op, left, right } => {
                 self.compile_expr(left)?;
@@ -275,6 +412,7 @@ impl Compiler {
                         )));
                     }
                     let caller_scopes = std::mem::replace(&mut self.scopes, vec![HashMap::new()]);
+                    let caller_loops = std::mem::take(&mut self.loops);
                     let slots: Vec<_> =
                         params.iter().map(|name| self.allocate_slot(name)).collect();
                     for slot in slots.into_iter().rev() {
@@ -294,6 +432,7 @@ impl Compiler {
                     }
                     self.function_stack.pop();
                     self.scopes = caller_scopes;
+                    self.loops = caller_loops;
                     return Ok(());
                 }
                 let func_id = self

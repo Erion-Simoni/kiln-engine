@@ -1896,3 +1896,20 @@ checks remain separate Task 8 gates.
   Closing the script tab retains its buffer. Source edits are not hot reloaded.
 - Keep source bounded to the runtime's 1 MiB limit and enforce project-root
   containment. Remove the rapidly changing FPS readout from the status bar.
+
+### ADR-0075 — KilnScript gameplay control flow (2026-11-12)
+
+- Expand one language milestone: short-circuit &&/||/!, compound arithmetic
+  assignments, else-if chains and while loops with break/continue. Reuse existing
+  IR jumps, locals and arithmetic; do not change bytecode, host ABI or add crates.
+- Boolean operators require bool operands when evaluated. The right side of &&
+  and || is skipped when unnecessary, preserving side-effect behavior.
+- Loops have lexical block scope; break/continue target the innermost loop in
+  the same function. Inlined functions must not inherit caller loop targets.
+  Existing VM instruction limits bound runaway loops; no budget is weakened.
+- Unary operators bind before multiplication/division, which associate left.
+  This corrects the old right-associative division parser and is documented.
+- Bound added block/unary nesting and retain lexical errors with byte spans.
+  New while/break/continue keywords can require renaming legacy identifiers.
+- Validate frontend semantics, malformed input, runtime attachment execution and
+  editor validation through tests. Full engine/3D/release work remains separate.
