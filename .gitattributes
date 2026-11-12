@@ -1,2 +1,3 @@
 # Preserve pinned upstream license bytes, including their original EOL whitespace.
 packaging/licenses/*.txt -text whitespace=-blank-at-eol
+games/*/assets/fonts/LICENSE.txt -text whitespace=-blank-at-eol

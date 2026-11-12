@@ -6,6 +6,20 @@ measurements, with no release ceiling or size-based completion gate. Frame-time,
 startup, memory/resource budgets and bounded-input limits remain active.
 `just size` only reports sizes; it does not enforce these other budgets.
 
+## Task 9 reference-game validation — 2026-11-12
+
+The three reference games exercise actual editor authoring, source/KAR gameplay
+replays and native/browser exports on Xvfb/SwiftShader/ALSA-null software devices.
+These runs establish functionality, not physical frame-time/startup/memory or
+Intel HD 520 performance. Reference-hardware measurements, long sessions and
+large-project/recovery stress remain open Task 9 gates.
+
+The new source editor bounds each script to 1 MiB, matching the existing module
+loader. Enemy/projectile and puzzle object counts are finite; no new engine
+dependency, render tier, package-size ceiling or resource-budget exception was
+introduced. Package sizes remain informational. See
+[evidence/task9-games](evidence/task9-games/README.md) for actual test outcomes.
+
 ## Task 8 captured portable builds — 2026-11-10
 
 Source capture, offline compilation and build-record checks run only during

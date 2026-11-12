@@ -1,0 +1,1431 @@
+id = "kiln-reference-switchyard"
+name = "Switchyard"
+version = "0.1.0"
+publisher = ""
+icon = ""
+features = []
+
+[window]
+width = 640
+height = 360
+fullscreen = false
+borderless = false
+vsync = true
+high_dpi = true
+resizable = true
+monitor = 0
+
+[mobile]
+orientation = "landscape"
+
+[mobile.ios]
+bundle_identifier = "com.example.game"
+permissions = []
+supports_notch = true
+
+[mobile.ios.privacy_descriptions]
+camera = ""
+microphone = ""
+photo_library = ""
+location = ""
+
+[mobile.ios.launch_screen]
+image = ""
+background_color = "#000000"
+
+[mobile.android]
+package_name = "com.example.game"
+permissions = []
+target_sdk = 33
+
+[scenes.main]
+id = "main"
+name = "Main"
+nested_scenes = []
+script = "scripts/main.ks"
+
+[[scenes.main.entities]]
+id = "player"
+name = "Player"
+
+[[scenes.main.entities.components]]
+type = "Transform"
+x = 40.0
+y = 60.0
+rotation = 0.0
+scale = 1.0
+
+[[scenes.main.entities.components]]
+type = "Role"
+role = "player"
+
+[[scenes.main.entities.components]]
+type = "Sprite"
+color = [
+    0.20000000298023224,
+    0.5,
+    1.0,
+    1.0,
+]
+width = 20.0
+height = 20.0
+layer = 0.0
+
+[[scenes.main.entities]]
+id = "ui"
+name = "UI controller"
+
+[[scenes.main.entities.components]]
+type = "Script"
+path = "scripts/ui.ks"
+
+[scenes.main.entities.components.properties]
+
+[cameras]
+
+[tilemaps]
+
+[terrains]
+
+[tilesets]
+
+[animation_clips]
+
+[shaders]
+
+[materials]
+
+[[audio_assets]]
+id = "theme"
+name = "theme"
+path = "assets/audio/theme.wav"
+is_music = true
+volume = 1.0
+bus = ""
+looped = true
+
+[[audio_assets]]
+id = "hit"
+name = "hit"
+path = "assets/audio/hit.wav"
+is_music = false
+volume = 1.0
+bus = ""
+looped = true
+
+[audio_mixer]
+master_volume = 1.0
+
+[audio_mixer.buses.Music]
+volume = 1.0
+muted = false
+solo = false
+
+[audio_mixer.buses.SFX]
+volume = 1.0
+muted = false
+solo = false
+
+[ui]
+reference_size = [
+    640.0,
+    360.0,
+]
+initial_screen = "title"
+pause_screen = "pause"
+
+[ui.scene_screens]
+
+[ui.screens.game_over]
+name = "Game Over"
+pause_game = true
+modal = true
+allow_cancel = true
+default_focus = "resume"
+
+[[ui.screens.game_over.widgets]]
+id = "background"
+parent = ""
+kind = "Panel"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Button"
+font = ""
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.029999999329447746,
+    0.03999999910593033,
+    0.07999999821186066,
+    0.9700000286102295,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = ""
+action = "Event"
+
+[ui.screens.game_over.widgets.layout]
+anchor = [
+    0.0,
+    0.0,
+]
+pivot = [
+    0.0,
+    0.0,
+]
+offset = [
+    0.0,
+    0.0,
+]
+size = [
+    0.0,
+    0.0,
+]
+stretch = [
+    true,
+    true,
+]
+
+[ui.screens.game_over.widgets.navigation]
+
+[[ui.screens.game_over.widgets]]
+id = "heading"
+parent = ""
+kind = "Label"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Game Over"
+font = "body"
+font_size = 30.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = ""
+action = "Event"
+
+[ui.screens.game_over.widgets.layout]
+anchor = [
+    0.5,
+    0.0,
+]
+pivot = [
+    0.5,
+    0.0,
+]
+offset = [
+    0.0,
+    50.0,
+]
+size = [
+    460.0,
+    50.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.game_over.widgets.navigation]
+
+[[ui.screens.game_over.widgets]]
+id = "resume"
+parent = ""
+kind = "Button"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Resume demo"
+font = "body"
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = "resume"
+action = "Close"
+
+[ui.screens.game_over.widgets.layout]
+anchor = [
+    0.5,
+    0.5,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+offset = [
+    0.0,
+    0.0,
+]
+size = [
+    240.0,
+    36.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.game_over.widgets.navigation]
+
+[ui.screens.hud]
+name = "Gameplay HUD"
+pause_game = false
+modal = false
+allow_cancel = false
+default_focus = "damage"
+
+[[ui.screens.hud.widgets]]
+id = "health"
+parent = ""
+kind = "Label"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Health 73"
+font = "body"
+font_size = 30.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = ""
+action = "Event"
+
+[ui.screens.hud.widgets.layout]
+anchor = [
+    0.5,
+    0.0,
+]
+pivot = [
+    0.5,
+    0.0,
+]
+offset = [
+    0.0,
+    24.0,
+]
+size = [
+    460.0,
+    50.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.hud.widgets.navigation]
+
+[[ui.screens.hud.widgets]]
+id = "inventory"
+parent = ""
+kind = "Label"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "brass_key"
+font = "body"
+font_size = 30.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = ""
+action = "Event"
+
+[ui.screens.hud.widgets.layout]
+anchor = [
+    0.5,
+    0.0,
+]
+pivot = [
+    0.5,
+    0.0,
+]
+offset = [
+    0.0,
+    64.0,
+]
+size = [
+    460.0,
+    50.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.hud.widgets.navigation]
+
+[[ui.screens.hud.widgets]]
+id = "damage"
+parent = ""
+kind = "Button"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Take 7 damage"
+font = "body"
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = "damage"
+action = "Event"
+
+[ui.screens.hud.widgets.layout]
+anchor = [
+    0.5,
+    0.5,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+offset = [
+    0.0,
+    96.0,
+]
+size = [
+    240.0,
+    36.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.hud.widgets.navigation]
+
+[ui.screens.pause]
+name = "Paused"
+pause_game = true
+modal = true
+allow_cancel = true
+default_focus = "resume"
+
+[[ui.screens.pause.widgets]]
+id = "background"
+parent = ""
+kind = "Panel"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Button"
+font = ""
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.029999999329447746,
+    0.03999999910593033,
+    0.07999999821186066,
+    0.9700000286102295,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = ""
+action = "Event"
+
+[ui.screens.pause.widgets.layout]
+anchor = [
+    0.0,
+    0.0,
+]
+pivot = [
+    0.0,
+    0.0,
+]
+offset = [
+    0.0,
+    0.0,
+]
+size = [
+    0.0,
+    0.0,
+]
+stretch = [
+    true,
+    true,
+]
+
+[ui.screens.pause.widgets.navigation]
+
+[[ui.screens.pause.widgets]]
+id = "heading"
+parent = ""
+kind = "Label"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Paused"
+font = "body"
+font_size = 30.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = ""
+action = "Event"
+
+[ui.screens.pause.widgets.layout]
+anchor = [
+    0.5,
+    0.0,
+]
+pivot = [
+    0.5,
+    0.0,
+]
+offset = [
+    0.0,
+    50.0,
+]
+size = [
+    460.0,
+    50.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.pause.widgets.navigation]
+
+[[ui.screens.pause.widgets]]
+id = "resume"
+parent = ""
+kind = "Button"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Resume"
+font = "body"
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = "resume"
+action = "Close"
+
+[ui.screens.pause.widgets.layout]
+anchor = [
+    0.5,
+    0.5,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+offset = [
+    0.0,
+    -20.0,
+]
+size = [
+    240.0,
+    36.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.pause.widgets.navigation]
+
+[[ui.screens.pause.widgets]]
+id = "settings"
+parent = ""
+kind = "Button"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Settings"
+font = "body"
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = "settings"
+
+[ui.screens.pause.widgets.layout]
+anchor = [
+    0.5,
+    0.5,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+offset = [
+    0.0,
+    28.0,
+]
+size = [
+    240.0,
+    36.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.pause.widgets.action]
+ShowScreen = "settings"
+
+[ui.screens.pause.widgets.navigation]
+
+[[ui.screens.pause.widgets]]
+id = "gameover"
+parent = ""
+kind = "Button"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Game over"
+font = "body"
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = "gameover"
+
+[ui.screens.pause.widgets.layout]
+anchor = [
+    0.5,
+    0.5,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+offset = [
+    0.0,
+    76.0,
+]
+size = [
+    240.0,
+    36.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.pause.widgets.action]
+ShowScreen = "game_over"
+
+[ui.screens.pause.widgets.navigation]
+
+[[ui.screens.pause.widgets]]
+id = "save"
+parent = ""
+kind = "Button"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Save game"
+font = "body"
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = "save"
+action = "Event"
+
+[ui.screens.pause.widgets.layout]
+anchor = [
+    0.5,
+    0.5,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+offset = [
+    0.0,
+    124.0,
+]
+size = [
+    240.0,
+    36.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.pause.widgets.navigation]
+
+[ui.screens.settings]
+name = "Settings"
+pause_game = true
+modal = true
+allow_cancel = true
+default_focus = "sound"
+
+[[ui.screens.settings.widgets]]
+id = "background"
+parent = ""
+kind = "Panel"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Button"
+font = ""
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.029999999329447746,
+    0.03999999910593033,
+    0.07999999821186066,
+    0.9700000286102295,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = ""
+action = "Event"
+
+[ui.screens.settings.widgets.layout]
+anchor = [
+    0.0,
+    0.0,
+]
+pivot = [
+    0.0,
+    0.0,
+]
+offset = [
+    0.0,
+    0.0,
+]
+size = [
+    0.0,
+    0.0,
+]
+stretch = [
+    true,
+    true,
+]
+
+[ui.screens.settings.widgets.navigation]
+
+[[ui.screens.settings.widgets]]
+id = "heading"
+parent = ""
+kind = "Label"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Settings"
+font = "body"
+font_size = 30.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = ""
+action = "Event"
+
+[ui.screens.settings.widgets.layout]
+anchor = [
+    0.5,
+    0.0,
+]
+pivot = [
+    0.5,
+    0.0,
+]
+offset = [
+    0.0,
+    50.0,
+]
+size = [
+    460.0,
+    50.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.settings.widgets.navigation]
+
+[[ui.screens.settings.widgets]]
+id = "sound"
+parent = ""
+kind = "Button"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Sound 25%"
+font = "body"
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = "sound"
+action = "Event"
+
+[ui.screens.settings.widgets.layout]
+anchor = [
+    0.5,
+    0.5,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+offset = [
+    0.0,
+    0.0,
+]
+size = [
+    240.0,
+    36.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.settings.widgets.navigation]
+
+[[ui.screens.settings.widgets]]
+id = "back"
+parent = ""
+kind = "Button"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Back"
+font = "body"
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = "back"
+action = "Back"
+
+[ui.screens.settings.widgets.layout]
+anchor = [
+    0.5,
+    0.5,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+offset = [
+    0.0,
+    48.0,
+]
+size = [
+    240.0,
+    36.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.settings.widgets.navigation]
+
+[ui.screens.title]
+name = "Kiln UI Demo"
+pause_game = true
+modal = true
+allow_cancel = false
+default_focus = "start"
+
+[[ui.screens.title.widgets]]
+id = "background"
+parent = ""
+kind = "Panel"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Button"
+font = ""
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.029999999329447746,
+    0.03999999910593033,
+    0.07999999821186066,
+    0.9700000286102295,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = ""
+action = "Event"
+
+[ui.screens.title.widgets.layout]
+anchor = [
+    0.0,
+    0.0,
+]
+pivot = [
+    0.0,
+    0.0,
+]
+offset = [
+    0.0,
+    0.0,
+]
+size = [
+    0.0,
+    0.0,
+]
+stretch = [
+    true,
+    true,
+]
+
+[ui.screens.title.widgets.navigation]
+
+[[ui.screens.title.widgets]]
+id = "heading"
+parent = ""
+kind = "Label"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Kiln UI Demo"
+font = "body"
+font_size = 30.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = ""
+action = "Event"
+
+[ui.screens.title.widgets.layout]
+anchor = [
+    0.5,
+    0.0,
+]
+pivot = [
+    0.5,
+    0.0,
+]
+offset = [
+    0.0,
+    50.0,
+]
+size = [
+    460.0,
+    50.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.title.widgets.navigation]
+
+[[ui.screens.title.widgets]]
+id = "start"
+parent = ""
+kind = "Button"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Start"
+font = "body"
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = "start"
+action = "Close"
+
+[ui.screens.title.widgets.layout]
+anchor = [
+    0.5,
+    0.5,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+offset = [
+    0.0,
+    0.0,
+]
+size = [
+    240.0,
+    36.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.title.widgets.navigation]
+
+[[ui.screens.title.widgets]]
+id = "settings"
+parent = ""
+kind = "Button"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Settings"
+font = "body"
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = "settings"
+
+[ui.screens.title.widgets.layout]
+anchor = [
+    0.5,
+    0.5,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+offset = [
+    0.0,
+    48.0,
+]
+size = [
+    240.0,
+    36.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.title.widgets.action]
+ShowScreen = "settings"
+
+[ui.screens.title.widgets.navigation]
+
+[[ui.screens.title.widgets]]
+id = "continue"
+parent = ""
+kind = "Button"
+visible = true
+enabled = true
+blocks_pointer = true
+text = "Continue saved game"
+font = "body"
+font_size = 18.0
+text_align = [
+    0.5,
+    0.5,
+]
+color = [
+    0.11999999731779099,
+    0.18000000715255737,
+    0.2800000011920929,
+    1.0,
+]
+text_color = [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+]
+focus_color = [
+    0.25,
+    0.5,
+    0.8500000238418579,
+    1.0,
+]
+event = "load"
+action = "Event"
+
+[ui.screens.title.widgets.layout]
+anchor = [
+    0.5,
+    0.5,
+]
+pivot = [
+    0.5,
+    0.5,
+]
+offset = [
+    0.0,
+    96.0,
+]
+size = [
+    240.0,
+    36.0,
+]
+stretch = [
+    false,
+    false,
+]
+
+[ui.screens.title.widgets.navigation]
+
+[ui.fonts.body]
+path = "assets/fonts/KilnSampleSans.ttf"
+extra_chars = ""
+
+[sdf_fonts]
+
+[prefabs]
+
+[asset_ids]
+
+[asset_import_settings]
+
+[action_map.actions]
