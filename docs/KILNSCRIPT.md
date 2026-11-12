@@ -272,7 +272,7 @@ Compile errors produce diagnostics with source spans (undefined variable, undefi
 
 ## Entity scripts and modules
 
-In the Inspector, use **Attach Script** to select a project `.ks` file. Add
+In the Inspector, choose **Create Movement Script** to create and attach an arrow/WASD starter, or **Attach Script** to select a project `.ks` file. **Open Script** opens the native Script Editor; Validate and Save Script apply source changes for the next Play. Double-click `.ks` assets to edit other scripts. Add
 numeric property names and values there, then read them with
 `get_property("speed")`. Attachments, property defaults, duplication, undo, and
 save/reopen use the authored scene document. Each entity gets its own runtime

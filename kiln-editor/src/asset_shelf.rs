@@ -70,6 +70,7 @@ impl Thumbnails {
 pub(crate) enum ShelfAction {
     SelectImage(String),
     OpenScene(String),
+    OpenScript(String),
 }
 
 pub(crate) fn show(
@@ -154,6 +155,9 @@ pub(crate) fn show(
                             kind,
                             browser.preview_source() == Some(&entry.path),
                         );
+                        if response.double_clicked() && entry.path.ends_with(".ks") {
+                            action = Some(ShelfAction::OpenScript(entry.path.clone()));
+                        }
                         if response.clicked() && entry.kind == AssetKind::Image {
                             action = Some(ShelfAction::SelectImage(entry.path.clone()));
                         }

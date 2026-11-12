@@ -1883,3 +1883,16 @@ checks remain separate Task 8 gates.
   tools, searchable actions, scene/hierarchy/inspector organization and an asset
   shelf. This does not claim feature parity with those engines.
 - No new dependency, runtime feature, project format or resource-budget exception.
+
+### ADR-0074 — In-editor character scripting (2026-11-12)
+
+- Complete one focused editor scripting workflow, retaining existing entity
+  Script components and the shared SliceSession runtime. No new dependency.
+- Add a native text editor for project-relative .ks files, explicit atomic Save,
+  runtime compiler validation (including imports), external-change protection,
+  and a non-overwriting movement template attached through component history.
+- Unsaved script text stays separate from scene undo. Opening another file,
+  switching/closing projects and Play require Save or explicit Discard Edits.
+  Closing the script tab retains its buffer. Source edits are not hot reloaded.
+- Keep source bounded to the runtime's 1 MiB limit and enforce project-root
+  containment. Remove the rapidly changing FPS readout from the status bar.

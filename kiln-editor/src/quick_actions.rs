@@ -14,13 +14,14 @@ pub(crate) enum QuickAction {
     Console,
     Animation,
     Graph,
+    Script,
     Export,
     Preferences,
     ResetLayout,
 }
 
 impl QuickAction {
-    const ALL: [Self; 15] = [
+    const ALL: [Self; 16] = [
         Self::OpenProject,
         Self::Save,
         Self::Undo,
@@ -33,6 +34,7 @@ impl QuickAction {
         Self::Console,
         Self::Animation,
         Self::Graph,
+        Self::Script,
         Self::Export,
         Self::Preferences,
         Self::ResetLayout,
@@ -52,6 +54,7 @@ impl QuickAction {
             Self::Console => "Console",
             Self::Animation => "Animation Editor",
             Self::Graph => "Graph Editor",
+            Self::Script => "Script Editor",
             Self::Export => "Build / Export",
             Self::Preferences => "Preferences",
             Self::ResetLayout => "Reset Workspace Layout",
