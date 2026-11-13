@@ -45,3 +45,6 @@ kiln-engine/
 # Python test/packaging caches
 __pycache__/
 *.pyc
+
+# Generated mdBook documentation
+/docs/book/

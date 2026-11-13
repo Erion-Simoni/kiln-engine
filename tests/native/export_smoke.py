@@ -115,7 +115,7 @@ def main():
         key('Return')
         assert authored_x() == 40, 'The inspector edit should remain unsaved until export'
         click(80, 12)
-        click(105, 199)
+        click(105, 242)
         command('mousemove', '--window', window, 365, 510)
         command('mousedown', 1)
         for point in [(450,550),(650,650),(850,750),(1100,850)]:
@@ -123,12 +123,12 @@ def main():
         command('mouseup', 1)
         destination = run/'native game'
         # This edits the actual output field; the old panel discarded these edits.
-        click(250, 257)
+        click(250, 273)
         key('ctrl+a')
         command('type', '--clearmodifiers', str(destination))
         key('Return')
         shot('ready_unsaved')
-        click(75, 326)
+        click(75, 346)
         # Installed exports also hash the complete runtime/notice inventory.
         wait_for(lambda: (destination/'export.json').exists(), editor, editor_log, attempts=300)
         wait_for(lambda: 'Export result: Success' in editor_log.read_text(), editor, editor_log, attempts=300)
@@ -140,7 +140,7 @@ def main():
         for file in receipt['files']:
             assert (destination/file['path']).stat().st_size == file['bytes']
         before = hashlib.sha256((destination/'assets.kar').read_bytes()).hexdigest()
-        click(75, 326)  # Existing output must fail, never overwrite a previous good export.
+        click(75, 346)  # Existing output must fail, never overwrite a previous good export.
         wait_for(lambda: 'Export result: Failed' in editor_log.read_text(), editor, editor_log)
         shot('existing_output_failed')
         assert hashlib.sha256((destination/'assets.kar').read_bytes()).hexdigest() == before
@@ -149,18 +149,18 @@ def main():
         slow_runtime = run/'slow-runtime'
         slow_runtime.write_text('#!/bin/sh\nexec /bin/sleep 20\n')
         slow_runtime.chmod(0o755)
-        click(250, 257)
+        click(250, 273)
         key('ctrl+a')
         command('type', '--clearmodifiers', str(cancel_destination))
         key('Return')
-        click(80, 283)
-        click(260, 334)
+        click(80, 301)
+        click(260, 352)
         key('ctrl+a')
         command('type', '--clearmodifiers', str(slow_runtime))
         key('Return')
-        click(75, 396)
+        click(75, 416)
         shot('active_export')
-        click(240, 396)
+        click(240, 416)
         wait_for(lambda: 'Export result: Cancelled' in editor_log.read_text(), editor, editor_log)
         shot('cancelled')
         assert not cancel_destination.exists()

@@ -121,6 +121,13 @@ Evidence ledger template (one row per accepted substep/target):
 - [ ] Diagnose current CI/release/reference-game failures; repair causes without weakening checks. Run reference-game authoring/export/play acceptance on master and relevant pull requests. Align native, audio, WASM, feature-off and browser gates; detect stale/mismatched runtime bundles.
 - [ ] **Acceptance:** A fresh source revision passes required hosted checks, all three game replays and artifact verification; deliberate exporter failures still fail visibly.
 
+**Progress 2026-11-13:** repaired reproducible documentation build failures and
+stale saved-UI/native/browser export smoke interactions; promoted reference-game
+checks to master/main and pull requests. Local strict checks, 700 Rust tests,
+29 Python tests and the three repaired UI smokes pass. See
+[A01 repair evidence](evidence/A01_CI_BASELINE.md). Hosted failures, complete
+three-game rerun and artifact verification remain open; A01 is not accepted.
+
 ### A02 — Durable projects, scene editing and recovery
 
 **Status:** PARTIAL. **Depends on:** A01.

@@ -17,14 +17,6 @@
 ## Scripting
 
 * [KilnScript](KILNSCRIPT.md)
-* [IR & VM](API_REFERENCE.md#kiln-ir)
-
-## 2D Rendering
-
-* [2D Rendering](API_REFERENCE.md#kiln-render)
-* [Sprite Batching](API_REFERENCE.md#sprite-batching)
-* [Tilemap Rendering](TILEMAPS.md)
-* [Post Processing](API_REFERENCE.md#post-processing)
 
 ## Physics
 
@@ -47,22 +39,6 @@
 ## UI
 
 * [UI Integration](UI_INTEGRATION.md)
-* [UI Widgets](API_REFERENCE.md#kiln-ui)
-
-## AI
-
-* [AI Integration](AI_INTEGRATION.md)
-
-## Gameplay
-
-* [Gameplay Systems](API_REFERENCE.md#kiln-gameplay)
-* [Quests](API_REFERENCE.md#quests)
-* [Dialogue](API_REFERENCE.md#dialogue)
-* [Data Tables](API_REFERENCE.md#data-tables)
-
-## Animation
-
-* [Animation System](ANIMATION_INTEGRATION.md)
 
 ## Platform & Deployment
 
@@ -78,22 +54,15 @@
 * [Physical Device Acceptance](PHYSICAL_DEVICE_TEST.md)
 * [Browser 2D Physics](BROWSER_PHYSICS_2D.md)
 * [Sprite Materials](SPRITE_MATERIALS_2D.md)
-* [UI Integration](UI_INTEGRATION.md)
-* [VFX Integration](VFX_INTEGRATION.md)
 
 ## Advanced
 
-* [Animation Integration](ANIMATION_INTEGRATION.md)
 * [Budget](BUDGETS.md)
 * [Decisions](DECISIONS.md)
 * [State](STATE.md)
-* [Project Format](PROJECT_FORMAT.md)
 * [2D Gate Verification](2D_GATE_VERIFICATION.md)
 
 ## Development
 
-* [Tutorial](TUTORIAL.md)
-* [Getting Started](GETTING_STARTED.md)
-* [API Reference](API_REFERENCE.md)
-* [Fixes Log](fixes m1-29.md)
+* [Fixes Log](<fixes m1-29.md>)
 * [Progress](PROGRESS_F6_NEXT.md)

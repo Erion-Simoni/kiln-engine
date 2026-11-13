@@ -101,7 +101,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install mdbook
-        run: cargo install mdbook
+        run: cargo install mdbook --version 0.4.52 --locked
       - name: Build documentation
         run: mdbook build docs
       - name: Upload docs artifact
