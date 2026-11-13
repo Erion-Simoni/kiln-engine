@@ -176,11 +176,11 @@ unsigned local build record. See [BUILD_PROVENANCE.md](BUILD_PROVENANCE.md).
 This adds source-to-artifact execution evidence; it does not close signing,
 byte-reproducibility, licensing or physical/other-platform gates.
 
-### 9. Reference games and release gate — PENDING
+### 9. Reference games and release gate — IN PROGRESS (three editor-authored games)
 
-- [ ] Build a top-down action game covering enemies/projectiles/triggers/audio/UI/saving.
-- [ ] Build a platformer covering grounding/animation/cameras/levels.
-- [ ] Build a puzzle game covering reusable objects/mouse/UI/progress.
+- [x] Build a top-down action game covering enemies/projectiles/triggers/audio/UI/saving. `games/emberwatch` is authored through the editor; source/KAR regressions and native/browser exported playthroughs pass.
+- [x] Build a platformer covering grounding/animation/cameras/levels. `games/skybridge` has two editor-authored physical levels, a saved two-frame clip, camera copies and bound save/load/replay controls. Actual gate/animation/grounding and exported playthrough checks pass.
+- [x] Build a puzzle game covering reusable objects/mouse/UI/progress. `games/switchyard` reuses lamp/switch logic across three circuits, mouse activation, saved UI and autosaved progress; all solutions and native restart/browser reload Continue pass.
 - [ ] Have another developer follow the tutorial unaided and fix every ordinary task that requires engine edits or manual project-file edits.
 - [ ] Measure reference hardware frame time/memory/startup; test recovery, long sessions, large asset sets, and clean exports.
 - [ ] Reconcile all roadmap and support claims against executed evidence; defer nonessential plugins, 3D, multiplayer, stores, and mobile breadth until this gate passes.
@@ -786,3 +786,42 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Pushed feature a0f1d85 and verified its exact remote SHA. New Windows run
   43227026649 and Linux run 43227026505 are in progress, with no failed gates
   observed at the recorded checkpoint. Complete hosted success is pending.
+
+### 2026-11-12 — Task 9 games explicitly started on a new branch
+
+- Owner requested the three games now, overriding ordered-task sequencing while
+  Task 8's remaining platform/release gates stay open. New branch
+  `feat/task9-editor-reference-games` starts at 8ec7852.
+- Added Emberwatch, Skybridge and Switchyard through real editor Save As, source
+  editing, scene/inspector/animation/input widgets, save/reopen and both exports.
+  General authoring blockers fixed: project-relative Script Editor with guarded
+  atomic saving and lifecycle protection, project identity fields, scene script/
+  name fields, scene/camera duplication and stable input-action ordering.
+- Fresh GUI replay reproduces saved project values and exact source bytes. Native
+  source-unavailable play and nested HTTP browser play exercise objectives,
+  physics/scene gates, audio, menus and save/load/Continue. Tests never inject
+  winning game state or generate project manifests outside the editor. See
+  [reference game evidence](evidence/task9-games/README.md) and [games](../games/README.md).
+- Dedicated branch CI repeats strict quality, source/KAR regressions, actual editor
+  authoring/export and native/browser gameplay with read-only permissions.
+  Independent tutorial/hardware/long-session/large-project and final support
+  claims remain open; Task 9 is not marked release-complete.
+- Pushed editor commit 0b5b03b and games/test commit 135c7f1 to the new branch,
+  verifying the exact remote source SHA. New hosted reference-game run 43317157963
+  is in progress; no complete new hosted acceptance is claimed.
+
+
+### 2026-11-13 — Resolve Task 9/master integration conflicts
+
+- Integrate master 9da5551 into the reference-games PR, retaining Quick Actions,
+  workspace polish, movement authoring and language updates. Use one shared source
+  buffer with import-aware guarded saves and project Save/Discard/Cancel (ADR-0077).
+- Prevent duplicate dock panels discovered during real GUI replay. Update the
+  authoring driver for the retained layout; keep all serialized/source comparisons.
+- Local integration acceptance passes: just check, 700 Rust tests (zero skipped),
+  29 Python tests, native/WASM builds, verified tool packaging, all three actual
+  editor authoring replays/six exports, and native/browser gameplay/restoration.
+  See [merge evidence](evidence/task9-games/merge-validation.json).
+- Earlier hosted run 43317157963 failed authoring after passing strict gates/tool
+  packaging; gameplay was skipped. New merged-source CI remains separate/pending.
+  Independent human, hardware, stress/platform and release gates remain open.

@@ -35,7 +35,7 @@ pub mod recovery;
 pub mod scene_document;
 pub mod scene_view;
 pub mod scene_workspace;
-mod script_editor;
+pub mod script_editor;
 pub mod shader_editor;
 pub mod sprite_editor;
 pub mod tilemap_editor;

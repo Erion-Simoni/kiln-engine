@@ -1,0 +1,115 @@
+name: Editor-authored reference games
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/task9-editor-reference-games]
+    paths:
+      - .github/workflows/reference-games.yml
+      - Cargo.toml
+      - Cargo.lock
+      - LICENSE-*
+      - kiln-*/**
+      - games/**
+      - tests/**
+      - tools/**
+      - packaging/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reference-games-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  CARGO_BUILD_JOBS: '1'
+  CARGO_PROFILE_DEV_DEBUG: '0'
+  CARGO_PROFILE_TEST_DEBUG: '0'
+  PYTHONDONTWRITEBYTECODE: '1'
+  RUST_TOOLCHAIN: '1.99.1'
+
+jobs:
+  games:
+    name: Author, export and play all three reference games
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+          key: release-tools-v2-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}
+      - name: Install the tested toolchain and software graphics requirements
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt,clippy,rust-docs --target wasm32-unknown-unknown
+          rustup default "$RUST_TOOLCHAIN"
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev libssl-dev pkg-config xvfb xdotool imagemagick
+          sudo xargs -a packaging/linux-runtime-packages.txt apt-get install -y
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: tests/web/package-lock.json
+      - name: Prepare locked tools and Chromium
+        run: |
+          cargo fetch --locked
+          cargo install cargo-nextest --version 0.9.151 --locked
+          wasm_bindgen_version=$(python3 -c 'import tomllib; p=tomllib.load(open("Cargo.lock","rb")); v={p["version"] for p in p["package"] if p["name"]=="wasm-bindgen"}; assert len(v)==1; print(v.pop())')
+          cargo install wasm-bindgen-cli --version "$wasm_bindgen_version" --locked
+          npm ci --prefix tests/web --ignore-scripts
+          cd tests/web
+          npx playwright install --with-deps chromium
+      - name: Require strict quality gates and meaningful gameplay regressions
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo check --workspace --locked
+          cargo check --manifest-path samples/audio/Cargo.toml
+          cargo nextest run --workspace --locked
+          python3 -m unittest discover -s tests/native -p 'test_*.py'
+      - name: Build and package the matching editor tools
+        run: |
+          cargo build --locked -p kiln-editor -p kiln-cli -p kiln-player --bins
+          cargo build --locked --target wasm32-unknown-unknown -p kiln-web
+          wasm-bindgen target/wasm32-unknown-unknown/debug/kiln_web.wasm --target web --out-dir target/task9-web-runtime
+          target/debug/kiln-cli web-runtime --input target/task9-web-runtime
+          cargo metadata --offline --locked --format-version 1 --filter-platform x86_64-unknown-linux-gnu > target/task9-native-metadata.json
+          cargo metadata --offline --locked --format-version 1 --filter-platform wasm32-unknown-unknown > target/task9-web-metadata.json
+          python3 tools/package_editor.py --binaries target/debug --web-runtime target/task9-web-runtime --metadata target/task9-native-metadata.json --metadata target/task9-web-metadata.json --output target/task9-portable.tar.gz
+          mkdir target/task9-installed
+          tar -xzf target/task9-portable.tar.gz -C target/task9-installed
+      - name: Reproduce all three games through editor widgets and export them
+        run: python3 tests/native/task9_editor_games.py --tools target/task9-installed/kiln-0.1.0-linux-x86_64 --output target/task9-replay --author
+      - name: Play standalone exports without source projects or build tools
+        run: python3 tests/native/task9_play_games.py target/task9-replay/result.json --output target/task9-native-play
+      - name: Play browser exports and verify saved progress
+        run: node tests/web/task9-games.cjs target/task9-replay/result.json target/task9-browser-play
+      - name: Retain authoring and gameplay evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: kiln-reference-game-evidence-${{ github.sha }}
+          path: |
+            target/task9-replay/result.json
+            target/task9-replay/*/authoring/*.json
+            target/task9-replay/*/authoring/*.png
+            target/task9-replay/*/authoring/*.log
+            target/task9-replay/*/export/*.png
+            target/task9-replay/*/export/*.log
+            target/task9-native-play/result.json
+            target/task9-native-play/*/*.png
+            target/task9-native-play/*/*.log
+            target/task9-browser-play/
+          if-no-files-found: warn
+          retention-days: 7

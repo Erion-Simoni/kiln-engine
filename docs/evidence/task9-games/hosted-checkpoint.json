@@ -1,0 +1,16 @@
+{
+  "observed_at": "2026-11-12T22:10:41.653716+00:00",
+  "branch": "feat/task9-editor-reference-games",
+  "editor_commit": "0b5b03b",
+  "game_source_revision": "135c7f17d5fb7043268278719e66bbac1cabf4dc",
+  "exact_remote_source_sha_verified": true,
+  "run_url": "https://github.com/Erion-Simoni/kiln-engine/actions/runs/43317157963",
+  "state": {
+    "status": "WORKFLOW_RUN_STATUS_IN_PROGRESS"
+  },
+  "timing": {
+    "kind": "WORKFLOW_RUN_TIMING_KIND_IN_PROGRESS",
+    "text": "In progress"
+  },
+  "scope": "Public newly started CI checkpoint; complete hosted success is not claimed. Local authoring/native/browser acceptance is recorded separately."
+}

@@ -58,6 +58,13 @@ cargo run --bin kiln-editor                        # editor
 cargo run -p kiln-player -- --archive samples/vertical_slice   # vertical slice
 ```
 
+## Play the reference games
+
+[Emberwatch, Skybridge and Switchyard](games/README.md) are three small editor-authored
+2D games: top-down action, a physics platformer and a circuit puzzle. Open their
+`kiln.toml` in the editor, then use Play Project Start or Build / Export. Their
+authoring steps, native/browser playthroughs and remaining release gates are documented.
+
 ## Try the vertical slice
 
 `samples/vertical_slice/` is a small 2D game that exercises the whole stack:

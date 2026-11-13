@@ -32,7 +32,8 @@ impl InputRebindPanel {
             return;
         }
 
-        let actions: Vec<Action> = action_map.actions().cloned().collect();
+        let mut actions: Vec<Action> = action_map.actions().cloned().collect();
+        actions.sort_by(|left, right| left.id.cmp(&right.id));
 
         ScrollArea::vertical().show(ui, |ui| {
             for action in actions {

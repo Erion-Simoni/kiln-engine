@@ -1,8 +1,11 @@
-//! Native, bounded KilnScript editing using the runtime compiler.
-use std::io::Write;
-use std::path::{Component, Path, PathBuf};
+//! Project-relative gameplay source editing, with guarded atomic saves.
+use std::{
+    io::Write,
+    path::{Component, Path, PathBuf},
+};
 
-const MAX_SOURCE: usize = 1_048_576;
+const SOURCE_LIMIT: usize = 1_048_576;
+
 pub(crate) const MOVEMENT: &str = r#"// Character movement: arrows or WASD. Set speed in the Inspector.
 // This moves a Transform directly; it is not a collision-based controller.
 if script_phase() == "update" {
@@ -16,18 +19,23 @@ if script_phase() == "update" {
 "#;
 
 #[derive(Default)]
-pub(crate) struct ScriptEditor {
+pub struct ScriptEditor {
     root: Option<PathBuf>,
-    path: String,
-    saved: String,
-    source: String,
+    pub path: String,
+    pub source: String,
+    saved: Option<String>,
+    loaded: String,
     message: String,
-    valid: bool,
 }
 
 fn resource(root: &Path, relative: &str) -> Result<PathBuf, String> {
     let path = Path::new(relative);
-    if path.extension().and_then(|ext| ext.to_str()) != Some("ks")
+    if relative.contains(['\\', ':'])
+        || relative.chars().any(char::is_control)
+        || !relative
+            .split('/')
+            .all(|part| !part.is_empty() && part != "." && part != "..")
+        || path.extension().and_then(|ext| ext.to_str()) != Some("ks")
         || path
             .components()
             .any(|part| !matches!(part, Component::Normal(_)))
@@ -57,11 +65,11 @@ fn resource(root: &Path, relative: &str) -> Result<PathBuf, String> {
 
 fn read(root: &Path, path: &str) -> Result<String, String> {
     let target = resource(root, path)?;
-    if std::fs::metadata(&target).map_err(|e| e.to_string())?.len() > MAX_SOURCE as u64 {
+    if std::fs::metadata(&target).map_err(|e| e.to_string())?.len() > SOURCE_LIMIT as u64 {
         return Err("Script exceeds 1 MiB".into());
     }
     let source = std::fs::read_to_string(target).map_err(|e| e.to_string())?;
-    if source.len() > MAX_SOURCE {
+    if source.len() > SOURCE_LIMIT {
         return Err("Script exceeds 1 MiB".into());
     }
     Ok(source)
@@ -69,30 +77,82 @@ fn read(root: &Path, path: &str) -> Result<String, String> {
 
 impl ScriptEditor {
     pub(crate) fn dirty(&self) -> bool {
-        self.source != self.saved
+        self.is_dirty()
     }
-
     pub(crate) fn require_saved(&self) -> Result<(), String> {
-        if self.dirty() {
-            Err("Save the script or choose Discard Edits in Script Editor first.".into())
+        if self.is_dirty() {
+            Err("Save or Revert the script before switching files or creating movement code".into())
         } else {
             Ok(())
         }
     }
 
-    pub(crate) fn open(&mut self, root: &Path, path: &str) -> Result<(), String> {
-        let root = root.canonicalize().map_err(|e| e.to_string())?;
-        if self.root.as_ref() == Some(&root) && self.path == path {
-            return Ok(());
+    pub fn is_dirty(&self) -> bool {
+        !self.loaded.is_empty() && self.saved.as_deref().unwrap_or("") != self.source
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+
+    fn destination(&self, path: &str) -> Result<PathBuf, String> {
+        if path.is_empty()
+            || path.contains(['\\', ':'])
+            || path.chars().any(char::is_control)
+            || !path
+                .split('/')
+                .all(|part| !part.is_empty() && part != "." && part != "..")
+            || Path::new(path).extension().and_then(|s| s.to_str()) != Some("ks")
+        {
+            return Err("Choose a project-relative .ks file without traversal".into());
         }
-        self.require_saved()?;
-        let source = read(&root, path)?;
-        self.saved = source.clone();
-        self.source = source;
-        self.root = Some(root);
+        let root = self.root.as_ref().ok_or("Open a project first")?;
+        let target = root.join(path);
+        for parent in Path::new(path).ancestors().skip(1) {
+            let metadata =
+                std::fs::symlink_metadata(root.join(parent)).map_err(|e| e.to_string())?;
+            if !metadata.is_dir() {
+                return Err("Script parent must be a directory, not a link".into());
+            }
+        }
+        if let Ok(metadata) = std::fs::symlink_metadata(&target) {
+            if !metadata.is_file() || metadata.len() > SOURCE_LIMIT as u64 {
+                return Err("Script must be a regular file of at most 1 MiB".into());
+            }
+        }
+        Ok(target)
+    }
+
+    pub fn open(&mut self, root: &Path, path: &str) -> Result<(), String> {
+        if self.is_dirty() {
+            if self.loaded == path && self.root.as_deref() == root.canonicalize().ok().as_deref() {
+                self.path = self.loaded.clone();
+                return Ok(());
+            }
+            return Err("Save or Revert the current script before opening another".into());
+        }
+        let root = root.canonicalize().map_err(|e| e.to_string())?;
+        let previous = self.root.replace(root);
+        let result =
+            self.destination(path)
+                .and_then(|target| match std::fs::read_to_string(target) {
+                    Ok(source) => Ok(Some(source)),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                    Err(error) => Err(error.to_string()),
+                });
+        let source = match result {
+            Ok(source) => source,
+            Err(error) => {
+                self.root = previous;
+                return Err(error);
+            }
+        };
+        self.source = source.clone().unwrap_or_default();
+        self.saved = source;
+        self.loaded = path.into();
         self.path = path.into();
-        self.message = "Edit, Validate, then Save Script. Press Play to run saved code.".into();
-        self.valid = true;
+        self.message =
+            "Script opened. Save Script writes source; Save Project also saves this draft.".into();
         Ok(())
     }
 
@@ -126,7 +186,7 @@ impl ScriptEditor {
 
     fn validate(&self) -> Result<(), String> {
         let root = self.root.as_ref().ok_or("Open a script first")?;
-        if self.source.len() > MAX_SOURCE {
+        if self.source.len() > SOURCE_LIMIT {
             return Err("Script exceeds 1 MiB".into());
         }
         let mut project = kiln_core::Project::default();
@@ -135,13 +195,13 @@ impl ScriptEditor {
             kiln_core::Scene {
                 id: "validate".into(),
                 name: "Validate".into(),
-                script: Some(self.path.clone()),
+                script: Some(self.loaded.clone()),
                 entities: vec![],
                 nested_scenes: vec![],
             },
         );
         kiln_runtime::SliceSession::with_scene_sources(&project, "validate", |path| {
-            if path == self.path {
+            if path == self.loaded {
                 Ok(self.source.clone())
             } else {
                 read(root, path)
@@ -150,104 +210,158 @@ impl ScriptEditor {
         .map(|_| ())
     }
 
-    fn save(&mut self) -> Result<(), String> {
-        self.validate()?;
-        let root = self.root.as_ref().ok_or("Open a script first")?;
-        if read(root, &self.path)? != self.saved {
-            return Err("File changed on disk. Your edits are preserved; reconcile the external file before saving.".into());
+    pub fn save(&mut self) -> Result<(), String> {
+        if self.loaded.is_empty() {
+            return Ok(());
         }
-        let target = resource(root, &self.path)?;
-        let mut temp = tempfile::NamedTempFile::new_in(target.parent().ok_or("Missing directory")?)
+        if self.source.len() > SOURCE_LIMIT {
+            return Err("Script exceeds 1 MiB".into());
+        }
+        self.validate()?;
+        let target = self.destination(&self.loaded)?;
+        let disk = match std::fs::read_to_string(&target) {
+            Ok(source) => Some(source),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.to_string()),
+        };
+        if disk != self.saved {
+            return Err("Script changed on disk outside the editor. Copy your draft, Revert, then merge the changes.".into());
+        }
+        let mut file =
+            tempfile::NamedTempFile::new_in(target.parent().ok_or("Script parent missing")?)
+                .map_err(|e| e.to_string())?;
+        file.write_all(self.source.as_bytes())
             .map_err(|e| e.to_string())?;
-        temp.write_all(self.source.as_bytes())
-            .map_err(|e| e.to_string())?;
-        temp.as_file().sync_all().map_err(|e| e.to_string())?;
-        temp.persist(target).map_err(|e| e.to_string())?;
-        self.saved = self.source.clone();
+        file.as_file().sync_all().map_err(|e| e.to_string())?;
+        file.persist(target).map_err(|e| e.to_string())?;
+        self.saved = Some(self.source.clone());
+        self.message = "Script saved".into();
         Ok(())
     }
 
-    pub(crate) fn ui(&mut self, ui: &mut egui::Ui, locked: bool) {
-        ui.heading("Script Editor");
-        if self.root.is_none() {
-            ui.add_space(16.0);
-            ui.label("Give a character behavior");
-            ui.label("1. Select your character in the Hierarchy.");
-            ui.label("2. In the Inspector, choose Create Movement Script or Attach Script.");
-            ui.label("3. Edit code here, save it, then press Play and use arrows or WASD.");
-            return;
+    fn revert(&mut self) -> Result<(), String> {
+        let root = self.root.clone().ok_or("Open a project first")?;
+        let path = self.loaded.clone();
+        let draft = std::mem::take(&mut self.source);
+        self.source = self.saved.clone().unwrap_or_default();
+        if let Err(error) = self.open(&root, &path) {
+            self.source = draft;
+            return Err(error);
         }
-        ui.label(
-            egui::RichText::new(format!(
-                "{}{}",
-                self.path,
-                if self.dirty() { "  • Unsaved" } else { "" }
-            ))
-            .monospace(),
-        );
-        ui.horizontal_wrapped(|ui| {
-            if ui.add_enabled(!locked && self.dirty(), egui::Button::new("Save Script")).clicked() {
-                let result = self.save(); self.valid = result.is_ok();
-                self.message = result.err().unwrap_or_else(|| "Script saved. Press Play to run the updated code.".into());
+        Ok(())
+    }
+
+    pub fn render(&mut self, ui: &mut egui::Ui, root: &Path, default_path: &str) {
+        if self.root.is_none() {
+            if let Err(error) = self.open(root, default_path) {
+                self.message = error;
             }
-            if ui.button("Validate").clicked() {
-                let result = self.validate(); self.valid = result.is_ok();
-                self.message = result.err().unwrap_or_else(|| "Compilation passed (including imports). Runtime behavior is checked in Play.".into());
-            }
-            if ui.add_enabled(!locked && self.dirty(), egui::Button::new("Discard Edits")).clicked() {
-                self.source = self.saved.clone(); self.message = "Unsaved edits discarded.".into(); self.valid = true;
-            }
-            if ui.add_enabled(!self.dirty() && !locked, egui::Button::new("Reload from Disk")).clicked() {
-                match read(self.root.as_ref().expect("Open resource"), &self.path) {
-                    Ok(source) => { self.source = source.clone(); self.saved = source; self.message = "Reloaded.".into(); self.valid = true; }
-                    Err(error) => { self.message = error; self.valid = false; }
+        }
+        ui.horizontal(|ui| {
+            ui.label("Script:");
+            ui.add(egui::TextEdit::singleline(&mut self.path).desired_width(260.0));
+            if ui.button("Open / New").clicked() {
+                let path = self.path.clone();
+                if let Err(error) = self.open(root, &path) {
+                    self.message = error;
                 }
             }
         });
-        ui.small("KilnScript (.ks)  ·  Changes run after Save and the next Play  ·  Speed is set in the Inspector");
-        ui.separator();
-        ui.colored_label(
-            if self.valid {
-                egui::Color32::from_rgb(152, 180, 166)
-            } else {
-                egui::Color32::LIGHT_RED
-            },
-            &self.message,
-        );
-        let editor = egui::ScrollArea::both()
-            .id_salt("script_source")
+        ui.horizontal(|ui| {
+            let shortcut =
+                ui.input_mut(|input| input.consume_key(egui::Modifiers::CTRL, egui::Key::S));
+            if ui.button("Save Script").clicked() || shortcut {
+                if let Err(error) = self.save() {
+                    self.message = error;
+                }
+            }
+            if ui.button("Revert").clicked() {
+                if let Err(error) = self.revert() {
+                    self.message = error;
+                }
+            }
+            if ui.button("Check Syntax").clicked() {
+                self.message = match self.validate() {
+                    Ok(()) => "Syntax OK (including imports; Play checks runtime behavior)".into(),
+                    Err(error) => error,
+                };
+            }
+            if self.is_dirty() {
+                ui.colored_label(egui::Color32::YELLOW, "Unsaved script");
+            }
+        });
+        ui.label(&self.message);
+        egui::ScrollArea::both()
+            .id_salt("gameplay_script_source")
             .show(ui, |ui| {
-                ui.add_enabled(
-                    !locked,
+                ui.add(
                     egui::TextEdit::multiline(&mut self.source)
                         .code_editor()
-                        .font(egui::TextStyle::Monospace)
+                        .char_limit(SOURCE_LIMIT)
                         .desired_width(f32::INFINITY)
-                        .desired_rows(28)
-                        .char_limit(MAX_SOURCE),
-                )
-            })
-            .inner;
-        if !locked
-            && editor.has_focus()
-            && ui.input_mut(|input| {
-                input.consume_shortcut(&egui::KeyboardShortcut::new(
-                    egui::Modifiers::COMMAND,
-                    egui::Key::S,
-                ))
-            })
-        {
-            let result = self.save();
-            self.valid = result.is_ok();
-            self.message = result
-                .err()
-                .unwrap_or_else(|| "Script saved. Press Play to run updated code.".into());
-        }
+                        .desired_rows(28),
+                );
+            });
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    #[test]
+    fn edits_are_atomic_and_conflicts_preserve_the_draft_and_disk() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("scripts")).unwrap();
+        let mut editor = ScriptEditor::default();
+        editor.open(root.path(), "scripts/main.ks").unwrap();
+        editor.source = "// Héllo\nlet x = 1;\n".into();
+        assert!(editor.is_dirty());
+        editor.save().unwrap();
+        assert!(!editor.is_dirty());
+        editor.source = "let x = 2;".into();
+        editor.open(root.path(), "scripts/main.ks").unwrap();
+        assert_eq!(editor.source, "let x = 2;");
+        assert!(editor.is_dirty());
+        assert!(editor.open(root.path(), "scripts/other.ks").is_err());
+        std::fs::write(root.path().join("scripts/main.ks"), "external").unwrap();
+        assert!(editor.save().is_err());
+        assert!(editor.is_dirty());
+        assert_eq!(
+            std::fs::read_to_string(root.path().join("scripts/main.ks")).unwrap(),
+            "external"
+        );
+        editor.revert().unwrap();
+        assert_eq!(editor.source, "external");
+    }
+
+    #[test]
+    fn traversal_links_and_oversized_sources_are_refused() {
+        let root = tempfile::tempdir().unwrap();
+        let mut editor = ScriptEditor::default();
+        for path in [
+            "../outside.ks",
+            "/outside.ks",
+            "C:/outside.ks",
+            "a\\b.ks",
+            "main.toml",
+        ] {
+            assert!(editor.open(root.path(), path).is_err());
+        }
+        editor.open(root.path(), "main.ks").unwrap();
+        editor.source = "x".repeat(SOURCE_LIMIT + 1);
+        assert!(editor.save().is_err());
+        assert!(!root.path().join("main.ks").exists());
+        #[cfg(unix)]
+        {
+            editor.reset();
+            std::os::unix::fs::symlink(root.path(), root.path().join("linked")).unwrap();
+            assert!(editor.open(root.path(), "linked/main.ks").is_err());
+        }
+    }
+}
+
+#[cfg(test)]
+mod upstream_tests {
     use super::*;
     use std::collections::HashMap;
 

@@ -1913,3 +1913,42 @@ checks remain separate Task 8 gates.
   New while/break/continue keywords can require renaming legacy identifiers.
 - Validate frontend semantics, malformed input, runtime attachment execution and
   editor validation through tests. Full engine/3D/release work remains separate.
+
+### ADR-0076 — Editor-authored Task 9 reference games (2026-11-12)
+
+- The owner explicitly starts Task 9 on a new branch before the remaining Task 8
+  platform/release checks. Limit this session to the three reference games and
+  editor blockers they expose; hardware, independent tutorial and release review
+  stay open. Task 8's new Linux/Windows notice candidates both passed.
+- Author projects through native editor interactions, including project creation
+  or Save As, scene editing, gameplay source editing, Save/Reopen/Play and Export.
+  Automation may supply ordinary script text/assets and inspect resulting files;
+  it must not generate game manifests behind the editor or add game-specific
+  engine buttons/loaders to bypass authoring. Keep reproducible interaction
+  drivers and actual evidence with the games.
+- Add a general Script Editor for project-relative .ks files, the missing ordinary
+  authoring operation. Bound source to 1 MiB, reject traversal/links and external
+  modification, save atomically, and include drafts in Save/Discard/Cancel
+  protection. Compilation diagnostics use the existing shared runtime compiler.
+  This is not a new language/runtime/dependency or a project/save format change.
+- Reference games may start from existing example projects through Save As and
+  import their assets, then replace gameplay through the editor. Give games
+  independent project identities and document controls, goals and constraints.
+  Do not equate three games with completion of all Task 9 release gates.
+
+### ADR-0077 — Reconcile master and reference-game editor integrations (2026-11-12)
+
+- Merge current master into the reference-game PR without replacing either
+  branch's work. Retain Quick Actions, workspace polish, movement-script creation
+  and new language control flow alongside the editor-authored games.
+- Use one ScriptEditor buffer in EditorShell for inspector, assets, dock tabs,
+  project saving, Play and export. Preserve generic Open/New and guarded atomic
+  saves, adding master's compiler/import validation and movement starter.
+- Normal project replacement/exit uses Save/Discard/Cancel for script drafts;
+  failed saves retain both draft and prompt. Inspector file switching and
+  movement creation still require saving/discarding the existing draft.
+- Keep both branches' regression tests and rerun actual editor authoring/export
+  against the integrated UI. No new dependency, format or size/resource exception.
+- Reuse an existing dock panel when menus reopen it. Master adds default animation
+  and source tabs; duplicate copies cause egui widget-ID collisions and ambiguous
+  authoring. Keep the default layout and allow a floating panel after closing it.

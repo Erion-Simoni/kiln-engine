@@ -1,0 +1,12 @@
+{
+  "observed_at": "2026-11-13T09:52:21.527722+00:00",
+  "branch": "feat/task9-editor-reference-games",
+  "merge_source_revision": "f7c8f9da50fa2d8e32e8811250c4e199870838cf",
+  "master_parent": "9da55513f18d30466440adadd32d0fd999625b8f",
+  "exact_remote_sha_verified": true,
+  "public_pr_head_matches": true,
+  "pull_request": "https://github.com/Erion-Simoni/kiln-engine/pull/21",
+  "run_url": "https://github.com/Erion-Simoni/kiln-engine/actions/runs/43404644543",
+  "state": "WORKFLOW_RUN_STATUS_IN_PROGRESS",
+  "scope": "Public source-pinned hosted checkpoint after verified push. No completed CI acceptance is claimed. Later documentation-only commits do not retrigger the reference-games workflow."
+}

@@ -55,6 +55,7 @@ use crate::vfx_editor::VfxEditorState;
 enum SceneAction {
     Open(String),
     Create,
+    Duplicate,
     Switch(usize),
     Close(usize),
 }
@@ -346,6 +347,15 @@ enum Tab {
     VersionControl,
     InputRebind,
     SpriteEditor,
+}
+
+/// Reopening a panel must not render a second copy with the same widget IDs.
+fn open_panel(dock: &mut egui_dock::DockState<Tab>, tab: Tab) {
+    if let Some(location) = dock.find_tab(&tab) {
+        dock.set_active_tab(location);
+    } else {
+        dock.add_window(vec![tab]);
+    }
 }
 
 fn play_input_edges(
@@ -718,6 +728,7 @@ impl EditorApp {
             .clone()
             .ok_or("No project file open. Use Save As first.")?;
         let project = self.project_to_save()?;
+        self.shell.script_editor.save()?;
         let path = crate::project_files::save(&project, &path)?;
         let _ = crate::recovery::clear(&path);
         self.project_path = Some(path);
@@ -741,15 +752,15 @@ impl EditorApp {
 
     /// Save a project copy while preserving relative assets, committing state only on success.
     pub fn save_project_as(&mut self, path: PathBuf) -> Result<(), String> {
-        self.shell.script_editor.require_saved()?;
         self.finish_transform_edit();
+        self.shell.script_editor.save()?;
         let source = self
             .project_path
             .as_ref()
             .ok_or("Open or create a project before Save As")?;
         let project = self.project_to_save()?;
         let path = crate::project_files::save_as(&project, source, &path)?;
-        self.shell.script_editor = Default::default();
+        self.shell.script_editor.reset();
         self.prefab_apply_undo.clear();
         self.prefab_apply_redo.clear();
         let _ = crate::recovery::clear(&path);
@@ -776,7 +787,7 @@ impl EditorApp {
     pub fn load_project(&mut self, path: PathBuf) -> Result<(), String> {
         self.shell.script_editor.require_saved()?;
         let loaded = crate::project_files::load(&path)?;
-        self.shell.script_editor = Default::default();
+        self.shell.script_editor.reset();
         self.prefab_apply_undo.clear();
         self.prefab_apply_redo.clear();
         self.finish_transform_edit();
@@ -866,14 +877,6 @@ impl EditorApp {
     }
 
     fn request_project_action(&mut self, action: ProjectAction) -> Result<(), String> {
-        if let Err(error) = self.shell.script_editor.require_saved() {
-            if let Some(location) = self.dock_state.find_tab(&Tab::ScriptEditor) {
-                self.dock_state.set_active_tab(location);
-            } else {
-                self.dock_state.push_to_focused_leaf(Tab::ScriptEditor);
-            }
-            return Err(error);
-        }
         if self.lifecycle.pending().is_some() {
             return Ok(());
         }
@@ -883,7 +886,11 @@ impl EditorApp {
         self.finish_transform_edit();
         self.gizmo.drag = None;
         let document = self.authoring_document()?;
-        if let Some(action) = self.lifecycle.request(action, document.as_ref())? {
+        if let Some(action) = self.lifecycle.request_with_external_dirty(
+            action,
+            document.as_ref(),
+            self.shell.script_editor.is_dirty(),
+        )? {
             self.execute_project_action(action)?;
         }
         Ok(())
@@ -899,6 +906,9 @@ impl EditorApp {
             Ok(())
         };
         if let Some(action) = self.lifecycle.resolve(decision, saved)? {
+            if decision == SaveDecision::Discard {
+                self.shell.script_editor.reset();
+            }
             self.execute_project_action(action)?;
         }
         Ok(())
@@ -968,7 +978,7 @@ impl EditorApp {
     }
 
     fn start_play_scene(&mut self, scene_id: &str) -> Result<(), String> {
-        self.shell.script_editor.require_saved()?;
+        self.shell.script_editor.save()?;
         self.shell.set_preview(false);
         self.finish_transform_edit();
         self.capture_active_scene()?;
@@ -1967,6 +1977,9 @@ impl EditorApp {
                     .open_scene(project, current.ok_or("No active scene")?, &id)?
             }
             SceneAction::Create => self.scenes.create(project, current)?,
+            SceneAction::Duplicate => self
+                .scenes
+                .duplicate(project, current.ok_or("No active scene")?)?,
             SceneAction::Switch(index) => {
                 self.scenes
                     .switch(project, current.ok_or("No active scene")?, index)?
@@ -2207,20 +2220,14 @@ impl EditorApp {
             }
             let result = match request {
                 ProjectRequest::Export(config) => {
-                    let result = self
-                        .shell
-                        .script_editor
-                        .require_saved()
-                        .and_then(|_| self.save_project())
-                        .and_then(|_| {
-                            let path =
-                                self.project_path.as_ref().ok_or("Save the project first")?;
-                            let project = self
-                                .current_project
-                                .as_ref()
-                                .ok_or("Open a project first")?;
-                            self.build_panel.start(config, path, &project.id)
-                        });
+                    let result = self.save_project().and_then(|_| {
+                        let path = self.project_path.as_ref().ok_or("Save the project first")?;
+                        let project = self
+                            .current_project
+                            .as_ref()
+                            .ok_or("Open a project first")?;
+                        self.build_panel.start(config, path, &project.id)
+                    });
                     if let Err(error) = &result {
                         self.build_panel.fail(error.clone());
                     }
@@ -2372,7 +2379,8 @@ impl EditorApp {
         let project_dirty = self
             .authoring_document()
             .and_then(|document| self.lifecycle.is_dirty(document.as_ref()))
-            .unwrap_or(true);
+            .unwrap_or(true)
+            || self.shell.script_editor.is_dirty();
         if self.pending_recovery.is_none() {
             if let Some(path) = self.project_path.clone() {
                 if self.play.is_none() && project_dirty {
@@ -2534,26 +2542,26 @@ impl EditorApp {
                     }
                     ui.separator();
                     if ui.button("Preferences...").clicked() {
-                        self.dock_state.add_window(vec![Tab::Preferences]);
+                        open_panel(&mut self.dock_state, Tab::Preferences);
                         ui.close_menu();
                     }
                 });
 
                 ui.menu_button("View", |ui| {
                     if ui.button("Scene View").clicked() {
-                        self.dock_state.add_window(vec![Tab::SceneView]);
+                        open_panel(&mut self.dock_state, Tab::SceneView);
                         ui.close_menu();
                     }
                     if ui.button("Inspector").clicked() {
-                        self.dock_state.add_window(vec![Tab::Inspector]);
+                        open_panel(&mut self.dock_state, Tab::Inspector);
                         ui.close_menu();
                     }
                     if ui.button("Assets").clicked() {
-                        self.dock_state.add_window(vec![Tab::Assets]);
+                        open_panel(&mut self.dock_state, Tab::Assets);
                         ui.close_menu();
                     }
                     if ui.button("Console").clicked() {
-                        self.dock_state.add_window(vec![Tab::Console]);
+                        open_panel(&mut self.dock_state, Tab::Console);
                         ui.close_menu();
                     }
                     if ui.button("Script Editor").clicked() {
@@ -2561,106 +2569,110 @@ impl EditorApp {
                         ui.close_menu();
                     }
                     if ui.button("Graph Editor").clicked() {
-                        self.dock_state.add_window(vec![Tab::GraphEditor]);
+                        open_panel(&mut self.dock_state, Tab::GraphEditor);
                         ui.close_menu();
                     }
                     if ui.button("Animation Editor").clicked() {
-                        self.dock_state.add_window(vec![Tab::AnimationEditor]);
+                        open_panel(&mut self.dock_state, Tab::AnimationEditor);
                         ui.close_menu();
                     }
                     if ui.button("Build / Export").clicked() {
-                        self.dock_state.add_window(vec![Tab::BuildPanel]);
+                        open_panel(&mut self.dock_state, Tab::BuildPanel);
                         ui.close_menu();
                     }
                     if ui.button("Project Hub").clicked() {
                         if let Some(location) = self.dock_state.find_tab(&Tab::ProjectHub) {
                             self.dock_state.set_active_tab(location);
                         } else {
-                            self.dock_state.add_window(vec![Tab::ProjectHub]);
+                            open_panel(&mut self.dock_state, Tab::ProjectHub);
                         }
                         ui.close_menu();
                     }
                     if ui.button("Profiler").clicked() {
-                        self.dock_state.add_window(vec![Tab::ProfilerPanel]);
+                        open_panel(&mut self.dock_state, Tab::ProfilerPanel);
                         ui.close_menu();
                     }
                     if ui.button("Debugger").clicked() {
-                        self.dock_state.add_window(vec![Tab::DebuggerPanel]);
+                        open_panel(&mut self.dock_state, Tab::DebuggerPanel);
                         ui.close_menu();
                     }
                     if ui.button("VFX Editor").clicked() {
-                        self.dock_state.add_window(vec![Tab::VfxEditor]);
+                        open_panel(&mut self.dock_state, Tab::VfxEditor);
                         ui.close_menu();
                     }
                     if ui.button("Audio Editor").clicked() {
-                        self.dock_state.add_window(vec![Tab::AudioEditor]);
+                        open_panel(&mut self.dock_state, Tab::AudioEditor);
                         ui.close_menu();
                     }
                     if ui.button("Physics Editor").clicked() {
-                        self.dock_state.add_window(vec![Tab::PhysicsEditor]);
+                        open_panel(&mut self.dock_state, Tab::PhysicsEditor);
                         ui.close_menu();
                     }
                     if ui.button("Shader Editor").clicked() {
-                        self.dock_state.add_window(vec![Tab::ShaderEditor]);
+                        open_panel(&mut self.dock_state, Tab::ShaderEditor);
                         ui.close_menu();
                     }
                     if ui.button("UI Layout Editor").clicked() {
-                        self.dock_state.add_window(vec![Tab::UiLayoutEditor]);
+                        open_panel(&mut self.dock_state, Tab::UiLayoutEditor);
                         ui.close_menu();
                     }
                     if ui.button("Preferences").clicked() {
-                        self.dock_state.add_window(vec![Tab::Preferences]);
+                        open_panel(&mut self.dock_state, Tab::Preferences);
                         ui.close_menu();
                     }
                     if ui.button("Version Control").clicked() {
-                        self.dock_state.add_window(vec![Tab::VersionControl]);
+                        open_panel(&mut self.dock_state, Tab::VersionControl);
                         ui.close_menu();
                     }
                     if ui.button("Input Rebinding").clicked() {
-                        self.dock_state.add_window(vec![Tab::InputRebind]);
+                        open_panel(&mut self.dock_state, Tab::InputRebind);
                         ui.close_menu();
                     }
                     if ui.button("Sprite Editor").clicked() {
-                        self.dock_state.add_window(vec![Tab::SpriteEditor]);
+                        open_panel(&mut self.dock_state, Tab::SpriteEditor);
                         ui.close_menu();
                     }
                     if ui.button("Plugin Manager").clicked() {
-                        self.dock_state.add_window(vec![Tab::PluginManagerPanel]);
+                        open_panel(&mut self.dock_state, Tab::PluginManagerPanel);
                         ui.close_menu();
                     }
                     if ui.button("UI Designer").clicked() {
-                        self.dock_state.add_window(vec![Tab::UIDesigner]);
+                        open_panel(&mut self.dock_state, Tab::UIDesigner);
                         ui.close_menu();
                     }
                     if ui.button("Prefab Editor").clicked() {
-                        self.dock_state.add_window(vec![Tab::PrefabEditor]);
+                        open_panel(&mut self.dock_state, Tab::PrefabEditor);
                         ui.close_menu();
                     }
                     if ui.button("Scene Editor").clicked() {
-                        self.dock_state.add_window(vec![Tab::SceneEditor]);
+                        open_panel(&mut self.dock_state, Tab::SceneEditor);
                         ui.close_menu();
                     }
                     if ui.button("Gameplay Editor").clicked() {
-                        self.dock_state.add_window(vec![Tab::GameplayEditor]);
+                        open_panel(&mut self.dock_state, Tab::GameplayEditor);
                         ui.close_menu();
                     }
                     if ui.button("Tilemap Editor").clicked() {
-                        self.dock_state.add_window(vec![Tab::TilemapEditor]);
+                        open_panel(&mut self.dock_state, Tab::TilemapEditor);
                         ui.close_menu();
                     }
                     if ui.button("Hierarchy").clicked() {
-                        self.dock_state.add_window(vec![Tab::Hierarchy]);
+                        open_panel(&mut self.dock_state, Tab::Hierarchy);
                         ui.close_menu();
                     }
                     if ui.button("Inspector").clicked() {
-                        self.dock_state.add_window(vec![Tab::Inspector]);
+                        open_panel(&mut self.dock_state, Tab::Inspector);
                         ui.close_menu();
                     }
                 });
 
                 ui.menu_button("Project", |ui| {
                     if ui.button("Build Settings").clicked() {
-                        self.dock_state.add_window(vec![Tab::Settings]);
+                        open_panel(&mut self.dock_state, Tab::Settings);
+                        ui.close_menu();
+                    }
+                    if ui.button("Script Editor").clicked() {
+                        open_panel(&mut self.dock_state, Tab::ScriptEditor);
                         ui.close_menu();
                     }
                     if ui.button("Package").clicked() {
@@ -4447,6 +4459,10 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                     }
                                 }
                             });
+                            if ui.button("Duplicate Scene").clicked() {
+                                self.project_requests
+                                    .push(ProjectRequest::Scene(SceneAction::Duplicate));
+                            }
                             for (index, tab) in self.scenes.tabs.iter().enumerate() {
                                 let response = ui
                                     .selectable_label(
@@ -5226,10 +5242,6 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 });
                 crate::editor_shell::EditorShell::future_components(ui);
             }
-            Tab::ScriptEditor => {
-                let locked = self.editing_locked() || self.project_blocked;
-                self.shell.script_editor.ui(ui, locked);
-            }
             Tab::GraphEditor => {
                 ui.vertical(|ui| {
                     // Toolbar
@@ -5573,6 +5585,31 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 ui.vertical(|ui| {
                     ui.heading("Settings");
                     ui.add_space(8.0);
+                    if let Some(project) = self.current_project.as_mut() {
+                        ui.group(|ui| {
+                            ui.strong("Project");
+                            ui.horizontal(|ui| {
+                                ui.label("Name");
+                                ui.text_edit_singleline(&mut project.name);
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label("ID");
+                                ui.text_edit_singleline(&mut project.id);
+                            });
+                            ui.label("Use a unique ID for independent game saves/settings.");
+                            ui.horizontal(|ui| {
+                                ui.label("Window");
+                                ui.add(
+                                    egui::DragValue::new(&mut project.window.width)
+                                        .range(320..=7680),
+                                );
+                                ui.add(
+                                    egui::DragValue::new(&mut project.window.height)
+                                        .range(180..=4320),
+                                );
+                            });
+                        });
+                    }
 
                     // Render Quality section
                     egui::Frame::none()
@@ -5796,6 +5833,22 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     let locked = self.editing_locked();
                     let scene_id = self.scenes.active_id().map(str::to_owned);
                     if let (Some(project), Some(id)) = (self.current_project.as_mut(), scene_id) {
+                        if let Some(scene) = project.scenes.get_mut(&id) {
+                            ui.add_enabled_ui(!locked, |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label("Scene name");
+                                    ui.text_edit_singleline(&mut scene.name);
+                                });
+                                let mut path = scene.script.clone().unwrap_or_default();
+                                ui.horizontal(|ui| {
+                                    ui.label("Gameplay script");
+                                    if ui.text_edit_singleline(&mut path).changed() {
+                                        scene.script = (!path.trim().is_empty())
+                                            .then(|| path.trim().to_string());
+                                    }
+                                });
+                            });
+                        }
                         let mut settings = project.cameras.get(&id).cloned().unwrap_or_default();
                         let mut ids: Vec<_> = project
                             .scenes
@@ -6194,6 +6247,26 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     self.physics_editor.render(ui);
                 });
             }
+            Tab::ScriptEditor => {
+                if self.editing_locked() {
+                    ui.disable();
+                }
+                if let Some(root) = self.asset_browser.root() {
+                    let path = self
+                        .current_project
+                        .as_ref()
+                        .and_then(|project| {
+                            self.scenes
+                                .active_id()
+                                .and_then(|id| project.scenes.get(id))
+                        })
+                        .and_then(|scene| scene.script.as_deref())
+                        .unwrap_or("scripts/main.ks");
+                    self.shell.script_editor.render(ui, root, path);
+                } else {
+                    ui.label("Open a project to edit gameplay scripts.");
+                }
+            }
             Tab::ShaderEditor => {
                 if self.editing_locked() {
                     ui.disable();
@@ -6519,6 +6592,24 @@ mod play_tests {
         assert!(keys.is_empty());
         assert_eq!(points.len(), 2);
         let _ = ctx.end_pass();
+    }
+
+    #[test]
+    fn reopening_default_or_floating_panels_preserves_one_instance() {
+        let mut dock = default_dock_layout();
+        for tab in [Tab::AnimationEditor, Tab::ScriptEditor, Tab::BuildPanel] {
+            open_panel(&mut dock, tab);
+            let original = dock.find_tab(&tab).unwrap();
+            open_panel(&mut dock, tab);
+            assert_eq!(dock.find_tab(&tab), Some(original));
+            dock.remove_tab(original);
+            assert!(dock.find_tab(&tab).is_none(), "Duplicate panel: {tab:?}");
+            open_panel(&mut dock, tab);
+            let reopened = dock.find_tab(&tab).unwrap();
+            open_panel(&mut dock, tab);
+            dock.remove_tab(reopened);
+            assert!(dock.find_tab(&tab).is_none());
+        }
     }
 
     #[test]

@@ -163,6 +163,21 @@ impl SceneWorkspace {
         Ok(())
     }
 
+    /// Duplicate the current level and camera into an independent scene tab.
+    pub fn duplicate(&mut self, project: &mut Project, current: Scene) -> Result<(), String> {
+        let camera = project.cameras.get(&current.id).cloned();
+        let mut copy = current.clone();
+        self.create(project, Some(current))?;
+        let id = self.active_id().ok_or("No duplicated scene")?.to_string();
+        copy.id = id.clone();
+        copy.name = format!("{} Copy", copy.name);
+        project.scenes.insert(id.clone(), copy);
+        if let Some(camera) = camera {
+            project.cameras.insert(id, camera);
+        }
+        Ok(())
+    }
+
     /// Compare documents with the last successful disk write, including live edits.
     pub fn refresh_dirty(&mut self, project: &Project, current: Option<&Scene>) {
         let active = self.active_id().map(str::to_owned);
@@ -255,5 +270,46 @@ impl SceneWorkspace {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod duplicate_tests {
+    use super::*;
+    #[test]
+    fn duplicate_preserves_unsaved_level_and_camera_without_aliasing() {
+        let mut project = Project::default();
+        let original = Scene {
+            id: "main".into(),
+            name: "First".into(),
+            entities: vec![],
+            nested_scenes: vec![],
+            script: Some("scripts/level.ks".into()),
+        };
+        project.scenes.insert("main".into(), original.clone());
+        let camera = kiln_core::camera::CameraSettings {
+            zoom: 2.0,
+            ..Default::default()
+        };
+        project.cameras.insert("main".into(), camera.clone());
+        let mut workspace = SceneWorkspace::open(&project);
+        let mut edited = original;
+        edited.name = "Unsaved first".into();
+        workspace.duplicate(&mut project, edited).unwrap();
+        assert_eq!(workspace.active_id(), Some("scene_1"));
+        assert_eq!(project.scenes["main"].name, "Unsaved first");
+        assert_eq!(project.cameras["scene_1"], camera);
+        project.scenes.get_mut("scene_1").unwrap().script = Some("scripts/finale.ks".into());
+        assert_eq!(
+            project.scenes["main"].script.as_deref(),
+            Some("scripts/level.ks")
+        );
+        assert!(workspace.tabs.last().unwrap().dirty);
+        let roundtrip = Project::from_toml(&project.to_toml().unwrap()).unwrap();
+        assert_eq!(roundtrip.scenes["scene_1"].id, "scene_1");
+        assert_ne!(
+            roundtrip.scenes["main"].script,
+            roundtrip.scenes["scene_1"].script
+        );
     }
 }

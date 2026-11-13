@@ -1,0 +1,1 @@
+// Emberwatch gameplay is attached to the UI controller.

@@ -1,0 +1,199 @@
+{
+  "observed_at": "2026-11-12T22:07:01.051796+00:00",
+  "branch": "feat/task9-editor-reference-games",
+  "branch_base": "8ec785237997147964580bd79cad603310c16235",
+  "scope": "Local Xvfb/SwiftShader/ALSA-null authoring/export and actual native/Chromium gameplay; not physical hardware, macOS/Windows, release signing or independent tutorial acceptance",
+  "games": [
+    {
+      "game": "emberwatch",
+      "project_id": "kiln-reference-emberwatch",
+      "scene_count": 1,
+      "script_sha256": {
+        "scripts/main.ks": "422537bcaa6693b145f28444c1c5369f0d758f71beb0a4096102aefd96aa67c0",
+        "scripts/ui.ks": "7ade21b7a86e16bfa46a0dbda7db8211444c6321cc76135b1ac9f8faa0736ead"
+      },
+      "editor_replay_project_values_equal": true,
+      "editor_saved_source_bytes_equal": true
+    },
+    {
+      "game": "switchyard",
+      "project_id": "kiln-reference-switchyard",
+      "scene_count": 1,
+      "script_sha256": {
+        "scripts/main.ks": "422537bcaa6693b145f28444c1c5369f0d758f71beb0a4096102aefd96aa67c0",
+        "scripts/ui.ks": "871ddac1f1183168a0b8b6d337d6c2aa188296f8fe09a51848465b020e2c4341"
+      },
+      "editor_replay_project_values_equal": true,
+      "editor_saved_source_bytes_equal": true
+    },
+    {
+      "game": "skybridge",
+      "project_id": "kiln-reference-skybridge",
+      "scene_count": 2,
+      "script_sha256": {
+        "scripts/hero.ks": "163bbbf39dbde4c3f889c052cc623f7f846386305d5fdab47756782081286b64",
+        "scripts/main.ks": "57536db9d37bc0376064afd6cf899e02bd390c0d76822f12a6cf0ccc93f1dc58",
+        "scripts/platform.ks": "9ae49e7baaf9fe878430dc0be1d90a6ff93c7fa05e8735a1fc1251d5b3f88a56"
+      },
+      "editor_replay_project_values_equal": true,
+      "editor_saved_source_bytes_equal": true
+    }
+  ],
+  "checks": {
+    "just_check": "passed",
+    "just_test": {
+      "passed": 680,
+      "skipped": 0
+    },
+    "python_unittest": {
+      "passed": 29
+    },
+    "wasm_kiln_web_check": "passed",
+    "reference_games_source_and_kar": {
+      "tests": 4,
+      "result": "passed"
+    },
+    "actionlint_reference_workflow": "passed",
+    "python_js_syntax": "passed"
+  },
+  "prepared_tools": {
+    "archive_sha256": "34952231417b3e27f5984b0185048f1e35f3167db6939d46658e883939070154",
+    "source_revision_observed": "8ec785237997147964580bd79cad603310c16235",
+    "source_dirty_observed": true,
+    "build_kind": "prebuilt development tools; not a clean captured release",
+    "files": 1546
+  },
+  "editor_authoring_and_exports": {
+    "scope": "Xvfb software GUI authoring/export; not physical devices",
+    "games": [
+      {
+        "authoring": {
+          "game": "emberwatch",
+          "project": "/workspace/kiln-engine/target/task9-replay-final/projects/emberwatch",
+          "manifest_created_by": "native editor Save As and real authoring widgets",
+          "source_pasted_and_byte_verified": true,
+          "project_matches_checked_in_game": true,
+          "template_unchanged": true
+        },
+        "export": {
+          "game": "emberwatch",
+          "opened_saved_project": "/workspace/kiln-engine/target/task9-replay-final/projects/emberwatch",
+          "outputs": {
+            "native": "/workspace/kiln-engine/target/task9-replay-final/emberwatch/export/native game",
+            "web": "/workspace/kiln-engine/target/task9-replay-final/emberwatch/export/browser game"
+          },
+          "native_browser_notices_verified": true,
+          "overwrite_preserved": true,
+          "tools_absent_from_child_path": true
+        }
+      },
+      {
+        "authoring": {
+          "game": "switchyard",
+          "project": "/workspace/kiln-engine/target/task9-replay-final/projects/switchyard",
+          "manifest_created_by": "native editor Save As and real authoring widgets",
+          "source_pasted_and_byte_verified": true,
+          "project_matches_checked_in_game": true,
+          "template_unchanged": true
+        },
+        "export": {
+          "game": "switchyard",
+          "opened_saved_project": "/workspace/kiln-engine/target/task9-replay-final/projects/switchyard",
+          "outputs": {
+            "native": "/workspace/kiln-engine/target/task9-replay-final/switchyard/export/native game",
+            "web": "/workspace/kiln-engine/target/task9-replay-final/switchyard/export/browser game"
+          },
+          "native_browser_notices_verified": true,
+          "overwrite_preserved": true,
+          "tools_absent_from_child_path": true
+        }
+      },
+      {
+        "authoring": {
+          "game": "skybridge",
+          "project": "/workspace/kiln-engine/target/task9-skybridge-verified/projects/skybridge",
+          "manifest_created_by": "native editor Save As and real authoring widgets",
+          "source_pasted_and_byte_verified": true,
+          "project_matches_checked_in_game": true,
+          "template_unchanged": true
+        },
+        "export": {
+          "game": "skybridge",
+          "opened_saved_project": "/workspace/kiln-engine/target/task9-skybridge-verified/projects/skybridge",
+          "outputs": {
+            "native": "/workspace/kiln-engine/target/task9-skybridge-verified/export/native game",
+            "web": "/workspace/kiln-engine/target/task9-skybridge-verified/export/browser game"
+          },
+          "native_browser_notices_verified": true,
+          "overwrite_preserved": true,
+          "tools_absent_from_child_path": true
+        }
+      }
+    ]
+  },
+  "native_playthroughs": {
+    "scope": "Xvfb/SwiftShader/ALSA null; no physical-device claim",
+    "games": [
+      {
+        "game": "emberwatch",
+        "standalone_without_archive_argument": true,
+        "source_project_unavailable": true,
+        "tools_absent_from_path": true,
+        "all_hostiles_defeated": true,
+        "relay_trigger_won": true,
+        "victory_saved": true
+      },
+      {
+        "game": "switchyard",
+        "standalone_without_archive_argument": true,
+        "source_project_unavailable": true,
+        "tools_absent_from_path": true,
+        "three_circuits_won": true,
+        "saved_moves": 2,
+        "fresh_process_continue": true
+      },
+      {
+        "game": "skybridge",
+        "standalone_without_archive_argument": true,
+        "source_project_unavailable": true,
+        "tools_absent_from_path": true,
+        "two_physical_levels_won": true,
+        "jumping_and_animation": true,
+        "saved_stage": {
+          "Float": 2.0
+        },
+        "save_load_completed": true
+      }
+    ]
+  },
+  "browser_playthroughs": {
+    "scope": "Chromium/SwiftShader; no physical-device claim",
+    "games": [
+      {
+        "game": "emberwatch",
+        "editor_export": true,
+        "nested_http_deployment": true,
+        "all_hostiles_defeated": true,
+        "relay_trigger_won": true,
+        "victory_saved": true
+      },
+      {
+        "game": "switchyard",
+        "editor_export": true,
+        "nested_http_deployment": true,
+        "three_circuits_won": true,
+        "reload_continue": true,
+        "stage": 3,
+        "moves": 2
+      },
+      {
+        "game": "skybridge",
+        "editor_export": true,
+        "nested_http_deployment": true,
+        "two_physical_levels_won": true,
+        "save_load_restores_position": true
+      }
+    ]
+  },
+  "raw_generated_artifacts": "target/task9-*; not committed"
+}
