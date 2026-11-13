@@ -1869,7 +1869,52 @@ checks remain separate Task 8 gates.
 - No new dependency or release-size threshold. Existing bounded-input limits
   remain; no resource budget is weakened.
 
-### ADR-0073 — Editor-authored Task 9 reference games (2026-11-12)
+### ADR-0073 — Native editor polish and Quick Actions (2026-11-12)
+
+- User-requested editor polish is a focused native workspace task; Task 8 release
+  acceptance remains separate and no additional 3D milestone begins.
+- Refine the existing charcoal theme and toolbar rather than introduce a UI
+  framework. Keep current docking, documents, undo history and project formats.
+- Add a bounded, session-only Quick Actions search (Ctrl/Cmd+K), backed by the
+  existing menu actions and dock tabs. Reuse existing tabs instead of duplicating
+  panels. Save/undo/redo follow their current state restrictions; lifecycle
+  prompts close the palette and prevent commands behind them.
+- Borrow familiar workflow ideas from Unity, Godot and Unreal: visible transform
+  tools, searchable actions, scene/hierarchy/inspector organization and an asset
+  shelf. This does not claim feature parity with those engines.
+- No new dependency, runtime feature, project format or resource-budget exception.
+
+### ADR-0074 — In-editor character scripting (2026-11-12)
+
+- Complete one focused editor scripting workflow, retaining existing entity
+  Script components and the shared SliceSession runtime. No new dependency.
+- Add a native text editor for project-relative .ks files, explicit atomic Save,
+  runtime compiler validation (including imports), external-change protection,
+  and a non-overwriting movement template attached through component history.
+- Unsaved script text stays separate from scene undo. Opening another file,
+  switching/closing projects and Play require Save or explicit Discard Edits.
+  Closing the script tab retains its buffer. Source edits are not hot reloaded.
+- Keep source bounded to the runtime's 1 MiB limit and enforce project-root
+  containment. Remove the rapidly changing FPS readout from the status bar.
+
+### ADR-0075 — KilnScript gameplay control flow (2026-11-12)
+
+- Expand one language milestone: short-circuit &&/||/!, compound arithmetic
+  assignments, else-if chains and while loops with break/continue. Reuse existing
+  IR jumps, locals and arithmetic; do not change bytecode, host ABI or add crates.
+- Boolean operators require bool operands when evaluated. The right side of &&
+  and || is skipped when unnecessary, preserving side-effect behavior.
+- Loops have lexical block scope; break/continue target the innermost loop in
+  the same function. Inlined functions must not inherit caller loop targets.
+  Existing VM instruction limits bound runaway loops; no budget is weakened.
+- Unary operators bind before multiplication/division, which associate left.
+  This corrects the old right-associative division parser and is documented.
+- Bound added block/unary nesting and retain lexical errors with byte spans.
+  New while/break/continue keywords can require renaming legacy identifiers.
+- Validate frontend semantics, malformed input, runtime attachment execution and
+  editor validation through tests. Full engine/3D/release work remains separate.
+
+### ADR-0076 — Editor-authored Task 9 reference games (2026-11-12)
 
 - The owner explicitly starts Task 9 on a new branch before the remaining Task 8
   platform/release checks. Limit this session to the three reference games and
@@ -1890,3 +1935,20 @@ checks remain separate Task 8 gates.
   import their assets, then replace gameplay through the editor. Give games
   independent project identities and document controls, goals and constraints.
   Do not equate three games with completion of all Task 9 release gates.
+
+### ADR-0077 — Reconcile master and reference-game editor integrations (2026-11-12)
+
+- Merge current master into the reference-game PR without replacing either
+  branch's work. Retain Quick Actions, workspace polish, movement-script creation
+  and new language control flow alongside the editor-authored games.
+- Use one ScriptEditor buffer in EditorShell for inspector, assets, dock tabs,
+  project saving, Play and export. Preserve generic Open/New and guarded atomic
+  saves, adding master's compiler/import validation and movement starter.
+- Normal project replacement/exit uses Save/Discard/Cancel for script drafts;
+  failed saves retain both draft and prompt. Inspector file switching and
+  movement creation still require saving/discarding the existing draft.
+- Keep both branches' regression tests and rerun actual editor authoring/export
+  against the integrated UI. No new dependency, format or size/resource exception.
+- Reuse an existing dock panel when menus reopen it. Master adds default animation
+  and source tabs; duplicate copies cause egui widget-ID collisions and ambiguous
+  authoring. Keep the default layout and allow a floating panel after closing it.

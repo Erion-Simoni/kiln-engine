@@ -19,6 +19,14 @@ pub enum Expr {
     Float(f64, crate::diagnostic::Span),
     String(String, crate::diagnostic::Span),
     Identifier(String, crate::diagnostic::Span),
+    /// Boolean negation; evaluated operands must be bool.
+    Not(Box<Expr>, Span),
+    /// Short-circuit boolean expression.
+    Logical {
+        and: bool,
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
     BinaryOp {
         op: BinaryOp,
         left: Box<Expr>,
@@ -67,6 +75,15 @@ pub enum Stmt {
         value: Expr,
         span: crate::diagnostic::Span,
     },
+    /// Loop with a block-local scope.
+    While {
+        condition: Expr,
+        body: Vec<Stmt>,
+    },
+    /// Exit the innermost loop in this function.
+    Break(Span),
+    /// Continue at the innermost loop condition.
+    Continue(Span),
     If {
         condition: Expr,
         then_block: Vec<Stmt>,
@@ -88,8 +105,8 @@ pub struct Parser<'a> {
 impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Self {
         let mut lexer = Lexer::new(input);
-        let current = lexer.next_token().ok();
-        let lookahead = lexer.next_token().ok();
+        let current = Some(Self::read_token(&mut lexer));
+        let lookahead = Some(Self::read_token(&mut lexer));
         Self {
             lexer,
             current,
@@ -116,8 +133,20 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_stmt(&mut self) -> Result<Option<Stmt>, ParseError> {
+        if self.depth >= 64 {
+            return Err(ParseError::Custom("Statement nesting too deep".into()));
+        }
+        self.depth += 1;
+        let result = self.parse_stmt_inner();
+        self.depth -= 1;
+        result
+    }
+
+    fn parse_stmt_inner(&mut self) -> Result<Option<Stmt>, ParseError> {
         match self.peek_token() {
             Some(Token::Fn) => self.parse_function(),
+            Some(Token::While) => self.parse_while(),
+            Some(Token::Break | Token::Continue) => self.parse_loop_control(),
             Some(Token::If) => self.parse_if(),
             Some(Token::Return) => self.parse_return(),
             Some(Token::Let) => self.parse_let(),
@@ -194,7 +223,13 @@ impl<'a> Parser<'a> {
         // token after the current one in `self.lookahead`.
         matches!(
             self.lookahead.as_ref().map(|t| &t.token),
-            Some(Token::Assign)
+            Some(
+                Token::Assign
+                    | Token::PlusAssign
+                    | Token::MinusAssign
+                    | Token::StarAssign
+                    | Token::SlashAssign
+            )
         )
     }
 
@@ -243,12 +278,53 @@ impl<'a> Parser<'a> {
                 return Err(ParseError::Custom("Expected a variable name".to_string()));
             }
         };
-        self.consume(Token::Assign)?;
-        let value = self.parse_expr()?;
+        let operator = match self.peek_token() {
+            Some(Token::Assign) => None,
+            Some(Token::PlusAssign) => Some(BinaryOp::Add),
+            Some(Token::MinusAssign) => Some(BinaryOp::Sub),
+            Some(Token::StarAssign) => Some(BinaryOp::Mul),
+            Some(Token::SlashAssign) => Some(BinaryOp::Div),
+            _ => return Err(ParseError::Custom("Expected assignment operator".into())),
+        };
+        self.advance();
+        let mut value = self.parse_expr()?;
+        if let Some(op) = operator {
+            value = Expr::BinaryOp {
+                op,
+                left: Box::new(Expr::Identifier(name.clone(), span)),
+                right: Box::new(value),
+            };
+        }
         if self.peek_token() == Some(Token::Semicolon) {
             self.advance();
         }
         Ok(Some(Stmt::Assign { name, value, span }))
+    }
+
+    fn parse_while(&mut self) -> Result<Option<Stmt>, ParseError> {
+        self.consume(Token::While)?;
+        let condition = self.parse_expr()?;
+        self.consume(Token::LBrace)?;
+        let body = self.parse_block()?;
+        self.consume(Token::RBrace)?;
+        Ok(Some(Stmt::While { condition, body }))
+    }
+
+    fn parse_loop_control(&mut self) -> Result<Option<Stmt>, ParseError> {
+        let token = self
+            .current
+            .as_ref()
+            .ok_or_else(|| ParseError::Custom("Expected loop control".into()))?;
+        let stmt = if token.token == Token::Break {
+            Stmt::Break(token.span)
+        } else {
+            Stmt::Continue(token.span)
+        };
+        self.advance();
+        if self.peek_token() == Some(Token::Semicolon) {
+            self.advance();
+        }
+        Ok(Some(stmt))
     }
 
     fn parse_if(&mut self) -> Result<Option<Stmt>, ParseError> {
@@ -260,10 +336,14 @@ impl<'a> Parser<'a> {
 
         let else_block = if self.peek_token() == Some(Token::Else) {
             self.advance();
-            self.consume(Token::LBrace)?;
-            let block = self.parse_block()?;
-            self.consume(Token::RBrace)?;
-            Some(block)
+            if self.peek_token() == Some(Token::If) {
+                Some(self.parse_stmt()?.into_iter().collect())
+            } else {
+                self.consume(Token::LBrace)?;
+                let block = self.parse_block()?;
+                self.consume(Token::RBrace)?;
+                Some(block)
+            }
         } else {
             None
         };
@@ -301,9 +381,45 @@ impl<'a> Parser<'a> {
                 "Expression nesting too deep".to_string(),
             ));
         }
-        let result = self.parse_comparison();
+        let result = self.parse_or();
         self.depth -= 1;
         result
+    }
+
+    fn parse_or(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.parse_and()?;
+        let mut terms = 0;
+        while self.peek_token() == Some(Token::Or) {
+            terms += 1;
+            if terms + self.depth > 128 {
+                return Err(ParseError::Custom("Boolean expression is too long".into()));
+            }
+            self.advance();
+            expr = Expr::Logical {
+                and: false,
+                left: Box::new(expr),
+                right: Box::new(self.parse_and()?),
+            };
+        }
+        Ok(expr)
+    }
+
+    fn parse_and(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.parse_comparison()?;
+        let mut terms = 0;
+        while self.peek_token() == Some(Token::And) {
+            terms += 1;
+            if terms + self.depth > 128 {
+                return Err(ParseError::Custom("Boolean expression is too long".into()));
+            }
+            self.advance();
+            expr = Expr::Logical {
+                and: true,
+                left: Box::new(expr),
+                right: Box::new(self.parse_comparison()?),
+            };
+        }
+        Ok(expr)
     }
 
     fn parse_comparison(&mut self) -> Result<Expr, ParseError> {
@@ -337,30 +453,42 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_factor(&mut self) -> Result<Expr, ParseError> {
-        // Unary minus: `-3` is `0 - 3`.
-        if self.peek_token() == Some(Token::Minus) {
-            self.advance();
-            let operand = self.parse_factor()?;
-            return Ok(Expr::BinaryOp {
-                op: BinaryOp::Sub,
-                left: Box::new(Expr::Number(0, crate::diagnostic::Span::new(0, 0))),
-                right: Box::new(operand),
-            });
-        }
-        let mut expr = self.parse_primary()?;
-
+        let mut expr = self.parse_unary()?;
         while let Some(op) = self.match_multiplicative_op() {
-            // Use parse_factor (not parse_primary) so unary minus works as an
-            // operand: `2 * -1`, `6 / -2`, `3.0 * -x`.
-            let right = self.parse_factor()?;
+            let right = self.parse_unary()?;
             expr = Expr::BinaryOp {
                 op,
                 left: Box::new(expr),
                 right: Box::new(right),
             };
         }
-
         Ok(expr)
+    }
+
+    fn parse_unary(&mut self) -> Result<Expr, ParseError> {
+        if !matches!(self.peek_token(), Some(Token::Minus | Token::Not)) {
+            return self.parse_primary();
+        }
+        if self.depth >= 256 {
+            return Err(ParseError::Custom("Unary nesting too deep".into()));
+        }
+        let token = self.current.as_ref().expect("Unary token");
+        let span = token.span;
+        let not = token.token == Token::Not;
+        self.advance();
+        self.depth += 1;
+        let operand = self.parse_unary();
+        self.depth -= 1;
+        let operand = operand?;
+        Ok(if not {
+            Expr::Not(Box::new(operand), span)
+        } else {
+            Expr::BinaryOp {
+                op: BinaryOp::Sub,
+                left: Box::new(Expr::Number(0, span)),
+                right: Box::new(operand),
+            }
+        })
     }
 
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
@@ -512,9 +640,16 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn read_token(lexer: &mut Lexer<'_>) -> TokenWithSpan {
+        lexer.next_token().unwrap_or_else(|message| TokenWithSpan {
+            token: Token::Invalid(message),
+            span: Span::new(lexer.token_start, lexer.pos),
+        })
+    }
+
     fn advance(&mut self) {
         self.current = self.lookahead.take();
-        self.lookahead = self.lexer.next_token().ok();
+        self.lookahead = Some(Self::read_token(&mut self.lexer));
     }
 
     fn peek_token(&self) -> Option<Token> {

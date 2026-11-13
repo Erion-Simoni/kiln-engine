@@ -30,6 +30,7 @@ pub mod project_files;
 pub mod project_hub;
 pub mod project_lifecycle;
 pub mod property_edit;
+mod quick_actions;
 pub mod recovery;
 pub mod scene_document;
 pub mod scene_view;

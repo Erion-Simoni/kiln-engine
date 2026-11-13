@@ -20,7 +20,7 @@ Scene copied the level and camera; the second hero's exposed stage property and
 gate X were edited in the inspector. S/L/R bindings were entered through Input
 Rebinding. Stop restores authoring state. The general source editor and scene
 controls remain usable for other games; no game-specific engine entry point was
-introduced (ADR-0073).
+introduced (ADR-0076).
 
 `tests/native/task9_editor_games.py --author` reproduces these operations into
 fresh directories and compares **all serialized project values** to the tracked
@@ -105,6 +105,36 @@ Editor changes `0b5b03b` and game/test source
 `135c7f17d5fb7043268278719e66bbac1cabf4dc` are pushed to the requested new
 branch; the exact remote source SHA was verified. New
 [run 43317157963](https://github.com/Erion-Simoni/kiln-engine/actions/runs/43317157963)
-is in progress at `hosted-checkpoint.json`'s observation. Complete hosted success
-is pending; local acceptance is recorded independently. Later documentation-only
+was in progress at `hosted-checkpoint.json`'s observation. Its final observation
+is recorded in `pre-merge-hosted-failure.json`: strict gates and tool packaging
+passed, authoring failed, and gameplay was skipped. Authenticated failure logs
+were unavailable here; this result is not accepted. Later documentation-only
 commits do not retrigger this source-pinned workflow.
+
+
+## Master integration — 2026-11-13
+
+PR #21 integrates master `9da55513f18d30466440adadd32d0fd999625b8f`
+into the reference-games branch (starting HEAD `4628429`). Both branches added a
+Script Editor independently. The integrated editor has one buffer in EditorShell
+shared by inspector/asset opening, dock tabs, project save, Play and export.
+It retains master's movement starter, import validation, Quick Actions and
+language changes, plus generic Open/New, guarded atomic saves and ordinary
+Save/Discard/Cancel protection. Discard explicitly clears the source draft before
+loading a replacement project. Existing layout/polish remains (ADR-0077).
+
+The UI replay exposed duplicate Animation Editor instances and egui widget-ID
+collisions. Menu routes now focus an existing panel before creating a floating
+one; a regression verifies default and floating panels cannot be duplicated.
+The replay closes default source/animation tabs before opening floating editors,
+observes the actual title-bar pixels and drags staggered windows to a consistent
+origin. Updated widget coordinates follow the merged theme and inspector.
+It still authors manifests exclusively through ordinary editor controls and
+compares every saved value and script byte; no engine hooks or generated game
+manifests replace authoring. An initial standalone sequence hit XOpenDisplayFailed;
+the harness now runs Xvfb with -noreset and cleans failed starts. Incomplete
+startup attempts are separate from the final complete gameplay results.
+
+Integration acceptance and source identities are recorded separately in
+`merge-validation.json`; the earlier 680-test checkpoint remains historical.
+Hosted acceptance for the new merged revision must be observed independently.

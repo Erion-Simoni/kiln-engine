@@ -809,3 +809,19 @@ Acceptance: all three games can be authored, debugged, reopened, and shipped wit
 - Pushed editor commit 0b5b03b and games/test commit 135c7f1 to the new branch,
   verifying the exact remote source SHA. New hosted reference-game run 43317157963
   is in progress; no complete new hosted acceptance is claimed.
+
+
+### 2026-11-13 — Resolve Task 9/master integration conflicts
+
+- Integrate master 9da5551 into the reference-games PR, retaining Quick Actions,
+  workspace polish, movement authoring and language updates. Use one shared source
+  buffer with import-aware guarded saves and project Save/Discard/Cancel (ADR-0077).
+- Prevent duplicate dock panels discovered during real GUI replay. Update the
+  authoring driver for the retained layout; keep all serialized/source comparisons.
+- Local integration acceptance passes: just check, 700 Rust tests (zero skipped),
+  29 Python tests, native/WASM builds, verified tool packaging, all three actual
+  editor authoring replays/six exports, and native/browser gameplay/restoration.
+  See [merge evidence](evidence/task9-games/merge-validation.json).
+- Earlier hosted run 43317157963 failed authoring after passing strict gates/tool
+  packaging; gameplay was skipped. New merged-source CI remains separate/pending.
+  Independent human, hardware, stress/platform and release gates remain open.

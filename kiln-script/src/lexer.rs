@@ -20,6 +20,9 @@ pub enum Token {
     Call,
     Let,
     Fn,
+    While,
+    Break,
+    Continue,
 
     // Operators
     Plus,
@@ -34,6 +37,15 @@ pub enum Token {
     Ge,
     /// `=` — assignment to an existing variable.
     Assign,
+    PlusAssign,
+    MinusAssign,
+    StarAssign,
+    SlashAssign,
+    And,
+    Or,
+    Not,
+    /// Invalid token retained by the parser for lexical diagnostics.
+    Invalid(String),
 
     // Punctuation
     LParen,
@@ -55,7 +67,8 @@ pub struct TokenWithSpan {
 
 pub struct Lexer<'a> {
     input: Peekable<Chars<'a>>,
-    pos: usize,
+    pub(crate) pos: usize,
+    pub(crate) token_start: usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -63,6 +76,7 @@ impl<'a> Lexer<'a> {
         Self {
             input: input.chars().peekable(),
             pos: 0,
+            token_start: 0,
         }
     }
 
@@ -70,6 +84,7 @@ impl<'a> Lexer<'a> {
         self.skip_whitespace();
 
         let start = self.pos;
+        self.token_start = start;
 
         match self.peek_char() {
             None => Ok(TokenWithSpan::new(Token::Eof, Span::new(start, start))),
@@ -105,7 +120,7 @@ impl<'a> Lexer<'a> {
             // Line comments run to the end of the line.
             if self.input.peek() == Some(&'/') && self.input.clone().nth(1) == Some('/') {
                 for c in self.input.by_ref() {
-                    self.pos += 1;
+                    self.pos += c.len_utf8();
                     if c == '\n' {
                         break;
                     }
@@ -123,8 +138,8 @@ impl<'a> Lexer<'a> {
 
     fn next_char(&mut self) -> Option<char> {
         let c = self.input.next();
-        if c.is_some() {
-            self.pos += 1;
+        if let Some(c) = c {
+            self.pos += c.len_utf8();
         }
         c
     }
@@ -199,6 +214,9 @@ impl<'a> Lexer<'a> {
             "call" => Token::Call,
             "let" => Token::Let,
             "fn" => Token::Fn,
+            "while" => Token::While,
+            "break" => Token::Break,
+            "continue" => Token::Continue,
             _ => Token::Identifier(ident),
         };
 
@@ -244,10 +262,38 @@ impl<'a> Lexer<'a> {
         let c = self.next_char()?;
 
         Some(match c {
-            '+' => Token::Plus,
-            '-' => Token::Minus,
-            '*' => Token::Star,
-            '/' => Token::Slash,
+            '+' => {
+                if self.peek_char() == Some('=') {
+                    self.next_char();
+                    Token::PlusAssign
+                } else {
+                    Token::Plus
+                }
+            }
+            '-' => {
+                if self.peek_char() == Some('=') {
+                    self.next_char();
+                    Token::MinusAssign
+                } else {
+                    Token::Minus
+                }
+            }
+            '*' => {
+                if self.peek_char() == Some('=') {
+                    self.next_char();
+                    Token::StarAssign
+                } else {
+                    Token::Star
+                }
+            }
+            '/' => {
+                if self.peek_char() == Some('=') {
+                    self.next_char();
+                    Token::SlashAssign
+                } else {
+                    Token::Slash
+                }
+            }
             '=' => {
                 if self.peek_char() == Some('=') {
                     self.next_char();
@@ -256,12 +302,20 @@ impl<'a> Lexer<'a> {
                     Token::Assign
                 }
             }
+            '&' if self.peek_char() == Some('&') => {
+                self.next_char();
+                Token::And
+            }
+            '|' if self.peek_char() == Some('|') => {
+                self.next_char();
+                Token::Or
+            }
             '!' => {
                 if self.peek_char() == Some('=') {
                     self.next_char();
                     Token::Ne
                 } else {
-                    return None;
+                    Token::Not
                 }
             }
             '<' => {

@@ -44,9 +44,10 @@ class Player(Editor):
 
 
 def play(name,root,evidence):
-    player=Player(root,root,evidence,':81').start()
+    player=Player(root,root,evidence,':81')
     result={'game':name,'standalone_without_archive_argument':True,'source_project_unavailable':True,'tools_absent_from_path':True}
     try:
+        player.start()
         player.shot('title')
         if name=='skybridge':
             player.key('Return');time.sleep(.5)

@@ -7,6 +7,7 @@ Requires Linux/Xvfb/xdotool/ImageMagick and built editor tools. Outputs stay out
 """
 import argparse
 import hashlib
+import itertools
 import json
 import os
 from pathlib import Path
@@ -46,7 +47,7 @@ class Editor:
         self.xdo = executable('xdotool')
         if Path('/tmp/.X11-unix', 'X'+display[1:]).exists():
             raise RuntimeError('Choose an unused display: '+display)
-        self.server = subprocess.Popen([executable('Xvfb'), display, '-screen', '0', '1440x900x24', '-nolisten', 'tcp', '-ac'], env=self.env,
+        self.server = subprocess.Popen([executable('Xvfb'), display, '-screen', '0', '1440x900x24', '-nolisten', 'tcp', '-ac', '-noreset'], env=self.env,
                                        stdout=(self.output/'xvfb.log').open('w'), stderr=subprocess.STDOUT)
         self.process = None
         self.window = None
@@ -78,6 +79,9 @@ class Editor:
         self.window = self.wait(find)
         self.command('windowfocus', '--sync', self.window)
         time.sleep(.7)
+        # Close the default source/animation tabs before reopening them as
+        # floating panels. Menus deliberately reuse an already-open panel.
+        self.click(633,78); self.click(520,78)
         return self
 
     def command(self, *args):
@@ -110,6 +114,31 @@ class Editor:
 
     def panel(self, menu, row):
         self.click(menu, 12); self.click(menu+25, row)
+        if menu == 18:
+            return
+        # egui may stagger newly reopened floating windows. Read their visible
+        # title bar and drag to a consistent origin before using widget points.
+        # This is screen observation and an ordinary title-bar drag, not an
+        # application state hook or an assumed hidden window position.
+        capture = subprocess.check_output([executable('import'), '-display', self.env['DISPLAY'],
+                                          '-window', self.window, '-depth', '8', 'ppm:-'], env=self.env)
+        header, pixels = capture.split(b'\n255\n', 1)
+        width, height = map(int, header.splitlines()[-1].split())
+        assert (width, height) == (1440, 900)
+        row_pixels = [pixels[(102*width+x)*3:(102*width+x)*3+3] == bytes((35,38,44)) for x in range(width)]
+        runs, start = [], 0
+        for match, group in itertools.groupby(row_pixels):
+            length = len(list(group))
+            if match and length > 200:
+                runs.append((length, start))
+            start += length
+        if not runs:
+            raise RuntimeError('Floating panel title bar not visible')
+        _, start = max(runs)
+        if start != 33:
+            self.command('mousemove', '--window', self.window, start+30, 102, 'mousedown', '1')
+            self.command('mousemove', '--window', self.window, 63, 102)
+            self.command('mouseup', '1')
 
     def enlarge(self):
         if self.large:
@@ -132,8 +161,8 @@ class Editor:
             clip.terminate(); clip.wait(timeout=5)
 
     def source(self, relative, source):
-        self.text(225,161,relative); self.click(392,161); self.paste(source)
-        self.click(65,187); self.click(208,187)
+        self.text(225,166,relative); self.click(392,166); self.paste(source)
+        self.click(65,194); self.click(208,194)
         self.wait(lambda: (self.project/relative).exists() and (self.project/relative).read_bytes()==Path(source).read_bytes())
 
     def save(self):
@@ -141,8 +170,8 @@ class Editor:
 
     def close(self):
         try:
-            if self.process and self.process.poll() is None:
-                self.panel(18,245)
+            if self.process and self.process.poll() is None and self.window is not None:
+                self.panel(18,262)
                 self.process.wait(timeout=10)
                 if self.process.returncode != 0:
                     raise RuntimeError('Editor normal close failed')
@@ -158,51 +187,54 @@ def author(tools, name, destination, evidence):
     original = (base/'kiln.toml').read_bytes()
     canonical = REPO/'games'/name
     expected = tomllib.loads((canonical/'kiln.toml').read_text())
-    editor = Editor(tools, base, evidence).start()
+    editor = Editor(tools, base, evidence)
     try:
-        editor.panel(18,120)
-        editor.text(160,153,str(destination/'kiln.toml')); editor.click(102,178)
+        editor.start()
+        editor.panel(18,130)
+        editor.text(160,158,str(destination/'kiln.toml')); editor.click(106,184)
         editor.wait(lambda:(destination/'kiln.toml').exists())
         editor.project = destination
         editor.panel(118,42)
-        editor.text(191,213,expected['name']); editor.text(177,238,expected['id']); editor.click(94,128); editor.save()
+        editor.text(191,221,expected['name']); editor.text(177,249,expected['id']); editor.click(101,132); editor.save()
         editor.panel(118,68); editor.enlarge()
         for path in ('scripts/main.ks', 'scripts/hero.ks' if name=='skybridge' else 'scripts/ui.ks'):
             editor.source(path,canonical/path)
-        editor.shot('source_saved'); editor.click(114,128)
+        editor.shot('source_saved'); editor.click(125,132)
         if name=='skybridge':
             (destination/'art').mkdir(exist_ok=True)
             shutil.copyfile(canonical/'art/hero.png',destination/'art/hero.png')
-            editor.panel(80,173); editor.click(166,206)
-            editor.text(180,233,'run'); editor.text(225,259,'art/hero.png'); editor.click(56,284)
+            editor.panel(80,214); editor.click(173,216)
+            editor.text(180,244,'run'); editor.text(225,272,'art/hero.png'); editor.click(59,300)
             time.sleep(.4)  # Wait for the New Clip form to collapse before targeting frame controls.
             for attempt in range(3):
-                editor.click(68,301); editor.save()
+                editor.click(72,317); editor.save()
                 count=len(tomllib.loads((destination/'kiln.toml').read_text())['animation_clips']['run']['frames'])
                 if count==2:break
                 if count!=1:raise RuntimeError('Unexpected animation frame count: '+str(count))
                 time.sleep(.4)
             if count!=2:raise RuntimeError('Add Frame never produced the second saved frame')
-            editor.value(52,354,16)
-            editor.shot('animation_authored'); editor.click(140,128)
-            editor.panel(80,615)
-            editor.text(240,215,'Lower Gantry'); editor.text(240,240,'scripts/main.ks'); editor.click(114,128)
-            editor.click(100,187); editor.click(1200,505)
-            editor.text(1280,466,'art/hero.png'); editor.text(1280,600,'run'); editor.click(1177,648)
-            editor.save(); editor.click(385,140)
-            editor.panel(80,615); editor.text(240,215,'Upper Gantry'); editor.click(114,128)
-            editor.click(100,187)
+            editor.value(52,373,16)
+            editor.shot('animation_authored'); editor.click(154,132)
+            editor.panel(80,690)
+            editor.text(240,224,'Lower Gantry'); editor.text(240,252,'scripts/main.ks'); editor.click(125,132)
+            editor.click(100,196); editor.click(1200,528)
+            editor.text(1280,487,'art/hero.png'); editor.text(1280,627,'run')
+            editor.command('mousemove','--window',editor.window,1320,610,'click','--repeat','2','--delay','70','5')
+            editor.click(1180,521)
+            editor.save(); editor.click(395,146)
+            editor.panel(80,690); editor.text(240,224,'Upper Gantry'); editor.click(125,132)
+            editor.click(100,196)
             editor.command('mousemove','--window',editor.window,1320,610,'click','--repeat','9','--delay','70','5')
-            editor.text(1270,438,'stage'); editor.click(1199,464); editor.value(1208,439,2)
-            editor.click(100,265)
+            editor.text(1270,426,'stage'); editor.click(1199,455); editor.value(1230,426,2)
+            editor.click(100,284)
             editor.command('mousemove','--window',editor.window,1320,400,'click','--repeat','12','--delay','50','4')
-            editor.value(1262,195,1100); editor.save()
-            editor.panel(80,485)
+            editor.value(1269,202,1100); editor.save()
+            editor.panel(80,550)
             # Input Rebinding sorts actions by stable ID.
-            editor.click(80,206); editor.click(148,225); editor.press('s')
-            editor.click(80,295); editor.click(148,313); editor.press('l')
-            editor.click(80,383); editor.click(148,401); editor.press('r')
-            editor.click(136,128); editor.click(459,140)
+            editor.click(80,214); editor.click(160,233); editor.press('s')
+            editor.click(80,308); editor.click(160,327); editor.press('l')
+            editor.click(80,402); editor.click(160,421); editor.press('r')
+            editor.click(149,132); editor.click(480,146)
         editor.save()
         actual=tomllib.loads((destination/'kiln.toml').read_text())
         if actual!=expected:
@@ -211,21 +243,25 @@ def author(tools, name, destination, evidence):
             raise RuntimeError(name+' UI authoring did not reproduce the checked-in project')
         assert (base/'kiln.toml').read_bytes()==original, 'Source template changed'
         editor.shot('saved_project')
+    except Exception:
+        editor.shot("failure")
+        raise
     finally:
         editor.close()
     return {'game':name,'project':str(destination),'manifest_created_by':'native editor Save As and real authoring widgets','source_pasted_and_byte_verified':True,'project_matches_checked_in_game':True,'template_unchanged':True}
 
 
 def export(tools, name, project, evidence):
-    editor=Editor(tools,project,evidence,':82').start()
+    editor=Editor(tools,project,evidence,':82')
     outputs={}
     try:
-        editor.panel(80,199); editor.enlarge()
+        editor.start()
+        editor.panel(80,242); editor.enlarge()
         for web in (False,True):
             output=evidence/('browser game' if web else 'native game')
-            if web: editor.click(155,199)
+            if web: editor.click(155,206)
             successes=(evidence/'editor.log').read_text().count('Export result: Success')
-            editor.text(250,257,str(output)); editor.key('Return'); editor.click(75,326)
+            editor.text(250,273,str(output)); editor.key('Return'); editor.click(75,346)
             editor.wait(lambda:(output/'export.json').exists(),60)
             editor.wait(lambda:(evidence/'editor.log').read_text().count('Export result: Success')>successes,60)
             verify_export_notices(tools,output,web)
@@ -234,10 +270,13 @@ def export(tools, name, project, evidence):
             # This attempt must fail without changing the successful artifact.
             before=(output/'export.json').read_bytes()
             old=(evidence/'editor.log').read_text().count('Export result: Failed')
-            editor.click(75,326)
+            editor.click(75,346)
             editor.wait(lambda:(evidence/'editor.log').read_text().count('Export result: Failed')>old)
             assert (output/'export.json').read_bytes()==before
-        editor.click(122,128)  # Close the Build / Export tab.
+        editor.click(132,132)  # Close the Build / Export tab.
+    except Exception:
+        editor.shot("failure")
+        raise
     finally:
         editor.close()
     return {'game':name,'opened_saved_project':str(project),'outputs':outputs,'native_browser_notices_verified':True,'overwrite_preserved':True,'tools_absent_from_child_path':True}

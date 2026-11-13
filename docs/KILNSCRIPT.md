@@ -24,7 +24,7 @@ script = "scripts/main.ks"
 
 ### Keywords
 
-`if`, `else`, `return`, `let`, `call`
+`if`, `else`, `return`, `let`, `call`, `fn`, `while`, `break`, `continue`
 
 ### Operators
 
@@ -41,6 +41,10 @@ script = "scripts/main.ks"
 | `>` | Greater than |
 | `>=` | Greater than or equal |
 | `=` | Assign to existing variable |
+| `+=`, `-=`, `*=`, `/=` | Update an existing variable |
+| `!` | Boolean negation |
+| `&&` | Short-circuit boolean AND |
+| `\|\|` | Short-circuit boolean OR |
 
 Numeric operations promote `I64` to `F64` when mixed with floats (e.g. `1 + 2.5` yields `3.5`). Integer division by zero is a runtime error; float division follows IEEE-754.
 
@@ -50,7 +54,50 @@ Numeric operations promote `I64` to `F64` when mixed with floats (e.g. `1 + 2.5`
 - `name = expr;` — assign to an existing variable
 - `expr;` — expression statement (e.g. a function call)
 - `return expr;` — return from the program
-- `if cond { ... } else { ... }` — conditional; blocks get their own scope
+- `if cond { ... } else if cond { ... } else { ... }` — conditional; blocks get their own scope
+- `while cond { ... }` — repeat while a boolean condition is true
+- `break;` — exit the innermost loop in this function
+- `continue;` — jump to the innermost loop condition
+
+### Gameplay control flow
+
+`while` tests its condition before each iteration; its body may run zero times.
+Block-local declarations are initialized on each iteration and are not visible
+outside the loop. Assignments can update existing outer locals. `break` and
+`continue` apply to the innermost loop in the same function; an invoked helper
+cannot control its caller's loop. A function's `return` exits that function even
+inside nested loops.
+
+```kilnscript
+let i = 0;
+while i < 5 {
+    i += 1;
+    if i == 2 { continue; }
+    else if i == 5 { break; }
+    print(i); // prints 1, 3, 4
+}
+```
+
+The operators `!`, `&&` and `||` require booleans for evaluated operands and
+return booleans. `&&` skips its right side when the left is false; `||` skips it
+when the left is true. Thus a skipped host call has no side effects.
+For example, `false && probe()` does not call a registered `probe` host function.
+
+Precedence, from highest to lowest: parentheses/calls, unary `!` and `-`,
+`*` and `/`, `+` and `-`, comparisons, `&&`, `||`. Operators at the same
+binary precedence associate left to right. Compound assignments are statements,
+not expressions, and require an existing local.
+
+The existing VM instruction budget also applies to loops: runaway execution
+returns an instruction-budget error. Keep per-frame work bounded; do not use
+a loop to wait for time or input. Parser limits reject excessive statement/unary
+nesting and boolean chains.
+
+Compatibility: `while`, `break` and `continue` are newly reserved words.
+Rename old variables/functions using those names. Chained division now groups
+left to right: `8 / 4 / 2` is `1`; the previous parser incorrectly produced
+`4`. Use explicit parentheses when a right grouping is intended. Unary minus
+now binds before multiplication/division.
 
 ### Functions (Builtins)
 
@@ -272,7 +319,7 @@ Compile errors produce diagnostics with source spans (undefined variable, undefi
 
 ## Entity scripts and modules
 
-In the Inspector, use **Attach Script** to select a project `.ks` file. Add
+In the Inspector, choose **Create Movement Script** to create and attach an arrow/WASD starter, or **Attach Script** to select a project `.ks` file. **Open Script** opens the native Script Editor; Validate and Save Script apply source changes for the next Play. Double-click `.ks` assets to edit other scripts. Add
 numeric property names and values there, then read them with
 `get_property("speed")`. Attachments, property defaults, duplication, undo, and
 save/reopen use the authored scene document. Each entity gets its own runtime

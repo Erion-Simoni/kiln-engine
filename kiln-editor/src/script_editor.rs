@@ -1,10 +1,22 @@
 //! Project-relative gameplay source editing, with guarded atomic saves.
 use std::{
     io::Write,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 const SOURCE_LIMIT: usize = 1_048_576;
+
+pub(crate) const MOVEMENT: &str = r#"// Character movement: arrows or WASD. Set speed in the Inspector.
+// This moves a Transform directly; it is not a collision-based controller.
+if script_phase() == "update" {
+    let position = get_entity_pos(self_entity());
+    let speed = get_property("speed");
+    let dt = get_delta_time();
+    set_entity_pos(self_entity(),
+        array_get(position, 0) + get_input_x() * speed * dt,
+        array_get(position, 1) + get_input_y() * speed * dt);
+}
+"#;
 
 #[derive(Default)]
 pub struct ScriptEditor {
@@ -16,7 +28,65 @@ pub struct ScriptEditor {
     message: String,
 }
 
+fn resource(root: &Path, relative: &str) -> Result<PathBuf, String> {
+    let path = Path::new(relative);
+    if relative.contains(['\\', ':'])
+        || relative.chars().any(char::is_control)
+        || !relative
+            .split('/')
+            .all(|part| !part.is_empty() && part != "." && part != "..")
+        || path.extension().and_then(|ext| ext.to_str()) != Some("ks")
+        || path
+            .components()
+            .any(|part| !matches!(part, Component::Normal(_)))
+    {
+        return Err("Choose a project-relative .ks file".into());
+    }
+    let root = root.canonicalize().map_err(|e| e.to_string())?;
+    let mut target = root.clone();
+    for part in path.components() {
+        target.push(part);
+        if target.exists() {
+            let resolved = target.canonicalize().map_err(|e| e.to_string())?;
+            if !resolved.starts_with(&root) {
+                return Err("Script path leaves the project".into());
+            }
+            if std::fs::symlink_metadata(&target)
+                .map_err(|e| e.to_string())?
+                .file_type()
+                .is_symlink()
+            {
+                return Err("Script paths cannot contain symbolic links".into());
+            }
+        }
+    }
+    Ok(target)
+}
+
+fn read(root: &Path, path: &str) -> Result<String, String> {
+    let target = resource(root, path)?;
+    if std::fs::metadata(&target).map_err(|e| e.to_string())?.len() > SOURCE_LIMIT as u64 {
+        return Err("Script exceeds 1 MiB".into());
+    }
+    let source = std::fs::read_to_string(target).map_err(|e| e.to_string())?;
+    if source.len() > SOURCE_LIMIT {
+        return Err("Script exceeds 1 MiB".into());
+    }
+    Ok(source)
+}
+
 impl ScriptEditor {
+    pub(crate) fn dirty(&self) -> bool {
+        self.is_dirty()
+    }
+    pub(crate) fn require_saved(&self) -> Result<(), String> {
+        if self.is_dirty() {
+            Err("Save or Revert the script before switching files or creating movement code".into())
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn is_dirty(&self) -> bool {
         !self.loaded.is_empty() && self.saved.as_deref().unwrap_or("") != self.source
     }
@@ -55,6 +125,10 @@ impl ScriptEditor {
 
     pub fn open(&mut self, root: &Path, path: &str) -> Result<(), String> {
         if self.is_dirty() {
+            if self.loaded == path && self.root.as_deref() == root.canonicalize().ok().as_deref() {
+                self.path = self.loaded.clone();
+                return Ok(());
+            }
             return Err("Save or Revert the current script before opening another".into());
         }
         let root = root.canonicalize().map_err(|e| e.to_string())?;
@@ -82,6 +156,60 @@ impl ScriptEditor {
         Ok(())
     }
 
+    pub(crate) fn create_movement(root: &Path) -> Result<String, String> {
+        let target = resource(root, "scripts/character_movement.ks")?;
+        std::fs::create_dir_all(target.parent().ok_or("Missing script directory")?)
+            .map_err(|e| e.to_string())?;
+        for index in 0..1000 {
+            let path = if index == 0 {
+                "scripts/character_movement.ks".into()
+            } else {
+                format!("scripts/character_movement_{index}.ks")
+            };
+            let target = resource(root, &path)?;
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(target)
+            {
+                Ok(mut file) => {
+                    file.write_all(MOVEMENT.as_bytes())
+                        .map_err(|e| e.to_string())?;
+                    return Ok(path);
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(error.to_string()),
+            }
+        }
+        Err("Too many movement scripts; attach an existing file instead".into())
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        let root = self.root.as_ref().ok_or("Open a script first")?;
+        if self.source.len() > SOURCE_LIMIT {
+            return Err("Script exceeds 1 MiB".into());
+        }
+        let mut project = kiln_core::Project::default();
+        project.scenes.insert(
+            "validate".into(),
+            kiln_core::Scene {
+                id: "validate".into(),
+                name: "Validate".into(),
+                script: Some(self.loaded.clone()),
+                entities: vec![],
+                nested_scenes: vec![],
+            },
+        );
+        kiln_runtime::SliceSession::with_scene_sources(&project, "validate", |path| {
+            if path == self.loaded {
+                Ok(self.source.clone())
+            } else {
+                read(root, path)
+            }
+        })
+        .map(|_| ())
+    }
+
     pub fn save(&mut self) -> Result<(), String> {
         if self.loaded.is_empty() {
             return Ok(());
@@ -89,6 +217,7 @@ impl ScriptEditor {
         if self.source.len() > SOURCE_LIMIT {
             return Err("Script exceeds 1 MiB".into());
         }
+        self.validate()?;
         let target = self.destination(&self.loaded)?;
         let disk = match std::fs::read_to_string(&target) {
             Ok(source) => Some(source),
@@ -96,7 +225,7 @@ impl ScriptEditor {
             Err(error) => return Err(error.to_string()),
         };
         if disk != self.saved {
-            return Err("Script changed outside the editor. Copy your draft, Revert, then merge the changes.".into());
+            return Err("Script changed on disk outside the editor. Copy your draft, Revert, then merge the changes.".into());
         }
         let mut file =
             tempfile::NamedTempFile::new_in(target.parent().ok_or("Script parent missing")?)
@@ -152,26 +281,9 @@ impl ScriptEditor {
                 }
             }
             if ui.button("Check Syntax").clicked() {
-                self.message = match kiln_runtime::SliceSession::new(&self.source) {
-                    Ok(_) => "Syntax OK (Play/Export also validate imports and resources)".into(),
-                    Err(errors) => errors
-                        .iter()
-                        .map(|e| {
-                            format!(
-                                "{}:{}: {}",
-                                self.loaded,
-                                self.source
-                                    .get(..e.span.start.min(self.source.len()))
-                                    .unwrap_or("")
-                                    .bytes()
-                                    .filter(|b| *b == b'\n')
-                                    .count()
-                                    + 1,
-                                e.message
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n"),
+                self.message = match self.validate() {
+                    Ok(()) => "Syntax OK (including imports; Play checks runtime behavior)".into(),
+                    Err(error) => error,
                 };
             }
             if self.is_dirty() {
@@ -185,6 +297,7 @@ impl ScriptEditor {
                 ui.add(
                     egui::TextEdit::multiline(&mut self.source)
                         .code_editor()
+                        .char_limit(SOURCE_LIMIT)
                         .desired_width(f32::INFINITY)
                         .desired_rows(28),
                 );
@@ -206,6 +319,9 @@ mod tests {
         editor.save().unwrap();
         assert!(!editor.is_dirty());
         editor.source = "let x = 2;".into();
+        editor.open(root.path(), "scripts/main.ks").unwrap();
+        assert_eq!(editor.source, "let x = 2;");
+        assert!(editor.is_dirty());
         assert!(editor.open(root.path(), "scripts/other.ks").is_err());
         std::fs::write(root.path().join("scripts/main.ks"), "external").unwrap();
         assert!(editor.save().is_err());
@@ -241,5 +357,97 @@ mod tests {
             std::os::unix::fs::symlink(root.path(), root.path().join("linked")).unwrap();
             assert!(editor.open(root.path(), "linked/main.ks").is_err());
         }
+    }
+}
+
+#[cfg(test)]
+mod upstream_tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn movement_creation_never_overwrites_existing_files_and_moves_attached_entity() {
+        let root = tempfile::tempdir().unwrap();
+        let path = ScriptEditor::create_movement(root.path()).unwrap();
+        let second = ScriptEditor::create_movement(root.path()).unwrap();
+        assert_ne!(path, second);
+        assert_eq!(read(root.path(), &path).unwrap(), MOVEMENT);
+        let mut project = kiln_core::Project::default();
+        project.scenes.insert(
+            "main".into(),
+            kiln_core::Scene {
+                id: "main".into(),
+                name: "Main".into(),
+                script: None,
+                nested_scenes: vec![],
+                entities: vec![kiln_core::Entity {
+                    id: "hero".into(),
+                    name: "Hero".into(),
+                    components: vec![kiln_core::Component::Script {
+                        path: path.clone(),
+                        properties: HashMap::from([("speed".into(), 180.0)]),
+                    }],
+                }],
+            },
+        );
+        let mut world = kiln_runtime::GameWorld::new();
+        let hero = world.world_mut().spawn((
+            kiln_runtime::SourceId::new("hero"),
+            kiln_core::Transform::new(10.0, 20.0),
+        ));
+        let mut session =
+            kiln_runtime::SliceSession::with_scene_sources(&project, "main", |path| {
+                read(root.path(), path)
+            })
+            .unwrap();
+        session.step(&mut world, (1.0, 0.0), 0.1).unwrap();
+        let position = world
+            .world_ref()
+            .get::<&kiln_core::Transform>(hero)
+            .unwrap();
+        assert!((position.position.x - 28.0).abs() < 0.001);
+        assert!((position.position.y - 20.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn script_saves_validate_and_preserve_external_changes_and_dirty_buffers() {
+        let root = tempfile::tempdir().unwrap();
+        let path = ScriptEditor::create_movement(root.path()).unwrap();
+        let mut editor = ScriptEditor::default();
+        editor.open(root.path(), &path).unwrap();
+        editor.source.push_str("\n// edited\n");
+        assert!(editor.require_saved().is_err());
+        assert!(editor.open(root.path(), "other.ks").is_err());
+        editor.save().unwrap();
+        assert!(!editor.dirty());
+        assert_eq!(read(root.path(), &path).unwrap(), editor.source);
+        editor.source.push_str("\n// second edit\n");
+        std::fs::write(root.path().join(&path), "// external edit").unwrap();
+        assert!(editor.save().unwrap_err().contains("changed on disk"));
+        assert!(editor.dirty());
+        assert_eq!(read(root.path(), &path).unwrap(), "// external edit");
+    }
+
+    #[test]
+    fn validation_reports_locations_and_resolves_imports_from_project() {
+        let root = tempfile::tempdir().unwrap();
+        let path = ScriptEditor::create_movement(root.path()).unwrap();
+        let mut editor = ScriptEditor::default();
+        editor.open(root.path(), &path).unwrap();
+        std::fs::write(
+            root.path().join("scripts/helper.ks"),
+            "fn speed() { let x = 0.0; while x < 3.0 { x += 1.0; } if !false && x == 3.0 { return x; } else if false { return 0; } return 1; }",
+        )
+        .unwrap();
+        editor.source = "import \"helper.ks\";\nlet x = speed();".into();
+        editor.validate().unwrap();
+        editor.source = "let broken = ;".into();
+        assert!(editor
+            .save()
+            .unwrap_err()
+            .contains("character_movement.ks:1:"));
+        assert_eq!(read(root.path(), &path).unwrap(), MOVEMENT);
+        assert!(resource(root.path(), "../outside.ks").is_err());
+        assert!(resource(root.path(), "scripts/file.txt").is_err());
     }
 }

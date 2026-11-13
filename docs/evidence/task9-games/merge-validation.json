@@ -1,0 +1,155 @@
+{
+  "observed_at": "2026-11-13T09:50:31.237056+00:00",
+  "scope": "Local integrated-source software acceptance. Not hosted CI, physical hardware, Windows/macOS or release provenance.",
+  "branch": "feat/task9-editor-reference-games",
+  "reference_parent": "4628429a82c24e89cc897d334fac3f95bda11895",
+  "master_parent": "9da55513f18d30466440adadd32d0fd999625b8f",
+  "validation": {
+    "just_check": "passed",
+    "rust_tests": {
+      "passed": 700,
+      "skipped": 0
+    },
+    "python_tests": {
+      "passed": 29
+    },
+    "native_tools_build": "passed",
+    "wasm_build_and_runtime_prepare": "passed",
+    "portable_installation_verify": "passed",
+    "workflow_actionlint": "passed",
+    "changed_python_javascript_syntax": "passed"
+  },
+  "games": [
+    {
+      "game": "emberwatch",
+      "editor": {
+        "complete_project_matches": true,
+        "script_bytes_verified": true,
+        "native_browser_export_notices_verified": true,
+        "overwrite_preserved": true,
+        "no_build_tools_in_child_path": true
+      },
+      "native": {
+        "game": "emberwatch",
+        "standalone_without_archive_argument": true,
+        "source_project_unavailable": true,
+        "tools_absent_from_path": true,
+        "all_hostiles_defeated": true,
+        "relay_trigger_won": true,
+        "victory_saved": true
+      },
+      "browser": {
+        "game": "emberwatch",
+        "editor_export": true,
+        "nested_http_deployment": true,
+        "all_hostiles_defeated": true,
+        "relay_trigger_won": true,
+        "victory_saved": true
+      }
+    },
+    {
+      "game": "switchyard",
+      "editor": {
+        "complete_project_matches": true,
+        "script_bytes_verified": true,
+        "native_browser_export_notices_verified": true,
+        "overwrite_preserved": true,
+        "no_build_tools_in_child_path": true
+      },
+      "native": {
+        "game": "switchyard",
+        "standalone_without_archive_argument": true,
+        "source_project_unavailable": true,
+        "tools_absent_from_path": true,
+        "three_circuits_won": true,
+        "saved_moves": 2,
+        "fresh_process_continue": true
+      },
+      "browser": {
+        "game": "switchyard",
+        "editor_export": true,
+        "nested_http_deployment": true,
+        "three_circuits_won": true,
+        "reload_continue": true,
+        "stage": 3,
+        "moves": 2
+      }
+    },
+    {
+      "game": "skybridge",
+      "editor": {
+        "complete_project_matches": true,
+        "script_bytes_verified": true,
+        "native_browser_export_notices_verified": true,
+        "overwrite_preserved": true,
+        "no_build_tools_in_child_path": true
+      },
+      "native": {
+        "game": "skybridge",
+        "standalone_without_archive_argument": true,
+        "source_project_unavailable": true,
+        "tools_absent_from_path": true,
+        "two_physical_levels_won": true,
+        "jumping_and_animation": true,
+        "saved_stage": {
+          "Float": 2.0
+        },
+        "save_load_completed": true
+      },
+      "browser": {
+        "game": "skybridge",
+        "editor_export": true,
+        "nested_http_deployment": true,
+        "two_physical_levels_won": true,
+        "save_load_restores_position": true
+      }
+    }
+  ],
+  "development_installation": {
+    "archive_sha256": "0f097ec0adf0ef1f36a76f2cc2349bb9f799a849a49c1233a3c269317a98e45b",
+    "preparing_revision": "4628429a82c24e89cc897d334fac3f95bda11895",
+    "source_dirty": true,
+    "provenance": "preparation-observations-only"
+  },
+  "source_sha256": {
+    "kiln-editor/src/app.rs": "5148433d6ec4098d7f56aafeed68c7a11196f7b42241916f6c136a0a33ed2b4f",
+    "kiln-editor/src/lib.rs": "34a16250a82a98e71eee1f88c12eb74423b933adfbc65e9bc028a7a4c27f1050",
+    "kiln-editor/src/script_editor.rs": "f56e652e52bb21cd57c4e7c9ab7d96f743f747b1d692455d8125651a646dd958",
+    "kiln-editor/src/editor_shell.rs": "f310cb80f33ec501c66f5a59165b9ca0ba9f7d4bc86109661ebdc0062525b819",
+    "kiln-editor/src/asset_shelf.rs": "6845c0422ad460945ba320919de449d34db04ec04d93de90386e979765eaaa13",
+    "kiln-editor/src/quick_actions.rs": "95b8d195de3b39cc6f57a11ac7ebedda7d911cfbad83cf2113566432f7ba2b84",
+    "kiln-script/src/compiler.rs": "c4ce6f0c17e9e4310de8f6f414ff10937dd55d88bed53879bfeef39d2f7c1ad2",
+    "kiln-script/src/parser.rs": "f427190f3ee4e1fe4ae53185061583cafad697d4cd83fe40b2e6f9f855b63ccd",
+    "kiln-script/src/lexer.rs": "f77087db05c702015fe51f8441c689b80b7a2bfbfb7276d2b7962a3abb3b8551",
+    "kiln-script/src/lib.rs": "f1f0a7f6b61738e45e32241416a28d26f435a2d448a8174c60f1f9391d30a78a",
+    "kiln-runtime/tests/entity_scripting.rs": "89189556162a2aea98d7f59f093ce7bf425f7dc723b4ce1126d7dd40397c8c08",
+    "kiln-script/tests/gameplay_syntax.rs": "1dbca0e853f200f4e4b20fc478aedc4df79f7ec258d1be93f9cd7565617b67ff",
+    "tests/native/task9_editor_games.py": "5ac4fdb43607b94172a5751dcb9ece74ae58224cddd20d172e5054055667c44b",
+    "tests/native/task9_play_games.py": "2a11110371f978e3d9e7b9ffda08f44d6a980b81b6bff339e1e9140c9ac88e29",
+    "tests/web/task9-games.cjs": "61fe68edf2148c90f5c3f891a43146fea86f374da5019cd235829edf7200d254",
+    "games/emberwatch/kiln.toml": "4f14cd1da648e01e9c111b947221eb4cfd521ac80af6412c875d692bdcaa1455",
+    "games/emberwatch/scripts/main.ks": "422537bcaa6693b145f28444c1c5369f0d758f71beb0a4096102aefd96aa67c0",
+    "games/emberwatch/scripts/ui.ks": "7ade21b7a86e16bfa46a0dbda7db8211444c6321cc76135b1ac9f8faa0736ead",
+    "games/skybridge/kiln.toml": "0ced18bc68e65b8cec909475907c82f13c3c78d125763fa74740f57f80b14c28",
+    "games/skybridge/scripts/hero.ks": "163bbbf39dbde4c3f889c052cc623f7f846386305d5fdab47756782081286b64",
+    "games/skybridge/scripts/main.ks": "57536db9d37bc0376064afd6cf899e02bd390c0d76822f12a6cf0ccc93f1dc58",
+    "games/skybridge/scripts/platform.ks": "9ae49e7baaf9fe878430dc0be1d90a6ff93c7fa05e8735a1fc1251d5b3f88a56",
+    "games/switchyard/kiln.toml": "27870a231d095acfdc3f5fc049aa871b1fc6157924fc2d267c051064d4edfe9d",
+    "games/switchyard/scripts/main.ks": "422537bcaa6693b145f28444c1c5369f0d758f71beb0a4096102aefd96aa67c0",
+    "games/switchyard/scripts/ui.ks": "871ddac1f1183168a0b8b6d337d6c2aa188296f8fe09a51848465b020e2c4341"
+  },
+  "cargo_lock_sha256": "042a1a29202fab2e8940632cbc9f23f17e88a42572f9b2930e8d303e8de0ac17",
+  "observations": [
+    "Retained both branches tests and added a default/floating panel-reopening regression.",
+    "Replayed all game authoring through real widgets and compared complete manifests/source bytes. No game manifest generation or winning state injection.",
+    "Updated coordinates and visibly repositioned staggered floating panels after the upstream layout changes. Duplicate dock panels are prevented.",
+    "Initial standalone sequence had a virtual-display startup failure. Final complete native run used Xvfb -noreset and cleanup on failed starts. Incomplete attempts are not acceptance.",
+    "The authoring replay predates the harness-only -noreset/failed-start cleanup adjustment; product binaries and widget operations are unchanged. Native gameplay reran after that adjustment.",
+    "Prior hosted source 135c7f1 failed authoring after passing quality/tool packaging. New merged-source CI is separate and pending."
+  ],
+  "local_reports": {
+    "editor": "target/task9-merged-acceptance/result.json",
+    "native": "target/task9-merged-native-accepted/result.json",
+    "browser": "target/task9-merged-browser/result.json"
+  }
+}

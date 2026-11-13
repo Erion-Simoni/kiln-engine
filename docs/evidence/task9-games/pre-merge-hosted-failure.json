@@ -1,0 +1,15 @@
+{
+  "run_url": "https://github.com/Erion-Simoni/kiln-engine/actions/runs/43317157963",
+  "source_revision": "135c7f17d5fb7043268278719e66bbac1cabf4dc",
+  "observed_at": "2026-11-12T22:25:46.537514+00:00",
+  "failed_gates": [
+    "Reproduce all three games through editor widgets and export them"
+  ],
+  "missing_successful_gates": [
+    "Play browser exports and verify saved progress",
+    "Play standalone exports without source projects or build tools",
+    "Reproduce all three games through editor widgets and export them"
+  ],
+  "complete_workflow_success_observed": false,
+  "scope": "Previous source before this master integration. Strict gates and tool packaging passed; authoring failed and gameplay steps were skipped. Authenticated job logs/artifacts were unavailable here; no exact failure cause or fix is claimed from this observation."
+}
