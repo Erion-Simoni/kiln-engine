@@ -1,65 +1,60 @@
 # Kiln Session Handoff
 
-**Active milestone:** A01 — Restore trustworthy CI and baseline (PARTIAL).
-**Branch:** fix/a01-ci-baseline; previous pushed repair 4b7f488.
-**Owner preferences:** batch small tasks. No package-size ceiling; retain resource
-and performance bounds. MIT OR Apache-2.0 settled. Full 3D gated on G2D.
+**Active work:** A01 hosted/replay repair plus the independent A02 script-recovery
+substep, as authorized by the owner's request to work through all tasks in batches.
+**Branch:** fix/a01-ci-baseline; previous pushed commit 4285924.
+**Owner constraints:** no release-size ceiling, keep resource/performance limits;
+MIT OR Apache-2.0 settled; full 3D stays gated on G2D.
 
-## Verified hosted progress
+## Done: A02 script recovery (ADR-0079)
 
-Public source-pinned snapshot for 4b7f488 (2026-11-13):
+- Versioned recovery envelopes include project plus dirty shared Script Editor
+  source, loaded relative path and original disk baseline. Legacy snapshots and
+  public project-only API remain compatible.
+- Restore populates the buffer without writing source; invalid/unfinished text can
+  be recovered. Failed saves and external edits preserve both disk and draft.
+  Newer saved manifests keep their scenes while independent script drafts recover.
+- Unique atomic sidecars and interrupted temporary files are excluded from Git and
+  Save As copies. Successful Save/explicit Discard clears recovery. Escape keeps
+  it; unknown/unreadable snapshots remain visibly pending and are not erased.
+- Fixed normal project/exit Discard leaving a recovery snapshot behind.
+- Added actual GUI autosave/crash/restart coverage to native CI, with evidence upload.
+- Contract: docs/SCRIPT_RECOVERY.md. Evidence: docs/evidence/A02_SCRIPT_RECOVERY.md
+  and A02_SCRIPT_RECOVERY.json. Full A02 scene/gizmo/selection/undo acceptance is open.
 
-- General CI 43509387416 SUCCESS. All three OS check/build/archive matrices,
-  docs, Rust/Python tests, native UI and browser/portable compatibility passed.
-  Actual desktop archives now supersede earlier planning-only evidence.
-- Windows portable candidate 43509387540 SUCCESS, including upload/attestation.
-  Its documented hosted contract does not establish full Windows GUI/hardware.
-- Reference games 43509387450 FAILED at editor authoring/export, step 9. Quality
-  gates and matched tool preparation passed; gameplay steps were skipped.
-  Detailed exception remains unreadable without authenticated step-log access.
-- Linux release candidate 43509387420 IN PROGRESS at latest follow-up. Artifact
-  service preflight passed; candidate acceptance/attestation not yet confirmed.
-- Durable snapshot: docs/evidence/A01_HOSTED_STATUS.json.
+## Validation
 
-## Done this batch
+- just check passed; 705 Rust tests passed, zero skipped (five new recovery tests).
+- 33 Python tests passed; workflows pass actionlint; mdBook build checked.
+- Actual 30-second autosave, OS kill/restart, Restore/Save, Escape preservation,
+  explicit recovery Discard, normal exit Cancel/Discard and unsupported-snapshot
+  preservation passed in the real editor. No successful snapshot was injected;
+  only the unsupported-version error case uses a synthetic invalid sidecar.
+- Raw evidence: target/a02-*; generated files are not committed.
 
-- Replay waits for the rendered floating-panel title before dragging it.
-- Input authoring saves and verifies each action creation and exact binding before
-  advancing. Project files are read as postconditions only; actual edits remain
-  GUI-driven. Full expected-project equality and exporter failure assertions remain.
-- Failed replays retain failure.json and expose game/phase/type/message as escaped
-  GitHub annotations; mismatch errors include a bounded actual/expected diff and
-  input waits name the action. Export failure JSON is retained by the workflow.
-- Two diagnostic regressions cover local/hosted output and command-injection-safe
-  escaping of multiline error content. No engine Rust behavior changed.
-- Exact hosted failure cause is unconfirmed. Synchronization changes address known
-  replay weaknesses; do not claim the unread remote exception was reproduced.
+## A01 hosted status and replay work
 
-## Local validation
+- Source 4b7f488: general CI 43509387416, Linux candidate 43509387420 and Windows
+  candidate 43509387540 all PASSED, including actual archives, full configured
+  software acceptance, artifact upload and origin attestations. Reference games failed.
+- Source 4285924: general CI 43515183192 PASSED; Linux candidate 43515183244 was
+  running at observation. Reference games 43515183354 FAILED with a useful annotation:
+  Emberwatch export timed out after native export succeeded; its next expected
+  overwrite rejection was not observed. Root cause is not proven yet.
+- A held hover/press/release repair (matching passing native smoke input delivery)
+  and a named overwrite wait are being verified locally; keep assertions intact.
+- Durable hosted snapshot: docs/evidence/A01_HOSTED_STATUS.json.
 
-- just check passed; 33 Python tests passed; actionlint and mdBook passed.
-- Previous 700 Rust tests passed for unchanged engine source (zero skipped).
-- Updated authoring/export replay passed for all three games: exact expected
-  project equality, all six exports/notices, and deliberate overwrite rejection.
-  New per-action saved-input postconditions passed in Skybridge.
-- Prior full three-game native/browser victories and persistence acceptance:
-  docs/evidence/A01_REFERENCE_GAMES.json. Full moved installation integrity,
-  template/export/relocated-play acceptance: docs/evidence/A01_PORTABLE_ACCEPTANCE.json.
-- Current raw evidence: target/a01-fourth-*. Combined diagnosis:
-  docs/evidence/A01_CI_BASELINE.md. Generated artifacts stay outside Git.
+## Next / remaining scope
 
-## Next / known issues
+1. Complete the held-click three-game local replay and push the tested batch.
+   Inspect fresh hosted reference-game/candidate results; A01 remains open until
+   applicable source-pinned checks pass. Do not promote inferred fixes to acceptance.
+2. Continue the rest of A02: two-scene widget authoring, complete transform/parent/
+   selection/undo and restart/property-reference acceptance. Recovery completion
+   does not close that broader milestone.
+3. Keep following docs/ENGINE_COMPLETION_PLAN.md. No full 2D/3D release gate is closed.
 
-1. Push after local replay verification and inspect fresh reference-game annotations.
-   A01 stays open until required hosted reference-game and candidate/artifact checks
-   pass on applicable source. General CI/desktop archives/Windows candidate now pass.
-2. Git push and approved public GitHub HTML reads work. GitHub CLI API is Forbidden;
-   authenticated logs/PR creation unavailable. Preserve unknown/failed outcomes.
-3. Linux candidate uses expensive fresh/replay release builds; do not infer success
-   from its passing artifact preflight or replace its checks with cached binaries.
-4. After A01 acceptance, continue A02 durable authoring/unsaved source recovery.
-   docs/ENGINE_COMPLETION_PLAN.md owns ordering and all later requirements.
-
-Software graphics/Xvfb/Chromium/null audio do not establish physical acceptance.
-Full installers/signing and broad device/platform acceptance remain later gates.
-No release gate is closed and full engine parity is not claimed.
+Git push/public HTML reads work; GitHub CLI API is Forbidden, so detailed authenticated
+logs/PR creation are unavailable. Software graphics/Xvfb/Chromium/null audio and
+hosted portable tests do not establish physical-device or signed-installer support.

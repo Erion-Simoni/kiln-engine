@@ -1967,3 +1967,23 @@ checks remain separate Task 8 gates.
 - No new dependency, runtime architecture or package-size goal. A future installer
   must wrap the full portable contract and pass target-specific install/uninstall,
   signing and clean-machine acceptance before publication is enabled.
+
+### ADR-0079 — Recover unsaved gameplay source alongside project drafts (2026-11-13)
+
+- The owner requested continuing all tasks in batches. While A01 hosted verification
+  runs, implement the independent A02 draft-recovery substep; keep both milestone
+  acceptance gates open until their own checks pass. Full 3D remains gated on G2D.
+- Store a versioned recovery envelope containing Project and an optional script
+  draft (loaded relative path, unsaved text, original disk baseline). Continue to
+  read legacy project-only snapshots. This changes editor sidecars, not project,
+  game-save or export formats, and adds no dependency.
+- Recovery never writes gameplay source. Restore into the shared Script Editor
+  buffer after validating existing path/link/size rules; preserve the original disk
+  baseline so external edits still block Save. If disk already equals recovered
+  text, treat that text as saved. Failed restore retains the prompt and sidecar.
+- Preserve script drafts even if the project manifest was saved more recently;
+  retain that newer saved project rather than restoring stale scene contents.
+- Write sidecars through unique same-directory temporary files and atomic replace.
+  Keep recovery until successful Save or explicit Discard. Escape must not delete
+  unsaved recovery data. Validate actual force-close/restart/widget recovery as
+  well as roundtrip, external-change, invalid-path and legacy-format regressions.

@@ -68,7 +68,7 @@ struct SceneClosePrompt {
 
 struct RecoveryPrompt {
     project_path: PathBuf,
-    project: Project,
+    snapshot: Result<crate::recovery::RecoverySnapshot, String>,
 }
 
 enum ProjectRequest {
@@ -800,13 +800,13 @@ impl EditorApp {
         self.prefab_editor
             .state
             .replace_prefabs(project.prefabs.clone());
-        let recovery = match crate::recovery::load_if_newer(&path) {
-            Ok(recovery) => recovery.map(|(_, project)| project),
+        let recovery = match crate::recovery::load_snapshot_if_newer(&path) {
+            Ok(recovery) => recovery.map(|(_, snapshot)| Ok(snapshot)),
             Err(error) => {
                 self.console_log.push(format!(
-                    "[WARN] Ignoring unreadable recovery snapshot: {error}"
+                    "[WARN] Keeping unreadable recovery snapshot: {error}"
                 ));
-                None
+                Some(Err(error))
             }
         };
         self.scenes = SceneWorkspace::open(&project);
@@ -819,9 +819,9 @@ impl EditorApp {
             .add_recent(path.clone(), project.name.clone());
         self.project_path = Some(path.clone());
         self.current_project = Some(project);
-        self.pending_recovery = recovery.map(|project| RecoveryPrompt {
+        self.pending_recovery = recovery.map(|snapshot| RecoveryPrompt {
             project_path: path.clone(),
-            project,
+            snapshot,
         });
         self.last_autosave = Instant::now();
 
@@ -905,6 +905,11 @@ impl EditorApp {
         } else {
             Ok(())
         };
+        if decision == SaveDecision::Discard {
+            if let Some(path) = self.project_path.as_deref() {
+                crate::recovery::clear(path)?;
+            }
+        }
         if let Some(action) = self.lifecycle.resolve(decision, saved)? {
             if decision == SaveDecision::Discard {
                 self.shell.script_editor.reset();
@@ -2036,16 +2041,32 @@ impl EditorApp {
             self.last_autosave = Instant::now();
             return Ok(());
         }
-        let Some(prompt) = self.pending_recovery.take() else {
-            return Ok(());
-        };
+        let snapshot = prompt.snapshot.as_ref().map_err(Clone::clone)?;
+        let recovered_project = snapshot.project.clone();
+        let saved_project = self.current_project.clone().ok_or("No project loaded")?;
+        let recovered_script = snapshot
+            .script
+            .as_ref()
+            .map(|draft| {
+                crate::script_editor::ScriptEditor::from_recovery(
+                    prompt
+                        .project_path
+                        .parent()
+                        .ok_or("Missing project directory")?,
+                    draft,
+                )
+            })
+            .transpose()?;
+        self.pending_recovery = None;
         {
-            let saved_project = self.current_project.clone().ok_or("No project loaded")?;
-            self.current_project = Some(prompt.project.clone());
-            self.scenes = SceneWorkspace::open(&prompt.project);
+            self.current_project = Some(recovered_project.clone());
+            self.scenes = SceneWorkspace::open(&recovered_project);
             self.scenes.set_saved_baselines(&saved_project);
             self.lifecycle.mark_saved(&saved_project);
             self.reset_scene_view();
+            if let Some(editor) = recovered_script {
+                self.shell.script_editor = editor;
+            }
             self.console_log
                 .push("[INFO] Recovered unsaved project changes".into());
         }
@@ -2386,7 +2407,11 @@ impl EditorApp {
                 if self.play.is_none() && project_dirty {
                     if self.last_autosave.elapsed() >= std::time::Duration::from_secs(30) {
                         if let Ok(Some(project)) = self.authoring_document() {
-                            if let Err(error) = crate::recovery::save(&path, &project) {
+                            if let Err(error) = crate::recovery::save_with_script(
+                                &path,
+                                &project,
+                                self.shell.script_editor.recovery_draft(),
+                            ) {
                                 self.console_log.push(format!(
                                     "[WARN] Could not write recovery snapshot: {error}"
                                 ));
@@ -3059,10 +3084,27 @@ impl EditorApp {
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .show(ctx, |ui| {
-                    ui.label("A newer recovery snapshot was found for this project.");
+                    ui.label("Unsaved changes were found for this project.");
                     ui.label("Restore it to continue from your last autosave.");
+                    let snapshot = self.pending_recovery.as_ref().map(|p| &p.snapshot);
+                    if let Some(Err(error)) = snapshot {
+                        ui.colored_label(egui::Color32::LIGHT_RED, error);
+                        ui.label("The recovery file is kept until you explicitly discard it.");
+                    }
+                    if snapshot
+                        .and_then(|s| s.as_ref().ok())
+                        .is_some_and(|s| s.script.is_some())
+                    {
+                        ui.label("Your unsaved script text is included.");
+                    }
                     ui.horizontal(|ui| {
-                        if ui.button("Restore").clicked() {
+                        if ui
+                            .add_enabled(
+                                snapshot.is_some_and(Result::is_ok),
+                                egui::Button::new("Restore"),
+                            )
+                            .clicked()
+                        {
                             self.project_requests
                                 .push(ProjectRequest::ResolveRecovery(true));
                         }
@@ -3072,10 +3114,7 @@ impl EditorApp {
                         }
                     });
                 });
-            if ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
-                self.project_requests
-                    .push(ProjectRequest::ResolveRecovery(false));
-            }
+            // Recovery is discarded only by the explicit button, never Escape.
         }
 
         // A hidden canvas or a release outside its bounds must still end the drag.

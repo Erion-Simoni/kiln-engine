@@ -226,6 +226,8 @@ jobs:
         env:
           KILN_TASK7_EDITOR_EVIDENCE_DIR: target/task7-editor-evidence
         run: python3 tests/native/task7_editor_smoke.py
+      - name: Recover unsaved source after forced editor crashes
+        run: python3 tests/native/script_recovery_smoke.py
       - name: Pack the saved UI game
         run: target/debug/kiln-cli pack --source samples/ui2d_editor --output target/task7-game.kar
       - name: Exercise Task 7 save/resume across player restarts
@@ -254,6 +256,10 @@ jobs:
             target/task8-export-evidence/
             target/task8-relocated-evidence/
             target/task8-material-native-evidence/
+            target/a02-script-recovery/result.json
+            target/a02-script-recovery/editor/*.png
+            target/a02-script-recovery/editor/*.log
+            target/a02-script-recovery/*_before_crash.log
           retention-days: 7
 
   web-smoke:

@@ -158,8 +158,17 @@ diagnostic repairs require a fresh hosted rerun; A01 remains PARTIAL.
 
 **Status:** PARTIAL. **Depends on:** A01.
 
-- [ ] Finish full create/open/save/save-as, scene tabs, hierarchy, multiselect, local/world move/rotate/scale, snapping/alignment, copy/paste, lock/hide and undo workflows. Recover unsaved script buffers as well as project documents; preserve drafts across failed saves and external edits.
+- [ ] Finish full create/open/save/save-as, scene tabs, hierarchy, multiselect, local/world move/rotate/scale, snapping/alignment, copy/paste, lock/hide and undo workflows.
+- [x] Recover unsaved script buffers alongside project drafts; preserve guarded saves and external edits. Versioned sidecars read legacy snapshots, keep newer saved projects, and require explicit discard. See [recovery contract](SCRIPT_RECOVERY.md).
 - [ ] **Acceptance:** Author two scenes through widgets, edit/reparent/duplicate/delete, undo/redo, force-close and recover, then restart and compare every supported property/reference. Original files survive failed writes.
+
+**Recovery substep 2026-11-13:** implemented under ADR-0079 while A01 hosted
+verification continues. Source drafts restore without writing files; guarded saves
+preserve external edits, newer manifests keep their saved scenes, and legacy/corrupt
+snapshots are handled explicitly. Real 30-second autosave/force-crash/restart,
+Restore/Save, Escape, recovery Discard, normal exit Cancel/Discard and unsupported
+snapshot preservation pass. [Evidence](evidence/A02_SCRIPT_RECOVERY.md). The full
+two-scene/gizmo/selection/undo acceptance above remains open.
 
 ### A03 — Assets, sprites and prefab production workflow
 

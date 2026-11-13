@@ -28,6 +28,14 @@ pub struct ScriptEditor {
     message: String,
 }
 
+/// Unsaved text and the disk baseline used by guarded saves after recovery.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub(crate) struct ScriptDraft {
+    path: String,
+    source: String,
+    saved: Option<String>,
+}
+
 fn resource(root: &Path, relative: &str) -> Result<PathBuf, String> {
     let path = Path::new(relative);
     if relative.contains(['\\', ':'])
@@ -76,6 +84,43 @@ fn read(root: &Path, path: &str) -> Result<String, String> {
 }
 
 impl ScriptEditor {
+    pub(crate) fn recovery_draft(&self) -> Option<ScriptDraft> {
+        self.is_dirty().then(|| ScriptDraft {
+            path: self.loaded.clone(),
+            source: self.source.clone(),
+            saved: self.saved.clone(),
+        })
+    }
+
+    /// Restore only the buffer; source files remain untouched until explicit Save.
+    pub(crate) fn from_recovery(root: &Path, draft: &ScriptDraft) -> Result<Self, String> {
+        if draft.source.len() > SOURCE_LIMIT
+            || draft.saved.as_ref().is_some_and(|s| s.len() > SOURCE_LIMIT)
+        {
+            return Err("Recovered script exceeds 1 MiB".into());
+        }
+        let mut editor = Self {
+            root: Some(root.canonicalize().map_err(|e| e.to_string())?),
+            ..Self::default()
+        };
+        let target = editor.destination(&draft.path)?;
+        let disk = match std::fs::read_to_string(target) {
+            Ok(source) => Some(source),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.to_string()),
+        };
+        editor.path = draft.path.clone();
+        editor.loaded = draft.path.clone();
+        editor.source = draft.source.clone();
+        editor.saved = if disk.as_deref() == Some(draft.source.as_str()) {
+            disk
+        } else {
+            draft.saved.clone()
+        };
+        editor.message = "Recovered script text. Save Script or Save Project to write it.".into();
+        Ok(editor)
+    }
+
     pub(crate) fn dirty(&self) -> bool {
         self.is_dirty()
     }
@@ -308,6 +353,42 @@ impl ScriptEditor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn recovery_uses_loaded_path_and_restores_new_file_without_writing_it() {
+        let root = tempfile::tempdir().unwrap();
+        let mut editor = ScriptEditor::default();
+        editor.open(root.path(), "new.ks").unwrap();
+        editor.source = "let value = 7;".into();
+        editor.path = "unopened-text-field.ks".into();
+        let draft = editor.recovery_draft().unwrap();
+        let mut restored = ScriptEditor::from_recovery(root.path(), &draft).unwrap();
+        assert_eq!(restored.path, "new.ks");
+        assert!(restored.is_dirty());
+        assert!(!root.path().join("new.ks").exists());
+        restored.save().unwrap();
+        assert_eq!(
+            std::fs::read_to_string(root.path().join("new.ks")).unwrap(),
+            "let value = 7;"
+        );
+        assert!(restored.recovery_draft().is_none());
+        let already_saved = ScriptEditor::from_recovery(root.path(), &draft).unwrap();
+        assert!(!already_saved.is_dirty());
+    }
+
+    #[test]
+    fn invalid_recovery_paths_and_oversized_text_are_rejected_without_writes() {
+        let root = tempfile::tempdir().unwrap();
+        let mut draft = ScriptDraft {
+            path: "../outside.ks".into(),
+            source: "draft".into(),
+            saved: None,
+        };
+        assert!(ScriptEditor::from_recovery(root.path(), &draft).is_err());
+        draft.path = "safe.ks".into();
+        draft.source = "x".repeat(SOURCE_LIMIT + 1);
+        assert!(ScriptEditor::from_recovery(root.path(), &draft).is_err());
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+    }
     #[test]
     fn edits_are_atomic_and_conflicts_preserve_the_draft_and_disk() {
         let root = tempfile::tempdir().unwrap();

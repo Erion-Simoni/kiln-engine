@@ -189,6 +189,11 @@ fn save_as_copies_relative_assets_and_refuses_to_overwrite_destination_files() {
         });
     project_files::save(&project, &created.path).unwrap();
     kiln_editor::recovery::save(&created.path, &project).unwrap();
+    std::fs::write(
+        root.join(".kiln-interrupted.recovery.tmp"),
+        "partial recovery",
+    )
+    .unwrap();
     let copy = project_files::save_as(&project, &created.path, &root.join("copy.toml")).unwrap();
     assert_eq!(
         json(&project_files::load(&copy).unwrap().project),
@@ -214,6 +219,11 @@ fn save_as_copies_relative_assets_and_refuses_to_overwrite_destination_files() {
         std::fs::read(root.join("scripts/main.ks")).unwrap()
     );
     assert!(!kiln_editor::recovery::path_for(&relocated).exists());
+    assert!(!relocated
+        .parent()
+        .unwrap()
+        .join(".kiln-interrupted.recovery.tmp")
+        .exists());
     assert!(
         project_files::save_as(&project, &created.path, &root.join("nested/kiln.toml")).is_err()
     );

@@ -49,6 +49,7 @@
 ## Editor
 
 * [Editor Roadmap](EDITOR_ROADMAP.md)
+* [Unsaved Script Recovery](SCRIPT_RECOVERY.md)
 * [Portable Development Editor](PORTABLE_EDITOR.md)
 * [Captured Portable Builds](BUILD_PROVENANCE.md)
 * [Physical Device Acceptance](PHYSICAL_DEVICE_TEST.md)
