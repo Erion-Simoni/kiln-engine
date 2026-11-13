@@ -1,7 +1,7 @@
 # Kiln Session Handoff
 
 **Active focus:** Resolve PR #21's master conflicts and verify the combined Task 9 editor/reference-game work. Task 9 remains IN PROGRESS for independent tutorial, hardware, stress and release gates. Task 8 distribution/platform review remains open; full 3D is paused.
-**Branch:** feat/task9-editor-reference-games. This checkpoint integrates reference-game HEAD 4628429a82c24e89cc897d334fac3f95bda11895 and master 9da55513f18d30466440adadd32d0fd999625b8f. Local acceptance is complete. Push and exact remote verification follow this merge commit; keep the PR open and do not rewrite history.
+**Branch:** feat/task9-editor-reference-games. Integration commit f7c8f9da50fa2d8e32e8811250c4e199870838cf is pushed and its exact remote SHA verified; public PR #21 head matches. It merges reference-game HEAD 4628429 and master 9da5551 without rewriting history or merging the PR. New source-pinned CI run 43404644543 is in progress; later documentation-only checkpoint commits do not change that source identity.
 **Owner preferences:** no package/release-size goal; performance/resource and bounded-input requirements remain. Kiln code uses MIT OR Apache-2.0; no license decision is pending.
 
 ## Done
@@ -23,7 +23,7 @@
 
 ## Next / known issues
 
-1. Push the merge commit on the existing feature branch and verify its exact remote SHA; keep PR #21 open. Observe the new merged-source CI separately before claiming hosted acceptance. Master was re-fetched and remains 9da5551; local just check was rerun before commit and all software acceptance passed.
+1. Observe https://github.com/Erion-Simoni/kiln-engine/actions/runs/43404644543 for source f7c8f9d to completion. It is in progress at merge-hosted-checkpoint.json; no completed hosted acceptance is claimed. Local software acceptance is complete. PR #21 remains open; current master is included and the remote source was verified.
 2. Another developer must follow the tutorial unaided. Automation is not independent human acceptance. Test long sessions, large projects, recovery and clean exports.
 3. Measure actual reference-hardware startup/frame time/memory. No physical i7-6600U/Intel HD 520, audible audio device or controller is attached here.
 4. Finish Task 8's full Windows GUI workflow, other physical GPUs, macOS, SDK/dependency/exact-linked-code review, independent artifact/signature/capture review, OS signing and public release preparation. Previous Task 8 a0f1d85 Linux/Windows candidates passed but do not validate Task 9. Local Linux tools require GLIBC 2.39/system libraries; binaries are not OS signed.

@@ -138,3 +138,9 @@ startup attempts are separate from the final complete gameplay results.
 Integration acceptance and source identities are recorded separately in
 `merge-validation.json`; the earlier 680-test checkpoint remains historical.
 Hosted acceptance for the new merged revision must be observed independently.
+
+Integration commit `f7c8f9da50fa2d8e32e8811250c4e199870838cf` is pushed, its exact remote SHA verified,
+and PR #21's public head matches. New [run 43404644543](https://github.com/Erion-Simoni/kiln-engine/actions/runs/43404644543)
+is in progress at `merge-hosted-checkpoint.json`. It validates the merged source,
+separately from the failed pre-merge run. Later documentation-only checkpoint
+commits do not retrigger this workflow; hosted acceptance is still pending.
