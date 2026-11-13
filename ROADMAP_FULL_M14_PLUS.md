@@ -1,5 +1,8 @@
 # Kiln Roadmap: everything after M13 (single file)
 
+> **Historical plan / technical reference.** The [unified engine completion plan](docs/ENGINE_COMPLETION_PLAN.md) is authoritative for current scope, order, status and release gates. Older completion claims and package-size goals below are historical; preserve their evidence, but do not use them to close current milestones.
+
+
 **Status:** Prior sessions claimed M0–M28; the **2026-10-19 honesty audit**
 (`docs/STATE.md`) rated the project **Partial** at the time. The 2D-first gate
 (textured sprites, tilemap, editor/player wiring) is **met**, and M29 (3D)

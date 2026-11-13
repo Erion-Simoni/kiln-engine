@@ -1,33 +1,58 @@
 # Kiln Session Handoff
 
-**Active focus:** Resolve PR #21's master conflicts and verify the combined Task 9 editor/reference-game work. Task 9 remains IN PROGRESS for independent tutorial, hardware, stress and release gates. Task 8 distribution/platform review remains open; full 3D is paused.
-**Branch:** feat/task9-editor-reference-games. Integration commit f7c8f9da50fa2d8e32e8811250c4e199870838cf is pushed and its exact remote SHA verified; public PR #21 head matches. It merges reference-game HEAD 4628429 and master 9da5551 without rewriting history or merging the PR. New source-pinned CI run 43404644543 is in progress; later documentation-only checkpoint commits do not change that source identity.
-**Owner preferences:** no package/release-size goal; performance/resource and bounded-input requirements remain. Kiln code uses MIT OR Apache-2.0; no license decision is pending.
+**Active focus:** Owner-requested consolidation of all planning Markdown into docs/ENGINE_COMPLETION_PLAN.md, covering remaining 2D, integrated 3D, production release, platforms and optional extensions. Planning only; no engine feature started.
+**Branch:** docs/unified-engine-completion-plan, based on master ae492f1. The latest master and prior local source have identical engine trees. Prior review observations are retained below.
+**Owner preferences:** no release-size goal; performance/resource bounds remain. MIT OR Apache-2.0 is settled. Full 3D implementation stays gated on G2D.
 
-## Done
+## Consolidated plan
 
-- Reconciled the five conflicting files: DECISIONS.md, STATE.md, app.rs, lib.rs and script_editor.rs. Preserve master's Quick Actions, workspace polish, default source tab, inspector/asset script opening, movement starter and KilnScript control flow/short-circuit changes alongside all three reference games and general authoring improvements.
-- One ScriptEditor buffer now lives in EditorShell and serves inspector, assets, tabs, Save/Save As, Play and export. Keep generic project-relative Open/New, bounded text, import-aware validation, atomic saves and external-change detection. Refocusing the same dirty file preserves the draft; switching files remains guarded.
-- Include source drafts in normal project Save/Discard/Cancel. A failed save keeps the prompt/draft; Discard clears the shared buffer before loading a replacement. Existing crash snapshots cover project documents, not unsaved source text.
-- Actual GUI replay exposed duplicated Animation Editor panels/egui widget-ID collisions. Menu routes now reuse an existing panel; regression covers default and floating panel reopening. Keep the upstream default layout. The authoring driver follows the merged theme, closes default authoring tabs before floating them, and uses visible title-bar pixels plus ordinary dragging to handle staggered windows.
-- Preserve all upstream ADRs (0073–0075); renumber the reference-game decision to 0076 and document this integration in ADR-0077. No engine dependency, save/project format or performance-budget exception.
-- Keep games/emberwatch (combat/relay), games/switchyard (three circuits), games/skybridge (two physical levels), real editor authoring/export and native/browser gameplay drivers. These are small reference games, not all Task 9 acceptance.
+- One authoritative plan now owns milestone IDs, dependencies, statuses, acceptance criteria, evidence rules and G2D/G3D/GPROD/GPLATFORM gates.
+- Preserved M0–M61, nine 2D tasks, seventeen 2D stages, editor plans, M29 designs and specialist/platform requirements through an explicit source crosswalk. Older planning documents carry historical-reference notices; README, documentation navigation and agent entry points point to the unified plan.
+- Added gaps for draft recovery, 3D conventions/import identity/migrations, device loss, collision/camera/animation ownership, world-space UI, spatial audio, resource unloading, QA/security/compatibility and release maintenance.
+- Mobile/macOS/handheld work remains a full-platform gate; newer Task 9 deferral ordering takes priority over older version-number coupling. Console/XR, multiplayer, plugins/mods/stores and advanced rendering research are explicitly retained as extensions with acceptance, not silently discarded.
+- Next implementation: A01, diagnose hosted failures and promote reference-game acceptance to master/PRs. New planning checkboxes do not claim implementation or acceptance.
 
-## Validation
+## Validation for this documentation change
 
-- Integrated just check passes: format, strict workspace/all-target Clippy, workspace and separate audio sample checks. just test: 700 passed, zero skipped, including all tests from both branches and the new duplicate-panel regression. All 29 Python tests, workflow actionlint and changed Python/JS syntax checks pass.
-- Rebuilt native editor/CLI/player and WASM kiln-web from the merged source; packaged and verified a matching installation. Development archive records preparing HEAD 4628429 with source_dirty=true, not captured clean release provenance. Cargo.lock is unchanged; no dependency added.
-- Fresh authoring replay reproduces all serialized project values and exact source bytes for all three games through real widgets. All six Native/Browser exports pass notice/runtime verification and overwrite preservation, with no build tools in child PATH. All native and browser gameplay passes: combat victory, puzzle fresh-process/reload Continue, and both physical platformer levels with saved-position restoration. See docs/evidence/task9-games/merge-validation.json. Incomplete virtual-display startup attempts are excluded; native acceptance reran with Xvfb -noreset and failed-start cleanup.
-- Logs/captures stay under target/task9-merged-acceptance, target/task9-merged-native-accepted, target/task9-merged-browser and target/task9-merge-quality-commit.log. Earlier docs/evidence/task9-games/local-validation.json remains the historical pre-master 680-test checkpoint.
-- Previous hosted run 43317157963 (source 135c7f1) passed strict gates/tool packaging but failed authoring; gameplay was skipped. Recorded in pre-merge-hosted-failure.json. Authenticated logs/artifacts were unavailable, so no exact failure cause or hosted fix is claimed from it.
+- `just check` passed: formatting, strict workspace/all-target clippy, workspace compilation and the standalone audio sample check.
+- Documentation links, milestone coverage and whitespace were checked before committing. No gameplay tests were rerun for this documentation-only change; earlier gameplay evidence remains separately identified below.
 
-## Next / known issues
+## Done / current strengths
 
-1. Observe https://github.com/Erion-Simoni/kiln-engine/actions/runs/43404644543 for source f7c8f9d to completion. It is in progress at merge-hosted-checkpoint.json; no completed hosted acceptance is claimed. Local software acceptance is complete. PR #21 remains open; current master is included and the remote source was verified.
-2. Another developer must follow the tutorial unaided. Automation is not independent human acceptance. Test long sessions, large projects, recovery and clean exports.
-3. Measure actual reference-hardware startup/frame time/memory. No physical i7-6600U/Intel HD 520, audible audio device or controller is attached here.
-4. Finish Task 8's full Windows GUI workflow, other physical GPUs, macOS, SDK/dependency/exact-linked-code review, independent artifact/signature/capture review, OS signing and public release preparation. Previous Task 8 a0f1d85 Linux/Windows candidates passed but do not validate Task 9. Local Linux tools require GLIBC 2.39/system libraries; binaries are not OS signed.
+- Latest master includes the three editor-authored reference games, the reconciled shared Script Editor, Quick Actions, editor polish, movement starter and new KilnScript control flow.
+- Supported scene/hierarchy commands, isolated undo, tabs, prefab/asset workflows, Rapier physics/cameras, sprite-frame animation, tilemaps, particles, audio, saved UI, general saves/settings and host-native/browser exports are implemented to their documented contracts.
+- Existing local evidence for the identical source tree records just check, 700 passing Rust tests (zero skipped), 29 Python tests, native/WASM builds, three actual editor authoring replays, six exports, and native/browser victories and restoration. This assessment reused that evidence; it did not rerun those tests.
+- Read-only parallel audits checked editor/runtime/shipping code, beyond historical completion checkboxes. A useful small-game engine is present. General production readiness and Unity/Godot feature breadth are not yet established.
+
+## Fresh hosted observations
+
+Public GitHub pages fetched in this review identify master ae492f1:
+
+- Windows portable candidate 43405013305: SUCCESS.
+- General CI 43405013257: FAILURE.
+- Release candidate verification 43405013163: FAILURE.
+- Reference-game workflow 43404644543 for merged source f7c8f9d: FAILURE.
+
+These supersede the old pending checkpoints. Exact failed steps/causes were not retrieved. Further job-detail commands were blocked because automatic approval review hit its usage limit; this was not an unsafe-action determination. Existing fetched pages establish overall conclusions only. No bypass or further blocked network retries were attempted.
+
+## Next: practical 2D release blockers
+
+1. Diagnose and fix the failed hosted gates, preserving assertions. Promote reference-games.yml from its feature-branch-only push trigger to master/pull-request coverage. Do not equate local passes with current hosted acceptance.
+2. Complete remaining actual GUI acceptance across hierarchy/gizmos, prefab overrides/propagation, asset rename/reimport, multilayer terrain/colliders, particles, recovery and save/restart. Current reference games cover selected paths; old no-Xvfb statements need reconciliation against newer evidence.
+3. Recover unsaved gameplay source after crashes: recovery.rs serializes Project, while the Script Editor buffer remains separate. Test forced close, failed save, undo and reload on representative projects.
+4. Measure CPU/script/physics/GPU time, memory and startup on real target hardware, including i7-6600U/Intel HD 520 if that is the minimum. Stress long sessions/large projects. SpriteRenderer currently silently returns at its 16,384 queued-quad limit; expose overflow and validate scaling/culling.
+5. Finish full Windows GUI author/save/restart/export/play acceptance, physical audio/controller/GPU tests, other claimed browsers and clean target systems. Windows candidate success is narrower. Current Linux packages require GLIBC 2.39/system libraries.
+6. Have an independent developer complete the tutorial unaided, then reconcile the public support matrix and release documentation. Finish reviewed distribution/signing/provenance requirements. Export currently supports the host OS and web; cross-OS/mobile export is explicitly rejected. macOS/other platforms require their own validation before being advertised.
+
+## Feature breadth beyond the current small-game contract
+
+- Source editing/debugging: completion/search/navigation and source breakpoints, statement stepping, stack/locals/watch inspection. Current live controls really pause/step/restart gameplay frames and inspect instance state.
+- Animation: visual state graphs, property tracks/timeline, transitions/blending; skeletal animation later if needed. Current authored clips are spritesheet frames/events/next-clip playback.
+- Saved game UI: sliders, toggles, text entry, progress bars, scrolling/containers and nine-slice styles; richer text/shaping as needed. Current UiKind is Panel/Label/Button.
+- Authorable polygon/capsule collider shapes and editing; current saved collider types are rectangle/circle.
+- Integrated authored 2D lights, shadows/occluders and normal-map workflow. Custom sprite materials already work; an isolated lighting module is not proof of this workflow.
+- Plugins/ecosystem, navigation tools, mobile breadth and advanced 3D are later scope, not prerequisites for every small 2D game. Unity/Godot are stronger pure-2D benchmarks; Unreal offers mature general tooling and Paper2D but is more oriented toward 3D/2.5D.
 
 ## Boundaries
 
-Xvfb/SwiftShader/ALSA-null/Chromium checks are local software evidence, not physical/Windows/macOS/performance proof. api.github.com is excluded by enforced cloud policy; public GitHub observations and managed Git fetch/push work. No credentials were extracted or policies bypassed. No PR merge, release publication or binary Git payload is authorized by this conflict fix. Package size remains informational.
+Tasks 8 and 9 remain open. Earlier implementation-complete task labels do not imply mature-engine parity or blanket GUI acceptance. No quantitative parity percentage, performance advantage or physical-device pass is claimed. Xvfb/SwiftShader/ALSA-null/Chromium evidence remains software evidence. This session changes documentation only on docs/unified-engine-completion-plan. Engine code and remote branches were not modified. The handoff was rewritten to make the unified plan authoritative; A01 is the next implementation milestone.

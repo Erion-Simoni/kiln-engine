@@ -1,5 +1,8 @@
 # 2D Gate Verification (G-1 … G-6) — Complete
 
+> **Historical plan / technical reference.** The [unified engine completion plan](ENGINE_COMPLETION_PLAN.md) is authoritative for current scope, order, status and release gates. Older completion claims and package-size goals below are historical; preserve their evidence, but do not use them to close current milestones.
+
+
 **Goal:** Confirm every 2D-first gate item is met and testable, per `docs/TODO_LIST.md`
 Phase 0.5. Verified against actual source code.
 

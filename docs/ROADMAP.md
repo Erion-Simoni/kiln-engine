@@ -1,5 +1,8 @@
 # Kiln Roadmap
 
+> **Historical plan / technical reference.** The [unified engine completion plan](ENGINE_COMPLETION_PLAN.md) is authoritative for current scope, order, status and release gates. Older completion claims and package-size goals below are historical; preserve their evidence, but do not use them to close current milestones.
+
+
 One focused session per milestone. Do not start the next milestone unasked.
 
 Acceptance criteria must be **testable** (command, screenshot, or automated check).

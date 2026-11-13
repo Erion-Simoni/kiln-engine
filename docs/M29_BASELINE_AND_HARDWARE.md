@@ -1,5 +1,8 @@
 # 3e & 3f — Size Baseline + Old-Hardware Test Target (Pre-M29)
 
+> **Historical plan / technical reference.** The [unified engine completion plan](ENGINE_COMPLETION_PLAN.md) is authoritative for current scope, order, status and release gates. Older completion claims and package-size goals below are historical; preserve their evidence, but do not use them to close current milestones.
+
+
 **Goal:** Record the `3d`-off 2D web WASM size baseline and pick a reference
 Low/Medium GPU for old-hardware testing. Both are M29 acceptance criteria.
 
