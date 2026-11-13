@@ -124,5 +124,30 @@
         "overwrite_preserved": true
       }
     ]
+  },
+  "export_click_recheck": {
+    "date": "2026-11-13",
+    "tools_bundle_sha256": "9442954eb9e39f5645fd9df490821fe7f32022c27d8bf7f00971809aba53919e",
+    "scope": "Focused local runs; held export-button events. Uses previously matched development tools; new recovery feature has separate GUI evidence. Gameplay above belongs to the prior verification.",
+    "games": [
+      {
+        "game": "emberwatch",
+        "exact_authored_project": true,
+        "native_browser_notices_verified": true,
+        "overwrite_preserved": true
+      },
+      {
+        "game": "switchyard",
+        "exact_authored_project": true,
+        "native_browser_notices_verified": true,
+        "overwrite_preserved": true
+      },
+      {
+        "game": "skybridge",
+        "exact_authored_project": true,
+        "native_browser_notices_verified": true,
+        "overwrite_preserved": true
+      }
+    ]
   }
 }

@@ -190,3 +190,29 @@ binding postconditions passed. `just check`, 33 Python tests, actionlint and mdB
 passed. Engine behavior is unchanged; prior native/browser gameplay evidence is
 retained separately and was not rerun for these harness-only changes. Fresh hosted
 reference-game acceptance and the Linux candidate result remain open.
+
+## Fifth batch — hosted progress and visible input events
+
+The 4b7f488 Linux candidate run 43509387420 completed successfully, including its
+accepted artifact and attestation. Source 4285924 general CI 43515183192 also
+passed. Its Linux candidate 43515183244 was still running at observation.
+
+The new failure annotation in reference-game run 43515183354 identifies Emberwatch
+export: the first native export logged Success, then the replay timed out before
+observing the expected overwrite rejection. Its diagnostics contain no Failed
+export outcome. This narrows the failed interaction; it does not prove the engine
+exporter failed or conclusively establish why the repeated click was ineffective.
+
+The replay now delivers separate hover, mouse-down and mouse-up commands with
+visible frame pauses, matching the passing native export smoke. The negative
+export assertion remains and now names game/platform in timeout diagnostics.
+Local focused runs verified exact authored projects and all six native/browser
+exports, notices and deliberate overwrite rejections for all three games. A broader
+held-click experiment disturbed Scene Editor placement/collapse in Skybridge; that
+experiment was not retained. Only the export-button clicks use held events. Existing
+authoring interactions remain as previously validated. Failed/aborted experiments
+remain under target/a01-fifth-*; one run was interrupted by the environment restart.
+
+In parallel, the owner-authorized independent A02 recovery work is implemented and
+validated separately in A02_SCRIPT_RECOVERY.md / ADR-0079. A01 remains open for
+fresh applicable hosted reference-game/candidate acceptance.

@@ -121,6 +121,12 @@ class Editor:
     def click(self, x, y):
         self.command('mousemove', '--window', self.window, x, y, 'click', '1')
 
+    def held_click(self, x, y):
+        # Keep export press/release visible across frames, as in export_smoke.py.
+        self.command('mousemove', '--window', self.window, x, y)
+        self.command('mousedown', '1')
+        self.command('mouseup', '1')
+
     def key(self, key):
         self.command('key', '--clearmodifiers', key)
 
@@ -311,7 +317,7 @@ def export(tools, name, project, evidence):
             output=evidence/('browser game' if web else 'native game')
             if web: editor.click(155,206)
             successes=(evidence/'editor.log').read_text().count('Export result: Success')
-            editor.text(250,273,str(output)); editor.key('Return'); editor.click(75,346)
+            editor.text(250,273,str(output)); editor.key('Return'); editor.held_click(75,346)
             editor.wait(lambda:(output/'export.json').exists(),60)
             editor.wait(lambda:(evidence/'editor.log').read_text().count('Export result: Success')>successes,60)
             verify_export_notices(tools,output,web)
@@ -320,8 +326,9 @@ def export(tools, name, project, evidence):
             # This attempt must fail without changing the successful artifact.
             before=(output/'export.json').read_bytes()
             old=(evidence/'editor.log').read_text().count('Export result: Failed')
-            editor.click(75,346)
-            editor.wait(lambda:(evidence/'editor.log').read_text().count('Export result: Failed')>old)
+            editor.held_click(75,346)
+            editor.wait(lambda:(evidence/'editor.log').read_text().count('Export result: Failed')>old,
+                        description=f"{name} reject overwrite of {'browser' if web else 'native'} export")
             assert (output/'export.json').read_bytes()==before
         editor.click(132,132)  # Close the Build / Export tab.
     except Exception:

@@ -154,6 +154,14 @@ Replay now waits for rendered panels and exact saved input postconditions, and
 publishes specific, escaped failure annotations/diffs. These synchronization and
 diagnostic repairs require a fresh hosted rerun; A01 remains PARTIAL.
 
+**Fifth batch 2026-11-13:** 4b7f488 Linux candidate also passed. Source 4285924
+has green general CI, but the reference-game annotation identifies a timeout after
+Emberwatch's successful native export, before expected overwrite rejection. Export
+buttons now use separated hover/press/release events, matching the passing native
+smoke; focused local authoring/export checks pass for all three games. The change
+still requires hosted confirmation. The independent A02 recovery substep below is
+implemented and tested under ADR-0079; broader gates remain open.
+
 ### A02 — Durable projects, scene editing and recovery
 
 **Status:** PARTIAL. **Depends on:** A01.

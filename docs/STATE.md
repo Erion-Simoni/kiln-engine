@@ -2,7 +2,8 @@
 
 **Active work:** A01 hosted/replay repair plus the independent A02 script-recovery
 substep, as authorized by the owner's request to work through all tasks in batches.
-**Branch:** fix/a01-ci-baseline; previous pushed commit 4285924.
+**Branch:** fix/a01-ci-baseline; recovery implemented in local commit 5627c72;
+previous pushed baseline 4285924. This batch is ready to push with the replay repair.
 **Owner constraints:** no release-size ceiling, keep resource/performance limits;
 MIT OR Apache-2.0 settled; full 3D stays gated on G2D.
 
@@ -41,13 +42,16 @@ MIT OR Apache-2.0 settled; full 3D stays gated on G2D.
   running at observation. Reference games 43515183354 FAILED with a useful annotation:
   Emberwatch export timed out after native export succeeded; its next expected
   overwrite rejection was not observed. Root cause is not proven yet.
-- A held hover/press/release repair (matching passing native smoke input delivery)
-  and a named overwrite wait are being verified locally; keep assertions intact.
+- Held hover/press/release is now scoped to export buttons, matching the passing
+  native smoke. All three exact authored projects, six exports/notices and
+  deliberate overwrite rejections pass across focused local runs. A broader
+  global input experiment regressed panel interactions and was removed; failed
+  and restart-interrupted runs remain in target/a01-fifth-* evidence.
 - Durable hosted snapshot: docs/evidence/A01_HOSTED_STATUS.json.
 
 ## Next / remaining scope
 
-1. Complete the held-click three-game local replay and push the tested batch.
+1. Push the tested recovery and export-click repair commits.
    Inspect fresh hosted reference-game/candidate results; A01 remains open until
    applicable source-pinned checks pass. Do not promote inferred fixes to acceptance.
 2. Continue the rest of A02: two-scene widget authoring, complete transform/parent/

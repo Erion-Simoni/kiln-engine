@@ -25,8 +25,29 @@
     {
       "name": "Linux release candidate",
       "run": 43509387420,
-      "result": "in_progress",
-      "scope": "Artifact-service preflight passed; candidate/attestation not yet accepted"
+      "result": "success",
+      "scope": "Locked Linux candidate, fresh replay/payload comparison, software acceptance, accepted artifact and origin attestation passed."
     }
-  ]
+  ],
+  "followup": {
+    "source": "4285924d162270eece9826e0a4d061433c7398a1",
+    "checks": [
+      {
+        "name": "General CI",
+        "run": 43515183192,
+        "result": "success"
+      },
+      {
+        "name": "Linux candidate",
+        "run": 43515183244,
+        "result": "in_progress"
+      },
+      {
+        "name": "Reference games",
+        "run": 43515183354,
+        "result": "failure",
+        "detail": "emberwatch export timed out after its first native export succeeded; overwrite rejection was not observed. Held clicks and a named overwrite wait are being verified locally."
+      }
+    ]
+  }
 }
