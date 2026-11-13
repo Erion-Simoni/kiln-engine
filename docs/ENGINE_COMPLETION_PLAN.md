@@ -145,6 +145,15 @@ Full moved-editor integrity/template/export/relocated-play acceptance passes; se
 [portable acceptance](evidence/A01_PORTABLE_ACCEPTANCE.json). Fresh hosted archive
 and candidate outcomes remain required before A01 acceptance.
 
+**Fourth batch 2026-11-13:** source 4b7f488 passes full hosted general CI,
+including actual Linux/Windows/macOS archive builds and native/browser/portable
+checks; Windows candidate and origin attestation also pass. The reference-game
+run fails in authoring/export; its exact exception is not yet available. Linux
+candidate remains in progress. See [hosted snapshot](evidence/A01_HOSTED_STATUS.json).
+Replay now waits for rendered panels and exact saved input postconditions, and
+publishes specific, escaped failure annotations/diffs. These synchronization and
+diagnostic repairs require a fresh hosted rerun; A01 remains PARTIAL.
+
 ### A02 — Durable projects, scene editing and recovery
 
 **Status:** PARTIAL. **Depends on:** A01.

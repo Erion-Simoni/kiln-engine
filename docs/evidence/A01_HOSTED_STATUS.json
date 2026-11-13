@@ -1,0 +1,32 @@
+{
+  "observed_date": "2026-11-13",
+  "source": "4b7f488f4dacc2c52f980ce0d788fb0fad087435",
+  "evidence_source": "Public GitHub Actions summary/job HTML; no authenticated log access",
+  "checks": [
+    {
+      "name": "General CI",
+      "run": 43509387416,
+      "result": "success",
+      "scope": "Includes three OS check/build/archive matrices, Rust/Python tests, docs, native UI, browser and portable compatibility checks"
+    },
+    {
+      "name": "Windows portable candidate",
+      "run": 43509387540,
+      "result": "success",
+      "scope": "Candidate build, hosted acceptance, artifact upload and origin attestation; not full Windows GUI/physical-device certification"
+    },
+    {
+      "name": "Editor-authored reference games",
+      "run": 43509387450,
+      "result": "failure",
+      "failed_step": "Reproduce all three games through editor widgets and export them",
+      "detail": "Step logs inaccessible; exact cause unconfirmed"
+    },
+    {
+      "name": "Linux release candidate",
+      "run": 43509387420,
+      "result": "in_progress",
+      "scope": "Artifact-service preflight passed; candidate/attestation not yet accepted"
+    }
+  ]
+}

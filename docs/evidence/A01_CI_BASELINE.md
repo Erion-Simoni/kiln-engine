@@ -149,3 +149,44 @@ See [A01_PORTABLE_ACCEPTANCE.json](A01_PORTABLE_ACCEPTANCE.json). This is reloca
 in the same Linux userspace, not a clean machine or physical device. `just check`,
 31 Python tests, actionlint and mdBook also passed for this batch. Rust behavior is
 unchanged; the preceding 700-test pass still applies to the same engine source.
+
+## Fourth repair batch — 2026-11-13
+
+Observed public, source-pinned hosted results for 4b7f488:
+
+- General CI 43509387416 **SUCCESS**: all three OS check/build/archive matrices,
+  documentation, Rust/Python regressions, native UI and browser/portable checks.
+  This establishes actual desktop archive builds, superseding planning-only evidence.
+- Windows candidate 43509387540 **SUCCESS**, including candidate upload and origin
+  attestation. This is the workflow's hosted contract, not physical/GUI certification.
+- Reference games 43509387450 **FAILURE** in real editor authoring/export (step 9);
+  quality checks and matching tool preparation passed; gameplay steps were skipped.
+  Exact exception is unavailable through the public step-log endpoints.
+- Linux candidate 43509387420 still **IN PROGRESS** on a fresh follow-up read;
+  artifact-service preflight passed. Acceptance/attestation remains unconfirmed.
+
+See [A01_HOSTED_STATUS.json](A01_HOSTED_STATUS.json) for the snapshot. Do not reuse
+these results to accept a newer source revision without corresponding evidence.
+
+Replay changes address known synchronization weaknesses; they are not a claim
+that the unread hosted exception has been diagnosed:
+
+- Observe the floating panel title bar with a bounded wait before measuring and
+  dragging it; screenshot subprocesses have a timeout.
+- Save and verify every newly created input action before binding it, then save
+  and verify its exact binding before advancing. All writes still occur through
+  real editor widgets; the project files are only read as postconditions. No retry
+  creates duplicate actions, and full-project equality remains required.
+- Retain failure.json with game/phase/type/message and expose an escaped GitHub
+  error annotation. Project mismatch errors include a bounded expected/actual diff;
+  binding waits name the action. Retain export failure JSON in workflow artifacts.
+- Added two regressions covering local/hosted diagnostics and preventing multiline
+  exception content from injecting a second workflow command.
+
+Local fourth-batch validation passed: updated three-game real editor authoring,
+exact full-project comparisons, six native/browser exports with verified notices
+and output preservation on deliberate failures. Skybridge's new saved-action and
+binding postconditions passed. `just check`, 33 Python tests, actionlint and mdBook
+passed. Engine behavior is unchanged; prior native/browser gameplay evidence is
+retained separately and was not rerun for these harness-only changes. Fresh hosted
+reference-game acceptance and the Linux candidate result remain open.

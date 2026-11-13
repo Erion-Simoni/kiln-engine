@@ -96,5 +96,33 @@
         "save_load_restores_position": true
       }
     ]
+  },
+  "authoring_export_recheck": {
+    "date": "2026-11-13",
+    "branch_base": "4b7f488",
+    "scope": "Updated harness; rendered-panel wait and saved action/binding postconditions. Gameplay results above belong to the prior unchanged-engine verification.",
+    "games": [
+      {
+        "game": "emberwatch",
+        "exact_authored_project": true,
+        "template_unchanged": true,
+        "native_browser_notices_verified": true,
+        "overwrite_preserved": true
+      },
+      {
+        "game": "switchyard",
+        "exact_authored_project": true,
+        "template_unchanged": true,
+        "native_browser_notices_verified": true,
+        "overwrite_preserved": true
+      },
+      {
+        "game": "skybridge",
+        "exact_authored_project": true,
+        "template_unchanged": true,
+        "native_browser_notices_verified": true,
+        "overwrite_preserved": true
+      }
+    ]
   }
 }

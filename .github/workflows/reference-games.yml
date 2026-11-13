@@ -94,6 +94,7 @@ jobs:
           name: kiln-reference-game-evidence-${{ github.sha }}
           path: |
             target/task9-replay/result.json
+            target/task9-replay/*/export/*.json
             target/task9-replay/*/authoring/*.json
             target/task9-replay/*/authoring/*.png
             target/task9-replay/*/authoring/*.log
