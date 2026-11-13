@@ -144,6 +144,7 @@ jobs:
     name: Build experimental desktop binary archives
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         include:
@@ -158,19 +159,46 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Install cargo-dist
-        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.33.0/installer.sh | sh
+      - name: Install cargo-dist on Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          curl --proto '=https' --tlsv1.2 -fsSL https://github.com/axodotdev/cargo-dist/releases/download/v0.33.0/cargo-dist-installer.sh --output "$RUNNER_TEMP/cargo-dist-installer.sh"
+          sh "$RUNNER_TEMP/cargo-dist-installer.sh"
+      - name: Install cargo-dist on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Join-Path $env:RUNNER_TEMP 'cargo-dist-installer.ps1'
+          Invoke-WebRequest -Uri 'https://github.com/axodotdev/cargo-dist/releases/download/v0.33.0/cargo-dist-installer.ps1' -OutFile $installer -ErrorAction Stop
+          & $installer
+      - name: Require pinned cargo-dist version
+        shell: bash
+        run: test "$(dist --version)" = 'cargo-dist 0.33.0'
       - name: Install Linux audio/controller development headers
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: Run cargo-dist
-        run: dist build --artifacts=all --target=${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/distribution-logs
+          dist build --artifacts=all --target=${{ matrix.target }} 2>&1 | tee target/distribution-logs/build.log
       - name: Upload artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: dist-${{ matrix.os }}
           path: target/distrib/
           if-no-files-found: error
+      - name: Retain distribution diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: dist-diagnostics-${{ matrix.os }}
+          path: target/distribution-logs/
+          if-no-files-found: warn
+          retention-days: 7
 
   native-ui-smoke:
     name: Native editor and saved UI smoke tests

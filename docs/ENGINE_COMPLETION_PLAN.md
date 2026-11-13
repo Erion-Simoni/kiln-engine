@@ -137,6 +137,14 @@ native/browser games pass victories and persistence checks; see
 [reference-game record](evidence/A01_REFERENCE_GAMES.json). Full
 archive builds, fresh hosted/candidate verification and physical targets remain open.
 
+**Third batch 2026-11-13:** fresh hosted docs/tests/native-UI checks passed on
+aeda8dd; archive failure exposed a masked installer HTTP 404 and missing dist
+profile. Corrected platform-native install assets/version checks, added the profile,
+kept independent archive diagnostics and enabled candidate workflows on fix branches.
+Full moved-editor integrity/template/export/relocated-play acceptance passes; see
+[portable acceptance](evidence/A01_PORTABLE_ACCEPTANCE.json). Fresh hosted archive
+and candidate outcomes remain required before A01 acceptance.
+
 ### A02 — Durable projects, scene editing and recovery
 
 **Status:** PARTIAL. **Depends on:** A01.

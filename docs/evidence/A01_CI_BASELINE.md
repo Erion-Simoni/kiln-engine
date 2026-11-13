@@ -113,3 +113,39 @@ Checks cover victories, saved progress, position restoration, scene transitions
 and restart/reload continuation. The compact durable results are in
 [A01_REFERENCE_GAMES.json](A01_REFERENCE_GAMES.json). No physical-device or hosted
 acceptance is inferred from these local passes.
+
+## Third repair batch — 2026-11-13
+
+Public run [43507314005](https://github.com/Erion-Simoni/kiln-engine/actions/runs/43507314005)
+for aeda8dd shows documentation, Rust tests and native editor/UI smoke passing.
+Its Windows binary-archive job failed at Run cargo-dist, while Install cargo-dist
+reported success. Other archive platforms were canceled by matrix fail-fast.
+Reference-game run 43507313970 and other CI work were still running at observation.
+
+- Reproduced the installer URL failure: `/v0.33.0/installer.sh` and `installer.ps1`
+  return HTTP 404. The old curl-to-sh pipeline masked the failed download. The
+  actual published assets are `cargo-dist-installer.sh` / `.ps1`; both downloaded
+  successfully. The official Unix installer installed cargo-dist 0.33.0 into the
+  workspace tool directory and its executable reports the exact expected version.
+- CI now downloads to a file before execution, uses Bash on Unix and PowerShell
+  on Windows, and requires the pinned executable version before building. The
+  Windows installer asset was verified, but execution needs the Windows runner.
+- A real local `dist build --artifacts=local --target=x86_64-unknown-linux-gnu`
+  reached cargo and failed with `profile dist is not defined`. Added that profile
+  inheriting existing release settings. Complete native archive compilation is
+  still pending fresh hosted builds; planning alone was insufficient evidence.
+- Disabled archive matrix fail-fast so independent platforms can finish and report
+  their own failures. Capture build output with Bash pipefail behavior and retain
+  distribution diagnostic artifacts even when a build fails.
+- Enabled the full Linux and Windows portable candidate workflows on fix/** pushes
+  so this branch can receive candidate validation without authenticated PR APIs.
+
+The complete moved-editor acceptance passed using the matched development bundle:
+all installed tools verified; tamper/missing-file/permissions/mixed-version/symlink
+rejection; empty_2d/platformer/topdown initialization and both exports; actual GUI
+native/browser exports; cancellation/failed-output preservation; relocated native
+and browser gameplay/save restoration; unchanged installation and preserved notices.
+See [A01_PORTABLE_ACCEPTANCE.json](A01_PORTABLE_ACCEPTANCE.json). This is relocation
+in the same Linux userspace, not a clean machine or physical device. `just check`,
+31 Python tests, actionlint and mdBook also passed for this batch. Rust behavior is
+unchanged; the preceding 700-test pass still applies to the same engine source.

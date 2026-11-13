@@ -3,7 +3,7 @@ name: Release candidate verification
 on:
   workflow_dispatch:
   push:
-    branches: [master, main, feat/2d-production-workflow]
+    branches: [master, main, "fix/**", feat/2d-production-workflow]
     paths:
       - .github/workflows/release-candidate.yml
       - Cargo.toml
