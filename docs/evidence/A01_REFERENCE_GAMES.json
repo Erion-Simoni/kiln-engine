@@ -1,0 +1,100 @@
+{
+  "date": "2026-11-13",
+  "branch_base": "01a272c",
+  "engine_source_baseline": "ae492f1",
+  "scope": "Local software acceptance; hosted, physical-device and installer acceptance remain open.",
+  "portable_bundle_sha256": "9442954eb9e39f5645fd9df490821fe7f32022c27d8bf7f00971809aba53919e",
+  "authoring": [
+    {
+      "game": "emberwatch",
+      "manifest_created_by": "native editor Save As and real authoring widgets",
+      "source_pasted_and_byte_verified": true,
+      "project_matches_checked_in_game": true,
+      "template_unchanged": true,
+      "native_browser_notices_verified": true,
+      "overwrite_preserved": true
+    },
+    {
+      "game": "switchyard",
+      "manifest_created_by": "native editor Save As and real authoring widgets",
+      "source_pasted_and_byte_verified": true,
+      "project_matches_checked_in_game": true,
+      "template_unchanged": true,
+      "native_browser_notices_verified": true,
+      "overwrite_preserved": true
+    },
+    {
+      "game": "skybridge",
+      "manifest_created_by": "native editor Save As and real authoring widgets",
+      "source_pasted_and_byte_verified": true,
+      "project_matches_checked_in_game": true,
+      "template_unchanged": true,
+      "native_browser_notices_verified": true,
+      "overwrite_preserved": true
+    }
+  ],
+  "native": {
+    "scope": "Xvfb/SwiftShader/ALSA null; no physical-device claim",
+    "games": [
+      {
+        "game": "emberwatch",
+        "standalone_without_archive_argument": true,
+        "source_project_unavailable": true,
+        "tools_absent_from_path": true,
+        "all_hostiles_defeated": true,
+        "relay_trigger_won": true,
+        "victory_saved": true
+      },
+      {
+        "game": "switchyard",
+        "standalone_without_archive_argument": true,
+        "source_project_unavailable": true,
+        "tools_absent_from_path": true,
+        "three_circuits_won": true,
+        "saved_moves": 2,
+        "fresh_process_continue": true
+      },
+      {
+        "game": "skybridge",
+        "standalone_without_archive_argument": true,
+        "source_project_unavailable": true,
+        "tools_absent_from_path": true,
+        "two_physical_levels_won": true,
+        "jumping_and_animation": true,
+        "saved_stage": {
+          "Float": 2.0
+        },
+        "save_load_completed": true
+      }
+    ]
+  },
+  "browser": {
+    "scope": "Chromium/SwiftShader; no physical-device claim",
+    "games": [
+      {
+        "game": "emberwatch",
+        "editor_export": true,
+        "nested_http_deployment": true,
+        "all_hostiles_defeated": true,
+        "relay_trigger_won": true,
+        "victory_saved": true
+      },
+      {
+        "game": "switchyard",
+        "editor_export": true,
+        "nested_http_deployment": true,
+        "three_circuits_won": true,
+        "reload_continue": true,
+        "stage": 3,
+        "moves": 2
+      },
+      {
+        "game": "skybridge",
+        "editor_export": true,
+        "nested_http_deployment": true,
+        "two_physical_levels_won": true,
+        "save_load_restores_position": true
+      }
+    ]
+  }
+}

@@ -5,8 +5,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Kiln game engine editor"
-homepage = "https://github.com/kiln-engine/kiln"
-repository = "https://github.com/kiln-engine/kiln"
+homepage = "https://github.com/Erion-Simoni/kiln-engine"
+repository.workspace = true
 
 [[bin]]
 name = "kiln-editor"
@@ -62,3 +62,6 @@ dirs = { workspace = true }
 kiln-plugin-api = { path = "../kiln-plugin-api" }
 git2 = { workspace = true, optional = true }
 tempfile = "3.14"
+
+[package.metadata.dist]
+dist = true

@@ -56,9 +56,60 @@ are deliberately excluded from the commit.
 ## Still required before A01 acceptance
 
 Retrieve authenticated cargo-dist and candidate/reference-game failure logs;
-repair and reproduce remaining causes. Existing installer workflow has no checked-in
-cargo-dist metadata, while the supported portable packaging path is separate;
-confirm the actual failure and intended installer contract before restructuring it.
+repair and reproduce remaining causes. The legacy cargo-dist.toml file is not loaded by cargo-dist 0.33.0. The next
+batch below repairs supported metadata and separates experimental binary archives
+from complete portable bundles and future installers.
 Run the full three-game author/export/native/browser acceptance on this revision.
 Require fresh hosted checks and artifact verification to pass before accepting
 A01. Existing remote failures remain failures; local repairs do not close them.
+
+## Second repair batch — 2026-11-13
+
+- Reproduced the legacy distribution failure with cargo-dist 0.33.0: its ignored
+  configuration left no configured targets. The first sandbox attempt also hit
+  dependency download restrictions; fetching dependencies allowed the actual
+  configuration error to be reproduced offline.
+- Moved settings into supported Cargo workspace/package metadata. Only the three
+  editor/CLI/player packages opt in; samples and demos are excluded. Removed the
+  ignored file and unsupported DMG/AppImage settings. See ADR-0078: executable
+  archives are experimental, complete portable bundles remain the supported
+  distribution path, and full installers remain open.
+- Corrected CI to invoke the installed `dist` executable and upload the actual
+  `target/distrib` outputs, failing if absent. Removed the nonexistent, unreachable
+  `cargo dist upload` step; publication remains outside this build workflow.
+- Corrected the editor's repository/homepage and shared the real repository URL
+  with all three distributable packages.
+- Pinned general CI to the same Rust 1.99.1 and nextest 0.9.151 used by candidate
+  workflows; use locked root dependency graphs. Updated cache/checkout/Node and
+  artifact actions to the already-used pinned current versions. Both general CI
+  and reference-game acceptance now trigger on `fix/**` pushes.
+- Bounded failed-replay cleanup with termination/kill/reap and skip normal menu
+  exit when handling an existing failure. Added actual child-process regressions
+  for ignored termination and preserved exit status.
+- Local validation: `just check`, 700 Rust tests (zero skipped), 31 Python tests,
+  actionlint and mdBook passed. Real cargo-dist plans pass for Linux x64,
+  Windows x64 and Intel macOS, each containing only the three intended tools.
+  These are planning results, not actual target build/install acceptance.
+- Repackaged current native/browser tools into a verified 1,546-file portable
+  bundle (SHA-256 9442954eb9e39f5645fd9df490821fe7f32022c27d8bf7f00971809aba53919e).
+  Reusing an older installed bundle first exposed a local tool mismatch; that
+  result was discarded. The matched replay authored/exported Emberwatch and
+  Switchyard. Skybridge initially exposed an input-binding replay mismatch; the corrected
+  follow-up below passes while preserving the failed-run evidence.
+- Git push access works. GitHub CLI API access returned Forbidden, so this session
+  cannot create a PR or fetch authenticated hosted logs. Fix-branch push triggers
+  allow checks to run without using that API. Hosted acceptance remains open.
+
+Skybridge follow-up: retained a screenshot after opening Input Rebinding, allowing
+its floating-panel layout to settle before clicking Add Action. Its fresh authored
+manifest now equals the checked-in project, including all three input bindings.
+The earlier mismatched manifest remains in local failed-run evidence. No expected
+properties or gameplay assertions were removed.
+
+Final gameplay acceptance: all three standalone exports pass from unrelated working
+directories while source projects are hidden and build tools are absent from PATH.
+All three browser exports pass nested HTTP deployment in Chromium/SwiftShader.
+Checks cover victories, saved progress, position restoration, scene transitions
+and restart/reload continuation. The compact durable results are in
+[A01_REFERENCE_GAMES.json](A01_REFERENCE_GAMES.json). No physical-device or hosted
+acceptance is inferred from these local passes.

@@ -3,6 +3,7 @@ name = "kiln-player"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [lib]
 name = "kiln_player"
@@ -38,3 +39,6 @@ kiln-editor = { workspace = true }
 tempfile = "3.14"
 serde = { workspace = true }
 kiln-ir = { workspace = true }
+
+[package.metadata.dist]
+dist = true

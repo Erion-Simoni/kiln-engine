@@ -17,6 +17,15 @@ creating GitHub build-origin attestations in a separate job. See
 [BUILD_PROVENANCE.md](BUILD_PROVENANCE.md#hosted-release-candidate-workflow).
 GitHub origin attestation is separate from the OS installer signing described below.
 
+## Experimental cargo-dist archives
+
+`dist build --artifacts=all --target=<desktop-triple>` uses the supported
+Cargo workspace/package metadata and writes `target/distrib/`. It includes only
+the editor, CLI and player binary packages. These archives are experimental tools;
+they do not bundle the complete editor resources, browser runtime or acceptance
+records. Use the portable candidate workflows for complete editor bundles.
+DMG/AppImage/MSI installers and publication remain pending (ADR-0078).
+
 ---
 
 ## Overview

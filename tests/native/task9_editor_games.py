@@ -23,6 +23,18 @@ from export_notices import verify_export_notices
 GAMES = ('emberwatch', 'switchyard', 'skybridge')
 
 
+def stop_process(process, timeout=10):
+    """Bound cleanup even when an editor refuses termination during a modal."""
+    if process is None or process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=timeout)
+
+
 class Editor:
     def __init__(self, tools, project, output, display=':83'):
         self.tools, self.project, self.output = Path(tools).resolve(), Path(project).resolve(), Path(output).resolve()
@@ -168,17 +180,16 @@ class Editor:
     def save(self):
         self.click(500,78); self.key('ctrl+s'); time.sleep(.2)
 
-    def close(self):
+    def close(self, *, failed=False):
         try:
-            if self.process and self.process.poll() is None and self.window is not None:
+            if not failed and self.process and self.process.poll() is None and self.window is not None:
                 self.panel(18,262)
                 self.process.wait(timeout=10)
                 if self.process.returncode != 0:
                     raise RuntimeError('Editor normal close failed')
         finally:
-            if self.process and self.process.poll() is None:
-                self.process.terminate(); self.process.wait(timeout=10)
-            self.server.terminate(); self.server.wait(timeout=10)
+            stop_process(self.process)
+            stop_process(self.server)
             (self.output/'interactions.json').write_text(json.dumps(self.actions,indent=2)+'\n')
 
 
@@ -230,6 +241,9 @@ def author(tools, name, destination, evidence):
             editor.command('mousemove','--window',editor.window,1320,400,'click','--repeat','12','--delay','50','4')
             editor.value(1269,202,1100); editor.save()
             editor.panel(80,550)
+            # Let the moved floating panel settle and retain its visible layout
+            # before targeting Add Action; immediate clicks raced software rendering.
+            editor.shot('input_before_bindings')
             # Input Rebinding sorts actions by stable ID.
             editor.click(80,214); editor.click(160,233); editor.press('s')
             editor.click(80,308); editor.click(160,327); editor.press('l')
@@ -247,7 +261,7 @@ def author(tools, name, destination, evidence):
         editor.shot("failure")
         raise
     finally:
-        editor.close()
+        editor.close(failed=sys.exc_info()[0] is not None)
     return {'game':name,'project':str(destination),'manifest_created_by':'native editor Save As and real authoring widgets','source_pasted_and_byte_verified':True,'project_matches_checked_in_game':True,'template_unchanged':True}
 
 
@@ -278,7 +292,7 @@ def export(tools, name, project, evidence):
         editor.shot("failure")
         raise
     finally:
-        editor.close()
+        editor.close(failed=sys.exc_info()[0] is not None)
     return {'game':name,'opened_saved_project':str(project),'outputs':outputs,'native_browser_notices_verified':True,'overwrite_preserved':True,'tools_absent_from_child_path':True}
 
 

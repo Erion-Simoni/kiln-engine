@@ -42,7 +42,7 @@ just run      # editor or demo window
 just web      # wasm demo in browser
 just size     # optional artifact size report; no release-size target
 just assets   # import / pack
-just package  # installers via cargo-dist
+just package  # experimental binary archives; complete bundles use portable-editor
 ```
 
 ## Coding rules

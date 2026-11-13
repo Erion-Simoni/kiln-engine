@@ -128,6 +128,15 @@ checks to master/main and pull requests. Local strict checks, 700 Rust tests,
 [A01 repair evidence](evidence/A01_CI_BASELINE.md). Hosted failures, complete
 three-game rerun and artifact verification remain open; A01 is not accepted.
 
+**Second batch 2026-11-13:** moved cargo-dist configuration into supported metadata;
+validated three desktop plans and experimental-archive scope; repaired upload path,
+CI tool/dependency pins and fix-branch triggers; bounded replay cleanup with two
+child-process regressions. Fresh matching tools authored/exported all three games;
+settled Input Rebinding panel capture repairs the Skybridge replay race. All six
+native/browser games pass victories and persistence checks; see
+[reference-game record](evidence/A01_REFERENCE_GAMES.json). Full
+archive builds, fresh hosted/candidate verification and physical targets remain open.
+
 ### A02 — Durable projects, scene editing and recovery
 
 **Status:** PARTIAL. **Depends on:** A01.

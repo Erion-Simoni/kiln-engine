@@ -1952,3 +1952,18 @@ checks remain separate Task 8 gates.
 - Reuse an existing dock panel when menus reopen it. Master adds default animation
   and source tabs; duplicate copies cause egui widget-ID collisions and ambiguous
   authoring. Keep the default layout and allow a floating panel after closing it.
+
+### ADR-0078 — Explicit experimental binary archive distribution (2026-11-13)
+
+- The legacy cargo-dist.toml filename is not loaded by cargo-dist 0.33.0. Put
+  distribution configuration in supported Cargo workspace/package metadata.
+- Opt in only kiln-editor, kiln-cli and kiln-player; exclude sample/demo binaries.
+  Configure desktop binary archives and upload target/distrib, the tool's actual
+  output. Do not invoke the nonexistent `cargo dist upload` command.
+- Archives are experimental separate tools, not complete editor installations.
+  Keep complete matched tools/assets/templates/notices/browser runtime in the
+  existing portable Linux/Windows candidate workflows. DMG/AppImage/MSI installers
+  remain planned; do not call executable archives installers or release acceptance.
+- No new dependency, runtime architecture or package-size goal. A future installer
+  must wrap the full portable contract and pass target-specific install/uninstall,
+  signing and clean-machine acceptance before publication is enabled.

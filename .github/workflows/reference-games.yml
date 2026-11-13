@@ -3,7 +3,7 @@ name: Editor-authored reference games
 on:
   workflow_dispatch:
   push:
-    branches: [master, main, feat/task9-editor-reference-games]
+    branches: [master, main, "fix/**", feat/task9-editor-reference-games]
   pull_request:
     branches: [master, main]
 
