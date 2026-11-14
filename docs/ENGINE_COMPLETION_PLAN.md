@@ -168,6 +168,14 @@ Windows capture selected a tiny helper before the main client was ready. Held
 binding presses and largest-valid-client selection repair those specific paths,
 with regression coverage. Fresh matching-source hosted results remain required.
 
+**Seventh batch 2026-11-14:** current `3efb687` Windows candidate and reference
+games passed, but general CI still timed out opening the floating source editor.
+Delaying the first render locally reproduced lost default-tab close clicks and
+the same timeout. Startup now observes the painted menu before closing tabs and
+holds menu clicks across frames; native CI retains a real delayed-render
+regression. [Evidence](evidence/A01_EDITOR_STARTUP.md). Matching hosted
+confirmation remains required; A01 stays PARTIAL.
+
 ### A02 — Durable projects, scene editing and recovery
 
 **Status:** PARTIAL. **Depends on:** A01.

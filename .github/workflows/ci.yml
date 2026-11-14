@@ -218,6 +218,8 @@ jobs:
         env:
           KILN_EDITOR_EVIDENCE_DIR: target/editor-design-evidence
         run: python3 tests/native/editor_smoke.py
+      - name: Verify panel opening after delayed editor rendering
+        run: python3 tests/native/editor_startup_smoke.py
       - name: Exercise saved menus and settings
         env:
           KILN_UI_EVIDENCE_DIR: target/native-ui-evidence
@@ -263,6 +265,10 @@ jobs:
           path: |
             target/native-ui-evidence/
             target/editor-design-evidence/
+            target/a01-editor-startup/result.json
+            target/a01-editor-startup/failure.json
+            target/a01-editor-startup/editor/*.png
+            target/a01-editor-startup/editor/*.log
             target/task7-native-evidence/
             target/task7-editor-evidence/
             target/task8-export-evidence/

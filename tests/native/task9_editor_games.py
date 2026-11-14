@@ -68,6 +68,19 @@ def floating_title_start(row):
     return max(runs)[1] if runs else None
 
 
+def menu_frame_ready(width, height, pixels):
+    """Observe the painted menu, excluding an allocated but unpainted X11 window."""
+    if (width, height) != (1440, 900) or len(pixels) != width*height*3:
+        return False
+    background = glyphs = 0
+    for y in range(26):
+        for x in range(200):
+            pixel = pixels[(y*width+x)*3:(y*width+x)*3+3]
+            background += color_matches(pixel, (35, 38, 44))
+            glyphs += min(pixel) > 100
+    return background > 2000 and glyphs > 20
+
+
 class Editor:
     def __init__(self, tools, project, output, display=':83'):
         self.tools, self.project, self.output = Path(tools).resolve(), Path(project).resolve(), Path(output).resolve()
@@ -123,10 +136,11 @@ class Editor:
             return result.stdout.strip().splitlines()[0] if result.returncode == 0 else None
         self.window = self.wait(find)
         self.command('windowfocus', '--sync', self.window)
-        time.sleep(.7)
+        self.wait(lambda: menu_frame_ready(*self.frame()),
+                  description='Render editor menu before closing default tabs')
         # Close the default source/animation tabs before reopening them as
         # floating panels. Menus deliberately reuse an already-open panel.
-        self.click(633,78); self.click(520,78)
+        self.held_click(633,78); self.held_click(520,78)
         return self
 
     def command(self, *args):
@@ -163,8 +177,16 @@ class Editor:
         time.sleep(.2)
         subprocess.run([executable('import'), '-display', self.env['DISPLAY'], '-window', self.window, str(self.output/(name+'.png'))], env=self.env, check=True, timeout=20)
 
+    def frame(self):
+        capture = subprocess.check_output([executable('import'), '-display', self.env['DISPLAY'],
+                                          '-window', self.window, '-depth', '8', 'ppm:-'],
+                                         env=self.env, timeout=10)
+        header, pixels = capture.split(b'\n255\n', 1)
+        width, height = map(int, header.splitlines()[-1].split())
+        return width, height, pixels
+
     def panel(self, menu, row):
-        self.click(menu, 12); self.click(menu+25, row)
+        self.held_click(menu, 12); self.held_click(menu+25, row)
         if menu == 18:
             return
         # egui may stagger newly reopened floating windows. Read their visible
@@ -172,11 +194,7 @@ class Editor:
         # This is screen observation and an ordinary title-bar drag, not an
         # application state hook or an assumed hidden window position.
         def title_bar():
-            capture = subprocess.check_output([executable('import'), '-display', self.env['DISPLAY'],
-                                              '-window', self.window, '-depth', '8', 'ppm:-'], env=self.env,
-                                             timeout=10)
-            header, pixels = capture.split(b'\n255\n', 1)
-            width, height = map(int, header.splitlines()[-1].split())
+            width, height, pixels = self.frame()
             assert (width, height) == (1440, 900)
             start = floating_title_start(pixels[102*width*3:103*width*3])
             return (start,) if start is not None else None

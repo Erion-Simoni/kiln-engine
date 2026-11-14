@@ -77,5 +77,34 @@
         "detail": "Installed capture_window.ps1: Window client area is too small. Now select the largest PID-owned visible window with a client area of at least 100x100; regression tests pass. Fresh Windows hosted confirmation pending."
       }
     ]
+  },
+  "current": {
+    "observed_at": "2026-11-14T14:37:21.036164+00:00",
+    "source": "3efb687475569a3a3df0bb9f13f6e28e3bf49ddc",
+    "evidence_source": "Public GitHub Actions workflow list and run summary HTML",
+    "checks": [
+      {
+        "name": "Release candidate verification",
+        "run": 43603620009,
+        "result": "in_progress"
+      },
+      {
+        "name": "Windows portable candidate",
+        "run": 43603619881,
+        "result": "success"
+      },
+      {
+        "name": "CI",
+        "run": 43603619952,
+        "result": "failure",
+        "detail": "Browser structured-scripting authoring timed out waiting for floating Script Editor, before source entry. Delaying first rendering locally reproduces the same failure when initial default-tab close clicks are lost."
+      },
+      {
+        "name": "Editor-authored reference games",
+        "run": 43603619867,
+        "result": "success"
+      }
+    ],
+    "local_followup": "Wait for visibly painted menu before closing default tabs; hold tab/menu clicks across frames; retain delayed-render regression and screenshots in native CI. Matching-source hosted confirmation remains required."
   }
 }

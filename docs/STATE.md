@@ -1,68 +1,54 @@
 # Kiln Session Handoff
 
-Active owner instruction: finish A01 through A04. Branch `fix/a01-ci-baseline`;
-last pushed checkpoint before this graph batch: `3daaa1c`. Continue implementation,
-not checkbox closure. Full 3D remains gated on G2D; no release-size ceiling;
-MIT OR Apache-2.0 settled. A01–A04 remain PARTIAL.
+Active owner instruction: continue A01 through A04 on `fix/a01-ci-baseline`.
+This environment resumed from pushed graph checkpoint `3efb687` on 2026-11-14.
+Current focus: A01 startup synchronization. A01–A04 remain PARTIAL; full 3D stays
+behind G2D. MIT OR Apache-2.0 is settled; no release-size ceiling.
 
-## Done in this checkpoint
+## Done this checkpoint
 
-- Replaced graph hash IDs/stubs with bounded KilnScript lowering through the same
-  shared host registry/frontend/VM as text. Registry moved into kiln-script with
-  backwards-compatible runtime re-export; kiln-graph reuses the existing crate.
-- Correct host argument pins/return values and separate optional trigger/done pins;
-  constants, arithmetic/comparison, lifecycle events and conditional event merges.
-  Each node computes once per invocation despite fan-out. Missing/duplicate inputs,
-  cycles, unsupported reachable nodes, depth/expansion/value bounds fail explicitly.
-- Wired the existing interactive graph widget into the actual editor. Parameter
-  dialogs commit on OK, Cancel preserves values, Delete removes nodes/connections,
-  signature changes retain compatible pin IDs and remove obsolete wires. Fixed
-  multi-frame dragging, added visible pin names and actual shared-registry chooser.
-- Visual metadata and ordinary generated source are one guarded .ks resource with
-  bounded comment lines. Graph drafts share existing script Save, dirty guards and
-  crash recovery. Incomplete graphs retain metadata but intentionally fail compile;
-  manually changed generated bodies are preserved as text. Out-of-budget edits
-  reject the transaction. New graph resources assign to scenes through the UI.
-- Graph Undo/Redo is scoped to the file, bounded jointly to 32 snapshots/8 MiB;
-  each drag is one gesture. Graph controls are read-only during Play; actual last-
-  executed root VM node values are inspectable and survive logical saves.
-- Added real editor → native/browser graph acceptance and retained evidence in CI.
-- A01 observation fix: floating-panel detection tolerates egui sRGB dithering by
-  two channel units while rejecting canvas gray/short runs. Parameter-dialog waits
-  also observe the rendered dialog before typing. Added two Python regressions.
+- Fetched and checked out the requested branch in `/workspace/kiln-engine`,
+  preserving the graph/script/resource/scene work from the prior environment.
+- Restored Rust 1.99.1, rustfmt/Clippy/just and rootless native test libraries,
+  Xvfb/xdotool/software Vulkan under `/workspace/.kiln-tools`.
+- General hosted CI 43603619952 on `3efb687` still failed at the floating Script
+  Editor wait in structured-scripting authoring. The prior dither-tolerance fix
+  alone did not resolve it. Matching Windows candidate 43603619881 and reference
+  games 43603619867 PASSED; Linux candidate 43603620009 was still IN_PROGRESS
+  at the recorded observation. Public HTML only; no authenticated artifact/log access.
+- Reproduced the exact floating-panel timeout by pausing the owned editor after
+  X11 window creation and resuming after 2.5 seconds. The old 0.7-second wait sent
+  default-tab close clicks before rendering, leaving Script Editor docked.
+- Shared GUI startup now waits for the visibly painted menu. Tab closes and panel
+  menu selections use held press/release events. All floating-title, source,
+  movement and missing-canvas postconditions stay active; no engine hooks added.
+- Added delayed-render real GUI acceptance to native CI and retained screenshots,
+  diagnostics and receipts. Added unpainted/solid/truncated/dithered-frame regressions.
+- Evidence: `docs/evidence/A01_EDITOR_STARTUP.md` and updated hosted status JSON.
 
-## Validation
+## Executed validation
 
-- just check PASSED: fmt, strict workspace/all-target Clippy, native/workspace and
-  standalone audio check. Workspace: 751 passed, zero skipped. Python: 36 passed.
-  actionlint, mdBook build and Node syntax check passed.
-- Fresh default WASM build and no-default-feature strict WASM Clippy PASSED.
-- Real graph widgets/native/browser acceptance PASSED: wire actual add_score with
-  argument 9, parameter Cancel, Undo/Redo, one-step drag undo, scene assignment,
-  Play/F5 save, actual node values, exact restart and browser F9/F5 restoration.
-  Native score 252/browser 378; browser rendered 392 hero pixels, saved 3 node values.
-  Reproduction: tests/native/graph_authoring_smoke.py --web-runtime target/debug/web-runtime.
-- Real session graph/text movement parity and logical save/restart pass. Graph
-  regressions cover host IDs/arity/order, branch side effects, once-per-tick fan-out,
-  exact strings/i64 MIN, deterministic metadata, manual-edit guards and bounds.
-- Repaired floating-panel observer rerun PASSED real editor source authoring and
-  browser enum/task/timer/dictionary/loop movement. Baseline movement assertions and
-  missing-canvas rejection remain active. No renderer behavior was changed.
-- Evidence: docs/evidence/A04_GRAPH_WORKFLOW.md and A03_A04_RESOURCE_TOOLS.md.
-  Logs/screenshots/receipts are under target/, excluded from Git. Xvfb/software
-  graphics is not physical hardware or Windows/macOS graph certification.
+- Default editor/player/CLI build PASSED.
+- `just check` PASSED: formatting, strict workspace/all-target Clippy, workspace
+  check and standalone audio sample check. Python regressions: 38 PASSED.
+- Delayed first-render reproduction FAILED before the fix, PASSED after it;
+  committed `tests/native/editor_startup_smoke.py` PASSED. Inspected screenshot
+  shows actual floating Script Editor with default source/animation tabs closed.
+- Real external texture refresh and enum/task/timer/dictionary/loop source
+  authoring PASSED. Real source format/search/navigation/completion/save/restart
+  smoke PASSED. Forced-crash recovery/restore/save, explicit discard, exit
+  Cancel/Discard and unsupported-sidecar preservation smoke PASSED.
+- No engine source changed. Full Rust tests and browser runtime were not rerun in
+  this fresh environment; prior checkpoint recorded 751 Rust/36 Python passes
+  plus graph native/browser gameplay and saved node-value restoration.
 
 ## Next / remaining gates
 
-A01: source 3daaa1c Windows candidate 43601654013 PASSED. General CI 43601654042
-FAILED while observing the floating Script Editor (exact title-run timeout, before
-source entry). The new dither-tolerant observer requires matching hosted confirmation;
-this is a targeted fix, not proof of the hosted root cause. Reference 43601653998
-and Linux candidate 43601653996 were still IN_PROGRESS at last observation. Earlier
-fc78575 Linux candidate 43576816847 passed; PR #22 general/reference runs also passed,
-but current source still needs all required matching results. Public job logs return
-404; authenticated API is Forbidden. Push/public HTML work. Avoid rapid repeated
-pushes that continually cancel long candidate runs.
+A01: obtain matching hosted results for this startup fix; the local delayed-render
+reproduction establishes a sufficient cause, not proof of all hosted failures.
+Follow Linux candidate 43603620009 without repeatedly canceling long runs. Keep
+all three authored games, general CI, artifact checks and candidates source-pinned.
+Do not close acceptance from prior-source green runs.
 
 A02: prior fc78575 implements saved inherited lock/hide, selection/marquee,
 alignment, clipboard, recovery and guarded writes with real two-scene evidence.
@@ -77,7 +63,14 @@ with equivalent graph and complete exports remain open. Cooperative task payload
 are explicit state machines, not automatic suspended function stacks/yield syntax.
 The legacy separate bytecode debugger is not the live gameplay source debugger.
 
-Tools: source /workspace/.kiln-tools/activate.sh; CARGO_INCREMENTAL=0,
-CARGO_PROFILE_DEV_DEBUG=0, CARGO_PROFILE_TEST_DEBUG=0. Rust 1.99.1/nextest0.9.151;
-local browser CHROMIUM_PATH=/usr/bin/chromium. just check before every commit.
-Do not kill unrelated editor/Xvfb processes. Generated artifacts stay out of Git.
+
+## Environment / evidence
+
+Source `/workspace/.kiln-tools/activate.sh`; it sets CARGO_HOME/RUSTUP_HOME,
+CARGO_INCREMENTAL=0, debug-info overrides, rootless pkg-config/library paths and
+software Vulkan. Local tools use Debian 13 rootless packages. The previous
+`CHROMIUM_PATH=/usr/bin/chromium` installation is absent in this environment.
+Raw current evidence lives under target/a01-delayed-start, a01-editor-startup,
+a03-a04-workflow, a04-source-tools and a02-script-recovery; generated artifacts stay
+out of Git. No physical hardware or new Windows/macOS GUI certification claimed.
+Do not kill unrelated editor/Xvfb processes. `just check` before every commit.

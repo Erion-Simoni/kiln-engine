@@ -10,7 +10,7 @@ import tempfile
 from unittest.mock import patch
 import unittest
 
-from task9_editor_games import stop_process, record_failure, floating_title_start
+from task9_editor_games import stop_process, record_failure, floating_title_start, menu_frame_ready
 
 
 class ProcessCleanupTests(unittest.TestCase):
@@ -60,6 +60,22 @@ class FailureReportingTests(unittest.TestCase):
 
 
 class FramebufferObservationTests(unittest.TestCase):
+    def test_startup_rejects_unpainted_and_solid_windows(self):
+        for color in [(0, 0, 0), (255, 255, 255), (35, 38, 44)]:
+            self.assertFalse(menu_frame_ready(1440, 900, bytes(color)*1440*900))
+        self.assertFalse(menu_frame_ready(1440, 900, b''))
+
+    def test_startup_recognizes_painted_menu_with_srgb_dithering(self):
+        frame = bytearray(bytes((43, 43, 43))*1440*900)
+        for y in range(26):
+            for x in range(200):
+                d = (x+y)%3-1
+                pixel = (194, 194, 194) if y == 12 and 10 <= x < 100 else (35+d, 38+d, 44+d)
+                offset = (y*1440+x)*3
+                frame[offset:offset+3] = bytes(pixel)
+        self.assertTrue(menu_frame_ready(1440, 900, frame))
+        self.assertFalse(menu_frame_ready(900, 1440, frame))
+
     def test_dithered_srgb_title_is_found_without_matching_canvas_gray(self):
         row=bytes((43,43,43))*33
         row+=b''.join(bytes((35+d,38+d,44+d)) for d in [-1,0,1]*101)
