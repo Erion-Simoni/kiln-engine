@@ -216,6 +216,15 @@ Polling uses size/mtime; content-preserving metadata changes, the complete renam
 prefab/atlas/export workflow, platform presets and nested/variant acceptance remain
 open. See [batch evidence](evidence/A02_A04_AUTHORING.md).
 
+**Resource/import batch 2026-11-14:** one typed reference visitor now covers
+prefab overrides, clips, tilesets, scripts, fonts, audio and shader/material
+textures. Stable IDs move with references. Import defaults and separate target
+presets persist through real widget rename/save/restart; background diagnostics
+report missing dependents and duplicate IDs/content. Fixed a real GPU preview
+lifetime crash and hidden import controls. Nested/variant prefab and integrated
+atlas rebuild/export acceptance remain open. See
+[checkpoint evidence](evidence/A03_A04_RESOURCE_TOOLS.md).
+
 ### A04 — General scripting, graphs and real debugging
 
 **Status:** PARTIAL. **Depends on:** A02.
@@ -232,6 +241,16 @@ source breakpoints, imported function frames and watches. Enums, scheduling,
 completion/search/format/navigation and graph authoring/inspection acceptance
 remain open. See [language contract](KILNSCRIPT.md) and
 [batch evidence](evidence/A02_A04_AUTHORING.md). A02–A04 remain PARTIAL.
+
+**Source/scheduling batch 2026-11-14:** qualified enums, cooperative staged tasks
+and one-shot game-time timers use the shared VM and existing typed saves. Added
+indent formatting, shared-registry call insertion, bounded saved-project search
+and literal function navigation. Browser movement passes using editor-authored
+enums/tasks/timers/dictionaries/loops; save/restart and invalid input regressions
+pass. Runtime identities now reject stale same-version language/project contracts.
+This does not supply automatic stackful continuations, live source breakpoints,
+imported frames/watches or complete graph authoring. Those and the new equivalent
+script/graph game remain required. See [checkpoint evidence](evidence/A03_A04_RESOURCE_TOOLS.md).
 
 ### A05 — Sprite rendering, cameras and large-scene behavior
 

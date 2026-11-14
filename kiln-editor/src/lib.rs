@@ -76,3 +76,7 @@ mod script_highlight;
 
 mod scene_controls;
 mod scene_selection;
+
+mod asset_diagnostics;
+
+mod source_search;

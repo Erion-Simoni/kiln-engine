@@ -232,6 +232,10 @@ jobs:
         run: python3 tests/native/entity_clipboard_smoke.py
       - name: Verify scene selection, locks, visibility, alignment and recovery
         run: python3 tests/native/scene_controls_smoke.py
+      - name: Verify source formatting, navigation and completion
+        run: python3 tests/native/source_tools_smoke.py
+      - name: Verify asset preview, target presets and reference-safe moves
+        run: python3 tests/native/asset_import_workflow_smoke.py
       - name: Verify external art refresh and structured gameplay authoring
         run: python3 tests/native/asset_script_workflow_smoke.py
       - name: Pack the saved UI game
@@ -273,6 +277,16 @@ jobs:
             target/a02-entity-clipboard/editor/*.png
             target/a02-entity-clipboard/editor/*.log
             target/a02-entity-clipboard/reopened/*.png
+            target/a04-source-tools/result.json
+            target/a04-source-tools/failure.json
+            target/a04-source-tools/editor/*.png
+            target/a04-source-tools/editor/*.log
+            target/a04-source-tools/reopened/*.png
+            target/a03-asset-import/result.json
+            target/a03-asset-import/failure.json
+            target/a03-asset-import/editor/*.png
+            target/a03-asset-import/editor/*.log
+            target/a03-asset-import/reopened/*.png
             target/a03-a04-workflow/*.log
             target/a03-a04-workflow/failure.json
             target/a03-a04-workflow/result.json

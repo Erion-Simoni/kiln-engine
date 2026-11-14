@@ -41,7 +41,7 @@ pub struct AssetEntry {
 }
 
 /// The state of the editor's asset browser.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct AssetBrowser {
     fingerprints: BTreeMap<String, (u64, Option<SystemTime>)>,
     last_poll: Option<Instant>,
@@ -53,6 +53,7 @@ pub struct AssetBrowser {
     preview_source: Option<String>,
     /// Decoded preview pixels (RGBA8) of the selected asset.
     preview_pixels: Option<Vec<u8>>,
+    preview_texture: Option<egui::TextureHandle>,
     /// Preview size in pixels.
     preview_size: Option<(usize, usize)>,
     /// Load errors of the last scan, as `(path, message)` pairs.
@@ -61,6 +62,17 @@ pub struct AssetBrowser {
     filter: String,
     /// Currently dragged asset path for drag operations.
     drag_source: Option<String>,
+}
+
+impl std::fmt::Debug for AssetBrowser {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AssetBrowser")
+            .field("root", &self.root)
+            .field("entries", &self.entries)
+            .field("preview_source", &self.preview_source)
+            .field("preview_size", &self.preview_size)
+            .finish_non_exhaustive()
+    }
 }
 
 impl AssetBrowser {
@@ -140,6 +152,7 @@ impl AssetBrowser {
         self.errors.clear();
         self.preview_source = None;
         self.preview_pixels = None;
+        self.preview_texture = None;
         self.preview_size = None;
         self.drag_source = None;
 
@@ -286,6 +299,7 @@ impl AssetBrowser {
                 self.preview_source = Some(path.to_string());
                 self.preview_size = Some((width, height));
                 self.preview_pixels = Some(pixels);
+                self.preview_texture = None;
                 Ok(())
             }
             Err(message) => {
@@ -299,7 +313,18 @@ impl AssetBrowser {
     pub fn clear_preview(&mut self) {
         self.preview_source = None;
         self.preview_pixels = None;
+        self.preview_texture = None;
         self.preview_size = None;
+    }
+
+    /// Retain the GPU preview handle until selection or image contents change.
+    pub fn preview_texture(&mut self, ctx: &egui::Context) -> Option<&egui::TextureHandle> {
+        if self.preview_texture.is_none() {
+            let image = self.preview_color_image()?;
+            self.preview_texture =
+                Some(ctx.load_texture("asset_preview", image, egui::TextureOptions::NEAREST));
+        }
+        self.preview_texture.as_ref()
     }
 
     /// Build an `egui` colour image of the current preview.
@@ -434,6 +459,36 @@ mod tests {
 #[cfg(test)]
 mod reimport_tests {
     use super::*;
+    #[test]
+    fn preview_gpu_handle_remains_alive_across_frames_until_reimport() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("hero.png");
+        std::fs::write(
+            &path,
+            kiln_assets::encode_png_rgba(1, 1, &[255, 0, 0, 255]).unwrap(),
+        )
+        .unwrap();
+        let mut browser = AssetBrowser::new();
+        browser.scan(root.path());
+        browser.select("hero.png").unwrap();
+        let ctx = egui::Context::default();
+        ctx.begin_pass(Default::default());
+        let first = browser.preview_texture(&ctx).unwrap().id();
+        assert!(!ctx.end_pass().textures_delta.free.contains(&first));
+        ctx.begin_pass(Default::default());
+        assert_eq!(browser.preview_texture(&ctx).unwrap().id(), first);
+        assert!(!ctx.end_pass().textures_delta.free.contains(&first));
+        std::fs::write(
+            &path,
+            kiln_assets::encode_png_rgba(2, 1, &[0, 0, 255, 255, 0, 0, 255, 255]).unwrap(),
+        )
+        .unwrap();
+        browser.refresh_changed_files();
+        ctx.begin_pass(Default::default());
+        assert_ne!(browser.preview_texture(&ctx).unwrap().id(), first);
+        let _ = ctx.end_pass();
+    }
+
     #[test]
     fn external_image_changes_refresh_preview_and_detect_additions_and_deletions() {
         let root = tempfile::tempdir().unwrap();

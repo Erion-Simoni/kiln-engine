@@ -1,59 +1,69 @@
 # Kiln Session Handoff
 
-Active instruction: finish A01 through A04; do not close a gate without its listed
-acceptance. Branch `fix/a01-ci-baseline`, baseline `27fa148`. Full 3D stays gated
-on G2D; no release-size ceiling; MIT OR Apache-2.0 remains settled.
+Active instruction: finish A01 through A04. Branch `fix/a01-ci-baseline`; last
+pushed baseline `fc78575`. Full 3D remains gated on G2D. No release-size ceiling;
+MIT OR Apache-2.0 remains settled. No milestone is accepted by this checkpoint.
 
 ## Done in this checkpoint
 
-- Persistent optional EditorFlags components implement inherited lock/hide.
-  Locks guard hierarchy, component, transform, sprite-property and Sprite Editor
-  paths. Hide filters edit-mode sprite/tile/particle drawing and collider outlines;
-  player/Play rendering ignores editor hide. Hierarchy context menus unlock/show.
-  Scene snapshots and prefab propagation/revert preserve instance editor flags.
-- Viewport sprite picking follows painter order and actual rotated/pivoted/scaled
-  quads. Q-mode marquee supports additive selection. World-position alignment of
-  independent selections is one atomic undo command, without moving children twice.
-- Real widget acceptance passed: viewport select/copy, group alignment and undo/
-  redo, hide in Edit/show in Play, lock rejecting a viewport drag, two scenes,
-  real 30-second autosave, forced kill/restore/save and identical restart properties.
-  Raw evidence: target/a02-scene-controls/result.json and editor/reopened captures.
-- Added regressions for inherited guards, transaction rollback/history, parent/
-  child alignment, negative-scale/rotated picking, player visibility and metadata
-  preservation on snapshot, prefab propagation and revert.
-- A01 browser-export radio/path entry now uses separate held events. Export requests
-  log their actual target/output; receipt waits name the failed game/target.
-  New editor-to-browser acceptance publishes exact authoring/browser exceptions,
-  retaining browser logs and all assertions. Scene-controls smoke is added to CI.
+- Shared typed resource dependencies and rename cover sprite/prefab override,
+  clip/tileset, script, audio/font and shader/material texture paths. Asset identity
+  moves once, retaining global/target settings. Added target-specific texture
+  options with default fallback and optional backwards-compatible project tables.
+- Assets worker diagnostics name missing dependents and duplicated IDs/content
+  without writing or deleting. SHA256 streams in bounded buffers. Import All now
+  records actual project defaults instead of only cache metadata.
+- Fixed real egui/wgpu preview use-after-free: retained preview TextureHandle and
+  deferred texture frees until after submission/presentation. Bounded asset shelf
+  and scrollable Assets body expose previews/import settings previously obscured.
+- Qualified enums compile to stable tagged strings. Added parameter/argument and
+  nested-array bounds. Cooperative staged tasks/one-shot timers reuse deterministic
+  script time and typed state, survive logical save/restart and consume due values
+  exactly once. No automatic suspended function stacks/yield syntax is claimed.
+- Added token-preserving indent formatter, bounded saved-project source search,
+  literal function navigation and shared-registry completion insertion. Navigation
+  preserves unsaved buffers, uses Unicode cursor offsets and focuses/scans source.
+- Shared runtime contract now rejects old same-version native/WASM tool bundles.
+  Runtime sections, native identities and export regression fixtures agree.
+- A01 source-save helpers hold relevant clicks across frames and name exact files
+  and panel waits. Browser authoring publishes original exceptions/browser output.
+  New native asset/source workflow smokes run in CI with retained evidence.
 
 ## Validation
 
-- just check passed (strict workspace all-target Clippy, fmt, native/audio checks).
-- Workspace suite: 731 passed, zero skipped; four focused scene-controls tests
-  include inherited guards, alignment, player visibility and prefab-flag retention.
-- 34 Python regressions and actionlint passed. Native editor/player/CLI built.
-- tests/native/scene_controls_smoke.py passed on actual Linux Xvfb/software graphics.
-  Existing A02–A04 baseline evidence remains docs/evidence/A02_A04_AUTHORING.md.
+- just check PASSED: fmt, strict workspace/all-target Clippy, workspace/native and
+  standalone audio check. Full workspace: 745 passed, zero skipped; 34 Python tests.
+- WASM default build and WASM no-default-feature strict Clippy PASSED. Fresh bound
+  browser runtime plays real editor-authored enums/tasks/timers/dictionaries/loops;
+  actual movement depends on the new scheduler results, rather than syntax alone.
+- Real Xvfb/software graphics asset smoke PASSED: live GPU preview, separate Web
+  defaults, move preserving IDs/settings/references, diagnostics, exact restart.
+- Real source tools smoke PASSED: format/save, navigate to another saved source,
+  completion prefix replacement and exact source/manifest restart preservation.
+- Reproduction/evidence: docs/evidence/A03_A04_RESOURCE_TOOLS.md; generated logs,
+  screenshots and receipts remain under target/ and are excluded from Git.
 
-## A01 hosted observations / remaining work
+## Next / open gates
 
-On 27fa148: Windows candidate 43574843434 PASSED (7m47); Linux candidate
-43574843462 was running. General CI 43574843465 FAILED only in browser job
-132386754460, step 13: Verify editor-authored counted loops and dictionaries in
-browser. All three-OS checks/build/archive groups, docs, Rust/Python and native UI
-passed. Reference games 43574843470 FAILED after Switchyard native export and its
-expected overwrite rejection, before the browser receipt. Binding failure progressed.
-Public browser-step logs return 404; exact browser exception is not established.
-The diagnostic and held-event followups need fresh matching-source hosted results.
+A01: fc78575 Windows candidate 43576816845 PASSED. General CI 43576816906 FAILED
+in structured-scripting authoring with a source-save timeout; precise per-file waits
+and held source controls need matching-source hosted confirmation. Public check logs
+return 404 and authenticated API is Forbidden. Reference 43576816853 and Linux
+43576816847 still need latest status. Earlier hosted results do not accept new code.
+Avoid needless rapid pushes that continually cancel long candidate runs.
 
-Continue A03 resource/dependency coverage, prefab nesting/variants/atlas production
-workflow and platform presets; then A04 enums, scheduler, source tooling and actual
-live source debugging/graph acceptance. A02's broad combined property/transform and
-cross-platform acceptance remains open despite the newly passing Linux workflow.
-Keep docs/ENGINE_COMPLETION_PLAN.md authoritative; A01–A04 are not marked accepted.
+A02: implemented saved lock/hide, selection/marquee, alignment, copy/paste, recovery
+and guarded writes with real two-scene evidence in prior fc78575 checkpoint.
+Broad combined transform/property and cross-platform acceptance is still open.
+A03: source imports are not included in typed manifest rename. Nested prefabs,
+variants and integrated atlas author/rebuild/reopen/export acceptance remain open.
+A04: replace hashed/stub graph host calls with shared registry semantics and wire
+real editable nodes/pins; actual live source breakpoints, imported frames/locals/
+watches and new enemy/projectile/trigger equivalent script/graph game remain open.
+Legacy separate bytecode debugger is not the actual gameplay source debugger.
 
-Toolchain: source /workspace/.kiln-tools/activate.sh; use CARGO_INCREMENTAL=0,
+Tools: source /workspace/.kiln-tools/activate.sh; CARGO_INCREMENTAL=0,
 CARGO_PROFILE_DEV_DEBUG=0, CARGO_PROFILE_TEST_DEBUG=0. Rust 1.99.1, nextest0.9.151;
-Chromium local tests use CHROMIUM_PATH=/usr/bin/chromium. just check before commits.
-Git push/public GitHub HTML work; authenticated API is Forbidden. Software targets
-are not physical-device certification. Do not kill unrelated old editor processes.
+local browser CHROMIUM_PATH=/usr/bin/chromium. just check before every commit.
+Git push/public GitHub HTML work; authenticated API is Forbidden. Software graphics
+is not physical GPU certification. Do not kill unrelated old editor/Xvfb processes.

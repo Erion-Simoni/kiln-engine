@@ -769,6 +769,8 @@ impl EditorApp {
         let path = crate::project_files::save_as(&project, source, &path)?;
         self.shell.script_editor.reset();
         self.shell.entity_clipboard = None;
+        self.shell.selection_origin = None;
+        self.shell.asset_diagnostics = Default::default();
         self.prefab_apply_undo.clear();
         self.prefab_apply_redo.clear();
         let _ = crate::recovery::clear(&path);
@@ -797,6 +799,8 @@ impl EditorApp {
         let loaded = crate::project_files::load(&path)?;
         self.shell.script_editor.reset();
         self.shell.entity_clipboard = None;
+        self.shell.selection_origin = None;
+        self.shell.asset_diagnostics = Default::default();
         self.prefab_apply_undo.clear();
         self.prefab_apply_redo.clear();
         self.finish_transform_edit();
@@ -923,6 +927,8 @@ impl EditorApp {
             if decision == SaveDecision::Discard {
                 self.shell.script_editor.reset();
                 self.shell.entity_clipboard = None;
+                self.shell.selection_origin = None;
+                self.shell.asset_diagnostics = Default::default();
             }
             self.execute_project_action(action)?;
         }
@@ -1791,6 +1797,16 @@ impl EditorApp {
     }
 
     fn rename_project_asset(&mut self, old_path: &str, new_path: &str) -> Result<(), String> {
+        if old_path != new_path
+            && self
+                .current_project
+                .as_ref()
+                .is_some_and(|p| p.asset_ids.contains_key(new_path))
+        {
+            return Err(
+                "The destination is already registered to an asset; choose an unused path".into(),
+            );
+        }
         self.finish_transform_edit();
         if self.current_project.is_none() {
             return Err("Open a project before moving an asset".into());
@@ -1830,9 +1846,6 @@ impl EditorApp {
             project.scenes.insert(scene_id.clone(), scene);
         }
         let updated = crate::editing::rewrite_asset_references(project, old_path, new_path);
-        if let Some(id) = project.asset_ids.remove(old_path) {
-            project.asset_ids.insert(new_path.to_owned(), id);
-        }
         self.prefab_editor
             .state
             .replace_prefabs(project.prefabs.clone());
@@ -2235,6 +2248,12 @@ impl winit::application::ApplicationHandler for EditorApp {
 impl EditorApp {
     fn render_frame(&mut self) {
         self.build_panel.poll();
+        if self.shell.asset_diagnostics.poll() {
+            for line in &self.shell.asset_diagnostics.lines {
+                log::info!("Asset diagnostics: {line}");
+                self.console_log.push(format!("[INFO] {line}"));
+            }
+        }
         if self.play.is_none() && self.pending_recovery.is_none() {
             let changed = self.asset_browser.poll_changes();
             if changed
@@ -3299,10 +3318,6 @@ impl EditorApp {
             );
         }
 
-        for id in &full_output.textures_delta.free {
-            gpu.egui_renderer.free_texture(id);
-        }
-
         gpu.egui_renderer.update_buffers(
             gpu.renderer.device(),
             gpu.renderer.queue(),
@@ -3573,6 +3588,10 @@ impl EditorApp {
         gpu.renderer.queue().submit([encoder.finish()]);
         gpu.window.pre_present_notify();
         frame.present();
+        // Free egui handles only after commands referencing them were submitted.
+        for id in &full_output.textures_delta.free {
+            gpu.egui_renderer.free_texture(id);
+        }
 
         // Execute menu actions after UI pass (borrows are released)
         for action in menu_actions {
@@ -4605,11 +4624,7 @@ impl TabViewer<'_> {
                 .or_insert_with(|| kiln_core::next_id().to_string())
                 .clone();
             let path = dir.join(&entry.path);
-            let settings = project
-                .asset_import_settings
-                .get(&asset_id)
-                .copied()
-                .unwrap_or_default();
+            let settings = *project.asset_import_settings.entry(asset_id).or_default();
             let settings = kiln_assets::ImportSettings {
                 filtering: if settings.nearest_filter {
                     kiln_assets::TextureFilter::Nearest
@@ -5739,6 +5754,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                     ui.add_space(2.0);
 
+                    egui::ScrollArea::vertical().id_salt("asset_browser_body").show(ui,|ui| {
                     let mut scene_ids: Vec<_> = self.current_project.as_ref().map(|p| p.scenes.keys().cloned().collect()).unwrap_or_default();
                     scene_ids.sort();
                     match crate::asset_shelf::show(ui, self.asset_browser, &mut self.shell.asset_category, &mut self.shell.thumbnails, &scene_ids) {
@@ -5779,42 +5795,44 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     }
 
                     // PNG preview of the selected asset.
-                    if let Some(source) = self.asset_browser.preview_source() {
+                    if let Some(source) = self.asset_browser.preview_source().map(str::to_owned) {
                         ui.collapsing("Selected texture · import settings and preview", |ui| {
                         ui.add_space(8.0);
                         ui.label(format!("Preview: {source}"));
                         if let Some(project) = self.current_project.as_mut() {
-                            if let Some(asset_id) = project.asset_ids.get(source).cloned() {
+                            if let Some(asset_id) = project.asset_ids.get(&source).cloned() {
                                 ui.small(format!("Asset ID: {asset_id}"));
-                                let mut settings = project.asset_import_settings
-                                    .get(&asset_id).copied().unwrap_or_default();
-                                let mut changed = false;
-                                ui.horizontal(|ui| {
-                                    changed |= ui.checkbox(&mut settings.is_sprite, "Sprite").changed();
-                                    changed |= ui.checkbox(&mut settings.nearest_filter, "Nearest filtering").changed();
-                                    changed |= ui.checkbox(&mut settings.generate_mipmaps, "Mipmaps").changed();
+                                egui::ComboBox::from_id_salt("asset_import_platform").selected_text(self.shell.import_platform).show_ui(ui,|ui| {
+                                    for target in ["default","windows","linux","macos","web"] {ui.selectable_value(&mut self.shell.import_platform,target,target);}
                                 });
+                                let target=self.shell.import_platform;
+                                let mut settings=if target=="default" {project.asset_import_settings.get(&asset_id)}else{project.asset_platform_import_settings.get(&asset_id).and_then(|targets|targets.get(target)).or_else(||project.asset_import_settings.get(&asset_id))}.copied().unwrap_or_default();
+                                let mut changed=false;
+                                ui.horizontal(|ui| {
+                                    changed|=ui.checkbox(&mut settings.is_sprite,"Sprite").changed();
+                                    changed|=ui.checkbox(&mut settings.nearest_filter,"Nearest filtering").changed();
+                                    changed|=ui.checkbox(&mut settings.generate_mipmaps,"Mipmaps").changed();
+                                });
+                                if target!="default" {
+                                    ui.small("Override applies when running on this target.");
+                                    if ui.button("Use default settings").clicked() {if let Some(targets)=project.asset_platform_import_settings.get_mut(&asset_id){targets.remove(target);}self.project_requests.push(ProjectRequest::RefreshVisuals);}
+                                }
                                 if changed {
-                                    project.asset_import_settings.insert(asset_id, settings);
+                                    if target=="default" {project.asset_import_settings.insert(asset_id,settings);}else{project.asset_platform_import_settings.entry(asset_id).or_default().insert(target.into(),settings);}
                                     self.project_requests.push(ProjectRequest::RefreshVisuals);
                                 }
                             } else {
                                 ui.label("Import assets to assign a stable ID and configure import settings.");
                             }
                         }
-                        if let Some(image) = self.asset_browser.preview_color_image() {
-                            let texture_id = ui.ctx().load_texture(
-                                "preview",
-                                image,
-                                egui::TextureOptions::NEAREST,
-                            );
-                            let size = self.asset_browser.preview_size().unwrap_or((0, 0));
+                        let size=self.asset_browser.preview_size().unwrap_or((0,0));
+                        if let Some(texture_id) = self.asset_browser.preview_texture(ui.ctx()) {
                             let scale = if size.0 > 0 {
                                 96.0 / size.0 as f32
                             } else {
                                 1.0
                             };
-                            ui.add(egui::Image::new(&texture_id).fit_to_exact_size(egui::vec2(
+                            ui.add(egui::Image::new(texture_id).fit_to_exact_size(egui::vec2(
                                 size.0 as f32 * scale,
                                 size.1 as f32 * scale,
                             )));
@@ -5825,6 +5843,12 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         });
                     }
 
+                    ui.collapsing("Asset dependencies and diagnostics",|ui| {
+                        if ui.add_enabled(!self.shell.asset_diagnostics.running(),egui::Button::new("Check dependencies and duplicates")).clicked() {
+                            if let (Some(project),Some(root))=(self.current_project.as_ref(),self.asset_browser.root()) {self.shell.asset_diagnostics.start(project.clone(),root.to_owned());}
+                        }
+                        for line in &self.shell.asset_diagnostics.lines {ui.label(line);}
+                    });
                     // Decode failures are shown in the panel, not only logged.
                     let errors = self.asset_browser.errors().to_vec();
                     if !errors.is_empty() {
@@ -5837,6 +5861,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             ui.label(format!("{path}: {message}")).on_hover_text(path);
                         }
                     }
+                    });
                 });
             }
             Tab::Console => {

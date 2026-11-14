@@ -32,7 +32,7 @@ pub(crate) fn highlight(source: &str) -> LayoutJob {
             let word = &tail[..len];
             let color = if [
                 "let", "fn", "if", "else", "return", "call", "while", "for", "break", "continue",
-                "true", "false", "import",
+                "true", "false", "import", "enum",
             ]
             .contains(&word)
             {

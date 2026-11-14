@@ -82,99 +82,106 @@ pub(crate) fn show(
 ) -> Option<ShelfAction> {
     let mut action = None;
     let available = ui.available_size();
-    ui.horizontal_top(|ui| {
-        ui.allocate_ui_with_layout(
-            egui::vec2(164.0, available.y.min(140.0)),
-            egui::Layout::top_down(egui::Align::Min),
-            |ui| {
-                ui.spacing_mut().item_spacing.y = 0.0;
-                for (name, value) in [
-                    ("Assets", AssetCategory::All),
-                    ("   Textures", AssetCategory::Textures),
-                    ("   Scenes", AssetCategory::Scenes),
-                    ("   Scripts", AssetCategory::Scripts),
-                    ("   Audio", AssetCategory::Audio),
-                ] {
-                    if ui
-                        .add_sized(
-                            [156.0, 19.0],
-                            egui::Button::new(name)
-                                .selected(*category == value)
-                                .frame(false),
-                        )
-                        .clicked()
-                    {
-                        *category = value;
-                    }
-                }
-                ui.add_enabled(false, egui::Label::new("   Models                   3D"));
-                ui.add_enabled(false, egui::Label::new("   Materials                3D"));
-            },
-        );
-        ui.separator();
-        egui::ScrollArea::vertical()
-            .id_salt("asset-shelf")
-            .max_height(available.y.max(110.0))
-            .show(ui, |ui| {
-                ui.set_min_width(ui.available_width());
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = egui::vec2(12.0, 8.0);
-                    if matches!(category, AssetCategory::All | AssetCategory::Scenes) {
-                        for scene in scenes {
-                            let response = card(ui, scene, None, "SCENE", false);
-                            if response.double_clicked() {
-                                action = Some(ShelfAction::OpenScene(scene.clone()));
+    let shelf_height = available.y.clamp(110.0, 180.0);
+    ui.allocate_ui_with_layout(
+        egui::vec2(available.x, shelf_height),
+        egui::Layout::top_down(egui::Align::Min),
+        |ui| {
+            ui.horizontal_top(|ui| {
+                ui.allocate_ui_with_layout(
+                    egui::vec2(164.0, available.y.min(140.0)),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                        for (name, value) in [
+                            ("Assets", AssetCategory::All),
+                            ("   Textures", AssetCategory::Textures),
+                            ("   Scenes", AssetCategory::Scenes),
+                            ("   Scripts", AssetCategory::Scripts),
+                            ("   Audio", AssetCategory::Audio),
+                        ] {
+                            if ui
+                                .add_sized(
+                                    [156.0, 19.0],
+                                    egui::Button::new(name)
+                                        .selected(*category == value)
+                                        .frame(false),
+                                )
+                                .clicked()
+                            {
+                                *category = value;
                             }
-                            response.on_hover_text("Double-click to open scene");
                         }
-                    }
-                    let entries: Vec<_> = browser
-                        .filtered_entries()
-                        .into_iter()
-                        .filter(|entry| category.matches(&entry.path))
-                        .cloned()
-                        .collect();
-                    for entry in entries {
-                        let texture = if entry.kind == AssetKind::Image {
-                            thumbnails.texture(ui.ctx(), browser, &entry.path)
-                        } else {
-                            None
-                        };
-                        let name = entry.path.rsplit('/').next().unwrap_or(&entry.path);
-                        let kind = if entry.kind == AssetKind::Image {
-                            "IMAGE"
-                        } else if entry.path.ends_with(".ks") {
-                            "SCRIPT"
-                        } else {
-                            "FILE"
-                        };
-                        let response = card(
-                            ui,
-                            name,
-                            texture,
-                            kind,
-                            browser.preview_source() == Some(&entry.path),
-                        );
-                        if response.double_clicked() && entry.path.ends_with(".ks") {
-                            action = Some(ShelfAction::OpenScript(entry.path.clone()));
+                        ui.add_enabled(false, egui::Label::new("   Models                   3D"));
+                        ui.add_enabled(false, egui::Label::new("   Materials                3D"));
+                    },
+                );
+                ui.separator();
+                egui::ScrollArea::vertical()
+                    .id_salt("asset-shelf")
+                    .max_height(shelf_height)
+                    .show(ui, |ui| {
+                        ui.set_min_width(ui.available_width());
+                        ui.horizontal_wrapped(|ui| {
+                            ui.spacing_mut().item_spacing = egui::vec2(12.0, 8.0);
+                            if matches!(category, AssetCategory::All | AssetCategory::Scenes) {
+                                for scene in scenes {
+                                    let response = card(ui, scene, None, "SCENE", false);
+                                    if response.double_clicked() {
+                                        action = Some(ShelfAction::OpenScene(scene.clone()));
+                                    }
+                                    response.on_hover_text("Double-click to open scene");
+                                }
+                            }
+                            let entries: Vec<_> = browser
+                                .filtered_entries()
+                                .into_iter()
+                                .filter(|entry| category.matches(&entry.path))
+                                .cloned()
+                                .collect();
+                            for entry in entries {
+                                let texture = if entry.kind == AssetKind::Image {
+                                    thumbnails.texture(ui.ctx(), browser, &entry.path)
+                                } else {
+                                    None
+                                };
+                                let name = entry.path.rsplit('/').next().unwrap_or(&entry.path);
+                                let kind = if entry.kind == AssetKind::Image {
+                                    "IMAGE"
+                                } else if entry.path.ends_with(".ks") {
+                                    "SCRIPT"
+                                } else {
+                                    "FILE"
+                                };
+                                let response = card(
+                                    ui,
+                                    name,
+                                    texture,
+                                    kind,
+                                    browser.preview_source() == Some(&entry.path),
+                                );
+                                if response.double_clicked() && entry.path.ends_with(".ks") {
+                                    action = Some(ShelfAction::OpenScript(entry.path.clone()));
+                                }
+                                if response.clicked() && entry.kind == AssetKind::Image {
+                                    action = Some(ShelfAction::SelectImage(entry.path.clone()));
+                                }
+                                if response.drag_started() && entry.kind == AssetKind::Image {
+                                    browser.set_drag_source(Some(&entry.path));
+                                    response.dnd_set_drag_payload(SpriteAssetPayload {
+                                        path: entry.path.clone(),
+                                    });
+                                }
+                                response.on_hover_text(&entry.path);
+                            }
+                        });
+                        if browser.entries().is_empty() && scenes.is_empty() {
+                            ui.weak("Open a project to browse its assets.");
                         }
-                        if response.clicked() && entry.kind == AssetKind::Image {
-                            action = Some(ShelfAction::SelectImage(entry.path.clone()));
-                        }
-                        if response.drag_started() && entry.kind == AssetKind::Image {
-                            browser.set_drag_source(Some(&entry.path));
-                            response.dnd_set_drag_payload(SpriteAssetPayload {
-                                path: entry.path.clone(),
-                            });
-                        }
-                        response.on_hover_text(&entry.path);
-                    }
-                });
-                if browser.entries().is_empty() && scenes.is_empty() {
-                    ui.weak("Open a project to browse its assets.");
-                }
+                    });
             });
-    });
+        },
+    );
     action
 }
 

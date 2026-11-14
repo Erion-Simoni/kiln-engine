@@ -173,7 +173,7 @@ class Editor:
 
         # Menu clicks enqueue a new floating panel; wait for its rendered title
         # before measuring/dragging, rather than requiring the very next frame.
-        start, = self.wait(title_bar)
+        start, = self.wait(title_bar, description=f"Render floating panel from menu {menu}, row {row}")
         if start != 33:
             self.command('mousemove', '--window', self.window, start+30, 102, 'mousedown', '1')
             self.command('mousemove', '--window', self.window, 63, 102)
@@ -200,9 +200,12 @@ class Editor:
             clip.terminate(); clip.wait(timeout=5)
 
     def source(self, relative, source):
-        self.text(225,166,relative); self.click(392,166); self.paste(source)
-        self.click(65,194); self.click(208,194)
-        self.wait(lambda: (self.project/relative).exists() and (self.project/relative).read_bytes()==Path(source).read_bytes())
+        self.held_click(225,166); self.key('ctrl+a')
+        self.command('type', '--clearmodifiers', '--delay', '2', relative)
+        self.held_click(392,166); self.paste(source)
+        self.held_click(65,194); self.held_click(208,194)
+        self.wait(lambda: (self.project/relative).exists() and (self.project/relative).read_bytes()==Path(source).read_bytes(),
+                  description=f"Save exact source buffer {relative}")
 
     def save(self):
         self.click(500,78); self.key('ctrl+s'); time.sleep(.2)

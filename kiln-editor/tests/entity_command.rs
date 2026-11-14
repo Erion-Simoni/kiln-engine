@@ -720,8 +720,8 @@ fn two_scene_prefab_override_rename_save_reopen_and_export_acceptance() {
         .rename_asset("art/enemy.png", "assets/enemy.png")
         .unwrap();
     rewrite_asset_references(&mut project, "art/enemy.png", "assets/enemy.png");
-    let id = project.asset_ids.remove("art/enemy.png").unwrap();
-    project.asset_ids.insert("assets/enemy.png".into(), id);
+    assert!(!project.asset_ids.contains_key("art/enemy.png"));
+    assert_eq!(project.asset_ids["assets/enemy.png"], "asset-enemy");
     project_files::save(&project, &manifest).unwrap();
 
     let reopened = project_files::load(&root).unwrap().project;

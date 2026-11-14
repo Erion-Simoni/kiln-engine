@@ -6,6 +6,8 @@ use egui::{Color32, Stroke};
 
 /// Transient workspace presentation; never serialized into a game project.
 pub struct EditorShell {
+    pub(crate) import_platform: &'static str,
+    pub(crate) asset_diagnostics: crate::asset_diagnostics::AssetDiagnostics,
     pub(crate) selection_origin: Option<egui::Pos2>,
     pub(crate) entity_clipboard: Option<String>,
     pub(crate) script_editor: crate::script_editor::ScriptEditor,
@@ -22,6 +24,8 @@ impl Default for EditorShell {
     fn default() -> Self {
         Self {
             entity_clipboard: None,
+            import_platform: "default",
+            asset_diagnostics: Default::default(),
             selection_origin: None,
             script_editor: crate::script_editor::ScriptEditor::default(),
             quick_actions: crate::quick_actions::QuickActions::default(),

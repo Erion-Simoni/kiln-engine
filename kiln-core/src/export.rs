@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 pub const EXPORT_PROTOCOL: u32 = 1;
+/// Shared language/project/runtime compatibility revision; bump for semantic additions.
+pub const RUNTIME_CONTRACT: &str = "kiln-a04-v2";
 pub const MAX_RECEIPT_BYTES: u64 = 16 * 1024 * 1024;
 pub const RECEIPT_FILE: &str = "export.json";
 /// Inventory binding runtime notice bytes to the exported runtime payload.
@@ -18,6 +20,9 @@ pub const REQUIRED_RUNTIME_NOTICES: [&str; 5] = [
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeInfo {
+    /// Missing legacy identities cannot establish compatibility with this editor.
+    #[serde(default)]
+    pub contract: String,
     pub protocol: u32,
     pub version: String,
     pub platform: String,
@@ -34,6 +39,9 @@ pub struct RuntimeInfo {
 }
 impl RuntimeInfo {
     pub fn validate(&self, platform: &str) -> Result<(), String> {
+        if self.contract != RUNTIME_CONTRACT {
+            return Err("Runtime tools are from an incompatible engine build; install matching editor, exporter and player/browser tools".into());
+        }
         let target_matches = if platform == "web" {
             self.platform == "web" && self.arch == "wasm32"
         } else {
@@ -176,19 +184,27 @@ pub fn cancel_path(output: &Path, job: &str) -> PathBuf {
 #[cfg(test)]
 mod capability_tests {
     #[test]
-    fn legacy_runtime_json_does_not_claim_physics() {
+    fn legacy_runtime_json_cannot_claim_contract_compatibility_or_physics() {
         let legacy = format!(
             r#"{{"protocol":1,"version":"{}","platform":"web","arch":"wasm32","audio":true,"fonts":true,"gamepad":true}}"#,
             env!("CARGO_PKG_VERSION")
         );
         let runtime: super::RuntimeInfo = serde_json::from_str(&legacy).unwrap();
-        runtime.validate("web").unwrap();
+        assert!(runtime
+            .validate("web")
+            .unwrap_err()
+            .contains("incompatible"));
         assert!(!runtime.physics);
         assert!(!runtime.materials);
         let current = super::RuntimeInfo {
+            contract: super::RUNTIME_CONTRACT.into(),
             physics: true,
             ..runtime
         };
+        current.validate("web").unwrap();
+        let mut stale = current.clone();
+        stale.contract = "older-language-and-project-format".into();
+        assert!(stale.validate("web").unwrap_err().contains("incompatible"));
         let encoded = serde_json::to_string(&current).unwrap();
         assert!(
             serde_json::from_str::<super::RuntimeInfo>(&encoded)

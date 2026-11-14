@@ -27,6 +27,12 @@ pub struct ScriptEditor {
     loaded: String,
     message: String,
     show_api: bool,
+    show_search: bool,
+    search_query: String,
+    search_results: crate::source_search::Results,
+    search_task: Option<std::thread::JoinHandle<Result<crate::source_search::Results, String>>>,
+    cursor_character: usize,
+    pending_cursor: Option<usize>,
     api_filter: String,
     highlighted_source: String,
     highlighted_job: egui::text::LayoutJob,
@@ -200,6 +206,8 @@ impl ScriptEditor {
         self.saved = source;
         self.loaded = path.into();
         self.path = path.into();
+        self.cursor_character = 0;
+        self.pending_cursor = Some(0);
         self.message =
             "Script opened. Save Script writes source; Save Project also saves this draft.".into();
         Ok(())
@@ -301,9 +309,21 @@ impl ScriptEditor {
     }
 
     pub fn render(&mut self, ui: &mut egui::Ui, root: &Path, default_path: &str) {
+        let can_edit = ui.is_enabled();
         if self.root.is_none() {
             if let Err(error) = self.open(root, default_path) {
                 self.message = error;
+            }
+        }
+        if self
+            .search_task
+            .as_ref()
+            .is_some_and(|task| task.is_finished())
+        {
+            match self.search_task.take().expect("finished search").join() {
+                Ok(Ok(results)) => self.search_results = results,
+                Ok(Err(error)) => self.message = error,
+                Err(_) => self.message = "Source search worker failed".into(),
             }
         }
         ui.horizontal(|ui| {
@@ -338,6 +358,44 @@ impl ScriptEditor {
             if ui.button("API Reference").clicked() {
                 self.show_api = !self.show_api;
             }
+            if ui.button("Format Indent").clicked() {
+                match kiln_runtime::format_script(&self.source) {
+                    Ok(code) => {
+                        self.source = code;
+                        self.message =
+                            "Indentation formatted; Save Script writes this draft.".into();
+                        self.pending_cursor =
+                            Some(self.cursor_character.min(self.source.chars().count()));
+                    }
+                    Err(error) => self.message = error,
+                }
+            }
+            if ui.button("Project Search").clicked() {
+                self.show_search = true;
+            }
+            if ui.button("Find Function").clicked() {
+                let chars = self.source.chars().collect::<Vec<_>>();
+                let cursor = self.cursor_character.min(chars.len());
+                let mut begin = cursor;
+                let mut end = cursor;
+                while begin > 0
+                    && (chars[begin - 1].is_ascii_alphanumeric() || chars[begin - 1] == '_')
+                {
+                    begin -= 1;
+                }
+                while end < chars.len() && (chars[end].is_ascii_alphanumeric() || chars[end] == '_')
+                {
+                    end += 1;
+                }
+                let name = chars[begin..end].iter().collect::<String>();
+                if name.is_empty() {
+                    self.message = "Place the source cursor in a function name.".into();
+                } else {
+                    self.search_query = format!("fn {name}(");
+                    self.show_search = true;
+                    self.start_search(root);
+                }
+            }
             if self.is_dirty() {
                 ui.colored_label(egui::Color32::YELLOW, "Unsaved script");
             }
@@ -357,28 +415,168 @@ impl ScriptEditor {
         egui::ScrollArea::both()
             .id_salt("gameplay_script_source")
             .show(ui, |ui| {
-                ui.add(
-                    egui::TextEdit::multiline(&mut self.source)
-                        .code_editor()
-                        .layouter(&mut layouter)
-                        .char_limit(SOURCE_LIMIT)
-                        .desired_width(f32::INFINITY)
-                        .desired_rows(28),
-                );
-            });
-        egui::Window::new("KilnScript API Reference").open(&mut self.show_api).show(ui.ctx(),|ui| {
-            ui.label("Built-ins shared by scripts, graphs, native and browser games.");
-            ui.horizontal(|ui| {ui.label("Filter:");ui.text_edit_singleline(&mut self.api_filter);});
-            ui.label("Signatures show required argument counts. See docs/KILNSCRIPT.md for semantics.");
-            let filter=self.api_filter.to_lowercase();
-            let mut entries=kiln_runtime::slice::BUILTINS.to_vec();entries.sort_by_key(|entry|entry.0);
-            egui::ScrollArea::vertical().max_height(350.0).show(ui,|ui| {
-                for (name,_,count) in entries.into_iter().filter(|(name,_,_)|name.contains(&filter)) {
-                    let arguments=(1..=count).map(|i|format!("arg{i}")).collect::<Vec<_>>().join(", ");
-                    ui.monospace(format!("{name}({arguments})"));
+                let output = egui::TextEdit::multiline(&mut self.source)
+                    .id_salt("gameplay_source_text")
+                    .code_editor()
+                    .layouter(&mut layouter)
+                    .char_limit(SOURCE_LIMIT)
+                    .desired_width(f32::INFINITY)
+                    .desired_rows(28)
+                    .show(ui);
+                if output.response.has_focus() {
+                    if let Some(range) = output.cursor_range {
+                        self.cursor_character = range.primary.ccursor.index;
+                    }
+                    if ui.input_mut(|input| {
+                        input.consume_key(egui::Modifiers::CTRL, egui::Key::Space)
+                    }) {
+                        self.show_api = true;
+                    }
+                }
+                if let Some(character) = self.pending_cursor.take() {
+                    let cursor = egui::text::CCursor::new(character);
+                    let rectangle = output
+                        .galley
+                        .pos_from_ccursor(cursor)
+                        .translate(output.galley_pos.to_vec2());
+                    let mut state = output.state;
+                    state
+                        .cursor
+                        .set_char_range(Some(egui::text::CCursorRange::one(cursor)));
+                    state.store(ui.ctx(), output.response.id);
+                    output.response.request_focus();
+                    ui.scroll_to_rect(rectangle, Some(egui::Align::Center));
                 }
             });
-        });
+        let mut insert = None;
+        egui::Window::new("KilnScript API Reference")
+            .open(&mut self.show_api)
+            .show(ui.ctx(), |ui| {
+                if !can_edit {
+                    ui.disable();
+                }
+                ui.label("Built-ins shared by scripts, graphs, native and browser games.");
+                ui.horizontal(|ui| {
+                    ui.label("Filter:");
+                    ui.text_edit_singleline(&mut self.api_filter);
+                });
+                ui.label(
+                    "Insert a call at the source cursor, then replace arg1… with your values.",
+                );
+                let filter = self.api_filter.to_lowercase();
+                let mut entries = kiln_runtime::slice::BUILTINS.to_vec();
+                entries.sort_by_key(|entry| entry.0);
+                egui::ScrollArea::vertical()
+                    .max_height(350.0)
+                    .show(ui, |ui| {
+                        for (name, _, count) in entries
+                            .into_iter()
+                            .filter(|(name, _, _)| name.contains(&filter))
+                        {
+                            let arguments = (1..=count)
+                                .map(|i| format!("arg{i}"))
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            ui.horizontal(|ui| {
+                                ui.monospace(format!("{name}({arguments})"));
+                                if ui.button("Insert call").clicked() {
+                                    insert = Some(format!("{name}({arguments})"));
+                                }
+                            });
+                        }
+                    });
+            });
+        if let Some(call) = insert {
+            let index = self
+                .source
+                .char_indices()
+                .nth(self.cursor_character)
+                .map(|(byte, _)| byte)
+                .unwrap_or(self.source.len());
+            let begin = self.source[..index]
+                .char_indices()
+                .rev()
+                .find(|(_, ch)| !ch.is_ascii_alphanumeric() && *ch != '_')
+                .map(|(i, ch)| i + ch.len_utf8())
+                .unwrap_or(0);
+            if self.source.len() - (index - begin) + call.len() <= SOURCE_LIMIT {
+                let cursor = self.source[..begin].chars().count() + call.chars().count();
+                self.source.replace_range(begin..index, &call);
+                self.pending_cursor = Some(cursor);
+                self.show_api = false;
+            } else {
+                self.message = "Completion would exceed 1 MiB".into();
+            }
+        }
+        let mut search_now = false;
+        let mut navigate = None;
+        egui::Window::new("Search Saved Project Source")
+            .open(&mut self.show_search)
+            .show(ui.ctx(), |ui| {
+                ui.label(
+                    "Literal, case-sensitive search. Save or Revert the draft before navigating.",
+                );
+                ui.horizontal(|ui| {
+                    ui.text_edit_singleline(&mut self.search_query);
+                    if ui
+                        .add_enabled(self.search_task.is_none(), egui::Button::new("Search"))
+                        .clicked()
+                    {
+                        search_now = true;
+                    }
+                });
+                if self.search_task.is_some() {
+                    ui.label("Searching…");
+                }
+                if self.search_results.limited {
+                    ui.label(
+                        "Search limit reached (512 files / 8 MiB / 256 hits); refine the query.",
+                    );
+                }
+                egui::ScrollArea::vertical()
+                    .max_height(350.0)
+                    .show(ui, |ui| {
+                        for hit in &self.search_results.hits {
+                            if ui
+                                .selectable_label(
+                                    false,
+                                    format!("{}:{}  {}", hit.path, hit.line, hit.preview),
+                                )
+                                .clicked()
+                            {
+                                navigate = Some(hit.clone());
+                            }
+                        }
+                    });
+                ui.label(&self.message);
+            });
+        if search_now {
+            self.start_search(root);
+        }
+        if let Some(hit) = navigate {
+            match self
+                .require_saved()
+                .and_then(|_| self.open(root, &hit.path))
+            {
+                Ok(()) => {
+                    self.cursor_character = hit.character;
+                    self.pending_cursor = Some(hit.character);
+                    self.show_search = false;
+                    self.message = format!("{}:{}", hit.path, hit.line);
+                }
+                Err(error) => self.message = error,
+            }
+        }
+    }
+
+    fn start_search(&mut self, root: &Path) {
+        if self.search_task.is_none() {
+            let root = root.to_path_buf();
+            let query = self.search_query.clone();
+            self.search_task = Some(std::thread::spawn(move || {
+                crate::source_search::search(&root, &query)
+            }));
+        }
     }
 }
 

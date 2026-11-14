@@ -44,6 +44,7 @@ impl Fixture {
         fs::write(game.join(".kiln-save/slot_0.json"), "private").unwrap();
         let player = root.join("player with spaces");
         let info = RuntimeInfo {
+            contract: kiln_core::export::RUNTIME_CONTRACT.into(),
             protocol: export::EXPORT_PROTOCOL,
             version: env!("CARGO_PKG_VERSION").into(),
             platform: std::env::consts::OS.into(),
@@ -259,7 +260,11 @@ fn browser_exports_only_prepared_runtime_and_relative_project_with_validated_rec
         "export function run(){}\nexport function prepare_game(){}\nexport function start_game(){}";
     fs::write(bundle.join("kiln_web.js"), js).unwrap();
     let name = b"kiln.runtime.v1";
-    let text = format!("1\n{}\nfonts=1\n", env!("CARGO_PKG_VERSION"));
+    let text = format!(
+        "1\n{}\nfonts=1\nphysics=0\nmaterials=0\ncontract={}\n",
+        env!("CARGO_PKG_VERSION"),
+        export::RUNTIME_CONTRACT
+    );
     let mut wasm = b"\0asm\x01\0\0\0".to_vec();
     wasm.extend([0, (name.len() + 1 + text.len()) as u8, name.len() as u8]);
     wasm.extend(name);
@@ -337,7 +342,11 @@ fn browser_exports_only_prepared_runtime_and_relative_project_with_validated_rec
     assert!(!output.exists());
     assert!(!export::staging_path(&output, "physics").exists());
     // The same authored body exports only with a capability-bearing prepared runtime.
-    let capable_text = format!("1\n{}\nfonts=1\nphysics=1\n", env!("CARGO_PKG_VERSION"));
+    let capable_text = format!(
+        "1\n{}\nfonts=1\nphysics=1\nmaterials=0\ncontract={}\n",
+        env!("CARGO_PKG_VERSION"),
+        export::RUNTIME_CONTRACT
+    );
     let mut capable_wasm = b"\0asm\x01\0\0\0".to_vec();
     capable_wasm.extend([
         0,
@@ -427,9 +436,10 @@ fn material_capabilities_and_bad_shader_diagnostics_preserve_output() {
     let prepare = |capable: bool| {
         let name = b"kiln.runtime.v1";
         let text = format!(
-            "1\n{}\nfonts=1\nphysics=1\nmaterials={}\n",
+            "1\n{}\nfonts=1\nphysics=1\nmaterials={}\ncontract={}\n",
             env!("CARGO_PKG_VERSION"),
-            u8::from(capable)
+            u8::from(capable),
+            export::RUNTIME_CONTRACT
         );
         let mut wasm = b"\0asm\x01\0\0\0".to_vec();
         wasm.extend([0, (name.len() + 1 + text.len()) as u8, name.len() as u8]);

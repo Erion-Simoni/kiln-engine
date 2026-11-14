@@ -453,13 +453,13 @@ A script's `let` variables are local to its program execution. Persistent
 `state_get`/`state_set` storage belongs to the current scene program or individual
 attached entity script; it is not a shared cross-scene global singleton. Use the
 existing save/scene mechanisms deliberately. No implicit process-global scope or
-new timer/coroutine scheduler is introduced by these functions.
+timer behavior is implied by dictionary mutation; explicit tasks are described below.
 
 The Script Editor colors keywords, literals, comments and built-ins, including
 unfinished text. Its API Reference filters the same built-in registry used by
 scripts, graphs, native games and browser games. The reference currently displays
-argument counts; contextual completion, formatting, project search and navigation
-remain open A04 work.
+argument counts and call insertion. Formatting and bounded project search/navigation
+are described below.
 
 Execution defaults to 1,000,000 bytecode instructions per tick. The host's VM
 instruction-limit setter now governs both full runs and debugger steps, including
@@ -473,3 +473,65 @@ The live gameplay panel currently pauses/steps whole frames and inspects entity
 state. Source breakpoints, statement stepping, imported-function call frames,
 expression watches and a debugger attached to the actual gameplay VM remain
 required before A04 is accepted. Bytecode repairs do not establish those workflows.
+
+## Enums, tasks and source tools (A04)
+
+Top-level enums have 1–256 unique variants. Values are immutable qualified
+constants backed by stable strings (`Stage::Warmup`), so saved task payloads keep
+meaning if declarations are reordered. Nested enum declarations and member
+assignment are rejected. `enum` is reserved; rename older identifiers using it.
+Functions/calls accept at most 256 parameters/arguments.
+
+```kilnscript
+enum Stage { Warmup, Fire }
+if !state_get("started", false) {
+    task_schedule("enemy", 0.25, Stage.Warmup);
+    state_set("started", true);
+}
+if task_ready("enemy") {
+    let stage = task_take("enemy", Stage.Warmup);
+    if stage == Stage.Warmup {
+        task_schedule("enemy", 0.25, Stage.Fire);
+    } else {
+        state_set("projectiles", state_get("projectiles", 0) + 1);
+    }
+}
+```
+
+Tasks are cooperative state machines: take a due resume payload, execute a helper,
+then schedule the next stage explicitly. There are no automatic suspended function
+stacks or `yield` syntax. Each scene/entity script has its own task scope. Game
+pause stops task time; logical save/restore retains deadlines and typed payloads.
+Use different names for independent tasks; rescheduling replaces an existing one.
+
+| Function | Behavior |
+| --- | --- |
+| `task_schedule(name, delay, payload)` | Replace/schedule a task; returns its name |
+| `task_ready(name)` | True when a live task's deadline is reached |
+| `task_take(name, fallback)` | Consume a due payload once; otherwise fallback |
+| `task_cancel(name)` | Remove a task; returns whether it existed |
+| `task_exists(name)` | Test presence, including tasks that are already due |
+| `task_remaining(name)` | Nonnegative seconds remaining; absent tasks return 0 |
+| `timer_start(name, delay)` | Schedule a one-shot timer using the same task scope |
+| `timer_finished(name)` | Consume a due timer once; otherwise false |
+
+Names require 1–240 UTF-8 bytes; delays must be finite and nonnegative. Each script
+allows 256 live tasks within its existing state limit. Payloads obey saved-value
+bounds, including the scheduler's wrapper. Avoid reserved `__kiln_task:` state keys.
+Zero-delay tasks are ready within the current invocation after scheduling.
+
+The Script Editor's **Format Indent** changes indentation/trailing whitespace
+without changing tokens, comments or valid escaped string contents. Invalid quoted
+or unbalanced drafts are preserved. **API Reference** offers insertion of calls
+from the shared registry; replace the `arg1` placeholders with actual expressions.
+**Project Search** searches saved `.ks` files literally and case-sensitively;
+**Find Function** searches `fn name(` for the identifier under the source cursor.
+Navigation requires Save or Revert first, preserving unsaved drafts. Search skips
+symlinks and hidden/generated folders, limits traversal to 4096 entries/64 levels,
+and reads at most 512 files/8 MiB with 256 results. This is literal navigation,
+not a language-server symbol resolver. Source breakpoints/stepping/watches and
+interactive gameplay graph acceptance remain open.
+
+New exports require the matching `kiln-core::export::RUNTIME_CONTRACT` in both
+native and browser runtime identities. Missing/older same-version runtimes are
+rejected explicitly; install the matching tool bundle before exporting again.

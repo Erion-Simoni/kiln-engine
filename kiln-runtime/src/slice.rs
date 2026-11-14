@@ -11,6 +11,7 @@
 
 mod authored_ui;
 mod game_save;
+mod tasks;
 pub use game_save::{
     GameProgress, GameSave, SaveRequest, SaveValue, GAME_SAVE_VERSION, MAX_GAME_SAVE_BYTES,
 };
@@ -133,6 +134,14 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("dict_has", 113, 2),
     ("dict_remove", 114, 2),
     ("dict_keys", 115, 1),
+    ("task_schedule", 116, 3),
+    ("task_ready", 117, 1),
+    ("task_take", 118, 2),
+    ("task_cancel", 119, 1),
+    ("task_exists", 120, 1),
+    ("task_remaining", 121, 1),
+    ("timer_start", 122, 2),
+    ("timer_finished", 123, 1),
     ("array_new", 69, 0),
     ("overlap_circle", 70, 4),
     ("raycast_query", 71, 6),
@@ -1472,6 +1481,7 @@ impl SliceHost {
                 }
                 .into(),
             )),
+            116..=123 => self.call_task(func_id, args),
             110 => Ok(Value::Map(Default::default())),
             111..=114 => {
                 let Value::Map(values) = &args[0] else {
@@ -1533,7 +1543,9 @@ impl SliceHost {
                 Value::Array(values) if values.len() < 4096 => {
                     let mut values = values.clone();
                     values.push(args[1].clone());
-                    Ok(Value::Array(values))
+                    let result = Value::Array(values);
+                    game_save::SaveValue::capture(&result).map_err(VmError::HostCallError)?;
+                    Ok(result)
                 }
                 _ => Err(VmError::HostCallError(
                     "array_push expects an array with fewer than 4096 items".into(),

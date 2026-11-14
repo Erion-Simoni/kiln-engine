@@ -93,6 +93,7 @@ fn main() -> Result<()> {
     }
     if args.runtime_info {
         let runtime = kiln_core::export::RuntimeInfo {
+            contract: kiln_core::export::RUNTIME_CONTRACT.into(),
             protocol: kiln_core::export::EXPORT_PROTOCOL,
             version: env!("CARGO_PKG_VERSION").into(),
             platform: std::env::consts::OS.into(),

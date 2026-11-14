@@ -22,6 +22,7 @@ pub enum Token {
     Fn,
     While,
     For,
+    Enum,
     Break,
     Continue,
 
@@ -54,6 +55,7 @@ pub enum Token {
     LBrace,
     RBrace,
     Comma,
+    Dot,
     Semicolon,
 
     // End of input
@@ -217,6 +219,7 @@ impl<'a> Lexer<'a> {
             "fn" => Token::Fn,
             "while" => Token::While,
             "for" => Token::For,
+            "enum" => Token::Enum,
             "break" => Token::Break,
             "continue" => Token::Continue,
             _ => Token::Identifier(ident),
@@ -341,6 +344,7 @@ impl<'a> Lexer<'a> {
             '{' => Token::LBrace,
             '}' => Token::RBrace,
             ',' => Token::Comma,
+            '.' => Token::Dot,
             ';' => Token::Semicolon,
             _ => return None,
         })

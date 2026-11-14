@@ -66,6 +66,9 @@ pub struct Project {
     /// Import options keyed by stable asset ID.
     #[serde(default)]
     pub asset_import_settings: HashMap<String, AssetImportSettings>,
+    /// Optional target-specific import overrides, keyed by stable asset ID then target.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub asset_platform_import_settings: HashMap<String, HashMap<String, AssetImportSettings>>,
     /// Input action map for rebindable controls.
     #[serde(default)]
     pub action_map: ActionMap,
@@ -96,9 +99,28 @@ impl Project {
     /// Effective nearest-sampling/mipmap settings; legacy projects retain their
     /// original nearest/no-mip appearance until import options are assigned.
     pub fn texture_options(&self, path: &str) -> [bool; 2] {
+        let target = if cfg!(target_arch = "wasm32") {
+            "web"
+        } else if cfg!(target_os = "windows") {
+            "windows"
+        } else if cfg!(target_os = "macos") {
+            "macos"
+        } else {
+            "linux"
+        };
+        self.texture_options_for_target(path, target)
+    }
+
+    /// Effective options for an explicit supported preview/export target.
+    pub fn texture_options_for_target(&self, path: &str, target: &str) -> [bool; 2] {
         self.asset_ids
             .get(path)
-            .and_then(|id| self.asset_import_settings.get(id))
+            .and_then(|id| {
+                self.asset_platform_import_settings
+                    .get(id)
+                    .and_then(|targets| targets.get(target))
+                    .or_else(|| self.asset_import_settings.get(id))
+            })
             .map(|settings| [settings.nearest_filter, settings.generate_mipmaps])
             .unwrap_or([true, false])
     }
@@ -446,6 +468,7 @@ impl Default for Project {
             prefabs: HashMap::new(),
             asset_ids: HashMap::new(),
             asset_import_settings: HashMap::new(),
+            asset_platform_import_settings: HashMap::new(),
             action_map: ActionMap::new(),
         }
     }

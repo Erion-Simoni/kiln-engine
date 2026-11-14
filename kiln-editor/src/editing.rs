@@ -582,42 +582,7 @@ pub fn apply_prefab_instance_to_definition(
 
 /// Update authored Sprite, audio and UI font paths after a project-relative asset move.
 pub fn rewrite_asset_references(project: &mut Project, old: &str, new: &str) -> usize {
-    fn rewrite(entity: &mut kiln_core::Entity, old: &str, new: &str) -> usize {
-        entity
-            .components
-            .iter_mut()
-            .filter_map(|component| match component {
-                kiln_core::Component::Sprite { texture, .. } => texture.as_mut(),
-                _ => None,
-            })
-            .filter(|path| path.as_str() == old)
-            .map(|path| {
-                *path = new.to_owned();
-            })
-            .count()
-    }
-    let mut changed = 0;
-    for scene in project.scenes.values_mut() {
-        for entity in &mut scene.entities {
-            changed += rewrite(entity, old, new);
-        }
-    }
-    for prefab in project.prefabs.values_mut() {
-        changed += rewrite(&mut prefab.root_entity, old, new);
-    }
-    for font in project.ui.fonts.values_mut() {
-        if font.path == old {
-            font.path = new.into();
-            changed += 1;
-        }
-    }
-    for audio in &mut project.audio_assets {
-        if audio.path == old {
-            audio.path = new.into();
-            changed += 1;
-        }
-    }
-    changed
+    project.rewrite_resource_path(old, new)
 }
 
 /// The default size of a sprite without a texture, in world units.

@@ -17,6 +17,7 @@ pub mod paths;
 pub mod physics_data;
 pub mod prefab;
 pub mod project;
+pub mod resource_refs;
 pub mod tilemap;
 pub mod time;
 pub mod transform;

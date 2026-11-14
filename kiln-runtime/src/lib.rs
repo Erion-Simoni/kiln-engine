@@ -58,3 +58,6 @@ pub mod visual;
 
 /// Shared authored sprite material validation and texture references.
 pub use kiln_render::materials;
+
+/// Whitespace-only KilnScript formatting shared with the editor.
+pub use kiln_script::format_source as format_script;
