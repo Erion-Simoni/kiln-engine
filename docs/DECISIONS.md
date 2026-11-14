@@ -1987,3 +1987,37 @@ checks remain separate Task 8 gates.
   Keep recovery until successful Save or explicit Discard. Escape must not delete
   unsaved recovery data. Validate actual force-close/restart/widget recovery as
   well as roundtrip, external-change, invalid-path and legacy-format regressions.
+
+### ADR-0080 — Complete authoring, asset and script work in staged commands (2026-11-14)
+
+- The owner explicitly requested continuing through A04, overriding the one-
+  milestone session default. Keep individual acceptance gates and evidence honest;
+  full 3D remains gated on G2D. Implement and test small steps across A02–A04.
+- Entity clipboard operations use the authoritative scene command/history model,
+  not direct ECS edits. Capture selected subtrees, preserve external-parent world
+  poses, remap stable internal references and prefab instance identities, and
+  reject invalid/missing dependencies before mutation. Paste is one undo step.
+- Keep project/game formats compatible where practical; new persisted authoring
+  metadata needs explicit backward defaults and must not alter game visibility.
+- Reuse existing asset IDs, import settings, prefab and language/IR facilities;
+  do not invent parallel scene models or duplicate schedulers. New language/debug
+  capabilities must retain bounded execution and native/browser semantics.
+- No new dependency or package-size goal is authorized by this decision.
+
+### ADR-0081 — Bounded dictionary values in the shared gameplay VM (2026-11-14)
+
+- Add first-class string-keyed dictionary values to the existing IR value model,
+  with deterministic key order and recursive equality. Expose value-returning
+  dict_new/get/set/has/remove/keys through the shared host registry, like arrays.
+- Enforce existing state-value depth/item/string limits and 256-byte dictionary
+  keys. Extend tagged saved values so dictionaries survive save/load and runtime
+  snapshots without losing numeric types. Older engines reject unknown variants
+  rather than silently converting them. No parallel interpreter or dependency.
+- Counted for loops lower to existing jump/local instructions; continue reaches
+  the increment, break exits the innermost loop, and initializer locals are scoped
+  to the loop (including shadowing an outer name). Existing VM budgets still apply.
+- The VM owns configured and remaining instruction limits; both normal execution
+  and bytecode debugger steps consume the same budget. Resume skips only the
+  breakpoint just reported; step-over/out follow actual bytecode call depth.
+  This repairs the bytecode debugger and does not establish source-level/live
+  gameplay debugging or evaluation of conditional watches.

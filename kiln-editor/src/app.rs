@@ -161,6 +161,8 @@ pub enum EditorError {
 
 #[derive(Debug, Clone)]
 enum MenuAction {
+    CopyEntities,
+    PasteEntities,
     Exit,
     NewProject,
     OpenProject,
@@ -727,6 +729,7 @@ impl EditorApp {
             .project_path
             .clone()
             .ok_or("No project file open. Use Save As first.")?;
+        self.lifecycle.require_unchanged_disk(&path)?;
         let project = self.project_to_save()?;
         self.shell.script_editor.save()?;
         let path = crate::project_files::save(&project, &path)?;
@@ -758,9 +761,13 @@ impl EditorApp {
             .project_path
             .as_ref()
             .ok_or("Open or create a project before Save As")?;
+        if path.canonicalize().ok().as_ref() == Some(source) {
+            self.lifecycle.require_unchanged_disk(source)?;
+        }
         let project = self.project_to_save()?;
         let path = crate::project_files::save_as(&project, source, &path)?;
         self.shell.script_editor.reset();
+        self.shell.entity_clipboard = None;
         self.prefab_apply_undo.clear();
         self.prefab_apply_redo.clear();
         let _ = crate::recovery::clear(&path);
@@ -788,6 +795,7 @@ impl EditorApp {
         self.shell.script_editor.require_saved()?;
         let loaded = crate::project_files::load(&path)?;
         self.shell.script_editor.reset();
+        self.shell.entity_clipboard = None;
         self.prefab_apply_undo.clear();
         self.prefab_apply_redo.clear();
         self.finish_transform_edit();
@@ -913,6 +921,7 @@ impl EditorApp {
         if let Some(action) = self.lifecycle.resolve(decision, saved)? {
             if decision == SaveDecision::Discard {
                 self.shell.script_editor.reset();
+                self.shell.entity_clipboard = None;
             }
             self.execute_project_action(action)?;
         }
@@ -1635,7 +1644,18 @@ impl EditorApp {
             crate::entity_command::EntityEdit::Delete { entity_id } => Some(entity_id.as_str()),
             _ => None,
         };
+        let before_count = scene.entities.len();
         let selected = command.execute(&mut scene, project, &mut self.scenes.history)?;
+        let pasted_ids = matches!(
+            &command.edit,
+            crate::entity_command::EntityEdit::Paste { .. }
+        )
+        .then(|| {
+            scene.entities[before_count..]
+                .iter()
+                .map(|entity| entity.id.clone())
+                .collect::<Vec<_>>()
+        });
         if matches!(
             command.edit,
             crate::entity_command::EntityEdit::CreateSprite { .. }
@@ -1650,6 +1670,9 @@ impl EditorApp {
         if let Some(id) = selected {
             self.selected_entity = self.entity_id_to_hecs.get(&id).copied();
             self.hierarchy_panel.select(&id);
+        }
+        if let Some(ids) = pasted_ids {
+            self.hierarchy_panel.select_many(&ids);
         }
         Ok(())
     }
@@ -2211,6 +2234,21 @@ impl winit::application::ApplicationHandler for EditorApp {
 impl EditorApp {
     fn render_frame(&mut self) {
         self.build_panel.poll();
+        if self.play.is_none() && self.pending_recovery.is_none() {
+            let changed = self.asset_browser.poll_changes();
+            if changed
+                .iter()
+                .any(|path| path.to_ascii_lowercase().ends_with(".png"))
+            {
+                self.upload_scene_textures();
+            }
+            if !changed.is_empty() {
+                self.console_log.push(format!(
+                    "[INFO] Refreshed {} changed project assets",
+                    changed.len()
+                ));
+            }
+        }
         if !self
             .project_requests
             .iter()
@@ -2507,6 +2545,22 @@ impl EditorApp {
             self.shell.quick_actions.open = false;
         }
 
+        if !project_blocked && self.play.is_none() && !ctx.wants_keyboard_input() {
+            let events = ctx.input(|i| i.events.clone());
+            for event in events {
+                match event {
+                    egui::Event::Copy => menu_actions.push(MenuAction::CopyEntities),
+                    egui::Event::Paste(text)
+                        if text.starts_with(crate::entity_clipboard::PREFIX) =>
+                    {
+                        self.shell.entity_clipboard = Some(text);
+                        menu_actions.push(MenuAction::PasteEntities);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         // Top menu bar
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             if project_blocked {
@@ -2551,6 +2605,27 @@ impl EditorApp {
                 });
 
                 ui.menu_button("Edit", |ui| {
+                    if ui
+                        .add_enabled(
+                            !self.hierarchy_panel.selected_ids.is_empty() && self.play.is_none(),
+                            egui::Button::new("Copy Entities"),
+                        )
+                        .clicked()
+                    {
+                        menu_actions.push(MenuAction::CopyEntities);
+                        ui.close_menu();
+                    }
+                    if ui
+                        .add_enabled(
+                            self.shell.entity_clipboard.is_some() && self.play.is_none(),
+                            egui::Button::new("Paste Entities"),
+                        )
+                        .clicked()
+                    {
+                        menu_actions.push(MenuAction::PasteEntities);
+                        ui.close_menu();
+                    }
+                    ui.separator();
                     if ui
                         .add_enabled(self.scenes.history.can_undo(), egui::Button::new("Undo"))
                         .clicked()
@@ -3186,6 +3261,8 @@ impl EditorApp {
 
         let full_output = ctx.end_pass();
         let paint_jobs = ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
+        self.egui_winit
+            .handle_platform_output(&gpu.window, full_output.platform_output);
 
         let screen_descriptor = egui_wgpu::ScreenDescriptor {
             size_in_pixels: [size.width, size.height],
@@ -3473,6 +3550,40 @@ impl EditorApp {
         // Execute menu actions after UI pass (borrows are released)
         for action in menu_actions {
             match action {
+                MenuAction::CopyEntities => {
+                    let result = self
+                        .current_project
+                        .as_ref()
+                        .ok_or("No project loaded".to_string())
+                        .and_then(|project| {
+                            crate::entity_clipboard::copy(
+                                project,
+                                &self.scene_from_world(),
+                                &self.hierarchy_panel.selected_ids,
+                            )
+                        });
+                    match result {
+                        Ok(text) => {
+                            self.egui_winit.set_clipboard_text(text.clone());
+                            self.shell.entity_clipboard = Some(text);
+                        }
+                        Err(error) => self.project_error = Some(error),
+                    }
+                }
+                MenuAction::PasteEntities => {
+                    if let (Some(scene_id), Some(document)) = (
+                        self.scenes.active_id().map(str::to_owned),
+                        self.shell.entity_clipboard.clone(),
+                    ) {
+                        let command = crate::entity_command::EntityCommand {
+                            scene_id,
+                            edit: crate::entity_command::EntityEdit::Paste { document },
+                        };
+                        if let Err(error) = self.apply_entity_command(command) {
+                            self.project_error = Some(error);
+                        }
+                    }
+                }
                 MenuAction::FocusPanel(tab) => {
                     if let Some(location) = self.dock_state.find_tab(&tab) {
                         self.dock_state.set_active_tab(location);

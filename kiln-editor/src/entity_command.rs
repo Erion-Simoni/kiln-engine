@@ -8,6 +8,8 @@ use crate::{editing::next_entity_id, history::SceneHistory};
 /// A single authored entity or hierarchy operation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum EntityEdit {
+    /// Paste a validated project-scoped selection as one undo transaction.
+    Paste { document: String },
     /// Rename an entity without changing its stable identity.
     Rename { entity_id: String, name: String },
     /// Create a default visible entity at a world position.
@@ -75,6 +77,7 @@ fn apply(
     edit: &EntityEdit,
 ) -> Result<Option<String>, String> {
     match edit {
+        EntityEdit::Paste { document } => crate::entity_clipboard::paste(scene, project, document),
         EntityEdit::CreateSprite {
             texture,
             position,
@@ -369,7 +372,7 @@ fn apply(
     }
 }
 
-fn set_local_transform(entity: &mut Entity, transform: Transform) -> Result<(), String> {
+pub(crate) fn set_local_transform(entity: &mut Entity, transform: Transform) -> Result<(), String> {
     let indices: Vec<_> = entity
         .components
         .iter()

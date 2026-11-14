@@ -10,6 +10,7 @@ pub mod component_command;
 pub mod debugger_panel;
 pub mod editing;
 pub mod editor_shell;
+mod entity_clipboard;
 pub mod entity_command;
 pub mod graph_editor;
 pub mod hierarchy;
@@ -70,3 +71,5 @@ pub use version_control_panel::VersionControlPanel;
 pub use vfx_editor::VfxEditorState;
 
 pub mod image_preview;
+
+mod script_highlight;

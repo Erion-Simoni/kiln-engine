@@ -66,6 +66,17 @@ pub fn save_as(project: &Project, source: &Path, destination: &Path) -> Result<P
         .unwrap_or(Path::new("."));
     let destination_parent = canonicalize_destination(destination_parent)?;
     if root == destination_parent {
+        let target = destination_parent.join(
+            destination
+                .file_name()
+                .ok_or("Choose a project file name")?,
+        );
+        if target.exists()
+            && target.canonicalize().map_err(|e| e.to_string())?
+                != source.canonicalize().map_err(|e| e.to_string())?
+        {
+            return Err("Save As will not overwrite another existing project file".into());
+        }
         return save(project, destination);
     }
     if destination_parent.starts_with(&root) {

@@ -26,6 +26,10 @@ pub struct ScriptEditor {
     saved: Option<String>,
     loaded: String,
     message: String,
+    show_api: bool,
+    api_filter: String,
+    highlighted_source: String,
+    highlighted_job: egui::text::LayoutJob,
 }
 
 /// Unsaved text and the disk baseline used by guarded saves after recovery.
@@ -331,22 +335,50 @@ impl ScriptEditor {
                     Err(error) => error,
                 };
             }
+            if ui.button("API Reference").clicked() {
+                self.show_api = !self.show_api;
+            }
             if self.is_dirty() {
                 ui.colored_label(egui::Color32::YELLOW, "Unsaved script");
             }
         });
         ui.label(&self.message);
+        let highlighted_source = &mut self.highlighted_source;
+        let highlighted_job = &mut self.highlighted_job;
+        let mut layouter = |ui: &egui::Ui, code: &str, wrap_width: f32| {
+            if highlighted_source != code {
+                *highlighted_source = code.to_owned();
+                *highlighted_job = crate::script_highlight::highlight(code);
+            }
+            let mut job = highlighted_job.clone();
+            job.wrap.max_width = wrap_width;
+            ui.fonts(|fonts| fonts.layout_job(job))
+        };
         egui::ScrollArea::both()
             .id_salt("gameplay_script_source")
             .show(ui, |ui| {
                 ui.add(
                     egui::TextEdit::multiline(&mut self.source)
                         .code_editor()
+                        .layouter(&mut layouter)
                         .char_limit(SOURCE_LIMIT)
                         .desired_width(f32::INFINITY)
                         .desired_rows(28),
                 );
             });
+        egui::Window::new("KilnScript API Reference").open(&mut self.show_api).show(ui.ctx(),|ui| {
+            ui.label("Built-ins shared by scripts, graphs, native and browser games.");
+            ui.horizontal(|ui| {ui.label("Filter:");ui.text_edit_singleline(&mut self.api_filter);});
+            ui.label("Signatures show required argument counts. See docs/KILNSCRIPT.md for semantics.");
+            let filter=self.api_filter.to_lowercase();
+            let mut entries=kiln_runtime::slice::BUILTINS.to_vec();entries.sort_by_key(|entry|entry.0);
+            egui::ScrollArea::vertical().max_height(350.0).show(ui,|ui| {
+                for (name,_,count) in entries.into_iter().filter(|(name,_,_)|name.contains(&filter)) {
+                    let arguments=(1..=count).map(|i|format!("arg{i}")).collect::<Vec<_>>().join(", ");
+                    ui.monospace(format!("{name}({arguments})"));
+                }
+            });
+        });
     }
 }
 

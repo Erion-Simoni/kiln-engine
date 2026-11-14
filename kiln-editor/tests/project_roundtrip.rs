@@ -200,6 +200,9 @@ fn save_as_copies_relative_assets_and_refuses_to_overwrite_destination_files() {
         json(&project)
     );
     assert!(root.join("scripts/main.ks").exists());
+    let existing_copy = std::fs::read(&copy).unwrap();
+    assert!(project_files::save_as(&project, &created.path, &copy).is_err());
+    assert_eq!(std::fs::read(&copy).unwrap(), existing_copy);
     let relocated = project_files::save_as(
         &project,
         &created.path,

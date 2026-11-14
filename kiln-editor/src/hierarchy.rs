@@ -108,6 +108,15 @@ impl HierarchyPanel {
         self.select_primary(entity_id);
     }
 
+    /// Select a pasted group while retaining the first entity as inspector target.
+    pub fn select_many(&mut self, ids: &[String]) {
+        self.selected_ids = ids.to_vec();
+        self.selected_id = ids.first().cloned();
+        for node in &mut self.nodes {
+            node.selected = self.selected_ids.contains(&node.entity_id);
+        }
+    }
+
     /// Add or remove an entity from the current selection.
     pub fn toggle_select(&mut self, entity_id: &str) {
         if let Some(index) = self.selected_ids.iter().position(|id| id == entity_id) {

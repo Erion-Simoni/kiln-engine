@@ -14,7 +14,9 @@ use kiln_assets::decode_png;
 pub struct SpriteAssetPayload {
     pub path: String,
 }
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::time::{Instant, SystemTime};
 
 /// The kind of an asset listed in the browser.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,6 +43,8 @@ pub struct AssetEntry {
 /// The state of the editor's asset browser.
 #[derive(Debug, Default)]
 pub struct AssetBrowser {
+    fingerprints: BTreeMap<String, (u64, Option<SystemTime>)>,
+    last_poll: Option<Instant>,
     /// Root directory that is scanned for assets.
     root: Option<PathBuf>,
     /// Assets found in the last scan, sorted by path.
@@ -131,6 +135,8 @@ impl AssetBrowser {
     pub fn scan(&mut self, root: &Path) {
         self.root = Some(root.to_path_buf());
         self.entries.clear();
+        self.fingerprints.clear();
+        self.last_poll = Some(Instant::now());
         self.errors.clear();
         self.preview_source = None;
         self.preview_pixels = None;
@@ -150,7 +156,12 @@ impl AssetBrowser {
             if is_manifest(&relative) {
                 continue;
             }
-            let size = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
+            let metadata = std::fs::metadata(&file).ok();
+            let size = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
+            self.fingerprints.insert(
+                relative.clone(),
+                (size, metadata.and_then(|m| m.modified().ok())),
+            );
             let kind = match file.extension().and_then(|s| s.to_str()) {
                 Some("png") => AssetKind::Image,
                 _ => AssetKind::Other,
@@ -161,6 +172,53 @@ impl AssetBrowser {
                 kind,
             });
         }
+    }
+
+    /// Poll project files at most once a second, preserving the selected preview.
+    /// Stable asset identities live in Project and are never replaced by reimport.
+    pub fn poll_changes(&mut self) -> Vec<String> {
+        if self
+            .last_poll
+            .is_some_and(|time| time.elapsed() < std::time::Duration::from_secs(1))
+        {
+            return vec![];
+        }
+        self.last_poll = Some(Instant::now());
+        self.refresh_changed_files()
+    }
+
+    fn refresh_changed_files(&mut self) -> Vec<String> {
+        let Some(root) = self.root.clone() else {
+            return vec![];
+        };
+        let mut files = Vec::new();
+        collect_files(&root, &mut files);
+        let mut current = BTreeMap::new();
+        for file in files {
+            let path = relative_path(&root, &file);
+            if is_manifest(&path) {
+                continue;
+            }
+            if let Ok(metadata) = file.metadata() {
+                current.insert(path, (metadata.len(), metadata.modified().ok()));
+            }
+        }
+        let mut changed: Vec<_> = current
+            .keys()
+            .chain(self.fingerprints.keys())
+            .filter(|path| current.get(*path) != self.fingerprints.get(*path))
+            .cloned()
+            .collect();
+        changed.sort();
+        changed.dedup();
+        if !changed.is_empty() {
+            let preview = self.preview_source.clone();
+            self.scan(&root);
+            if let Some(path) = preview.filter(|path| current.contains_key(path)) {
+                let _ = self.select(&path);
+            }
+        }
+        changed
     }
 
     /// Move a project asset to another relative path without overwriting an
@@ -208,8 +266,12 @@ impl AssetBrowser {
             return Err("no project directory".to_string());
         };
 
-        let full = root.join(path);
         let result = (|| {
+            let full = root.join(safe_project_path(path)?);
+            let canonical = full.canonicalize().map_err(|e| e.to_string())?;
+            if !canonical.starts_with(root.canonicalize().map_err(|e| e.to_string())?) {
+                return Err("Asset preview must stay inside the project".into());
+            }
             let bytes = std::fs::read(&full).map_err(|e| e.to_string())?;
             let image = decode_png(&bytes).map_err(|e| e.to_string())?;
             Ok::<(usize, usize, Vec<u8>), String>((
@@ -293,12 +355,19 @@ fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
         if file_type.is_dir() {
             if matches!(
                 path.file_name().and_then(|name| name.to_str()),
-                Some(".git" | ".kiln-cache" | "target")
+                Some(".git" | ".kiln-cache" | ".kiln-save" | "target" | "export" | "dist")
             ) {
                 continue;
             }
             collect_files(&path, out);
         } else if path.is_file() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with('.')
+                && (name.ends_with(".recovery.json") || name.ends_with(".recovery.tmp"))
+            {
+                continue;
+            }
             out.push(path);
         }
     }
@@ -359,5 +428,51 @@ mod tests {
             .entries()
             .iter()
             .any(|entry| entry.path.contains("secret")));
+    }
+}
+
+#[cfg(test)]
+mod reimport_tests {
+    use super::*;
+    #[test]
+    fn external_image_changes_refresh_preview_and_detect_additions_and_deletions() {
+        let root = tempfile::tempdir().unwrap();
+        let image = root.path().join("hero.png");
+        std::fs::write(
+            &image,
+            kiln_assets::encode_png_rgba(1, 1, &[255, 0, 0, 255]).unwrap(),
+        )
+        .unwrap();
+        let mut browser = AssetBrowser::new();
+        browser.scan(root.path());
+        browser.set_filter("hero".into());
+        browser.select("hero.png").unwrap();
+        std::fs::write(
+            &image,
+            kiln_assets::encode_png_rgba(2, 1, &[0, 0, 255, 255, 0, 0, 255, 255]).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(browser.refresh_changed_files(), vec!["hero.png"]);
+        assert_eq!(browser.preview_source(), Some("hero.png"));
+        assert_eq!(browser.preview_size(), Some((2, 1)));
+        assert_eq!(browser.filter(), "hero");
+        std::fs::write(root.path().join("new.ks"), "let value=1;").unwrap();
+        assert_eq!(browser.refresh_changed_files(), vec!["new.ks"]);
+        std::fs::remove_file(&image).unwrap();
+        assert_eq!(browser.refresh_changed_files(), vec!["hero.png"]);
+        assert!(browser.preview_source().is_none());
+        assert!(browser.refresh_changed_files().is_empty());
+    }
+    #[test]
+    fn private_recovery_and_export_outputs_are_not_imported_and_preview_cannot_escape() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join(".kiln.toml.recovery.json"), "private").unwrap();
+        std::fs::create_dir(root.path().join("export")).unwrap();
+        std::fs::write(root.path().join("export/game.exe"), "binary").unwrap();
+        let mut browser = AssetBrowser::new();
+        browser.scan(root.path());
+        assert!(browser.entries().is_empty());
+        assert!(browser.select("../outside.png").is_err());
+        assert!(browser.select("/outside.png").is_err());
     }
 }
