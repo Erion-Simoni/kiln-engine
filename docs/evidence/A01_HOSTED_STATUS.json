@@ -49,5 +49,33 @@
         "detail": "emberwatch export timed out after its first native export succeeded; overwrite rejection was not observed. Held clicks and a named overwrite wait are being verified locally."
       }
     ]
+  },
+  "latest": {
+    "observed_date": "2026-11-14",
+    "source": "16b0e7bec0ff7e36c4e5fc24899ee8b0db66fe86",
+    "checks": [
+      {
+        "name": "General CI",
+        "run": 43520789419,
+        "result": "success"
+      },
+      {
+        "name": "Linux candidate",
+        "run": 43520789200,
+        "result": "success"
+      },
+      {
+        "name": "Reference games",
+        "run": 43520789363,
+        "result": "failure",
+        "detail": "Skybridge authoring: Bind input action_0 to s timed out. Held binding press verified by a fresh complete local Skybridge authoring replay; hosted confirmation pending."
+      },
+      {
+        "name": "Windows candidate",
+        "run": 43520789391,
+        "result": "failure",
+        "detail": "Installed capture_window.ps1: Window client area is too small. Now select the largest PID-owned visible window with a client area of at least 100x100; regression tests pass. Fresh Windows hosted confirmation pending."
+      }
+    ]
   }
 }

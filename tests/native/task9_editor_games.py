@@ -122,7 +122,7 @@ class Editor:
         self.command('mousemove', '--window', self.window, x, y, 'click', '1')
 
     def held_click(self, x, y):
-        # Keep export press/release visible across frames, as in export_smoke.py.
+        # Keep press/release visible across frames, as in export_smoke.py.
         self.command('mousemove', '--window', self.window, x, y)
         self.command('mousedown', '1')
         self.command('mouseup', '1')
@@ -279,7 +279,7 @@ def author(tools, name, destination, evidence):
                 def actions():
                     return tomllib.loads((destination/'kiln.toml').read_text())['action_map']['actions']
                 editor.wait(lambda: action_id in actions(), description=f"Create input {action_id}")
-                editor.click(160, row+19)
+                editor.held_click(160, row+19)
                 editor.shot('binding_'+action_id+'_waiting')
                 editor.press(key)
                 editor.save()

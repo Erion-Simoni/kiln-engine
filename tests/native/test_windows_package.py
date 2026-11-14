@@ -95,3 +95,26 @@ class WindowsProcessTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class WindowsWindowReadinessTests(unittest.TestCase):
+    def test_visible_helper_window_is_skipped_until_main_client_is_ready(self):
+        import ctypes
+        from ctypes import wintypes
+        dimensions = {1: (1,1), 2: (1440,900), 3: (640,480)}
+        def owner(window, pointer):
+            ctypes.cast(pointer, ctypes.POINTER(wintypes.DWORD)).contents.value = 42
+        def rectangle(window, pointer):
+            rect = ctypes.cast(pointer, ctypes.POINTER(wintypes.RECT)).contents
+            rect.right, rect.bottom = dimensions[window]
+            return True
+        observer = smoke.Windows.__new__(smoke.Windows)
+        observer.callback = lambda fn: fn
+        observer.api = SimpleNamespace(
+            GetWindowThreadProcessId=owner, IsWindowVisible=lambda _: True,
+            GetClientRect=rectangle,
+            EnumWindows=lambda callback,_: [callback(window,0) for window in dimensions])
+        self.assertEqual(observer.visible(42), 2)
+        dimensions.clear();dimensions[1] = (1,1)
+        self.assertIsNone(observer.visible(42))
+        self.assertIsNone(observer.visible(99))
