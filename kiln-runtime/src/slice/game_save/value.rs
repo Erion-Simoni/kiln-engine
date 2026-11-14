@@ -10,6 +10,7 @@ pub enum SaveValue {
     Boolean(bool),
     Text(String),
     Array(Vec<SaveValue>),
+    Dictionary(BTreeMap<String, SaveValue>),
 }
 
 impl SaveValue {
@@ -30,6 +31,18 @@ impl SaveValue {
                         .map(|v| convert(v, depth + 1, count))
                         .collect::<Result<_, _>>()?,
                 ),
+                Value::Map(values)
+                    if values.len() <= 4096 && values.keys().all(|key| key.len() <= 256) =>
+                {
+                    SaveValue::Dictionary(
+                        values
+                            .iter()
+                            .map(|(key, value)| {
+                                Ok((key.clone(), convert(value, depth + 1, count)?))
+                            })
+                            .collect::<Result<_, String>>()?,
+                    )
+                }
                 _ => return Err("Saved value is non-finite or exceeds its limit".into()),
             })
         }
@@ -42,6 +55,12 @@ impl SaveValue {
             Self::Boolean(v) => Value::Bool(*v),
             Self::Text(v) => Value::Str(v.clone()),
             Self::Array(v) => Value::Array(v.iter().map(Self::value).collect::<Result<_, _>>()?),
+            Self::Dictionary(values) => Value::Map(
+                values
+                    .iter()
+                    .map(|(key, value)| Ok((key.clone(), value.value()?)))
+                    .collect::<Result<_, String>>()?,
+            ),
         };
         Self::capture(&value)?;
         Ok(value)

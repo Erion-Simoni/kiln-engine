@@ -162,6 +162,12 @@ smoke; focused local authoring/export checks pass for all three games. The chang
 still requires hosted confirmation. The independent A02 recovery substep below is
 implemented and tested under ADR-0079; broader gates remain open.
 
+**Sixth batch 2026-11-14:** source 16b0e7b passes general CI and the Linux
+candidate. Reference authoring now identifies Skybridge's first input binding;
+Windows capture selected a tiny helper before the main client was ready. Held
+binding presses and largest-valid-client selection repair those specific paths,
+with regression coverage. Fresh matching-source hosted results remain required.
+
 ### A02 — Durable projects, scene editing and recovery
 
 **Status:** PARTIAL. **Depends on:** A01.
@@ -178,6 +184,14 @@ Restore/Save, Escape, recovery Discard, normal exit Cancel/Discard and unsupport
 snapshot preservation pass. [Evidence](evidence/A02_SCRIPT_RECOVERY.md). The full
 two-scene/gizmo/selection/undo acceptance above remains open.
 
+**Authoring batch 2026-11-14:** entity clipboard transactions capture selected
+subtrees, retain detached world poses and supported components, remap parent/joint/
+prefab-instance IDs, and paste once into scene history. System clipboard output
+is now handled. Two-scene widget Copy/Paste, undo/redo and save/restart pass.
+Manifest saves detect external edits/deletion/corruption before writing; Save As
+refuses another existing manifest. Lock/hide, alignment and the full combined
+transform/recovery acceptance remain open. See [batch evidence](evidence/A02_A04_AUTHORING.md).
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.
@@ -185,12 +199,31 @@ two-scene/gizmo/selection/undo acceptance above remains open.
 - [ ] Complete stable IDs/dependency tracking, search/filter/previews, import/reimport/file-change detection, rename/move, missing/duplicate diagnostics, atlas packing, slicing/pivots and platform import presets. Verify nested prefabs, variants, override apply/revert and reference-safe propagation.
 - [ ] **Acceptance:** Reimport renamed art used by prefabs in multiple scenes; retain overrides and IDs, rebuild an atlas, reopen and export with identical intended visuals and no stale references.
 
+**Asset batch 2026-11-14:** project-file polling refreshes browser listings,
+previews and rendered PNGs while retaining the selected preview/filter and project
+asset IDs. Recovery/export outputs are excluded. Atlas placement is now shared by
+fit validation, pixel copy and UVs, with atomic rejection, image/name validation and
+fallible allocation. Pixel/preview tests and actual rendered reimport pass.
+Polling uses size/mtime; content-preserving metadata changes, the complete renamed-
+prefab/atlas/export workflow, platform presets and nested/variant acceptance remain
+open. See [batch evidence](evidence/A02_A04_AUTHORING.md).
+
 ### A04 — General scripting, graphs and real debugging
 
 **Status:** PARTIAL. **Depends on:** A02.
 
 - [ ] Retain shared host registry, lifecycle/events/signals, functions/modules/collections and runtime entity APIs. Complete for/while loops, dictionaries, enums/structured values, documented global-state rules, timers/delayed execution and bounded coroutine scheduling; extend existing language constructs rather than duplicate them. Add highlighting, completion/docs, project search, formatter and source navigation; source breakpoints, statement stepping, stack/locals/watches. Wire editable graph pins/connections, compile diagnostics and runtime value inspection to the same semantics. Specify safe reload/restart and script budgets.
 - [ ] **Acceptance:** Build a new enemy/projectile/trigger game using scripts and an equivalent graph; debug an imported function, stop infinite work with a useful diagnostic, and reproduce source/export behavior without engine edits.
+
+**Scripting batch 2026-11-14:** scoped counted loops and bounded first-class
+dictionaries share the existing IR/host registry and typed saves/preferences.
+Added lossless syntax colors and a searchable built-in reference. Bytecode steps
+now execute; resume, locals, call-depth stepping and per-execution/single-step
+budgets have regression tests. The actual live gameplay debugger still needs
+source breakpoints, imported function frames and watches. Enums, scheduling,
+completion/search/format/navigation and graph authoring/inspection acceptance
+remain open. See [language contract](KILNSCRIPT.md) and
+[batch evidence](evidence/A02_A04_AUTHORING.md). A02–A04 remain PARTIAL.
 
 ### A05 — Sprite rendering, cameras and large-scene behavior
 

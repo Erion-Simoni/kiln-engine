@@ -127,6 +127,12 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("signal_value", 66, 0),
     ("event_entity", 67, 0),
     ("change_scene", 68, 1),
+    ("dict_new", 110, 0),
+    ("dict_get", 111, 3),
+    ("dict_set", 112, 3),
+    ("dict_has", 113, 2),
+    ("dict_remove", 114, 2),
+    ("dict_keys", 115, 1),
     ("array_new", 69, 0),
     ("overlap_circle", 70, 4),
     ("raycast_query", 71, 6),
@@ -1466,6 +1472,48 @@ impl SliceHost {
                 }
                 .into(),
             )),
+            110 => Ok(Value::Map(Default::default())),
+            111..=114 => {
+                let Value::Map(values) = &args[0] else {
+                    return Err(VmError::HostCallError("Expected dictionary".into()));
+                };
+                let key = args[1]
+                    .as_str()
+                    .filter(|key| key.len() <= 256)
+                    .ok_or_else(|| {
+                        VmError::HostCallError(
+                            "Dictionary key must be a string of at most 256 bytes".into(),
+                        )
+                    })?;
+                match func_id {
+                    111 => Ok(values.get(key).cloned().unwrap_or_else(|| args[2].clone())),
+                    113 => Ok(Value::Bool(values.contains_key(key))),
+                    _ => {
+                        let mut changed = values.clone();
+                        if func_id == 112 {
+                            if changed.len() >= 4096 && !changed.contains_key(key) {
+                                return Err(VmError::HostCallError(
+                                    "Dictionary item limit reached".into(),
+                                ));
+                            }
+                            changed.insert(key.into(), args[2].clone());
+                        } else {
+                            changed.remove(key);
+                        }
+                        let value = Value::Map(changed);
+                        game_save::SaveValue::capture(&value).map_err(VmError::HostCallError)?;
+                        Ok(value)
+                    }
+                }
+            }
+            115 => match &args[0] {
+                Value::Map(values) => Ok(Value::Array(
+                    values.keys().cloned().map(Value::Str).collect(),
+                )),
+                _ => Err(VmError::HostCallError(
+                    "dict_keys expects a dictionary".into(),
+                )),
+            },
             61 => match &args[0] {
                 Value::Array(values) => Ok(Value::I64(values.len() as i64)),
                 _ => Err(VmError::HostCallError(
@@ -1614,6 +1662,14 @@ fn describe(value: &Value) -> String {
         Value::F64(v) => v.to_string(),
         Value::Bool(v) => v.to_string(),
         Value::Str(v) => v.clone(),
+        Value::Map(values) => format!(
+            "{{{}}}",
+            values
+                .iter()
+                .map(|(key, value)| format!("{key}: {}", describe(value)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         Value::Array(arr) => format!(
             "[{}]",
             arr.iter().map(describe).collect::<Vec<_>>().join(", ")

@@ -1,64 +1,91 @@
 # Kiln Session Handoff
 
-**Active work:** A01 hosted/replay repair plus the independent A02 script-recovery
-substep, as authorized by the owner's request to work through all tasks in batches.
-**Branch:** fix/a01-ci-baseline; recovery implemented in local commit 5627c72;
-previous pushed baseline 4285924. This batch is ready to push with the replay repair.
-**Owner constraints:** no release-size ceiling, keep resource/performance limits;
-MIT OR Apache-2.0 settled; full 3D stays gated on G2D.
+**Active work:** staged A02–A04 implementation, explicitly authorized by the
+owner's “continue up to A04” request (ADR-0080/0081). Those milestones remain
+PARTIAL; this batch completes concrete substeps, not their entire acceptance.
+**Branch:** `fix/a01-ci-baseline`; batch baseline `16b0e7b`. Delivery is split into
+CI-readiness, editor-authoring and scripting commits, with tests, CI coverage,
+language contract and evidence versioned alongside the implementation.
+**Owner constraints:** no release-size ceiling; retain resource/performance
+limits; MIT OR Apache-2.0 settled; full 3D stays gated on G2D.
 
-## Done: A02 script recovery (ADR-0079)
+## Done
 
-- Versioned recovery envelopes include project plus dirty shared Script Editor
-  source, loaded relative path and original disk baseline. Legacy snapshots and
-  public project-only API remain compatible.
-- Restore populates the buffer without writing source; invalid/unfinished text can
-  be recovered. Failed saves and external edits preserve both disk and draft.
-  Newer saved manifests keep their scenes while independent script drafts recover.
-- Unique atomic sidecars and interrupted temporary files are excluded from Git and
-  Save As copies. Successful Save/explicit Discard clears recovery. Escape keeps
-  it; unknown/unreadable snapshots remain visibly pending and are not erased.
-- Fixed normal project/exit Discard leaving a recovery snapshot behind.
-- Added actual GUI autosave/crash/restart coverage to native CI, with evidence upload.
-- Contract: docs/SCRIPT_RECOVERY.md. Evidence: docs/evidence/A02_SCRIPT_RECOVERY.md
-  and A02_SCRIPT_RECOVERY.json. Full A02 scene/gizmo/selection/undo acceptance is open.
+- A02: project-scoped entity clipboard captures selected subtrees, all supported
+  components and detached world poses; remaps parents, joints and prefab-instance
+  identities; paste is one atomic scene command/history step. System clipboard
+  and egui platform output work. Multi-entity paste selects its new entities.
+- A02: pre-write manifest guards retain externally changed/deleted/corrupt files;
+  formatting-only changes are allowed. Save As refuses another existing project
+  file in the same directory. Existing script draft/recovery guards remain active.
+- A03: size/mtime polling detects external changes/additions/deletions, refreshes
+  selected previews and rendered PNGs, retains filters and project asset IDs,
+  excludes recovery/export outputs and rejects escaped preview paths.
+- A03: atlas fit, pixels and UVs use the same stored placement. Failed additions
+  do not mutate packing state; invalid data/names/configuration are errors;
+  fallible construction checks allocation. Boundary/shelf pixel tests pass.
+- A04: scoped counted loops, break/continue/increment rules and bounded dictionaries
+  share the existing compiler/IR/host registry. Typed logical saves/preferences
+  retain nested values and large integers. Syntax colors and searchable built-in
+  API Reference are available in the shared Script Editor.
+- A04: bytecode stepping executes, Continue resumes past a reported breakpoint,
+  locals update, step-over/out follow real call depth, Restart clears bytecode
+  state, and single steps/full execution share the configured instruction limit.
+  Source/live gameplay debugging remains separate unfinished work.
+- A01 followups: held input-binding presses repair the locally reproduced
+  Skybridge timeout. Windows window selection waits for a valid client area and
+  chooses the largest PID-owned visible window; regression tests pass.
 
 ## Validation
 
-- just check passed; 705 Rust tests passed, zero skipped (five new recovery tests).
-- 33 Python tests passed; workflows pass actionlint; mdBook build checked.
-- Actual 30-second autosave, OS kill/restart, Restore/Save, Escape preservation,
-  explicit recovery Discard, normal exit Cancel/Discard and unsupported-snapshot
-  preservation passed in the real editor. No successful snapshot was injected;
-  only the unsupported-version error case uses a synthetic invalid sidecar.
-- Raw evidence: target/a02-*; generated files are not committed.
+- `just check` PASSED: formatting, workspace all-target strict Clippy, workspace
+  check and the standalone audio sample check.
+- `cargo nextest run --workspace --locked`: **725 passed, zero skipped**.
+  Python native/build/package regressions: **34 passed**.
+- WASM strict Clippy passed with default and no-default features; browser runtime
+  built and matching wasm-bindgen bindings/runtime manifest generated.
+- Real editor Copy/Paste, undo/redo, second-scene paste and saved restart passed;
+  new IDs remain unique and supported properties remain identical after restart.
+- Real external PNG overwrite/restoration changed/restored scene framebuffer
+  pixels without rewriting the manifest; source authored via real widgets uses
+  counted loops and dictionaries to determine movement speed. The exact new
+  authoring-to-browser CI path passed with local Chromium.
+- Fresh portable installation verified (1546 files). Its native/browser exports
+  retained complete notices and matching runtime bytes, and deliberate overwrite
+  attempts failed without changing valid outputs. Native movement X119.5→137.5
+  and browser X119.5→133.5 passed; both stopped after key release.
+- Crash recovery rerun PASSED with real 30-second autosaves, forced kills, restart,
+  Restore/Save, Escape preservation, recovery Discard, normal exit Cancel/Discard
+  and unknown-version preservation against the new save guards.
+- Full Skybridge authoring replay PASSED: all source/assets/scene properties/input
+  bindings match the checked-in project; source template remains unchanged.
+- actionlint 1.7.7, mdBook 0.4.52 and JavaScript syntax checks passed.
+- Detailed contract/results/screenshots: docs/evidence/A02_A04_AUTHORING.md;
+  raw generated logs/results under target/a02-*, target/a03-a04-*, target/a04-*.
+  Two harness setup errors (missing installation notices and local Playwright
+  browser path) were corrected; no assertions were removed.
 
-## A01 hosted status and replay work
+## Hosted status / next work
 
-- Source 4b7f488: general CI 43509387416, Linux candidate 43509387420 and Windows
-  candidate 43509387540 all PASSED, including actual archives, full configured
-  software acceptance, artifact upload and origin attestations. Reference games failed.
-- Source 4285924: general CI 43515183192 PASSED; Linux candidate 43515183244 was
-  running at observation. Reference games 43515183354 FAILED with a useful annotation:
-  Emberwatch export timed out after native export succeeded; its next expected
-  overwrite rejection was not observed. Root cause is not proven yet.
-- Held hover/press/release is now scoped to export buttons, matching the passing
-  native smoke. All three exact authored projects, six exports/notices and
-  deliberate overwrite rejections pass across focused local runs. A broader
-  global input experiment regressed panel interactions and was removed; failed
-  and restart-interrupted runs remain in target/a01-fifth-* evidence.
-- Durable hosted snapshot: docs/evidence/A01_HOSTED_STATUS.json.
+- Source 16b0e7b: general CI **43520789419 PASSED**, Linux candidate
+  **43520789200 PASSED**. Reference games **43520789363 FAILED** at Skybridge's
+  first input binding; Windows candidate **43520789391 FAILED** because capture
+  chose a too-small client. Current binding/window-readiness fixes need fresh
+  matching-source hosted confirmation. See docs/evidence/A01_HOSTED_STATUS.json.
+- A02: lock/hide and alignment; integrated two-scene transforms/selection/history/
+  recovery acceptance. A03: renamed-art/multiple-scene prefab/atlas/export
+  acceptance, nested prefabs/variants and platform import presets. Metadata-only
+  polling cannot detect content changes preserving both file size and mtime.
+- A04: enums, timers/coroutines, completion, project search/formatting/navigation,
+  actual gameplay source breakpoints/statement stepping/imported stack frames/
+  expression watches and editable/inspectable equivalent graph acceptance.
+- Continue the authoritative docs/ENGINE_COMPLETION_PLAN.md; do not start full
+  3D or mark A02–A04/G2D complete based on these substeps alone.
 
-## Next / remaining scope
-
-1. Push the tested recovery and export-click repair commits.
-   Inspect fresh hosted reference-game/candidate results; A01 remains open until
-   applicable source-pinned checks pass. Do not promote inferred fixes to acceptance.
-2. Continue the rest of A02: two-scene widget authoring, complete transform/parent/
-   selection/undo and restart/property-reference acceptance. Recovery completion
-   does not close that broader milestone.
-3. Keep following docs/ENGINE_COMPLETION_PLAN.md. No full 2D/3D release gate is closed.
-
-Git push/public HTML reads work; GitHub CLI API is Forbidden, so detailed authenticated
-logs/PR creation are unavailable. Software graphics/Xvfb/Chromium/null audio and
-hosted portable tests do not establish physical-device or signed-installer support.
+Toolchain: source /workspace/.kiln-tools/activate.sh; Rust 1.99.1, nextest 0.9.151,
+mdBook 0.4.52. Set CARGO_INCREMENTAL=0, CARGO_PROFILE_DEV_DEBUG=0 and
+CARGO_PROFILE_TEST_DEBUG=0 for this workspace. Local browser tests use
+CHROMIUM_PATH=/usr/bin/chromium. Xvfb/software graphics/null audio and Chromium
+software rendering do not establish physical-device or Windows GUI acceptance.
+Git push and public GitHub HTML reads work; authenticated GitHub API remains
+Forbidden, so do not use it to infer missing CI details.

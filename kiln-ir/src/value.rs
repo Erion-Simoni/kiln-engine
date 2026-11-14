@@ -18,6 +18,8 @@ pub enum Value {
     Str(String),
     /// Homogeneous-enough list of values (positions, entity ids, colors).
     Array(Vec<Value>),
+    /// Deterministically ordered, string-keyed structured values.
+    Map(std::collections::BTreeMap<String, Value>),
 }
 
 impl Value {
@@ -66,7 +68,7 @@ impl Value {
         match self {
             Value::I64(v) => Some(*v as f64),
             Value::F64(v) => Some(*v),
-            Value::Bool(_) | Value::Str(_) | Value::Array(_) => None,
+            Value::Bool(_) | Value::Str(_) | Value::Array(_) | Value::Map(_) => None,
         }
     }
 
@@ -100,6 +102,13 @@ impl Value {
             }
             (Value::Bool(x), Value::Bool(y)) => x == y,
             (Value::Str(x), Value::Str(y)) => x == y,
+            (Value::Map(x), Value::Map(y)) => {
+                x.len() == y.len()
+                    && x.into_iter().all(|(key, value)| {
+                        y.get(&key)
+                            .is_some_and(|other| Value::values_equal(value, other.clone()))
+                    })
+            }
             (Value::Array(x), Value::Array(y)) => {
                 x.len() == y.len() && x.into_iter().zip(y).all(|(a, b)| Value::values_equal(a, b))
             }
@@ -213,6 +222,29 @@ mod tests {
             Value::F64(exact as f64),
             Value::I64(exact + 1)
         ));
+    }
+
+    #[test]
+    fn dictionary_equality_compares_keys_and_nested_numeric_values() {
+        use std::collections::BTreeMap;
+        let a = Value::Map(BTreeMap::from([(
+            "value".into(),
+            Value::Array(vec![Value::I64(1)]),
+        )]));
+        let b = Value::Map(BTreeMap::from([(
+            "value".into(),
+            Value::Array(vec![Value::F64(1.0)]),
+        )]));
+        assert!(Value::values_equal(a.clone(), b));
+        assert!(!Value::values_equal(
+            a.clone(),
+            Value::Map(BTreeMap::from([(
+                "other".into(),
+                Value::Array(vec![Value::I64(1)])
+            )]))
+        ));
+        assert!(!Value::values_equal(a.clone(), Value::Map(BTreeMap::new())));
+        assert_eq!(a.to_f64(), None);
     }
 
     #[test]

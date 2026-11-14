@@ -113,9 +113,14 @@ fn functions_isolate_loop_control_and_restore_caller_loop_targets() {
 
 #[test]
 fn runaway_loops_terminate_at_the_existing_vm_instruction_budget() {
-    let program = compile("while true { continue; }");
-    let error = Vm::new(Host::default()).execute(&program).unwrap_err();
-    assert!(matches!(error, VmError::InstructionBudgetExceeded));
+    for source in [
+        "while true { continue; }",
+        "for(let i=0;true;i+=1) {continue;}",
+    ] {
+        let program = compile(source);
+        let error = Vm::new(Host::default()).execute(&program).unwrap_err();
+        assert!(matches!(error, VmError::InstructionBudgetExceeded));
+    }
 }
 
 #[test]
@@ -125,6 +130,9 @@ fn malformed_operators_and_excessive_nesting_report_errors_without_panicking() {
         "true & false",
         "false | true",
         "while true {",
+        "for(let i=0 i<4;i+=1) {}",
+        "for(let i=0;i<4;) {}",
+        "for(let i=0;true;i+=1) { let inside=0; } return inside;",
         "if true {} else if {}",
         "@",
         "let x = 1; @",
@@ -153,4 +161,21 @@ fn unused_functions_cannot_hide_invalid_loop_control_and_boolean_chains_are_boun
         .is_err());
     let source = format!("return {}true;", "true && ".repeat(150));
     assert!(KilnScriptFrontend::new().compile(&source).is_err());
+}
+
+#[test]
+fn counted_loops_scope_the_initializer_and_continue_runs_the_increment() {
+    assert_eq!(run("let total = 0; for (let i=0; i<6; i+=1) { if i==2 { continue; } if i==5 { break; } total+=i; } return total;").stack(), &[Value::I64(8)]);
+    assert_eq!(run("let total=0; for (let i=0;i<3;i+=1) { for(let j=0;j<3;j+=1) { if j==1 {continue;} total+=1; } } return total;").stack(),&[Value::I64(6)]);
+    assert!(KilnScriptFrontend::new()
+        .compile("for(let i=0;i<1;i+=1) {} return i;")
+        .is_err());
+    assert_eq!(
+        run("let i=99; for(let i=0;i<2;i+=1) {} return i;").stack(),
+        &[Value::I64(99)]
+    );
+    assert_eq!(
+        run("fn test() { for(let i=0;i<4;i+=1) {return i+7;} return 0; } return test();").stack(),
+        &[Value::I64(7)]
+    );
 }

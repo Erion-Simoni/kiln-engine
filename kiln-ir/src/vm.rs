@@ -136,8 +136,8 @@ pub struct Vm<H: HostContext> {
     max_stack: usize,
     /// Maximum number of instructions to execute before halting.
     /// Prevents infinite loops from hanging the game.
-    /// Set to 0 for unlimited (not recommended for untrusted scripts).
     instruction_budget: u64,
+    instruction_limit: u64,
     /// Call stack for function calls (return addresses).
     call_stack: Vec<usize>,
 }
@@ -152,6 +152,7 @@ impl<H: HostContext> Vm<H> {
             host,
             max_stack: 1024,
             instruction_budget: 1_000_000,
+            instruction_limit: 1_000_000,
             call_stack: Vec::new(),
         }
     }
@@ -165,14 +166,16 @@ impl<H: HostContext> Vm<H> {
             host,
             max_stack,
             instruction_budget: 1_000_000,
+            instruction_limit: 1_000_000,
             call_stack: Vec::new(),
         }
     }
 
-    /// Set the instruction budget for the next execution.
-    /// Set to 0 for unlimited (not recommended for untrusted scripts).
+    /// Set the instruction limit per execution and remaining single-step budget.
+    /// Zero prevents execution; stepping obeys the same bound as a full run.
     pub fn set_instruction_budget(&mut self, budget: u64) {
         self.instruction_budget = budget;
+        self.instruction_limit = budget;
     }
 
     /// Borrow the host context, e.g. to read or write host-side state.
@@ -230,28 +233,26 @@ impl<H: HostContext> Vm<H> {
     /// decremented on each instruction. If the budget is exhausted, an
     /// `VmError::InstructionBudgetExceeded` error is returned.
     pub fn execute(&mut self, program: &Program) -> Result<(), VmError> {
+        self.begin_execution(program);
+        while self.ip < program.len() {
+            if !self.step(program)? {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    /// Start a bounded execution while retaining completed-tick locals.
+    pub fn begin_execution(&mut self, program: &Program) {
         self.ip = 0;
         self.stack.clear();
-        self.call_stack.clear(); // Clear call stack at start of execution
-                                 // Reset instruction budget for this execution
-        self.instruction_budget = 1_000_000;
+        self.call_stack.clear();
+        self.instruction_budget = self.instruction_limit;
         // Make sure every local slot the program declares exists.
         let slots = program.local_slots() as usize;
         if self.locals.len() < slots {
             self.locals.resize(slots, Value::I64(0));
         }
-
-        while self.ip < program.len() {
-            if self.instruction_budget == 0 {
-                return Err(VmError::InstructionBudgetExceeded);
-            }
-            self.instruction_budget -= 1;
-            if !self.step(program)? {
-                break;
-            }
-        }
-
-        Ok(())
     }
 
     /// Executes a single instruction.
@@ -264,6 +265,10 @@ impl<H: HostContext> Vm<H> {
             .get(self.ip)
             .ok_or(VmError::InvalidOpcode(0xFF))?;
 
+        if self.instruction_budget == 0 {
+            return Err(VmError::InstructionBudgetExceeded);
+        }
+        self.instruction_budget -= 1;
         match instr {
             Instruction::PushConst(v) => {
                 self.push(v.clone())?;
