@@ -73,3 +73,6 @@ pub use vfx_editor::VfxEditorState;
 pub mod image_preview;
 
 mod script_highlight;
+
+mod scene_controls;
+mod scene_selection;

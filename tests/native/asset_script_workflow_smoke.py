@@ -11,7 +11,7 @@ import sys
 import tempfile
 import tomllib
 import zlib
-from task9_editor_games import Editor, REPO, executable
+from task9_editor_games import Editor, REPO, executable, record_failure
 
 
 def png(color):
@@ -73,13 +73,23 @@ let speed = dict_get(movement, "speed", 0.0);""")
                   "script_authored_through_widgets": True, "project": str(project),
                   "scope": "Real editor under Xvfb/software graphics; exported play is recorded separately"}
         (output/"result.json").write_text(json.dumps(result, indent=2)+"\n")
+    except Exception as error:
+        editor.shot("failure")
+        record_failure(output,"structured-scripting","authoring",error)
+        raise
     finally:
         editor.close(failed=sys.exc_info()[0] is not None)
     if args.web_runtime:
         result["passed"] = False
         (output/"result.json").write_text(json.dumps(result, indent=2)+"\n")
         env = dict(os.environ, WEB_SMOKE_PROJECT=str(project))
-        subprocess.run(["node", str(REPO/"tests/web/smoke.cjs"), str(args.web_runtime.resolve())], env=env, check=True)
+        played=subprocess.run(["node", str(REPO/"tests/web/smoke.cjs"), str(args.web_runtime.resolve())],env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+        (output/"browser-play.log").write_text(played.stdout)
+        print(played.stdout,end="",flush=True)
+        if played.returncode:
+            error=RuntimeError(played.stdout[-4000:])
+            record_failure(output,"structured-scripting","browser",error)
+            raise error
         result["browser_played_authored_source"] = True
         result["passed"] = True
         (output/"result.json").write_text(json.dumps(result, indent=2)+"\n")

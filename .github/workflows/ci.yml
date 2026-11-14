@@ -230,6 +230,8 @@ jobs:
         run: python3 tests/native/script_recovery_smoke.py
       - name: Verify entity clipboard across scenes and restart
         run: python3 tests/native/entity_clipboard_smoke.py
+      - name: Verify scene selection, locks, visibility, alignment and recovery
+        run: python3 tests/native/scene_controls_smoke.py
       - name: Verify external art refresh and structured gameplay authoring
         run: python3 tests/native/asset_script_workflow_smoke.py
       - name: Pack the saved UI game
@@ -264,10 +266,15 @@ jobs:
             target/a02-script-recovery/editor/*.png
             target/a02-script-recovery/editor/*.log
             target/a02-script-recovery/*_before_crash.log
+            target/a02-scene-controls/result.json
+            target/a02-scene-controls/editor/*.png
+            target/a02-scene-controls/editor/*.log
             target/a02-entity-clipboard/result.json
             target/a02-entity-clipboard/editor/*.png
             target/a02-entity-clipboard/editor/*.log
             target/a02-entity-clipboard/reopened/*.png
+            target/a03-a04-workflow/*.log
+            target/a03-a04-workflow/failure.json
             target/a03-a04-workflow/result.json
             target/a03-a04-workflow/editor/*.png
             target/a03-a04-workflow/editor/*.log
@@ -356,6 +363,8 @@ jobs:
             target/task8-clean-linux-evidence/
             target/task8-physics-evidence/
             target/task8-material-evidence/
+            target/a03-a04-workflow/*.log
+            target/a03-a04-workflow/failure.json
             target/a03-a04-workflow/result.json
             target/a03-a04-workflow/editor/*.png
             target/a03-a04-workflow/editor/*.log

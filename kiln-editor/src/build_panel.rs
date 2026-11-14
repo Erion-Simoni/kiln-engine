@@ -77,6 +77,11 @@ impl BuildPanel {
         if self.job.is_some() {
             return Err("An export is already running".into());
         }
+        log::info!(
+            "Export requested: target={:?}, output={}",
+            config.target,
+            config.output_dir.display()
+        );
         self.build_log.clear();
         self.error = false;
         self.job = Some(ExportJob::start(&config, manifest, project)?);

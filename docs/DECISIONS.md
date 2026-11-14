@@ -2021,3 +2021,21 @@ checks remain separate Task 8 gates.
   breakpoint just reported; step-over/out follow actual bytecode call depth.
   This repairs the bytecode debugger and does not establish source-level/live
   gameplay debugging or evaluation of conditional watches.
+
+### ADR-0082 — Finish A01–A04 with persistent authoring controls (2026-11-14)
+
+- The owner's explicit instruction to finish A01 through A04 authorizes staged
+  work across these milestones. Keep existing scope and acceptance gates; do not
+  relabel omitted features as optional or claim a pending target has passed.
+- Store editor-only locked/hidden flags as an optional EditorFlags component in
+  the authoritative scene document. Missing flags mean unlocked/visible; parent
+  flags inherit down the hierarchy. Players ignore these authoring flags.
+- Locks reject direct property/component/hierarchy edits through command paths;
+  unlocking is always possible from hierarchy controls. Hiding affects edit-mode
+  drawing/picking only, including inherited children; Play uses normal visibility.
+- Viewport picking/marquee and alignment reuse runtime sprite geometry and stable
+  scene IDs. Alignment is explicitly alignment of world-space transform positions,
+  not sprite edges. Each group alignment is one undo transaction; descendants of
+  selected ancestors retain their local transforms rather than moving twice.
+- New controls require real widget/save/reopen and negative-command regressions.
+  Continue using the existing dependencies, scene history and host/IR systems.

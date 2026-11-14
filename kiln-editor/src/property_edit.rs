@@ -20,6 +20,7 @@ pub struct SetSpriteVisual<'a> {
 impl SetSpriteVisual<'_> {
     /// Validate and update authored data and its runtime projection atomically.
     pub fn apply(&self, scene: &mut Scene, world: &mut GameWorld) -> Result<bool, String> {
+        crate::scene_controls::require_editable(scene, self.entity_id)?;
         if scene.id != self.scene_id {
             return Err("Sprite edit targets another scene".into());
         }

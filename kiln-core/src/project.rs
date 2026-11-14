@@ -306,6 +306,13 @@ pub struct Entity {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Component {
+    /// Editor-only authoring flags. Runtime/game visibility is unaffected.
+    EditorFlags {
+        #[serde(default)]
+        locked: bool,
+        #[serde(default)]
+        hidden: bool,
+    },
     /// Sprite drawing geometry, independent of the referenced texture.
     SpriteLayout {
         settings: crate::visual::SpriteLayout,

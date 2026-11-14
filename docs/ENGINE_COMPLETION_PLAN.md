@@ -192,6 +192,14 @@ Manifest saves detect external edits/deletion/corruption before writing; Save As
 refuses another existing manifest. Lock/hide, alignment and the full combined
 transform/recovery acceptance remain open. See [batch evidence](evidence/A02_A04_AUTHORING.md).
 
+**Scene-controls batch 2026-11-14:** added saved/inherited editor lock/hide,
+command guards, viewport sprite picking and marquee, and one-command world-position
+alignment. Real two-scene selection/copy/alignment/undo, hidden-in-Edit/visible-in-
+Play, locked drag rejection, forced crash/recovery and restart comparison pass.
+Workspace flags survive prefab propagation. Windows candidate now passes on
+27fa148, but matching general CI/reference results failed and remain under repair.
+A02's broad cross-platform acceptance is still open; see STATE.md for current work.
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.

@@ -14,12 +14,25 @@ pub fn collect_scene_draws_with_materials(
     view: [f32; 4],
     resolve: impl Fn(&str) -> Option<u32>,
 ) -> Vec<(TextureId, SpriteInstance)> {
+    collect_scene_draws_filtered(world, view, resolve, |_| true)
+}
+
+/// Collect the same geometry while a host filters source IDs (e.g. editor hide).
+pub fn collect_scene_draws_filtered(
+    world: &GameWorld,
+    view: [f32; 4],
+    resolve: impl Fn(&str) -> Option<u32>,
+    include: impl Fn(Option<&str>) -> bool,
+) -> Vec<(TextureId, SpriteInstance)> {
     let mut draws = Vec::new();
     for (entity, source, pose, sprite) in world
         .world_ref()
         .query::<(hecs::Entity, Option<&SourceId>, &GlobalTransform, &Sprite)>()
         .iter()
     {
+        if !include(source.map(|id| id.0.as_str())) {
+            continue;
+        }
         let order = world
             .world_ref()
             .get::<&crate::SceneDrawOrder>(entity)
@@ -43,6 +56,9 @@ pub fn collect_scene_draws_with_materials(
         .query::<(hecs::Entity, Option<&SourceId>, &Tilemap)>()
         .iter()
     {
+        if !include(source.map(|id| id.0.as_str())) {
+            continue;
+        }
         let order = world
             .world_ref()
             .get::<&crate::SceneDrawOrder>(entity)
@@ -61,6 +77,9 @@ pub fn collect_scene_draws_with_materials(
         .query::<(hecs::Entity, Option<&SourceId>, &ParticleSystemComponent)>()
         .iter()
     {
+        if !include(source.map(|id| id.0.as_str())) {
+            continue;
+        }
         let order = world
             .world_ref()
             .get::<&crate::SceneDrawOrder>(entity)

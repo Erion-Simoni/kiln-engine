@@ -103,6 +103,7 @@ pub fn render_inspector_panel(
 
 fn component_header_name(component: &Component) -> String {
     match component {
+        Component::EditorFlags { .. } => "Editor Locks / Visibility".into(),
         Component::SpriteLayout { .. } => "Sprite Layout".into(),
         Component::Particles { .. } => "Particles".into(),
         Component::Physics { .. } => "Physics Body / Collider".into(),
@@ -125,6 +126,11 @@ fn render_component(ui: &mut egui::Ui, component: &mut Component, project: &Proj
     let mut changed = false;
 
     match component {
+        Component::EditorFlags { locked, hidden } => {
+            ui.label(format!(
+                "Locked: {locked}, hidden in editor: {hidden}. Use hierarchy controls to edit."
+            ));
+        }
         Component::SpriteLayout { settings } => {
             ui.label(format!(
                 "Pivot {:?}, {} px/unit",

@@ -161,6 +161,7 @@ pub enum EditorError {
 
 #[derive(Debug, Clone)]
 enum MenuAction {
+    Align(crate::scene_controls::Alignment),
     CopyEntities,
     PasteEntities,
     Exit,
@@ -2434,6 +2435,12 @@ impl EditorApp {
             }
         }
 
+        let authoring_flags = self
+            .current_project
+            .as_ref()
+            .and_then(|p| self.scenes.active_id().and_then(|id| p.scenes.get(id)))
+            .map(crate::scene_controls::resolved_flags)
+            .unwrap_or_default();
         let project_blocked = self.lifecycle.pending().is_some();
         let project_dirty = self
             .authoring_document()
@@ -2641,6 +2648,19 @@ impl EditorApp {
                         ui.close_menu();
                     }
                     ui.separator();
+                    ui.add_enabled_ui(
+                        self.play.is_none() && self.hierarchy_panel.selected_ids.len() > 1,
+                        |ui| {
+                            ui.menu_button("Align World Positions", |ui| {
+                                for (mode, label) in crate::scene_controls::Alignment::ALL {
+                                    if ui.button(label).clicked() {
+                                        menu_actions.push(MenuAction::Align(mode));
+                                        ui.close_menu();
+                                    }
+                                }
+                            });
+                        },
+                    );
                     if ui.button("Preferences...").clicked() {
                         open_panel(&mut self.dock_state, Tab::Preferences);
                         ui.close_menu();
@@ -3038,6 +3058,7 @@ impl EditorApp {
                         current_project: &mut self.current_project,
                         project_requests: &mut self.project_requests,
                         project_blocked,
+                        authoring_flags: &authoring_flags,
                         play: self.play.as_mut(),
                         scenes: &mut self.scenes,
                         entity_textures: &self.entity_textures,
@@ -3380,10 +3401,16 @@ impl EditorApp {
                 let camera = &scene_camera;
                 let view_bounds = camera.view_bounds();
                 let _ = kiln_runtime::update_global_transforms(&mut self.world);
-                for (texture, instance) in kiln_runtime::visual::collect_scene_draws_with_materials(
+                for (texture, instance) in kiln_runtime::visual::collect_scene_draws_filtered(
                     &self.world,
                     view_bounds,
                     |name| gpu.scene_view_sprite_renderer.material_id(name),
+                    |source| {
+                        self.is_playing
+                            || !source
+                                .and_then(|id| authoring_flags.get(id))
+                                .is_some_and(|f| f.hidden)
+                    },
                 ) {
                     gpu.scene_view_sprite_renderer
                         .push_textured(texture, instance);
@@ -3550,6 +3577,20 @@ impl EditorApp {
         // Execute menu actions after UI pass (borrows are released)
         for action in menu_actions {
             match action {
+                MenuAction::Align(alignment) => {
+                    if let Some(scene_id) = self.scenes.active_id().map(str::to_owned) {
+                        let command = crate::entity_command::EntityCommand {
+                            scene_id,
+                            edit: crate::entity_command::EntityEdit::Align {
+                                entity_ids: self.hierarchy_panel.selected_ids.clone(),
+                                alignment,
+                            },
+                        };
+                        if let Err(error) = self.apply_entity_command(command) {
+                            self.project_error = Some(error);
+                        }
+                    }
+                }
                 MenuAction::CopyEntities => {
                     let result = self
                         .current_project
@@ -3766,6 +3807,7 @@ struct TabViewer<'a> {
     current_project: &'a mut Option<Project>,
     project_requests: &'a mut Vec<ProjectRequest>,
     project_blocked: bool,
+    authoring_flags: &'a HashMap<String, crate::scene_controls::Flags>,
     /// The running game session, drawn over the scene view.
     play: Option<&'a mut PlaySession>,
     /// The history of scene edits, used by undo and redo.
@@ -4065,7 +4107,7 @@ impl TabViewer<'_> {
         let response = ui.interact(
             canvas,
             ui.id().with("transform_gizmo_canvas"),
-            egui::Sense::drag(),
+            egui::Sense::click_and_drag(),
         );
         if let Some(asset) = response.dnd_release_payload::<crate::assets::SpriteAssetPayload>() {
             let point = ui.input(|input| input.pointer.interact_pos());
@@ -4122,7 +4164,74 @@ impl TabViewer<'_> {
                 ));
             }
         }
-        if self.gizmo.mode == GizmoMode::None || !self.shell.gizmos {
+        let to_world = |point: egui::Pos2| {
+            kiln_core::Vec2::new(
+                self.scene_camera.position[0] + (point.x - canvas.left()) * units[0],
+                self.scene_camera.position[1] + (canvas.bottom() - point.y) * units[1],
+            )
+        };
+        if response.clicked() {
+            if let Some(point) = response.interact_pointer_pos() {
+                let id =
+                    crate::scene_selection::pick(self.world, self.authoring_flags, to_world(point));
+                let additive =
+                    ui.input(|i| i.modifiers.command || i.modifiers.ctrl || i.modifiers.shift);
+                match id {
+                    Some(id) if additive => self.hierarchy_panel.toggle_select(&id),
+                    Some(id) => self.hierarchy_panel.select(&id),
+                    None if !additive => self.hierarchy_panel.clear_selection(),
+                    None => {}
+                }
+                *self.selected_entity = self
+                    .hierarchy_panel
+                    .selected_entity_id()
+                    .and_then(|id| self.entity_id_to_hecs.get(id))
+                    .copied();
+            }
+        }
+        if self.gizmo.mode == GizmoMode::None {
+            if response.drag_started() {
+                self.shell.selection_origin = ui.input(|i| i.pointer.press_origin());
+            }
+            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.shell.selection_origin = None;
+            }
+            if let (Some(origin), Some(pointer)) =
+                (self.shell.selection_origin, response.interact_pointer_pos())
+            {
+                let rect = egui::Rect::from_two_pos(origin, pointer);
+                ui.painter().rect_stroke(
+                    rect,
+                    0.0,
+                    egui::Stroke::new(1.0_f32, egui::Color32::LIGHT_BLUE),
+                );
+                if response.drag_stopped() {
+                    let ids = crate::scene_selection::rectangle(
+                        self.world,
+                        self.authoring_flags,
+                        to_world(origin),
+                        to_world(pointer),
+                    );
+                    if ui.input(|i| i.modifiers.command || i.modifiers.ctrl || i.modifiers.shift) {
+                        for id in ids {
+                            if !self.hierarchy_panel.selected_ids.contains(&id) {
+                                self.hierarchy_panel.toggle_select(&id);
+                            }
+                        }
+                    } else {
+                        self.hierarchy_panel.select_many(&ids);
+                    }
+                    *self.selected_entity = self
+                        .hierarchy_panel
+                        .selected_entity_id()
+                        .and_then(|id| self.entity_id_to_hecs.get(id))
+                        .copied();
+                    self.shell.selection_origin = None;
+                }
+            }
+            return;
+        }
+        if !self.shell.gizmos {
             return;
         }
         if response.drag_started() {
@@ -4142,6 +4251,13 @@ impl TabViewer<'_> {
                     .map(|t| t.0);
                 let origin = ui.input(|input| input.pointer.press_origin());
                 if let (Some(source), Some(initial), Some(origin)) = (source, initial, origin) {
+                    if self
+                        .authoring_flags
+                        .get(&source)
+                        .is_some_and(|f| f.locked || f.hidden)
+                    {
+                        return;
+                    }
                     let canvas = egui::Rect::from_min_size(
                         egui::pos2(viewport.x as f32 / ppp, viewport.y as f32 / ppp),
                         egui::vec2(viewport.width as f32 / ppp, viewport.height as f32 / ppp),
@@ -4166,6 +4282,12 @@ impl TabViewer<'_> {
                             .hierarchy_panel
                             .selected_ids
                             .iter()
+                            .filter(|id| {
+                                !self
+                                    .authoring_flags
+                                    .get(id.as_str())
+                                    .is_some_and(|f| f.locked || f.hidden)
+                            })
                             .filter_map(|id| {
                                 let entity = *self.entity_id_to_hecs.get(id)?;
                                 let transform = self
@@ -4324,6 +4446,14 @@ impl TabViewer<'_> {
     ///
     /// While the game is playing the world belongs to the running game, so
     /// editing it would change the game instead of the scene.
+    fn selected_flags(&self) -> crate::scene_controls::Flags {
+        self.selected_entity
+            .and_then(|entity| self.world.world_ref().get::<&SourceId>(entity).ok())
+            .and_then(|id| self.authoring_flags.get(&id.0))
+            .copied()
+            .unwrap_or_default()
+    }
+
     fn editing_locked(&self) -> bool {
         *self.is_playing
     }
@@ -4665,15 +4795,23 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         egui::vec2(viewport.width as f32 / ppp, viewport.height as f32 / ppp),
                     );
                     let painter = ui.painter().with_clip_rect(canvas);
-                    for (collider, pose) in self
+                    for (source, collider, pose) in self
                         .world
                         .world_ref()
                         .query::<(
+                            Option<&SourceId>,
                             &kiln_runtime::world::Collider2D,
                             &kiln_runtime::GlobalTransform,
                         )>()
                         .iter()
                     {
+                        if !*self.is_playing
+                            && source
+                                .and_then(|id| self.authoring_flags.get(&id.0))
+                                .is_some_and(|f| f.hidden)
+                        {
+                            continue;
+                        }
                         let points: Vec<_> =
                             crate::physics_inspector::collider_outline(pose.0, collider.shape)
                                 .into_iter()
@@ -4700,7 +4838,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 }
 
                 // Draw gizmo mode indicator in the top-left of the scene view
-                if self.shell.gizmos && self.gizmo.mode != GizmoMode::None {
+                if self.shell.gizmos
+                    && self.gizmo.mode != GizmoMode::None
+                    && !self.selected_flags().hidden
+                    && !self.selected_flags().locked
+                {
                     if let Some(entity) = self.selected_entity {
                         let gizmo_color = match self.gizmo.mode {
                             GizmoMode::Translate => egui::Color32::from_rgb(255, 0, 0),
@@ -4804,6 +4946,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             ui.label("Select a root-scene entity to edit components.");
                             return;
                         };
+                        if self.authoring_flags.get(&authored.id).is_some_and(|f|f.locked) { ui.label("Locked in editor — unlock from the hierarchy context menu.");ui.disable();}
                         let has = |kind| authored.components.iter().any(|c| ComponentKind::of(c) == Some(kind));
                         let has_transform = has(ComponentKind::Transform);
                         let has_sprite = has(ComponentKind::Sprite);
@@ -6533,6 +6676,23 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             }
                             self.gizmo.drag = None;
                             match action {
+                                crate::hierarchy::HierarchyAction::SetEditorFlags {
+                                    entity_id,
+                                    locked,
+                                    hidden,
+                                } => {
+                                    self.project_requests.push(ProjectRequest::Entity(
+                                        crate::entity_command::EntityCommand {
+                                            scene_id: scene_id.clone(),
+                                            edit:
+                                                crate::entity_command::EntityEdit::SetEditorFlags {
+                                                    entity_id,
+                                                    locked,
+                                                    hidden,
+                                                },
+                                        },
+                                    ));
+                                }
                                 crate::hierarchy::HierarchyAction::SelectEntity(project_id) => {
                                     // Sync selection: project entity ID -> hecs Entity
                                     let selected_id = self

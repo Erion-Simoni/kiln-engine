@@ -19,6 +19,7 @@ impl SetTransform<'_> {
     /// Validate and update both the document and its existing runtime projection.
     /// Failure leaves both unchanged; nested entities cannot edit their parent scene.
     pub fn apply(&self, scene: &mut Scene, world: &mut GameWorld) -> Result<bool, String> {
+        crate::scene_controls::require_editable(scene, self.entity_id)?;
         let value = self.value;
         if !value.position.is_finite()
             || !value.rotation.is_finite()

@@ -83,6 +83,10 @@ impl SpriteEditorState {
         else {
             return;
         };
+        if let Err(error) = crate::scene_controls::require_editable(&p.scenes[&scene_id], &id) {
+            ui.label(error);
+            return;
+        }
         let entity = p.scenes[&scene_id]
             .entities
             .iter()
