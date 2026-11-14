@@ -95,6 +95,34 @@ async function heroPosition(page) {
     await page.waitForTimeout(300);
     const before = await heroPosition(page);
     assert.ok(before.count > 20, `Hero pixels not rendered: ${JSON.stringify({before, failedRequests, errors})}`);
+    if (process.env.WEB_SMOKE_GRAPH_PROJECT_ID) {
+      const slotKey = `kiln:${process.env.WEB_SMOKE_GRAPH_PROJECT_ID}:slot:0`;
+      await page.keyboard.press('F5');
+      await page.waitForFunction(key => localStorage.getItem(key) !== null, slotKey);
+      const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), slotKey);
+      assert.ok(saved.sample_compatibility.score >= 9, 'Registered add_score graph call must affect actual gameplay');
+      assert.equal(saved.sample_compatibility.score % 9, 0, 'Committed graph argument must be 9 after cancel/undo/redo');
+      const values = Object.entries(saved.root.values).filter(([key]) => key.startsWith('__kiln_graph:'));
+      assert.ok(values.some(([,value]) => value.Integer === 9), 'Real graph node values must be saved');
+      // Load a deliberately edited ordinary save, then save again to observe the
+      // actual restore path. Adding 9 per frame preserves the changed remainder.
+      await page.evaluate(key => {
+        const saved = JSON.parse(localStorage.getItem(key));
+        saved.sample_compatibility.score = 12345;
+        localStorage.setItem(key, JSON.stringify(saved));
+      }, slotKey);
+      await page.keyboard.press('F9');
+      await page.waitForTimeout(150);
+      await page.keyboard.press('F5');
+      await page.waitForFunction(key => {
+        const score = JSON.parse(localStorage.getItem(key)).sample_compatibility.score;
+        return score > 12345 && score % 9 === 6;
+      }, slotKey);
+      assert.deepEqual(failedRequests, [], 'Graph assets failed to load');
+      assert.deepEqual(errors, [], 'Graph browser runtime errors');
+      console.log(JSON.stringify({passed:true, graph:true, rendered:before.count, score:saved.sample_compatibility.score, saved_node_values:values.length, real_save_restore:true}));
+      return;
+    }
     await page.keyboard.down('d');
     let after;
     try {

@@ -1,12 +1,12 @@
 //! Main editor application.
 
+use crate::graph_editor::GraphEditorState;
 use hecs;
 use kiln_core::{
     project::{Project, Scene},
     Transform,
 };
 use kiln_gameplay::{DataTable, Dialogue, Quest};
-use kiln_graph::{ArithmeticOp, ConstantValue, Graph, Node, NodeType};
 use kiln_render::{
     clear_view, execute_passes, Frame2dGraph, PassTiming, PostConfig, PostFramebuffer,
     PostPipeline, RenderTier, SpriteRenderer,
@@ -206,7 +206,7 @@ pub struct EditorApp {
     entity_roles: HashMap<String, String>,
     /// Screen-space rectangle of the scene view panel from the last frame.
     scene_view_rect: Option<egui::Rect>,
-    graph: Graph,
+    graph: GraphEditorState,
     render_tier: RenderTier,
     show_welcome: bool,
     /// Whether the about window is open.
@@ -606,7 +606,7 @@ impl EditorApp {
             entity_textures: HashMap::new(),
             entity_roles: HashMap::new(),
             scene_view_rect: None,
-            graph: Graph::new(),
+            graph: GraphEditorState::new(),
             render_tier: RenderTier::default(),
             show_welcome: true,
             show_about: false,
@@ -3813,7 +3813,7 @@ struct TabViewer<'a> {
     role_input: &'a mut Option<(String, String)>,
     sprite_reference_input: &'a mut Option<(String, SpriteReferenceDraft)>,
     is_playing: &'a mut bool,
-    graph: &'a mut Graph,
+    graph: &'a mut GraphEditorState,
     render_tier: &'a mut RenderTier,
     pass_timings: &'a [PassTiming],
     profiler_supported: bool,
@@ -5551,159 +5551,49 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 crate::editor_shell::EditorShell::future_components(ui);
             }
             Tab::GraphEditor => {
-                ui.vertical(|ui| {
-                    // Toolbar
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = egui::vec2(8.0, 0.0);
-
-                        if ui.button("Add Constant").clicked() {
-                            let node = Node::new(
-                                NodeType::Constant {
-                                    value: ConstantValue::Integer(0),
-                                },
-                                (100.0, 100.0),
-                            );
-                            self.graph.add_node(node);
+                if let Some(play) = self.play.as_ref() {
+                    ui.collapsing("Last executed node values (scene script)", |ui| {
+                        for id in self.graph.graph.nodes.keys() {
+                            if let Some(value) =
+                                play.slice.root_script_state(&format!("__kiln_graph:{id}"))
+                            {
+                                ui.monospace(format!("{id}: {value:?}"));
+                            }
                         }
-                        if ui.button("Add Add").clicked() {
-                            let node = Node::new(
-                                NodeType::Arithmetic {
-                                    op: ArithmeticOp::Add,
-                                },
-                                (200.0, 100.0),
-                            );
-                            self.graph.add_node(node);
-                        }
-                        if ui.button("Add Output").clicked() {
-                            let node = Node::new(NodeType::Output, (300.0, 100.0));
-                            self.graph.add_node(node);
-                        }
-
-                        ui.separator();
-
-                        // AI node buttons
-                        if ui.button("Selector").clicked() {
-                            let node = Node::new(NodeType::Selector, (400.0, 100.0));
-                            self.graph.add_node(node);
-                        }
-                        if ui.button("Sequence").clicked() {
-                            let node = Node::new(NodeType::Sequence, (500.0, 100.0));
-                            self.graph.add_node(node);
-                        }
-                        if ui.button("Behavior").clicked() {
-                            let node = Node::new(
-                                NodeType::BehaviorAction {
-                                    name: "idle".to_string(),
-                                },
-                                (600.0, 100.0),
-                            );
-                            self.graph.add_node(node);
-                        }
-                        if ui.button("AI State").clicked() {
-                            let node = Node::new(
-                                NodeType::AIState {
-                                    state_name: "patrol".to_string(),
-                                },
-                                (700.0, 100.0),
-                            );
-                            self.graph.add_node(node);
-                        }
-
-                        ui.separator();
-
-                        if ui.button("Clear").clicked() {
-                            *self.graph = Graph::new();
-                        }
-
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.label("Node Graph");
-                        });
                     });
-
-                    ui.add_space(8.0);
-
-                    // Graph canvas
-                    let desired_size = egui::vec2(ui.available_width(), ui.available_height());
-                    let (rect, _response) =
-                        ui.allocate_exact_size(desired_size, egui::Sense::click_and_drag());
-
-                    // Draw background
-                    ui.painter()
-                        .rect_filled(rect, 0.0, egui::Color32::from_rgb(18, 18, 20));
-
-                    // Draw grid
-                    let grid_size = 50.0;
-                    let painter = ui.painter();
-                    for x in (rect.min.x as i32..rect.max.x as i32).step_by(grid_size as usize) {
-                        painter.line_segment(
-                            [
-                                egui::pos2(x as f32, rect.min.y),
-                                egui::pos2(x as f32, rect.max.y),
-                            ],
-                            (
-                                1.0,
-                                egui::Color32::from_rgba_premultiplied(255, 255, 255, 15),
-                            ),
-                        );
+                }
+                let ready = self.play.is_none()
+                    && !self.project_blocked
+                    && !self.shell.script_editor.is_dirty()
+                    && self
+                        .shell
+                        .script_editor
+                        .source
+                        .starts_with("// kiln-graph-v1\n");
+                if ui
+                    .add_enabled(ready, egui::Button::new("Use for Active Scene"))
+                    .clicked()
+                {
+                    if let (Some(project), Some(id)) =
+                        (self.current_project.as_mut(), self.scenes.active_id())
+                    {
+                        if let Some(scene) = project.scenes.get_mut(id) {
+                            scene.script = Some(self.shell.script_editor.loaded_path().into());
+                        }
                     }
-                    for y in (rect.min.y as i32..rect.max.y as i32).step_by(grid_size as usize) {
-                        painter.line_segment(
-                            [
-                                egui::pos2(rect.min.x, y as f32),
-                                egui::pos2(rect.max.x, y as f32),
-                            ],
-                            (
-                                1.0,
-                                egui::Color32::from_rgba_premultiplied(255, 255, 255, 15),
-                            ),
+                }
+                if let Some(root) = self.asset_browser.root() {
+                    ui.add_enabled_ui(self.play.is_none() && !self.project_blocked, |ui| {
+                        crate::graph_editor::render_document(
+                            ui,
+                            self.graph,
+                            &mut self.shell.script_editor,
+                            root,
                         );
-                    }
-
-                    // Draw nodes
-                    for node in self.graph.nodes.values() {
-                        let pos = egui::pos2(node.position.0, node.position.1);
-                        let size = egui::vec2(140.0, 70.0);
-                        let rect = egui::Rect::from_min_size(pos, size);
-
-                        // Draw node background
-                        painter.rect_filled(rect, 6.0, egui::Color32::from_rgb(45, 45, 50));
-                        painter.rect_stroke(
-                            rect,
-                            6.0,
-                            egui::Stroke::new(1.5_f32, egui::Color32::from_rgb(90, 90, 100)),
-                        );
-
-                        // Draw node header
-                        let header_rect =
-                            egui::Rect::from_min_size(rect.min, egui::vec2(rect.width(), 24.0));
-                        painter.rect_filled(
-                            header_rect,
-                            6.0,
-                            egui::Color32::from_rgb(66, 135, 245),
-                        );
-
-                        // Draw node title
-                        let title = match &node.node_type {
-                            NodeType::Constant { .. } => "Constant",
-                            NodeType::Arithmetic { .. } => "Add",
-                            NodeType::Output => "Output",
-                            NodeType::Selector => "Selector",
-                            NodeType::Sequence => "Sequence",
-                            NodeType::BehaviorAction { .. } => "Behavior",
-                            NodeType::BehaviorCondition => "Condition",
-                            NodeType::AIState { .. } => "AI State",
-                            NodeType::AITransition => "AI Transition",
-                            _ => "Node",
-                        };
-                        painter.text(
-                            header_rect.center(),
-                            egui::Align2::CENTER_CENTER,
-                            title,
-                            egui::FontId::proportional(13.0),
-                            egui::Color32::WHITE,
-                        );
-                    }
-                });
+                    });
+                } else {
+                    ui.label("Open a project to author gameplay graphs.");
+                }
             }
             Tab::Assets => {
                 ui.vertical(|ui| {

@@ -1,606 +1,292 @@
-//! Compile node graph to IR bytecode.
-
-use crate::{ArithmeticOp, ComparisonOp, Graph, NodeType};
-use kiln_ir::{Instruction, Program, Value};
-use std::collections::{HashMap, HashSet};
+//! Bounded gameplay graph lowering through the ordinary KilnScript frontend.
+use crate::{ArithmeticOp, ComparisonOp, Graph, NodeType, PinDirection, PinType};
+use kiln_ir::Program;
+use kiln_script::{KilnScriptFrontend, LanguageFrontend};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use thiserror::Error;
 use uuid::Uuid;
 
 #[derive(Error, Debug)]
 pub enum CompilerError {
-    #[error("Node not found: {0}")]
-    NodeNotFound(Uuid),
-    #[error("Pin not found: {0}")]
-    PinNotFound(Uuid),
-    #[error("Multiple connections to input pin: {0}")]
-    MultipleInputs(Uuid),
-    #[error("No connection to input pin: {0}")]
-    NoInputConnection(Uuid),
-    #[error("Type mismatch: {0}")]
-    TypeMismatch(String),
-    #[error("Program error: {0}")]
-    Program(#[from] kiln_ir::ProgramError),
+    #[error("Graph error: {0}")]
+    Invalid(String),
+}
+fn invalid(message: impl Into<String>) -> CompilerError {
+    CompilerError::Invalid(message.into())
 }
 
-/// Compile a graph to an IR program.
-pub fn compile_graph(graph: &Graph) -> Result<Program, CompilerError> {
-    let mut program = Program::new();
-    let mut label_map: HashMap<Uuid, String> = HashMap::new();
-    let mut pin_value_labels: HashMap<Uuid, String> = HashMap::new();
-    let mut visited: HashSet<Uuid> = HashSet::new();
+/// Numeric pins interoperate; Value accepts any ordinary VM value, never events.
+pub fn compatible(source: PinType, target: PinType) -> bool {
+    source == target
+        || (source != PinType::Event
+            && target != PinType::Event
+            && (source == PinType::Value
+                || target == PinType::Value
+                || matches!(
+                    (source, target),
+                    (PinType::Integer, PinType::Float) | (PinType::Float, PinType::Integer)
+                )))
+}
 
-    // Find output node (should be unique)
-    let output_node = graph
+/// Compile using the exact host names, IDs, arities and frontend used by gameplay.
+pub fn compile_graph(graph: &Graph) -> Result<Program, CompilerError> {
+    let source = graph_source(graph)?;
+    let mut frontend = KilnScriptFrontend::new();
+    for (name, id, argc) in kiln_script::BUILTINS {
+        frontend = frontend.with_builtin(*name, *id, *argc);
+    }
+    frontend.compile(&source).map_err(|diagnostics| {
+        invalid(
+            diagnostics
+                .iter()
+                .map(|d| d.message.clone())
+                .collect::<Vec<_>>()
+                .join("; "),
+        )
+    })
+}
+
+struct Lower<'a> {
+    graph: &'a Graph,
+    numbers: BTreeMap<Uuid, usize>,
+    inputs: HashMap<Uuid, (Uuid, String)>,
+    visiting: HashSet<Uuid>,
+    source: String,
+}
+impl Lower<'_> {
+    fn line(&mut self, line: &str) -> Result<(), CompilerError> {
+        if self.source.len() + line.len() + 1 > 262_144 {
+            return Err(invalid("Generated graph exceeds 256 KiB; split the graph"));
+        }
+        self.source.push_str(line);
+        self.source.push('\n');
+        Ok(())
+    }
+    fn input(
+        &mut self,
+        id: Uuid,
+        name: &str,
+        optional: bool,
+    ) -> Result<Option<String>, CompilerError> {
+        let node = &self.graph.nodes[&id];
+        let pin = node
+            .pins
+            .iter()
+            .find(|p| p.name == name && p.direction == PinDirection::Input)
+            .ok_or_else(|| {
+                invalid(format!(
+                    "Node {id}: missing input pin {name}; reconnect an updated node"
+                ))
+            })?;
+        let Some((source, output)) = self.inputs.get(&pin.id).cloned() else {
+            return if optional {
+                Ok(None)
+            } else {
+                Err(invalid(format!("Node {id}: connect input {name}")))
+            };
+        };
+        self.node(source)?;
+        let number = self.numbers[&source];
+        let source_node = &self.graph.nodes[&source];
+        let event = source_node
+            .pins
+            .iter()
+            .find(|p| p.name == output && p.direction == PinDirection::Output)
+            .is_some_and(|p| p.pin_type == PinType::Event);
+        Ok(Some(format!(
+            "{}{number}",
+            if event { "event" } else { "value" }
+        )))
+    }
+    fn required(&mut self, id: Uuid, name: &str) -> Result<String, CompilerError> {
+        self.input(id, name, false)
+            .map(|value| value.expect("required input"))
+    }
+    fn node(&mut self, id: Uuid) -> Result<(), CompilerError> {
+        if self.visiting.len() >= 64 {
+            return Err(invalid(format!("Node {id}: dependency depth exceeds 64")));
+        }
+        if !self.visiting.insert(id) {
+            return Err(invalid(format!("Node {id}: cyclic dependency")));
+        }
+        let n = self.numbers[&id];
+        let node_type = self.graph.nodes[&id].node_type.clone();
+        self.line(&format!("if !computed{n} {{"))?;
+        match node_type {
+            NodeType::Constant {value} => {
+                let value = match value {
+                    crate::ConstantValue::Integer(i64::MIN) => "(-9223372036854775807 - 1)".into(),
+                    crate::ConstantValue::Integer(v) => v.to_string(),
+                    crate::ConstantValue::Float(v) if v.is_finite() => {
+                        let text = v.to_string(); if text.contains('.') {text} else {format!("{text}.0")}
+                    },
+                    crate::ConstantValue::Float(_) => return Err(invalid(format!("Node {id}: non-finite number"))),
+                    crate::ConstantValue::Boolean(v) => v.to_string(),
+                    crate::ConstantValue::String(v) => quoted(&v)?,
+                };
+                self.line(&format!("value{n} = {value};"))?;
+            }
+            NodeType::Arithmetic {op} => {
+                let a = self.required(id,"a")?; let b = self.required(id,"b")?;
+                let op = match op {ArithmeticOp::Add=>"+",ArithmeticOp::Sub=>"-",ArithmeticOp::Mul=>"*",ArithmeticOp::Div=>"/"};
+                self.line(&format!("value{n} = {a} {op} {b};"))?;
+            }
+            NodeType::Comparison {op} => {
+                let a = self.required(id,"a")?; let b = self.required(id,"b")?;
+                let op = match op {ComparisonOp::Equal=>"==",ComparisonOp::LessThan=>"<"};
+                self.line(&format!("value{n} = {a} {op} {b};"))?;
+            }
+            NodeType::HostCall {name} => {
+                let (_,_,argc) = kiln_script::BUILTINS.iter().find(|(n,_,_)| *n == name)
+                    .ok_or_else(|| invalid(format!("Node {id}: unknown host function {name}")))?;
+                let trigger = self.input(id,"trigger",true)?.unwrap_or_else(|| "true".into());
+                self.line(&format!("if {trigger} {{"))?;
+                let args = (1..=*argc).map(|i| self.required(id,&format!("arg{i}"))).collect::<Result<Vec<_>,_>>()?;
+                self.line(&format!("value{n} = {name}({});", args.join(", ")))?;
+                self.line(&format!("event{n} = true;\n}}"))?;
+            }
+            NodeType::Event {name} => {
+                let normalized = name.to_lowercase().replace([' ', '_'], "");
+                let phase = normalized.strip_prefix("on").unwrap_or(&normalized);
+                let expression = match phase {
+                    "start" => "script_phase() == \"start\" || (self_entity() == \"\" && get_frame_count() == 1)".into(),
+                    "update" => "script_phase() == \"update\"".into(),
+                    "collision" | "trigger" | "collisionenter" => "script_phase() == \"collision_enter\"".into(),
+                    "collisionexit" => "script_phase() == \"collision_exit\"".into(),
+                    "signal" | "stop" => format!("script_phase() == {}",quoted(phase)?),
+                    "uievent" => "script_phase() == \"ui_event\"".into(),
+                    "animationevent" => "script_phase() == \"animation_event\"".into(),
+                    _ => return Err(invalid(format!("Node {id}: unsupported lifecycle event {name}"))),
+                };
+                self.line(&format!("event{n} = {expression};\nvalue{n} = event{n};"))?;
+            }
+            NodeType::Branch => {
+                let condition = self.required(id,"condition")?;
+                self.line(&format!("if {condition} {{"))?;
+                let a = self.required(id,"true")?;
+                self.line(&format!("event{n} = {a};\n}} else {{"))?;
+                let b = self.required(id,"false")?;
+                self.line(&format!("event{n} = {b};\n}}\nvalue{n} = event{n};"))?;
+            }
+            NodeType::Output => {
+                let value = self.input(id,"in",true)?.unwrap_or_else(|| "0".into());
+                self.line(&format!("value{n} = {value};"))?;
+            }
+            _ => return Err(invalid(format!("Node {id}: specialized node has no supported gameplay contract; use a registered Host Call"))),
+        }
+        self.line(&format!(
+            "computed{n} = true;\nstate_set(\"__kiln_graph:{id}\",value{n});\n}}"
+        ))?;
+        self.visiting.remove(&id);
+        Ok(())
+    }
+}
+fn quoted(value: &str) -> Result<String, CompilerError> {
+    if value.len() > 65_536
+        || value
+            .chars()
+            .any(|c| c.is_ascii_control() && !['\n', '\r', '\t'].contains(&c))
+    {
+        return Err(invalid(
+            "Graph string exceeds value bounds or contains unsupported control characters",
+        ));
+    }
+    Ok(format!(
+        "\"{}\"",
+        value
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n")
+            .replace('\r', "\\r")
+            .replace('\t', "\\t")
+    ))
+}
+
+/// Generate ordinary source. A node is evaluated once per invocation, including fan-out.
+pub fn graph_source(graph: &Graph) -> Result<String, CompilerError> {
+    if graph.nodes.len() > 256 || graph.connections.len() > 2048 {
+        return Err(invalid("Graph limit: 256 nodes / 2048 connections"));
+    }
+    let mut pins = HashMap::new();
+    let numbers = graph
+        .nodes
+        .keys()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .enumerate()
+        .map(|(n, id)| (id, n))
+        .collect::<BTreeMap<_, _>>();
+    for (id, node) in &graph.nodes {
+        if *id != node.id
+            || !node.position.0.is_finite()
+            || !node.position.1.is_finite()
+            || node.pins.len() > 260
+        {
+            return Err(invalid(format!(
+                "Node {id}: invalid identity, position or pin count"
+            )));
+        }
+        let mut names = HashSet::new();
+        for pin in &node.pins {
+            if pins.insert(pin.id, (*id, pin)).is_some()
+                || !names.insert((pin.direction as u8, pin.name.as_str()))
+            {
+                return Err(invalid(format!("Node {id}: duplicate pin identity/name")));
+            }
+        }
+    }
+    let mut inputs = HashMap::new();
+    for conn in &graph.connections {
+        let (source, sp) = pins
+            .get(&conn.source_pin)
+            .ok_or_else(|| invalid("Connection source pin is missing"))?;
+        let (target, tp) = pins
+            .get(&conn.target_pin)
+            .ok_or_else(|| invalid("Connection target pin is missing"))?;
+        if sp.direction != PinDirection::Output || tp.direction != PinDirection::Input {
+            return Err(invalid("Connections must run from output to input"));
+        }
+        if !matches!(graph.nodes[target].node_type, NodeType::Output)
+            && !compatible(sp.pin_type, tp.pin_type)
+        {
+            return Err(invalid(format!(
+                "Node {target}: incompatible input {}",
+                tp.name
+            )));
+        }
+        if inputs
+            .insert(conn.target_pin, (*source, sp.name.clone()))
+            .is_some()
+        {
+            return Err(invalid(format!(
+                "Node {target}: multiple connections to input {}",
+                tp.name
+            )));
+        }
+    }
+    let outputs = graph
         .nodes
         .values()
-        .find(|n| matches!(n.node_type, NodeType::Output))
-        .ok_or(CompilerError::NodeNotFound(Uuid::nil()))?;
-
-    // Traverse from output backwards
-    compile_node_recursive(
+        .filter(|node| matches!(node.node_type, NodeType::Output))
+        .map(|n| n.id)
+        .collect::<Vec<_>>();
+    if outputs.len() != 1 {
+        return Err(invalid("Use exactly one Output node"));
+    }
+    let mut lower = Lower {
         graph,
-        output_node.id,
-        &mut program,
-        &mut label_map,
-        &mut pin_value_labels,
-        &mut visited,
-    )?;
-
-    Ok(program)
-}
-
-fn compile_node_recursive(
-    graph: &Graph,
-    node_id: Uuid,
-    program: &mut Program,
-    label_map: &mut HashMap<Uuid, String>,
-    pin_value_labels: &mut HashMap<Uuid, String>,
-    visited: &mut HashSet<Uuid>,
-) -> Result<(), CompilerError> {
-    if visited.contains(&node_id) {
-        return Ok(());
+        numbers,
+        inputs,
+        visiting: HashSet::new(),
+        source: String::new(),
+    };
+    for n in 0..graph.nodes.len() {
+        lower.line(&format!(
+            "let computed{n}=false;\nlet value{n}=0;\nlet event{n}=false;"
+        ))?;
     }
-    visited.insert(node_id);
-
-    let node = graph
-        .get_node(node_id)
-        .ok_or(CompilerError::NodeNotFound(node_id))?;
-
-    match &node.node_type {
-        NodeType::Event { name: _ } => {
-            // Event nodes are entry points, compile their successors
-            let trigger_pin = node
-                .pins
-                .iter()
-                .find(|p| p.name == "trigger" && p.direction == crate::pin::PinDirection::Output)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-
-            if let Some(conn) = find_output_connection(graph, trigger_pin.id) {
-                compile_node_recursive(
-                    graph,
-                    get_target_node_id(graph, conn.target_pin)?,
-                    program,
-                    label_map,
-                    pin_value_labels,
-                    visited,
-                )?;
-            }
-        }
-        NodeType::Constant { value } => {
-            // Push constant value
-            let label = format!("const_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label.clone());
-
-            match value {
-                crate::node::ConstantValue::Integer(n) => {
-                    program.add_instruction(Instruction::PushConst(Value::I64(*n)));
-                }
-                crate::node::ConstantValue::Float(f) => {
-                    program.add_instruction(Instruction::PushConst(Value::F64(*f)));
-                }
-                crate::node::ConstantValue::Boolean(b) => {
-                    program.add_instruction(Instruction::PushConst(Value::Bool(*b)));
-                }
-                crate::node::ConstantValue::String(s) => {
-                    program.add_instruction(Instruction::PushConst(Value::Str(s.clone())));
-                }
-            }
-
-            // Register output pin as providing this value
-            let output_pin = node
-                .pins
-                .iter()
-                .find(|p| p.direction == crate::pin::PinDirection::Output)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-            pin_value_labels.insert(output_pin.id, label);
-        }
-        NodeType::Arithmetic { op } => {
-            // Compile inputs first
-            let input_a_pin = node
-                .pins
-                .iter()
-                .find(|p| p.name == "a" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-            let input_b_pin = node
-                .pins
-                .iter()
-                .find(|p| p.name == "b" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-
-            if let Some(conn_a) = find_input_connection(graph, input_a_pin.id) {
-                compile_node_recursive(
-                    graph,
-                    get_source_node_id(graph, conn_a.source_pin)?,
-                    program,
-                    label_map,
-                    pin_value_labels,
-                    visited,
-                )?;
-            }
-
-            if let Some(conn_b) = find_input_connection(graph, input_b_pin.id) {
-                compile_node_recursive(
-                    graph,
-                    get_source_node_id(graph, conn_b.source_pin)?,
-                    program,
-                    label_map,
-                    pin_value_labels,
-                    visited,
-                )?;
-            }
-
-            // Emit arithmetic op
-            let label = format!("arith_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label.clone());
-
-            let instr = match op {
-                ArithmeticOp::Add => Instruction::Add,
-                ArithmeticOp::Sub => Instruction::Sub,
-                ArithmeticOp::Mul => Instruction::Mul,
-                ArithmeticOp::Div => Instruction::Div,
-            };
-            program.add_instruction(instr);
-
-            // Register output pin
-            let output_pin = node
-                .pins
-                .iter()
-                .find(|p| p.name == "result" && p.direction == crate::pin::PinDirection::Output)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-            pin_value_labels.insert(output_pin.id, label);
-        }
-        NodeType::Comparison { op } => {
-            // Similar to arithmetic
-            let input_a_pin = node
-                .pins
-                .iter()
-                .find(|p| p.name == "a" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-            let input_b_pin = node
-                .pins
-                .iter()
-                .find(|p| p.name == "b" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-
-            if let Some(conn_a) = find_input_connection(graph, input_a_pin.id) {
-                compile_node_recursive(
-                    graph,
-                    get_source_node_id(graph, conn_a.source_pin)?,
-                    program,
-                    label_map,
-                    pin_value_labels,
-                    visited,
-                )?;
-            }
-
-            if let Some(conn_b) = find_input_connection(graph, input_b_pin.id) {
-                compile_node_recursive(
-                    graph,
-                    get_source_node_id(graph, conn_b.source_pin)?,
-                    program,
-                    label_map,
-                    pin_value_labels,
-                    visited,
-                )?;
-            }
-
-            let label = format!("cmp_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label.clone());
-
-            let instr = match op {
-                ComparisonOp::Equal => Instruction::Eq,
-                ComparisonOp::LessThan => Instruction::Lt,
-            };
-            program.add_instruction(instr);
-
-            let output_pin = node
-                .pins
-                .iter()
-                .find(|p| p.name == "result" && p.direction == crate::pin::PinDirection::Output)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-            pin_value_labels.insert(output_pin.id, label);
-        }
-        NodeType::Branch => {
-            // Compile condition, then true/false branches
-            let cond_pin = node
-                .pins
-                .iter()
-                .find(|p| p.name == "condition" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-
-            if let Some(conn) = find_input_connection(graph, cond_pin.id) {
-                compile_node_recursive(
-                    graph,
-                    get_source_node_id(graph, conn.source_pin)?,
-                    program,
-                    label_map,
-                    pin_value_labels,
-                    visited,
-                )?;
-            }
-
-            let label = format!("branch_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label.clone());
-
-            // Jump if false to false branch
-            let false_label = format!("{}_false", label);
-            program.define_label(&false_label)?;
-            program.add_instruction(Instruction::JumpIfNot(
-                program.get_label(&false_label).unwrap(),
-            ));
-
-            // True branch
-            let true_pin = node
-                .pins
-                .iter()
-                .find(|p| p.name == "true" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-            if let Some(conn) = find_input_connection(graph, true_pin.id) {
-                compile_node_recursive(
-                    graph,
-                    get_source_node_id(graph, conn.source_pin)?,
-                    program,
-                    label_map,
-                    pin_value_labels,
-                    visited,
-                )?;
-            }
-
-            // Jump past false branch
-            let end_label = format!("{}_end", label);
-            program.define_label(&end_label)?;
-            program.add_instruction(Instruction::Jump(program.get_label(&end_label).unwrap()));
-
-            // False branch
-            let false_pin = node
-                .pins
-                .iter()
-                .find(|p| p.name == "false" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-            if let Some(conn) = find_input_connection(graph, false_pin.id) {
-                compile_node_recursive(
-                    graph,
-                    get_source_node_id(graph, conn.source_pin)?,
-                    program,
-                    label_map,
-                    pin_value_labels,
-                    visited,
-                )?;
-            }
-        }
-        NodeType::HostCall { name } => {
-            // Emit host call (simplified: use hash of name as ID)
-            let label = format!("host_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label);
-
-            let id = simple_hash(name);
-            program.add_instruction(Instruction::HostCall { id, argc: 0 });
-        }
-        NodeType::Output => {
-            // Compile the input (trigger event)
-            let input_pin = node
-                .pins
-                .iter()
-                .find(|p| p.name == "in" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-
-            if let Some(conn) = find_input_connection(graph, input_pin.id) {
-                compile_node_recursive(
-                    graph,
-                    get_source_node_id(graph, conn.source_pin)?,
-                    program,
-                    label_map,
-                    pin_value_labels,
-                    visited,
-                )?;
-            }
-        }
-        NodeType::AnimationClip { clip_name } => {
-            // Emit a host call to play the animation clip
-            let label = format!("anim_clip_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label);
-
-            // Push clip name as string (simplified: use hash as placeholder)
-            let id = simple_hash(clip_name);
-            program.add_instruction(Instruction::HostCall { id, argc: 0 });
-
-            // Handle loop input if connected
-            let loop_pin = node
-                .pins
-                .iter()
-                .find(|p| p.name == "loop" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-
-            if let Some(conn) = find_input_connection(graph, loop_pin.id) {
-                compile_node_recursive(
-                    graph,
-                    get_source_node_id(graph, conn.source_pin)?,
-                    program,
-                    label_map,
-                    pin_value_labels,
-                    visited,
-                )?;
-            }
-        }
-        NodeType::AnimationState { state_name } => {
-            // Emit a host call to enter the animation state
-            let label = format!("anim_state_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label);
-
-            let id = simple_hash(state_name);
-            program.add_instruction(Instruction::HostCall { id, argc: 0 });
-        }
-        NodeType::AnimationTransition => {
-            // Compile condition and trigger
-            let cond_pin = node
-                .pins
-                .iter()
-                .find(|p| p.name == "condition" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-
-            if let Some(conn) = find_input_connection(graph, cond_pin.id) {
-                compile_node_recursive(
-                    graph,
-                    get_source_node_id(graph, conn.source_pin)?,
-                    program,
-                    label_map,
-                    pin_value_labels,
-                    visited,
-                )?;
-            }
-
-            let label = format!("anim_trans_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label.clone());
-
-            // Jump if false to skip transition
-            let skip_label = format!("{}_skip", label);
-            program.define_label(&skip_label)?;
-            program.add_instruction(Instruction::JumpIfNot(
-                program.get_label(&skip_label).unwrap(),
-            ));
-
-            // Trigger transition
-            let trigger_pin = node
-                .pins
-                .iter()
-                .find(|p| p.name == "trigger" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-
-            if let Some(conn) = find_input_connection(graph, trigger_pin.id) {
-                compile_node_recursive(
-                    graph,
-                    get_source_node_id(graph, conn.source_pin)?,
-                    program,
-                    label_map,
-                    pin_value_labels,
-                    visited,
-                )?;
-            }
-        }
-        NodeType::Selector => {
-            // Emit host call for selector behavior tree node
-            let label = format!("selector_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label);
-
-            let id = simple_hash("selector");
-            program.add_instruction(Instruction::HostCall { id, argc: 0 });
-        }
-        NodeType::Sequence => {
-            // Emit host call for sequence behavior tree node
-            let label = format!("sequence_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label);
-
-            let id = simple_hash("sequence");
-            program.add_instruction(Instruction::HostCall { id, argc: 0 });
-        }
-        NodeType::BehaviorCondition => {
-            // Emit host call for behavior condition
-            let label = format!("cond_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label);
-
-            let id = simple_hash("behavior_condition");
-            program.add_instruction(Instruction::HostCall { id, argc: 0 });
-        }
-        NodeType::BehaviorAction { name } => {
-            // Emit host call for behavior action
-            let label = format!("action_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label);
-
-            let id = simple_hash(name);
-            program.add_instruction(Instruction::HostCall { id, argc: 0 });
-        }
-        NodeType::AIState { state_name } => {
-            // Emit host call for AI state
-            let label = format!("ai_state_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label);
-
-            let id = simple_hash(state_name);
-            program.add_instruction(Instruction::HostCall { id, argc: 0 });
-        }
-        NodeType::AITransition => {
-            // Compile condition and trigger (similar to animation transition)
-            let cond_pin = node
-                .pins
-                .iter()
-                .find(|p| p.name == "condition" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-
-            if let Some(conn) = find_input_connection(graph, cond_pin.id) {
-                compile_node_recursive(
-                    graph,
-                    get_source_node_id(graph, conn.source_pin)?,
-                    program,
-                    label_map,
-                    pin_value_labels,
-                    visited,
-                )?;
-            }
-
-            let label = format!("ai_trans_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label.clone());
-
-            // Jump if false to skip transition
-            let skip_label = format!("{}_skip", label);
-            program.define_label(&skip_label)?;
-            program.add_instruction(Instruction::JumpIfNot(
-                program.get_label(&skip_label).unwrap(),
-            ));
-
-            // Trigger transition
-            let trigger_pin = node
-                .pins
-                .iter()
-                .find(|p| p.name == "trigger" && p.direction == crate::pin::PinDirection::Input)
-                .ok_or(CompilerError::PinNotFound(Uuid::nil()))?;
-
-            if let Some(conn) = find_input_connection(graph, trigger_pin.id) {
-                compile_node_recursive(
-                    graph,
-                    get_source_node_id(graph, conn.source_pin)?,
-                    program,
-                    label_map,
-                    pin_value_labels,
-                    visited,
-                )?;
-            }
-        }
-        NodeType::Dialogue { dialogue_id } => {
-            // Emit host call to show dialogue
-            let label = format!("dialogue_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label);
-
-            let id = simple_hash(dialogue_id);
-            program.add_instruction(Instruction::HostCall { id, argc: 0 });
-        }
-        NodeType::DialogueChoice => {
-            // Emit host call for dialogue choice
-            let label = format!("dialogue_choice_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label);
-
-            let id = simple_hash("dialogue_choice");
-            program.add_instruction(Instruction::HostCall { id, argc: 0 });
-        }
-        NodeType::QuestStart { quest_id } => {
-            // Emit host call to start quest
-            let label = format!("quest_start_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label);
-
-            let id = simple_hash(quest_id);
-            program.add_instruction(Instruction::HostCall { id, argc: 0 });
-        }
-        NodeType::QuestComplete { quest_id } => {
-            // Emit host call to complete quest
-            let label = format!("quest_complete_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label);
-
-            let id = simple_hash(quest_id);
-            program.add_instruction(Instruction::HostCall { id, argc: 0 });
-        }
-        NodeType::QuestObjectiveUpdate {
-            quest_id,
-            objective_index,
-        } => {
-            // Emit host call to update quest objective
-            let label = format!("quest_obj_update_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label);
-
-            // Push objective index
-            program.add_instruction(Instruction::PushConst(Value::I64(*objective_index as i64)));
-
-            let id = simple_hash(quest_id);
-            program.add_instruction(Instruction::HostCall { id, argc: 1 });
-        }
-        NodeType::DataTableLookup {
-            table_id,
-            column_name,
-        } => {
-            // Emit host call for data table lookup
-            let label = format!("datatable_lookup_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label);
-
-            let id = simple_hash(&format!("{}:{}", table_id, column_name));
-            program.add_instruction(Instruction::HostCall { id, argc: 0 });
-        }
-        NodeType::DataTableRowGet { table_id } => {
-            // Emit host call for data table row get
-            let label = format!("datatable_row_{}", node_id);
-            program.define_label(&label)?;
-            label_map.insert(node_id, label);
-
-            let id = simple_hash(table_id);
-            program.add_instruction(Instruction::HostCall { id, argc: 0 });
-        }
-    }
-
-    Ok(())
-}
-
-fn find_input_connection(graph: &Graph, pin_id: Uuid) -> Option<&crate::Connection> {
-    graph.connections.iter().find(|c| c.target_pin == pin_id)
-}
-
-fn find_output_connection(graph: &Graph, pin_id: Uuid) -> Option<&crate::Connection> {
-    graph.connections.iter().find(|c| c.source_pin == pin_id)
-}
-
-fn get_source_node_id(graph: &Graph, pin_id: Uuid) -> Result<Uuid, CompilerError> {
-    graph
-        .get_pin_node(pin_id)
-        .map(|n| n.id)
-        .ok_or(CompilerError::PinNotFound(pin_id))
-}
-
-fn get_target_node_id(graph: &Graph, pin_id: Uuid) -> Result<Uuid, CompilerError> {
-    graph
-        .get_pin_node(pin_id)
-        .map(|n| n.id)
-        .ok_or(CompilerError::PinNotFound(pin_id))
-}
-
-fn simple_hash(s: &str) -> u32 {
-    let mut hash: u32 = 5381;
-    for c in s.bytes() {
-        hash = hash.wrapping_mul(33).wrapping_add(c as u32);
-    }
-    hash
+    lower.node(outputs[0])?;
+    lower.line(&format!("return value{};", lower.numbers[&outputs[0]]))?;
+    kiln_script::format_source(&lower.source).map_err(invalid)
 }

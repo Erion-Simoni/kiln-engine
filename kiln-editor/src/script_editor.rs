@@ -142,6 +142,10 @@ impl ScriptEditor {
         }
     }
 
+    pub(crate) fn loaded_path(&self) -> &str {
+        &self.loaded
+    }
+
     pub fn is_dirty(&self) -> bool {
         !self.loaded.is_empty() && self.saved.as_deref().unwrap_or("") != self.source
     }

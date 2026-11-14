@@ -535,3 +535,49 @@ interactive gameplay graph acceptance remain open.
 New exports require the matching `kiln-core::export::RUNTIME_CONTRACT` in both
 native and browser runtime identities. Missing/older same-version runtimes are
 rejected explicitly; install the matching tool bundle before exporting again.
+
+
+## Editable gameplay graphs
+
+Open **View → Graph Editor**, choose a new or existing project-relative `.ks`
+resource and press **Open / New**. Add constants, arithmetic/comparisons, lifecycle
+events, branches and Host Calls. Input pins take one connection; connecting a new
+source replaces the previous one. Host Call argument pins follow the shared API
+registry in order (`arg1`, `arg2`, …). The optional trigger gates execution, `done`
+reports execution, and `result` carries the actual returned VM value. Output accepts
+a value or trigger. Numeric pins interoperate; Event pins remain separate from data.
+
+Select a node and **Edit Selected** (or double-click it) to change parameters.
+Constant types include integer, float, Boolean and string. Cancel preserves the
+previous node; Delete removes its connections. Drag nodes, use Shift-drag on empty
+canvas to pan, and Ctrl-scroll to zoom. **Undo/Redo** restore graph edits; a drag is
+one undo gesture. History is bounded to 32 snapshots/8 MiB and scoped to the source
+resource. Save the script, then **Use for Active Scene** and Save Project to run it.
+Entity Script components can use the same saved visual `.ks` resource.
+
+Each invocation evaluates a node at most once, even when its value feeds multiple
+pins. Conditional branches evaluate only their selected upstream event chain.
+Independent host calls need explicit trigger connections to specify order. Lifecycle
+events map to the existing script phases; root On Start runs on its first tick.
+Unsupported specialized AI/dialogue/quest nodes are rejected when connected, rather
+than calling guessed host IDs. They are excluded from the gameplay add menu.
+
+The file contains bounded visual metadata in leading comments followed by ordinary
+generated KilnScript. Native/player/browser loading and export use the normal source
+pipeline, not a parallel graph interpreter. Manual edits to the generated body stay
+valid as text but must be preserved/merged before reopening as a graph. Incomplete
+graphs remain recoverable drafts; their generated compile-error marker prevents
+Play/export or a normal validated Save until connections are repaired. Normal source
+save guards, project dirty prompts and script draft recovery apply to graph edits.
+
+Limits: 256 nodes, 2048 connections, dependency depth 64, generated body 256 KiB and
+complete document 1 MiB. Out-of-budget editor edits are rejected as a transaction.
+During Play the graph is read-only. **Last executed node values (scene script)**
+inspects the actual root VM's reserved `__kiln_graph:<node UUID>` state entries;
+attached-script state is also available in the existing live debugger. Values are
+last-executed results, so inactive branches can show an earlier invocation's value.
+These values survive logical save/restore. Graphs are executable scene/entity
+programs; use ordinary function modules for reusable text libraries.
+
+This workflow does not complete A04's live source breakpoints, statement stepping,
+imported function frames/watches or the required new enemy/projectile/trigger game.

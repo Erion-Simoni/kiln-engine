@@ -10,7 +10,7 @@ import tempfile
 from unittest.mock import patch
 import unittest
 
-from task9_editor_games import stop_process, record_failure
+from task9_editor_games import stop_process, record_failure, floating_title_start
 
 
 class ProcessCleanupTests(unittest.TestCase):
@@ -57,3 +57,15 @@ class FailureReportingTests(unittest.TestCase):
                 record_failure(temporary, 'emberwatch', 'export', RuntimeError('disk full'))
             self.assertEqual(output.getvalue(), '')
             self.assertIn('emberwatch export: RuntimeError: disk full', errors.getvalue())
+
+
+class FramebufferObservationTests(unittest.TestCase):
+    def test_dithered_srgb_title_is_found_without_matching_canvas_gray(self):
+        row=bytes((43,43,43))*33
+        row+=b''.join(bytes((35+d,38+d,44+d)) for d in [-1,0,1]*101)
+        row+=bytes((43,43,43))*1104
+        self.assertEqual(floating_title_start(row),33)
+
+    def test_backgrounds_short_matches_and_wrong_colors_are_not_panels(self):
+        for row in [bytes((43,43,43))*1440,bytes((35,38,44))*200+bytes((20,20,20))*1240,bytes((35,44,38))*1440]:
+            self.assertIsNone(floating_title_start(row))

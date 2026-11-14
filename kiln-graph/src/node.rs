@@ -105,6 +105,21 @@ impl Node {
         }
     }
 
+    /// Update a changed signature, retaining compatible existing pin identities.
+    pub fn refresh_pins(&mut self) {
+        let mut pins = Self::default_pins(&self.node_type);
+        for pin in &mut pins {
+            if let Some(previous) = self.pins.iter().find(|old| {
+                old.name == pin.name
+                    && old.direction == pin.direction
+                    && crate::compiler::compatible(old.pin_type, pin.pin_type)
+            }) {
+                pin.id = previous.id;
+            }
+        }
+        self.pins = pins;
+    }
+
     fn default_pins(node_type: &NodeType) -> Vec<Pin> {
         match node_type {
             NodeType::Event { .. } => {
@@ -141,14 +156,25 @@ impl Node {
                     Pin::new(PinDirection::Output, PinType::Event, "out"),
                 ]
             }
-            NodeType::HostCall { name: _ } => {
-                vec![
-                    Pin::new(PinDirection::Input, PinType::Event, "trigger"),
-                    Pin::new(PinDirection::Output, PinType::Event, "done"),
-                ]
+            NodeType::HostCall { name } => {
+                let mut pins = vec![Pin::new(PinDirection::Input, PinType::Event, "trigger")];
+                if let Some((_, _, argc)) =
+                    kiln_script::BUILTINS.iter().find(|(n, _, _)| *n == name)
+                {
+                    for i in 1..=*argc {
+                        pins.push(Pin::new(
+                            PinDirection::Input,
+                            PinType::Value,
+                            format!("arg{i}"),
+                        ));
+                    }
+                }
+                pins.push(Pin::new(PinDirection::Output, PinType::Value, "result"));
+                pins.push(Pin::new(PinDirection::Output, PinType::Event, "done"));
+                pins
             }
             NodeType::Output => {
-                vec![Pin::new(PinDirection::Input, PinType::Event, "in")]
+                vec![Pin::new(PinDirection::Input, PinType::Value, "in")]
             }
             NodeType::AnimationClip { .. } => {
                 vec![

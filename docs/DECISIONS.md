@@ -2104,3 +2104,25 @@ checks remain separate Task 8 gates.
 - Root and entity scripts use the same registry and separate existing state scopes;
   native/browser exports use identical semantics. Counted user loops around tasks
   remain subject to the VM instruction budget.
+
+### ADR-0087 — Graphs lower through the shared source compiler (2026-11-14)
+
+- Replace guessed/hash host-call IDs with the same named/arity registry used by
+  scripts. Move that dependency-free table into kiln-script and retain the runtime
+  re-export. Add only the existing workspace kiln-script dependency to kiln-graph.
+- Lower bounded acyclic gameplay graphs to ordinary KilnScript, then compile with
+  the existing frontend. Constants, arithmetic/comparison, conditional event merges,
+  lifecycle events and host calls use the actual VM/host semantics. Reject missing
+  inputs, ambiguous connections, cycles, unsupported nodes and excessive expansion.
+- Per-invocation computed flags evaluate each node at most once even with fan-out
+  or conditional branches. Trigger outputs and host return values are distinct pins.
+  Runtime inspection stores last executed values under reserved __kiln_graph: keys.
+- Keep visual metadata and generated source in one .ks file: deterministic bounded
+  RON encoded in a leading comment, followed by the exact generated source. This
+  avoids a two-file partial-save contract and uses existing source save/recovery,
+  module loading and export paths. Refuse to overwrite manually changed generated
+  bodies when reopening as a graph; manual source remains runnable/editable as text.
+- Reuse the existing graph widget, fix its drag/parameter/connection defects, and
+  synchronize edits into ScriptEditor drafts so normal guarded saves/autosave and
+  project replacement protection cover graph authoring. Legacy specialized graph
+  nodes remain explicitly unsupported until their runtime contracts are implemented.

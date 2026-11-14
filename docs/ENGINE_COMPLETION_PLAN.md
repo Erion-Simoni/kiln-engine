@@ -252,6 +252,14 @@ This does not supply automatic stackful continuations, live source breakpoints,
 imported frames/watches or complete graph authoring. Those and the new equivalent
 script/graph game remain required. See [checkpoint evidence](evidence/A03_A04_RESOURCE_TOOLS.md).
 
+**Graph batch 2026-11-14:** replaced hashed/stub host calls with bounded lowering
+through the ordinary source compiler/shared registry. Wired the actual node/pin
+editor, guarded single-file visual resources, parameter Cancel/Delete, graph history,
+one-gesture dragging, scene assignment and actual node-value inspection. Real widget
+save/restart, native gameplay and browser save/restore pass; graph/text movement and
+logical-save parity pass. Source debugging and the required new equivalent game
+remain open; see [graph evidence](evidence/A04_GRAPH_WORKFLOW.md).
+
 ### A05 — Sprite rendering, cameras and large-scene behavior
 
 **Status:** PARTIAL. **Depends on:** A03.

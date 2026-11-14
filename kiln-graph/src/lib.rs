@@ -2,6 +2,7 @@
 
 pub mod compiler;
 pub mod connection;
+pub mod document;
 pub mod graph;
 pub mod node;
 pub mod pin;

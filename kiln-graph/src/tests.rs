@@ -166,6 +166,13 @@ fn test_branch_graph() {
     graph.add_connection(Connection::new(pin_event_trigger_id, pin_host_trigger_id));
     graph.add_connection(Connection::new(pin_host_done_id, pin_output_in_id));
 
+    let argument = graph.add_node(Node::new(
+        NodeType::Constant {
+            value: ConstantValue::String("branch".into()),
+        },
+        (0.0, 0.0),
+    ));
+    connect(&mut graph, argument, "value", id_host, "arg1");
     let program = compile_graph(&graph).unwrap();
     // Should compile without error
     assert!(!program.instructions().is_empty());
@@ -292,7 +299,7 @@ fn test_graph_matches_script_arithmetic() {
 }
 
 #[test]
-fn test_dialogue_node() {
+fn test_unregistered_dialogue_event_is_rejected() {
     let mut graph = Graph::new();
 
     // Event node
@@ -331,11 +338,14 @@ fn test_dialogue_node() {
 
     // Compilation should succeed
     let program = compile_graph(&graph);
-    assert!(program.is_ok());
+    assert!(program
+        .unwrap_err()
+        .to_string()
+        .contains("unsupported lifecycle event"));
 }
 
 #[test]
-fn test_quest_node() {
+fn test_unregistered_quest_event_is_rejected() {
     let mut graph = Graph::new();
 
     // Event node
@@ -374,7 +384,10 @@ fn test_quest_node() {
 
     // Compilation should succeed
     let program = compile_graph(&graph);
-    assert!(program.is_ok());
+    assert!(program
+        .unwrap_err()
+        .to_string()
+        .contains("unsupported lifecycle event"));
 }
 
 #[test]
@@ -559,4 +572,248 @@ fn test_string_constant_node_compiles_to_push() {
         "expected a PushConst(Str) instruction, got {:?}",
         program.instructions()
     );
+}
+
+fn connect(graph: &mut Graph, source: uuid::Uuid, output: &str, target: uuid::Uuid, input: &str) {
+    let find = |id, name: &str| {
+        graph.nodes[&id]
+            .pins
+            .iter()
+            .find(|pin| pin.name == name)
+            .unwrap()
+            .id
+    };
+    let from = find(source, output);
+    let to = find(target, input);
+    graph.add_connection(Connection::new(from, to));
+}
+fn constant(graph: &mut Graph, value: i64) -> uuid::Uuid {
+    graph.add_node(Node::new(
+        NodeType::Constant {
+            value: ConstantValue::Integer(value),
+        },
+        (0.0, 0.0),
+    ))
+}
+fn call(graph: &mut Graph, name: &str) -> uuid::Uuid {
+    graph.add_node(Node::new(
+        NodeType::HostCall { name: name.into() },
+        (0.0, 0.0),
+    ))
+}
+#[derive(Default)]
+struct Host {
+    calls: Vec<(u32, Vec<kiln_ir::Value>)>,
+}
+impl kiln_ir::HostContext for Host {
+    fn call_host(
+        &mut self,
+        id: u32,
+        args: &[kiln_ir::Value],
+    ) -> Result<kiln_ir::Value, kiln_ir::VmError> {
+        self.calls.push((id, args.to_vec()));
+        Ok(if id == 4 {
+            kiln_ir::Value::I64(21)
+        } else {
+            args.last().cloned().unwrap_or(kiln_ir::Value::I64(0))
+        })
+    }
+}
+#[test]
+fn shared_host_ids_arity_fanout_and_values_execute_once_per_tick() {
+    use kiln_ir::{Value, Vm};
+    let mut graph = Graph::new();
+    let getter = call(&mut graph, "get_score");
+    let add = graph.add_node(Node::new(
+        NodeType::Arithmetic {
+            op: ArithmeticOp::Add,
+        },
+        (0.0, 0.0),
+    ));
+    let setter = call(&mut graph, "add_score");
+    let out = graph.add_node(Node::new(NodeType::Output, (0.0, 0.0)));
+    connect(&mut graph, getter, "result", add, "a");
+    connect(&mut graph, getter, "result", add, "b");
+    connect(&mut graph, add, "result", setter, "arg1");
+    connect(&mut graph, setter, "result", out, "in");
+    let mut vm = Vm::new(Host::default());
+    let program = compile_graph(&graph).unwrap();
+    for tick in 1..=2 {
+        vm.execute(&program).unwrap();
+        assert_eq!(vm.stack(), &[Value::I64(42)]);
+        assert_eq!(
+            vm.host().calls.iter().filter(|(id, _)| *id == 4).count(),
+            tick
+        );
+        let setters = vm
+            .host()
+            .calls
+            .iter()
+            .filter(|(id, _)| *id == 5)
+            .collect::<Vec<_>>();
+        assert_eq!(setters.len(), tick);
+        assert_eq!(setters[tick - 1].1, vec![Value::I64(42)]);
+    }
+}
+#[test]
+fn branch_runs_only_selected_side_effect_and_trigger_chain_retains_order() {
+    let mut graph = Graph::new();
+    let condition = graph.add_node(Node::new(
+        NodeType::Constant {
+            value: ConstantValue::Boolean(false),
+        },
+        (0.0, 0.0),
+    ));
+    let a = constant(&mut graph, 1);
+    let b = constant(&mut graph, 2);
+    let yes = call(&mut graph, "add_score");
+    let no = call(&mut graph, "add_score");
+    let after = call(&mut graph, "add_score");
+    let merge = graph.add_node(Node::new(NodeType::Branch, (0.0, 0.0)));
+    let out = graph.add_node(Node::new(NodeType::Output, (0.0, 0.0)));
+    connect(&mut graph, condition, "value", merge, "condition");
+    connect(&mut graph, a, "value", yes, "arg1");
+    connect(&mut graph, b, "value", no, "arg1");
+    connect(&mut graph, yes, "done", merge, "true");
+    connect(&mut graph, no, "done", merge, "false");
+    connect(&mut graph, merge, "out", after, "trigger");
+    connect(&mut graph, a, "value", after, "arg1");
+    connect(&mut graph, after, "done", out, "in");
+    let mut vm = kiln_ir::Vm::new(Host::default());
+    vm.execute(&compile_graph(&graph).unwrap()).unwrap();
+    let writes = vm
+        .host()
+        .calls
+        .iter()
+        .filter(|(id, _)| *id == 5)
+        .map(|(_, args)| args[0].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(writes, vec![kiln_ir::Value::I64(2), kiln_ir::Value::I64(1)]);
+}
+#[test]
+fn incomplete_cycles_duplicate_inputs_and_unsupported_nodes_have_diagnostics() {
+    let mut graph = Graph::new();
+    let setter = call(&mut graph, "add_score");
+    let out = graph.add_node(Node::new(NodeType::Output, (0.0, 0.0)));
+    connect(&mut graph, setter, "done", out, "in");
+    assert!(compile_graph(&graph)
+        .unwrap_err()
+        .to_string()
+        .contains("arg1"));
+    let a = constant(&mut graph, 2);
+    connect(&mut graph, a, "value", setter, "arg1");
+    connect(&mut graph, setter, "done", setter, "trigger");
+    assert!(compile_graph(&graph)
+        .unwrap_err()
+        .to_string()
+        .contains("cyclic"));
+    graph.connections.pop();
+    connect(&mut graph, a, "value", setter, "arg1");
+    assert!(compile_graph(&graph)
+        .unwrap_err()
+        .to_string()
+        .contains("multiple connections"));
+    graph.connections.clear();
+    let stub = graph.add_node(Node::new(
+        NodeType::Dialogue {
+            dialogue_id: "unimplemented".into(),
+        },
+        (0.0, 0.0),
+    ));
+    let pin = graph.nodes[&stub]
+        .pins
+        .iter()
+        .find(|p| p.direction == PinDirection::Output)
+        .unwrap()
+        .name
+        .clone();
+    connect(&mut graph, stub, &pin, out, "in");
+    assert!(compile_graph(&graph)
+        .unwrap_err()
+        .to_string()
+        .contains("specialized node"));
+}
+#[test]
+fn documents_are_deterministic_roundtrip_guard_manual_changes_and_recover_invalid_drafts() {
+    let mut graph = Graph::new();
+    let a = constant(&mut graph, i64::MIN);
+    let out = graph.add_node(Node::new(NodeType::Output, (0.0, 0.0)));
+    connect(&mut graph, a, "value", out, "in");
+    let source = document::encode(&graph).unwrap();
+    let restored = document::decode(&source).unwrap().unwrap();
+    assert_eq!(document::encode(&restored).unwrap(), source);
+    assert!(document::decode(&(source.clone() + "print(42);\n"))
+        .unwrap_err()
+        .contains("edited as text"));
+    let mut vm = kiln_ir::Vm::new(Host::default());
+    vm.execute(&compile_graph(&restored).unwrap()).unwrap();
+    assert_eq!(vm.stack(), &[kiln_ir::Value::I64(i64::MIN)]);
+    graph.nodes.get_mut(&a).unwrap().node_type = NodeType::HostCall {
+        name: "not_supported".into(),
+    };
+    graph.nodes.get_mut(&a).unwrap().refresh_pins();
+    graph.connections.clear();
+    connect(&mut graph, a, "done", out, "in");
+    let draft = document::encode(&graph).unwrap();
+    assert!(draft.contains("__kiln_graph_compile_error();"));
+    assert!(document::decode(&draft).unwrap().is_some());
+    assert!(compile_graph(&graph).is_err());
+}
+
+#[test]
+fn graph_limits_and_strings_fail_safely_and_preserve_exact_values() {
+    for value in ["quote \" slash \\ newline\n🦀", "", "tab\treturn\r"] {
+        let mut graph = Graph::new();
+        let a = graph.add_node(Node::new(
+            NodeType::Constant {
+                value: ConstantValue::String(value.into()),
+            },
+            (0.0, 0.0),
+        ));
+        let out = graph.add_node(Node::new(NodeType::Output, (0.0, 0.0)));
+        connect(&mut graph, a, "value", out, "in");
+        let mut vm = kiln_ir::Vm::new(Host::default());
+        vm.execute(&compile_graph(&graph).unwrap()).unwrap();
+        assert_eq!(vm.stack(), &[kiln_ir::Value::Str(value.into())]);
+        let encoded = document::encode(&graph).unwrap();
+        assert!(encoded.lines().all(|line| line.len() < 300));
+        assert!(document::decode(&encoded).unwrap().is_some());
+    }
+    let mut graph = Graph::new();
+    let mut previous = constant(&mut graph, 1);
+    let zero = constant(&mut graph, 0);
+    for _ in 0..65 {
+        let add = graph.add_node(Node::new(
+            NodeType::Arithmetic {
+                op: ArithmeticOp::Add,
+            },
+            (0.0, 0.0),
+        ));
+        connect(&mut graph, previous, "value", add, "a");
+        connect(&mut graph, zero, "value", add, "b");
+        // Make the next dependency use the arithmetic result, not a stale pin.
+        graph
+            .nodes
+            .get_mut(&add)
+            .unwrap()
+            .pins
+            .iter_mut()
+            .find(|p| p.name == "result")
+            .unwrap()
+            .name = "value".into();
+        previous = add;
+    }
+    let out = graph.add_node(Node::new(NodeType::Output, (0.0, 0.0)));
+    connect(&mut graph, previous, "value", out, "in");
+    assert!(compile_graph(&graph)
+        .unwrap_err()
+        .to_string()
+        .contains("depth exceeds"));
+    for _ in 0..256 {
+        constant(&mut graph, 0);
+    }
+    assert!(compile_graph(&graph)
+        .unwrap_err()
+        .to_string()
+        .contains("256 nodes"));
 }

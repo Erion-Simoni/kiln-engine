@@ -1,5 +1,8 @@
 //! KilnScript — minimal scripting language for Kiln.
 
+pub mod registry;
+pub use registry::BUILTINS;
+
 pub mod compiler;
 pub mod format;
 pub use format::format_source;

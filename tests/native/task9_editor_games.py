@@ -52,6 +52,22 @@ def record_failure(output, game, phase, error):
         print(message, file=sys.stderr, flush=True)
 
 
+def color_matches(actual, expected, tolerance=2):
+    """Allow egui's documented per-pixel dithering on sRGB framebuffers."""
+    return len(actual)==len(expected) and all(abs(a-b)<=tolerance for a,b in zip(actual,expected))
+
+
+def floating_title_start(row):
+    """Locate a long title-bar run while retaining distinction from canvas gray."""
+    matches=[color_matches(row[x:x+3],(35,38,44)) for x in range(0,len(row),3)]
+    runs,start=[],0
+    for match,group in itertools.groupby(matches):
+        length=len(list(group))
+        if match and length>200:runs.append((length,start))
+        start+=length
+    return max(runs)[1] if runs else None
+
+
 class Editor:
     def __init__(self, tools, project, output, display=':83'):
         self.tools, self.project, self.output = Path(tools).resolve(), Path(project).resolve(), Path(output).resolve()
@@ -162,14 +178,8 @@ class Editor:
             header, pixels = capture.split(b'\n255\n', 1)
             width, height = map(int, header.splitlines()[-1].split())
             assert (width, height) == (1440, 900)
-            row_pixels = [pixels[(102*width+x)*3:(102*width+x)*3+3] == bytes((35,38,44)) for x in range(width)]
-            runs, start = [], 0
-            for match, group in itertools.groupby(row_pixels):
-                length = len(list(group))
-                if match and length > 200:
-                    runs.append((length, start))
-                start += length
-            return (max(runs)[1],) if runs else None
+            start = floating_title_start(pixels[102*width*3:103*width*3])
+            return (start,) if start is not None else None
 
         # Menu clicks enqueue a new floating panel; wait for its rendered title
         # before measuring/dragging, rather than requiring the very next frame.
