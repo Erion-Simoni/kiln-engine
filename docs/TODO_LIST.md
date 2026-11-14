@@ -1,5 +1,8 @@
 # Kiln TODO List — 2D v1.0 Remaining Items
 
+> **Historical plan / technical reference.** The [unified engine completion plan](ENGINE_COMPLETION_PLAN.md) is authoritative for current scope, order, status and release gates. Older completion claims and package-size goals below are historical; preserve their evidence, but do not use them to close current milestones.
+
+
 **Status:** All 2D v1.0 blocking items complete. Only Phase G and Phase I remain
 (both need physical hardware).
 

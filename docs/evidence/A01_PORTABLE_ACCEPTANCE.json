@@ -1,0 +1,18 @@
+{
+  "installed_tools_verified": true,
+  "tamper_missing_permissions_mixed_version_symlink_rejected": true,
+  "templates_initialized_and_exported_native_web": [
+    "empty_2d",
+    "platformer",
+    "topdown"
+  ],
+  "native_browser_gui_export_and_relocated_gameplay": true,
+  "installation_unchanged_after_use": true,
+  "clean_machine": false,
+  "runtime_notices_preserved_bound_and_receipted": true,
+  "physical_gpu_audio_controller": false,
+  "date": "2026-11-13",
+  "engine_source_baseline": "ae492f1",
+  "bundle_sha256": "9442954eb9e39f5645fd9df490821fe7f32022c27d8bf7f00971809aba53919e",
+  "scope": "Moved installation in cloud Linux userspace; software graphics/null audio. Not clean-machine or physical-device certification."
+}

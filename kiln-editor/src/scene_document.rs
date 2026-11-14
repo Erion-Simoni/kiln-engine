@@ -158,7 +158,7 @@ fn reconcile(
                         .filter(|p| !p.tilemaps.contains_key(map))
                         .map(|_| component.clone())
                 }),
-                Component::Parent { .. } => Some(component.clone()),
+                Component::Parent { .. } | Component::EditorFlags { .. } => Some(component.clone()),
                 Component::PrefabInstance { .. } => Some(component.clone()),
                 Component::Script { .. } => Some(component.clone()),
                 Component::Physics { .. }

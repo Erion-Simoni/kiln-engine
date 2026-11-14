@@ -25,6 +25,7 @@ pub enum CompileError {
 struct LoopContext {
     condition: usize,
     breaks: Vec<usize>,
+    continues: Option<Vec<usize>>,
 }
 
 pub struct Compiler {
@@ -129,7 +130,9 @@ impl Compiler {
                         *span,
                     ));
                 }
-                Stmt::While { body, .. } => Self::validate_loop_controls(body, depth + 1)?,
+                Stmt::While { body, .. } | Stmt::For { body, .. } => {
+                    Self::validate_loop_controls(body, depth + 1)?
+                }
                 Stmt::Function { body, .. } => Self::validate_loop_controls(body, 0)?,
                 Stmt::If {
                     then_block,
@@ -195,6 +198,7 @@ impl Compiler {
                 self.loops.push(LoopContext {
                     condition: start,
                     breaks: Vec::new(),
+                    continues: None,
                 });
                 self.scopes.push(HashMap::new());
                 for stmt in body {
@@ -211,6 +215,54 @@ impl Compiler {
                         .set_instruction(index, Instruction::Jump(Label(end)));
                 }
             }
+            Stmt::For {
+                init,
+                condition,
+                step,
+                body,
+            } => {
+                self.scopes.push(HashMap::new());
+                let Stmt::Let { name, value, .. } = init.as_ref() else {
+                    return Err(CompileError::Custom(
+                        "for initializer must declare a variable".into(),
+                    ));
+                };
+                self.compile_expr(value)?;
+                let slot = self.allocate_slot(name);
+                self.program.add_instruction(Instruction::SetLocal(slot));
+                let start = self.program.len();
+                self.compile_expr(condition)?;
+                let exit = self.program.len();
+                self.program
+                    .add_instruction(Instruction::JumpIfNot(Label(0)));
+                self.loops.push(LoopContext {
+                    condition: start,
+                    breaks: Vec::new(),
+                    continues: Some(Vec::new()),
+                });
+                self.scopes.push(HashMap::new());
+                for statement in body {
+                    self.compile_stmt(statement)?;
+                }
+                self.scopes.pop();
+                let increment = self.program.len();
+                self.compile_stmt(step)?;
+                self.program
+                    .add_instruction(Instruction::Jump(Label(start)));
+                let end = self.program.len();
+                self.program
+                    .set_instruction(exit, Instruction::JumpIfNot(Label(end)));
+                let context = self.loops.pop().expect("Current for loop");
+                for index in context.breaks {
+                    self.program
+                        .set_instruction(index, Instruction::Jump(Label(end)));
+                }
+                for index in context.continues.unwrap_or_default() {
+                    self.program
+                        .set_instruction(index, Instruction::Jump(Label(increment)));
+                }
+                self.scopes.pop();
+            }
             Stmt::Break(span) | Stmt::Continue(span) => {
                 let is_break = matches!(stmt, Stmt::Break(_));
                 let context = self.loops.last_mut().ok_or_else(|| {
@@ -222,6 +274,9 @@ impl Compiler {
                 let index = self.program.len();
                 let target = if is_break {
                     context.breaks.push(index);
+                    0
+                } else if let Some(continues) = context.continues.as_mut() {
+                    continues.push(index);
                     0
                 } else {
                     context.condition

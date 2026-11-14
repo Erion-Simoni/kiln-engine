@@ -1,5 +1,8 @@
 # Kiln Editor Roadmap — Unity/GameMaker-Class Editor
 
+> **Historical plan / technical reference.** The [unified engine completion plan](ENGINE_COMPLETION_PLAN.md) is authoritative for current scope, order, status and release gates. Older completion claims and package-size goals below are historical; preserve their evidence, but do not use them to close current milestones.
+
+
 This document tracks the editor's evolution from a functional prototype to a
 full-featured game development environment comparable to Unity or GameMaker.
 

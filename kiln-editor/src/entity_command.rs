@@ -1,5 +1,6 @@
 //! Validated, document-first commands for hierarchy edits.
 
+pub use crate::scene_controls::Alignment;
 use kiln_core::hierarchy_transform::{local_from_world, world_transforms};
 use kiln_core::{Component, Entity, Project, Scene, Transform};
 
@@ -8,6 +9,19 @@ use crate::{editing::next_entity_id, history::SceneHistory};
 /// A single authored entity or hierarchy operation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum EntityEdit {
+    /// Change editor-only flags, including unlocking a protected entity.
+    SetEditorFlags {
+        entity_id: String,
+        locked: bool,
+        hidden: bool,
+    },
+    /// Align independent selected world positions as one transaction.
+    Align {
+        entity_ids: Vec<String>,
+        alignment: crate::scene_controls::Alignment,
+    },
+    /// Paste a validated project-scoped selection as one undo transaction.
+    Paste { document: String },
     /// Rename an entity without changing its stable identity.
     Rename { entity_id: String, name: String },
     /// Create a default visible entity at a world position.
@@ -75,6 +89,51 @@ fn apply(
     edit: &EntityEdit,
 ) -> Result<Option<String>, String> {
     match edit {
+        EntityEdit::Rename { entity_id, .. }
+        | EntityEdit::Delete { entity_id }
+        | EntityEdit::Duplicate { entity_id }
+        | EntityEdit::RevertPrefabOverrides { entity_id } => {
+            crate::scene_controls::require_editable(scene, entity_id)?
+        }
+        EntityEdit::Reparent {
+            entity_id,
+            parent_id,
+        } => {
+            crate::scene_controls::require_editable(scene, entity_id)?;
+            if let Some(parent) = parent_id {
+                crate::scene_controls::require_editable(scene, parent)?;
+            }
+        }
+        _ => {}
+    }
+    match edit {
+        EntityEdit::SetEditorFlags {
+            entity_id,
+            locked,
+            hidden,
+        } => {
+            let index = unique_entity_index(scene, entity_id)?;
+            scene.entities[index]
+                .components
+                .retain(|c| !matches!(c, Component::EditorFlags { .. }));
+            if *locked || *hidden {
+                scene.entities[index]
+                    .components
+                    .push(Component::EditorFlags {
+                        locked: *locked,
+                        hidden: *hidden,
+                    });
+            }
+            Ok(None)
+        }
+        EntityEdit::Align {
+            entity_ids,
+            alignment,
+        } => {
+            crate::scene_controls::align(scene, entity_ids, *alignment)?;
+            Ok(None)
+        }
+        EntityEdit::Paste { document } => crate::entity_clipboard::paste(scene, project, document),
         EntityEdit::CreateSprite {
             texture,
             position,
@@ -274,10 +333,24 @@ fn apply(
                 prefab_id,
                 overrides: kiln_core::PrefabOverride::new(entity_id.clone()),
             });
+            crate::scene_controls::preserve_flags(&scene.entities[index], &mut restored);
             scene.entities[index] = restored;
             Ok(None)
         }
         EntityEdit::Delete { entity_id } => {
+            let flags = crate::scene_controls::resolved_flags(scene);
+            if scene.entities.iter().any(|child| {
+                child
+                    .components
+                    .iter()
+                    .any(|c| matches!(c,Component::Parent{parent} if parent==entity_id))
+                    && flags.get(&child.id).is_some_and(|f| f.locked)
+            }) {
+                return Err(
+                    "Deleting this entity would reparent a locked child; unlock the child first"
+                        .into(),
+                );
+            }
             let index = unique_entity_index(scene, entity_id)?;
             let world = world_transforms(scene)?;
             let children: Vec<_> = scene
@@ -369,7 +442,7 @@ fn apply(
     }
 }
 
-fn set_local_transform(entity: &mut Entity, transform: Transform) -> Result<(), String> {
+pub(crate) fn set_local_transform(entity: &mut Entity, transform: Transform) -> Result<(), String> {
     let indices: Vec<_> = entity
         .components
         .iter()

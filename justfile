@@ -41,9 +41,10 @@ assets:
 audio:
     cargo run --manifest-path samples/audio/Cargo.toml
 
-# installers via cargo-dist
+# Experimental binary archives; requires cargo-dist 0.33.0.
+# Complete editor bundles use portable-editor / portable-release.
 package:
-    cargo-dist build
+    dist build
 
 # default recipe
 default:

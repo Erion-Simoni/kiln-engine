@@ -45,3 +45,10 @@ kiln-engine/
 # Python test/packaging caches
 __pycache__/
 *.pyc
+
+# Generated mdBook documentation
+/docs/book/
+
+# Editor crash-recovery sidecars and interrupted atomic writes
+.*.recovery.json
+.*.recovery.tmp

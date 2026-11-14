@@ -75,10 +75,15 @@ class Windows:
             owner = wintypes.DWORD()
             self.api.GetWindowThreadProcessId(window, ctypes.byref(owner))
             if owner.value == pid and self.api.IsWindowVisible(window):
-                found.append(window)
+                rectangle = wintypes.RECT()
+                if self.api.GetClientRect(window, ctypes.byref(rectangle)):
+                    width = rectangle.right-rectangle.left
+                    height = rectangle.bottom-rectangle.top
+                    if width >= 100 and height >= 100:
+                        found.append((width*height, window))
             return True
         self.api.EnumWindows(visit, 0)
-        return found[0] if found else None
+        return max(found, key=lambda item: item[0])[1] if found else None
 
     def screenshot(self, window, output, env):
         self.api.SetForegroundWindow(window)

@@ -1,5 +1,8 @@
 # 2D readiness audit — 2026-11-05
 
+> **Historical plan / technical reference.** The [unified engine completion plan](ENGINE_COMPLETION_PLAN.md) is authoritative for current scope, order, status and release gates. Older completion claims and package-size goals below are historical; preserve their evidence, but do not use them to close current milestones.
+
+
 **Verdict: the complete 2D engine is not finished.** Task 7 is in progress; Tasks 8–9 remain pending,
 native workflow acceptance is incomplete, and there are additional scripting
 and browser integration gaps. Passing automated tests establishes the covered

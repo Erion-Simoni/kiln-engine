@@ -80,6 +80,13 @@ pub enum Stmt {
         condition: Expr,
         body: Vec<Stmt>,
     },
+    /// Counted loop with a scoped initializer and an increment reached by continue.
+    For {
+        init: Box<Stmt>,
+        condition: Expr,
+        step: Box<Stmt>,
+        body: Vec<Stmt>,
+    },
     /// Exit the innermost loop in this function.
     Break(Span),
     /// Continue at the innermost loop condition.
@@ -146,6 +153,7 @@ impl<'a> Parser<'a> {
         match self.peek_token() {
             Some(Token::Fn) => self.parse_function(),
             Some(Token::While) => self.parse_while(),
+            Some(Token::For) => self.parse_for(),
             Some(Token::Break | Token::Continue) => self.parse_loop_control(),
             Some(Token::If) => self.parse_if(),
             Some(Token::Return) => self.parse_return(),
@@ -299,6 +307,40 @@ impl<'a> Parser<'a> {
             self.advance();
         }
         Ok(Some(Stmt::Assign { name, value, span }))
+    }
+
+    fn parse_for(&mut self) -> Result<Option<Stmt>, ParseError> {
+        self.consume(Token::For)?;
+        self.consume(Token::LParen)?;
+        self.consume(Token::Let)?;
+        let span = self
+            .current
+            .as_ref()
+            .map(|t| t.span)
+            .unwrap_or(Span::new(0, 0));
+        let name = match self.peek_token() {
+            Some(Token::Identifier(name)) => name,
+            _ => return Err(ParseError::Custom("Expected for-loop variable".into())),
+        };
+        self.advance();
+        self.consume(Token::Assign)?;
+        let value = self.parse_expr()?;
+        self.consume(Token::Semicolon)?;
+        let condition = self.parse_expr()?;
+        self.consume(Token::Semicolon)?;
+        let step = self
+            .parse_assign()?
+            .ok_or_else(|| ParseError::Custom("Expected for-loop increment".into()))?;
+        self.consume(Token::RParen)?;
+        self.consume(Token::LBrace)?;
+        let body = self.parse_block()?;
+        self.consume(Token::RBrace)?;
+        Ok(Some(Stmt::For {
+            init: Box::new(Stmt::Let { name, value, span }),
+            condition,
+            step: Box::new(step),
+            body,
+        }))
     }
 
     fn parse_while(&mut self) -> Result<Option<Stmt>, ParseError> {

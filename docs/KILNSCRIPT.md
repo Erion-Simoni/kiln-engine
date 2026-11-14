@@ -56,8 +56,9 @@ Numeric operations promote `I64` to `F64` when mixed with floats (e.g. `1 + 2.5`
 - `return expr;` — return from the program
 - `if cond { ... } else if cond { ... } else { ... }` — conditional; blocks get their own scope
 - `while cond { ... }` — repeat while a boolean condition is true
+- `for (let i = 0; i < count; i += 1) { ... }` — scoped counted loop
 - `break;` — exit the innermost loop in this function
-- `continue;` — jump to the innermost loop condition
+- `continue;` — test the innermost loop again (run its increment first for `for`)
 
 ### Gameplay control flow
 
@@ -407,3 +408,68 @@ gameplay with the update phase so menu events cannot run movement twice. Screen
 actions apply before callbacks, whose event screen still names the originating
 screen. See [Saved UI](UI_AUTHORING_2D.md) and `samples/ui2d_editor` for the full
 native contract, limits, fonts, navigation and remaining browser/save acceptance.
+
+
+## Counted loops and dictionaries
+
+A counted loop requires `let name = value`, a boolean condition, and an assignment
+increment, separated by semicolons inside parentheses. `i++`, omitted clauses and
+`for-in` are not supported. The initializer may shadow an outer local; its name
+is visible only in that loop. The body has its own scope. `continue` runs the
+increment before testing again; `break` skips it. Functions isolate loop controls.
+`for` is now a reserved keyword; rename older identifiers using that spelling.
+
+```kilnscript
+let enemy = dict_new();
+for (let i = 0; i < 4; i += 1) {
+    if i == 1 { continue; }
+    enemy = dict_set(enemy, "health", dict_get(enemy, "health", 0) + 10);
+}
+state_set("enemy", enemy); // health = 30
+```
+
+Dictionaries hold string-keyed values, including arrays and other dictionaries.
+Like arrays they have value semantics: assign the result of `dict_set` or
+`dict_remove` to keep a change. Independent copies do not share mutable storage.
+
+| Function | Behavior |
+| --- | --- |
+| `dict_new()` | Empty dictionary |
+| `dict_get(dictionary, key, fallback)` | Value or fallback for an absent key |
+| `dict_set(dictionary, key, value)` | Copy with one key inserted/replaced |
+| `dict_has(dictionary, key)` | Boolean key presence |
+| `dict_remove(dictionary, key)` | Copy without the key; absent keys are allowed |
+| `dict_keys(dictionary)` | Array of keys in sorted order |
+
+Keys are at most 256 UTF-8 bytes, with at most 4096 entries per dictionary. A
+mutation validates the existing saved-value limits (16 levels, 16384 total values,
+65536-byte strings, finite numbers). Invalid types or limits return runtime
+errors. Equality compares keys and recursively compares values, including the
+existing numeric-aware integer/float comparison. Logical game saves and player
+preferences preserve nested values and large integers. Save files containing
+new dictionary variants require an engine version that supports them.
+
+A script's `let` variables are local to its program execution. Persistent
+`state_get`/`state_set` storage belongs to the current scene program or individual
+attached entity script; it is not a shared cross-scene global singleton. Use the
+existing save/scene mechanisms deliberately. No implicit process-global scope or
+new timer/coroutine scheduler is introduced by these functions.
+
+The Script Editor colors keywords, literals, comments and built-ins, including
+unfinished text. Its API Reference filters the same built-in registry used by
+scripts, graphs, native games and browser games. The reference currently displays
+argument counts; contextual completion, formatting, project search and navigation
+remain open A04 work.
+
+Execution defaults to 1,000,000 bytecode instructions per tick. The host's VM
+instruction-limit setter now governs both full runs and debugger steps, including
+a zero limit that prevents execution. A restart gets a fresh configured budget.
+The bytecode debugger executes steps, resumes past the breakpoint it just
+reported, exposes local slots and follows actual bytecode call depth for Step
+Over/Out. Restart clears bytecode locals and stacks while retaining host state.
+Conditional bytecode breakpoints return an explicit unsupported diagnostic.
+
+The live gameplay panel currently pauses/steps whole frames and inspects entity
+state. Source breakpoints, statement stepping, imported-function call frames,
+expression watches and a debugger attached to the actual gameplay VM remain
+required before A04 is accepted. Bytecode repairs do not establish those workflows.

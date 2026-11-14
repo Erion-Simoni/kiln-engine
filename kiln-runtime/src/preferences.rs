@@ -72,8 +72,8 @@ impl PlayerPreferences {
     }
 }
 
-/// Convert script values to JSON without losing integer precision. Null/objects
-/// are intentionally absent from the current script language.
+/// Convert script values to JSON without losing integer precision.
+/// Dictionaries use JSON objects; null has no script equivalent.
 pub(crate) fn encode_value(value: &kiln_ir::Value) -> Result<serde_json::Value, String> {
     use kiln_ir::Value;
     match value {
@@ -83,6 +83,11 @@ pub(crate) fn encode_value(value: &kiln_ir::Value) -> Result<serde_json::Value, 
             .ok_or("Settings require finite numbers".into()),
         Value::Bool(value) => Ok((*value).into()),
         Value::Str(value) => Ok(value.clone().into()),
+        Value::Map(values) => values
+            .iter()
+            .map(|(key, value)| Ok((key.clone(), encode_value(value)?)))
+            .collect::<Result<serde_json::Map<_, _>, String>>()
+            .map(serde_json::Value::Object),
         Value::Array(values) => values
             .iter()
             .map(encode_value)
@@ -100,6 +105,11 @@ pub(crate) fn decode_value(value: &serde_json::Value) -> Option<kiln_ir::Value> 
             .or_else(|| number.as_f64().map(Value::F64)),
         serde_json::Value::Bool(value) => Some(Value::Bool(*value)),
         serde_json::Value::String(value) => Some(Value::Str(value.clone())),
+        serde_json::Value::Object(values) => values
+            .iter()
+            .map(|(key, value)| Some((key.clone(), decode_value(value)?)))
+            .collect::<Option<std::collections::BTreeMap<_, _>>>()
+            .map(Value::Map),
         serde_json::Value::Array(values) => values
             .iter()
             .map(decode_value)
@@ -112,6 +122,26 @@ pub(crate) fn decode_value(value: &serde_json::Value) -> Option<kiln_ir::Value> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dictionary_preferences_preserve_nested_values_and_large_integers() {
+        use kiln_ir::Value;
+        let value = Value::Map(std::collections::BTreeMap::from([(
+            "inventory".into(),
+            Value::Array(vec![
+                Value::I64(9_007_199_254_740_993),
+                Value::Map(std::collections::BTreeMap::from([(
+                    "equipped".into(),
+                    Value::Bool(true),
+                )])),
+            ]),
+        )]));
+        let encoded = encode_value(&value).unwrap();
+        let disk = serde_json::to_string(&encoded).unwrap();
+        assert_eq!(
+            decode_value(&serde_json::from_str(&disk).unwrap()),
+            Some(value)
+        );
+    }
     #[test]
     fn settings_survive_restart_without_project_or_sample_state() {
         let dir = std::env::temp_dir().join(format!(

@@ -30,7 +30,7 @@ impl ComponentKind {
             Component::Sprite { .. } => Some(Self::Sprite),
             Component::Role { .. } => Some(Self::Role),
             Component::Tilemap { .. } => Some(Self::Tilemap),
-            Component::Parent { .. } => None,
+            Component::Parent { .. } | Component::EditorFlags { .. } => None,
             Component::PrefabInstance { .. } => None,
         }
     }
@@ -136,6 +136,7 @@ impl ComponentCommand {
         if scene.id != self.scene_id || !project.scenes.contains_key(&self.scene_id) {
             return Err("Component edit targets another or missing scene".into());
         }
+        crate::scene_controls::require_editable(scene, &self.entity_id)?;
         let targets: Vec<_> = scene
             .entities
             .iter()

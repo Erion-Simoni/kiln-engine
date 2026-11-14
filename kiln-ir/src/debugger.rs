@@ -90,7 +90,8 @@ pub struct Debugger<H: crate::HostContext> {
 impl<H: crate::HostContext> Debugger<H> {
     /// Create a new debugger for the given program.
     pub fn new(program: Program, host: H) -> Self {
-        let vm = crate::Vm::new(host);
+        let mut vm = crate::Vm::new(host);
+        vm.begin_execution(&program);
         Self {
             vm,
             state: DebugState::default(),
@@ -212,112 +213,88 @@ impl<H: crate::HostContext> Debugger<H> {
         self.execute_until_event()
     }
 
-    /// Execute VM until a debug event occurs.
+    /// Restart bytecode execution and locals; host-side state is retained.
+    pub fn restart(&mut self) {
+        self.vm
+            .restore_locals(&self.program, Vec::new())
+            .expect("empty locals are valid");
+        self.vm.begin_execution(&self.program);
+        self.state.last_event = None;
+        self.state.step_mode = StepMode::None;
+        self.update_state_from_vm();
+    }
+
+    /// Execute at least one instruction when stepping or resuming a breakpoint.
     fn execute_until_event(&mut self) -> DebugEvent {
+        if matches!(self.state.last_event, Some(DebugEvent::Completed)) {
+            return DebugEvent::Completed;
+        }
+        let initial_depth = self.vm.call_stack().len();
+        let mut skip_breakpoint = matches!(self.state.last_event,Some(DebugEvent::BreakpointHit{instruction}) if instruction==self.vm.instruction_pointer())
+            || matches!(
+                self.state.step_mode,
+                StepMode::StepInto | StepMode::StepOver | StepMode::StepOut
+            );
         loop {
-            self.state.current_instruction = self.vm.instruction_pointer();
-
-            // Check for breakpoint
-            if let Some(bp) = self.state.breakpoints.get(&self.state.current_instruction) {
-                if bp.enabled {
-                    // Check condition if present
-                    let should_break = bp
-                        .condition
-                        .as_ref()
-                        .map(|c| self.evaluate_condition(c))
-                        .unwrap_or(true);
-                    if should_break {
-                        // We need mutable access to hit_count
-                        if let Some(bp_mut) = self
-                            .state
-                            .breakpoints
-                            .get_mut(&self.state.current_instruction)
-                        {
-                            bp_mut.hit_count += 1;
-                        }
-                        self.state.last_event = Some(DebugEvent::BreakpointHit {
-                            instruction: self.state.current_instruction,
+            let ip = self.vm.instruction_pointer();
+            if ip >= self.program.len() {
+                return self.record_event(DebugEvent::Completed);
+            }
+            if !skip_breakpoint {
+                if let Some(bp) = self.state.breakpoints.get_mut(&ip).filter(|bp| bp.enabled) {
+                    if bp.condition.is_some() {
+                        return self.record_event(DebugEvent::Error {
+                            message: "Conditional bytecode breakpoints are not supported".into(),
                         });
-                        self.update_state_from_vm();
-                        return DebugEvent::BreakpointHit {
-                            instruction: self.state.current_instruction,
-                        };
                     }
+                    bp.hit_count += 1;
+                    return self.record_event(DebugEvent::BreakpointHit { instruction: ip });
                 }
             }
-
-            // Check step mode
-            match self.state.step_mode {
-                StepMode::StepInto => {
-                    self.state.step_mode = StepMode::None;
-                    self.state.last_event = Some(DebugEvent::Step {
-                        instruction: self.state.current_instruction,
-                    });
-                    self.update_state_from_vm();
-                    return DebugEvent::Step {
-                        instruction: self.state.current_instruction,
-                    };
-                }
-                StepMode::StepOver => {
-                    // Step over: execute one instruction, but don't stop inside calls
-                    // For simplicity, treat as StepInto for now
-                    self.state.step_mode = StepMode::None;
-                    self.state.last_event = Some(DebugEvent::Step {
-                        instruction: self.state.current_instruction,
-                    });
-                    self.update_state_from_vm();
-                    return DebugEvent::Step {
-                        instruction: self.state.current_instruction,
-                    };
-                }
-                StepMode::StepOut => {
-                    // Step out: continue until we return from current function
-                    // For simplicity, treat as Continue for now
-                    self.state.step_mode = StepMode::Continue;
-                }
-                StepMode::Continue => {}
-                StepMode::None => {
-                    // No stepping, check if we should break anyway
-                }
-            }
-
-            // Execute one instruction
+            skip_breakpoint = false;
             match self.vm.step(&self.program) {
-                Ok(should_continue) => {
-                    // Check if execution completed
-                    if !should_continue
-                        || self.vm.instruction_pointer() >= self.program.instructions().len()
-                    {
-                        self.state.last_event = Some(DebugEvent::Completed);
-                        self.update_state_from_vm();
-                        return DebugEvent::Completed;
-                    }
+                Ok(false) => return self.record_event(DebugEvent::Completed),
+                Err(error) => {
+                    return self.record_event(DebugEvent::Error {
+                        message: error.to_string(),
+                    })
                 }
-                Err(e) => {
-                    self.state.last_event = Some(DebugEvent::Error {
-                        message: e.to_string(),
-                    });
-                    self.update_state_from_vm();
-                    return DebugEvent::Error {
-                        message: e.to_string(),
-                    };
-                }
+                Ok(true) => {}
+            }
+            let ip = self.vm.instruction_pointer();
+            if ip >= self.program.len() {
+                return self.record_event(DebugEvent::Completed);
+            }
+            let depth = self.vm.call_stack().len();
+            let stop = match self.state.step_mode {
+                StepMode::StepInto => true,
+                StepMode::StepOver => depth <= initial_depth,
+                StepMode::StepOut => depth < initial_depth,
+                _ => false,
+            };
+            if stop {
+                return self.record_event(DebugEvent::Step { instruction: ip });
             }
         }
     }
 
-    /// Update debug state from VM after an event.
-    fn update_state_from_vm(&mut self) {
-        self.state.current_instruction = self.vm.instruction_pointer();
-        // Update locals from VM (would need VM to expose stack/locals)
-        // For now, we'll need to add VM methods to inspect state
+    fn record_event(&mut self, event: DebugEvent) -> DebugEvent {
+        self.state.last_event = Some(event.clone());
+        self.state.step_mode = StepMode::None;
+        self.update_state_from_vm();
+        event
     }
 
-    /// Evaluate a breakpoint condition (simplified).
-    fn evaluate_condition(&self, _condition: &str) -> bool {
-        // TODO: Implement condition evaluation
-        // For now, always break
-        true
+    fn update_state_from_vm(&mut self) {
+        self.state.current_instruction = self.vm.instruction_pointer();
+        self.state.locals = self
+            .vm
+            .locals()
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(slot, value)| (slot as u16, value))
+            .collect();
     }
 
     /// Get the instruction at the current IP.
@@ -383,5 +360,82 @@ mod tests {
 
         debugger.set_step_mode(StepMode::StepOver);
         assert_eq!(debugger.state().step_mode, StepMode::StepOver);
+    }
+}
+
+#[cfg(test)]
+mod execution_tests {
+    use super::*;
+    use crate::{HostContext, Instruction, VmError};
+    struct Host;
+    impl HostContext for Host {
+        fn call_host(&mut self, _: u32, _: &[Value]) -> Result<Value, VmError> {
+            Ok(Value::I64(0))
+        }
+    }
+    #[test]
+    fn stepping_executes_locals_and_resuming_does_not_rehit_the_same_breakpoint() {
+        let mut p = Program::new();
+        p.set_local_slots(1);
+        p.add_instruction(Instruction::PushConst(Value::I64(42)));
+        p.add_instruction(Instruction::SetLocal(0));
+        p.add_instruction(Instruction::GetLocal(0));
+        let mut d = Debugger::new(p, Host);
+        d.set_breakpoint(1, None);
+        assert_eq!(d.step_into(), DebugEvent::Step { instruction: 1 });
+        assert_eq!(d.run(), DebugEvent::BreakpointHit { instruction: 1 });
+        assert_eq!(d.run(), DebugEvent::Completed);
+        assert_eq!(d.state.locals[&0], Value::I64(42));
+        assert_eq!(d.vm.stack(), &[Value::I64(42)]);
+        assert_eq!(d.state.breakpoints[&1].hit_count, 1);
+        assert_eq!(d.run(), DebugEvent::Completed);
+        d.restart();
+        assert_eq!(d.vm.instruction_pointer(), 0);
+        assert_eq!(d.state.locals[&0], Value::I64(0));
+    }
+    #[test]
+    fn bytecode_step_over_and_out_follow_real_call_depth() {
+        let mut p = Program::new();
+        for op in [
+            Instruction::Call(Label(3)),
+            Instruction::PushConst(Value::I64(9)),
+            Instruction::Return,
+            Instruction::PushConst(Value::I64(7)),
+            Instruction::Return,
+        ] {
+            p.add_instruction(op);
+        }
+        let mut d = Debugger::new(p, Host);
+        assert_eq!(d.step_over(), DebugEvent::Step { instruction: 1 });
+        assert_eq!(d.vm.stack(), &[Value::I64(7)]);
+        d.restart();
+        assert_eq!(d.step_into(), DebugEvent::Step { instruction: 3 });
+        assert_eq!(d.step_out(), DebugEvent::Step { instruction: 1 });
+        assert!(d.vm.call_stack().is_empty());
+    }
+    #[test]
+    fn instruction_budget_bounds_continue_single_steps_and_each_restart() {
+        let mut p = Program::new();
+        p.add_instruction(Instruction::Jump(Label(0)));
+        let mut d = Debugger::new(p, Host);
+        d.vm_mut().set_instruction_budget(3);
+        for _ in 0..3 {
+            assert_eq!(d.step_into(), DebugEvent::Step { instruction: 0 });
+        }
+        assert!(matches!(d.step_into(),DebugEvent::Error{message} if message.contains("budget")));
+        d.restart();
+        assert!(matches!(d.run(),DebugEvent::Error{message} if message.contains("budget")));
+        let mut vm = crate::Vm::new(Host);
+        vm.set_instruction_budget(1);
+        let mut finite = Program::new();
+        finite.add_instruction(Instruction::PushConst(Value::I64(1)));
+        finite.add_instruction(Instruction::Pop);
+        for _ in 0..2 {
+            assert!(matches!(
+                vm.execute(&finite),
+                Err(VmError::InstructionBudgetExceeded)
+            ));
+            assert_eq!(vm.instruction_pointer(), 1);
+        }
     }
 }

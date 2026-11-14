@@ -59,7 +59,7 @@ impl DebuggerPanel {
             }
             ui.separator();
             if ui.button("Restart").clicked() {
-                // Restart would need to reset VM
+                debugger.restart();
             }
         });
 

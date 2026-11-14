@@ -85,8 +85,8 @@ New to Kiln? Start with the [Tutorial](docs/TUTORIAL.md) to build your first gam
 
 - **AGENTS.md** - Agent brief and coding rules
 - **docs/ARCHITECTURE.md** - Crate map, data flow, IR design
-- **docs/ROADMAP.md** - Milestones M0-M61+
-- **ROADMAP_FULL_M14_PLUS.md** - M14+ milestones (M29+ detail)
+- **[Engine completion plan](docs/ENGINE_COMPLETION_PLAN.md)** - Authoritative 2D, 3D, production and platform roadmap
+- **docs/ROADMAP.md**, **ROADMAP_FULL_M14_PLUS.md** - Historical milestones and design references
 - **docs/DECISIONS.md** - Architecture decision records
 - **docs/BUDGETS.md** - Performance/resource goals and optional size observations
 - **docs/STATE.md** - Session handoff (current status)

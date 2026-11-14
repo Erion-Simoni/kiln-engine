@@ -115,20 +115,20 @@ def main():
         key('Return')
         assert authored_x() == 40, 'The inspector edit should remain unsaved until export'
         click(80, 12)
-        click(105, 199)
+        click(105, 242)
         command('mousemove', '--window', window, 365, 510)
         command('mousedown', 1)
         for point in [(450,550),(650,650),(850,750),(1100,850)]:
             command('mousemove', '--window', window, *point)
         command('mouseup', 1)
-        click(155, 199)  # Browser radio in the real native editor.
+        click(155, 206)  # Browser radio in the real native editor.
         destination = run/'browser game'
-        click(250, 257)
+        click(250, 273)
         key('ctrl+a')
         command('type', '--clearmodifiers', str(destination))
         key('Return')
         shot('browser_ready_unsaved')
-        click(75, 326)
+        click(75, 346)
         # Installed exports also hash the complete runtime/notice inventory.
         wait_for(lambda: (destination/'export.json').exists(), editor, editor_log, attempts=300)
         wait_for(lambda: 'Export result: Success' in editor_log.read_text(), editor, editor_log, attempts=300)
@@ -145,7 +145,7 @@ def main():
         actor = next(e for e in packed['scenes']['main']['entities'] if e['id'] == 'player')
         assert next(c['x'] for c in actor['components'] if c['type'] == 'Transform') == 88
         before = hashlib.sha256((destination/'runtime/kiln_web_bg.wasm').read_bytes()).hexdigest()
-        click(75, 326)
+        click(75, 346)
         wait_for(lambda: 'Export result: Failed' in editor_log.read_text(), editor, editor_log)
         time.sleep(0.5)
         shot('browser_existing_output_failed')

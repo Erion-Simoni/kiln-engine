@@ -6,6 +6,7 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 
 const pkg = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve(__dirname, '../../target/web-smoke');
+const exported = process.env.WEB_SMOKE_EXPORT_ROOT ? path.resolve(process.env.WEB_SMOKE_EXPORT_ROOT) : null;
 const game = process.env.WEB_SMOKE_PROJECT ? path.resolve(process.env.WEB_SMOKE_PROJECT) : path.resolve(__dirname, '../../samples/vertical_slice');
 const html = `<!doctype html><html><head><link rel="icon" href="data:,"></head>
 <body style="margin:0"><canvas id="game" style="width:640px;height:480px"></canvas>
@@ -17,6 +18,12 @@ window.ready = (async () => {await init(); console.log('WASM initialized'); awai
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
+    if (exported && url.pathname.startsWith('/export/')) {
+      const file = path.resolve(exported, decodeURIComponent(url.pathname.slice('/export/'.length) || 'index.html'));
+      if (!file.startsWith(exported + path.sep)) { res.writeHead(403); return res.end(); }
+      res.setHeader('Content-Type', ({'.html':'text/html', '.js':'text/javascript', '.wasm':'application/wasm', '.png':'image/png'})[path.extname(file)] || 'text/plain');
+      return res.end(await fs.readFile(file));
+    }
     if (url.pathname === '/') { res.setHeader('Content-Type', 'text/html'); return res.end(html); }
     const match = url.pathname.match(/^\/(pkg|game)\/(.+)$/);
     if (!match) { res.writeHead(404); return res.end(); }
@@ -62,17 +69,25 @@ async function heroPosition(page) {
     page.on('pageerror', error => { errors.push(String(error)); console.error('[page error]', String(error)); });
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); if (process.env.WEB_SMOKE_DEBUG) console.error('[browser]', message.type(), message.text()); });
     page.on('response', response => { if (response.status() >= 400) failedRequests.push(response.url()); });
-    await page.goto(`http://127.0.0.1:${server.address().port}/`);
-    await page.waitForFunction(() => window.ready !== undefined);
-    let initTimer;
-    try {
-      await Promise.race([
-        page.evaluate(() => window.ready),
-        new Promise((_, reject) => { initTimer = setTimeout(() => reject(new Error('Browser initialization timed out: ' + errors.join('\n'))), 30000); }),
-      ]);
-    } finally { clearTimeout(initTimer); }
+    if (exported) {
+      await page.goto(`http://127.0.0.1:${server.address().port}/export/`);
+      await page.waitForFunction(() => document.getElementById('gate')?.dataset.state === 'ready');
+      await page.locator('#start').click();
+      await page.waitForFunction(() => document.getElementById('gate')?.hidden === true);
+    } else {
+      await page.goto(`http://127.0.0.1:${server.address().port}/`);
+      await page.waitForFunction(() => window.ready !== undefined);
+      let initTimer;
+      try {
+        await Promise.race([
+          page.evaluate(() => window.ready),
+          new Promise((_, reject) => { initTimer = setTimeout(() => reject(new Error('Browser initialization timed out: ' + errors.join('\n'))), 30000); }),
+        ]);
+      } finally { clearTimeout(initTimer); }
+    }
     const rejectsMissingCanvas = await page.evaluate(async () => {
-      const {run} = await import('/pkg/kiln_web.js');
+      const {default: init, run} = await import('/pkg/kiln_web.js');
+      await init();
       try { await run('missing-canvas', '/game/kiln.toml'); return false; }
       catch (error) { return String(error).includes('Canvas element not found'); }
     });
@@ -114,7 +129,7 @@ async function heroPosition(page) {
       intervals.sort((a, b) => a - b);
       return {frames:intervals.length, meanMs:intervals.reduce((sum, value) => sum + value, 0) / intervals.length, p95Ms:intervals[Math.floor(intervals.length * 0.95)]};
     }) : undefined;
-    console.log(JSON.stringify({passed:true, before, after, stopped, cadence}));
+    console.log(JSON.stringify({passed:true, exported:!!exported, before, after, stopped, cadence}));
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));

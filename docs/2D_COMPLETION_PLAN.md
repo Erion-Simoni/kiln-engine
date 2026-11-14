@@ -1,5 +1,8 @@
 # Kiln 2D completion plan
 
+> **Historical plan / technical reference.** The [unified engine completion plan](ENGINE_COMPLETION_PLAN.md) is authoritative for current scope, order, status and release gates. Older completion claims and package-size goals below are historical; preserve their evidence, but do not use them to close current milestones.
+
+
 ## Goal and scope
 
 A developer can create, edit, save, reopen, debug, and export a complete 2D game through the editor and scripts, without changing Rust code or hand-editing project files for ordinary authoring. This is the current 2D work program; 3D is paused. It supersedes earlier claims that only hardware testing remains, not the historical implementation record.

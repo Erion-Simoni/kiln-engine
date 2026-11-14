@@ -1,5 +1,8 @@
 # Kiln 2D v1.0 Roadmap
 
+> **Historical plan / technical reference.** The [unified engine completion plan](ENGINE_COMPLETION_PLAN.md) is authoritative for current scope, order, status and release gates. Older completion claims and package-size goals below are historical; preserve their evidence, but do not use them to close current milestones.
+
+
 **Goal:** A shippable 2D engine — every core 2D feature works end-to-end,
 export to web and desktop is verified, and no critical gap blocks a real
 2D game release. This is the milestone between the v0.5 "2D complete" gate

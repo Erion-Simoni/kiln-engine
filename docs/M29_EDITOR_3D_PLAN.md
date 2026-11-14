@@ -1,5 +1,8 @@
 # 3d — M29 Editor 3D View Plan (Pre-M29)
 
+> **Historical plan / technical reference.** The [unified engine completion plan](ENGINE_COMPLETION_PLAN.md) is authoritative for current scope, order, status and release gates. Older completion claims and package-size goals below are historical; preserve their evidence, but do not use them to close current milestones.
+
+
 **Goal:** Scope the 3D editor scene view with gizmos, building on ADR-0032
 (the editor draws the scene with the engine). Design doc only — implementation
 happens in M29.

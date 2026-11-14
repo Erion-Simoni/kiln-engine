@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "real_autosave_interval_seconds": 30,
+  "force_kill_restart_restore_save": true,
+  "source_unchanged_until_save": true,
+  "escape_preserves_recovery": true,
+  "unsupported_recovery_preserved": true,
+  "exit_cancel_preserves_draft": true,
+  "exit_discard_clears_recovery": true,
+  "explicit_discard_preserves_saved_source": true,
+  "scope": "Isolated Xvfb/software graphics; no physical-device claim",
+  "branch_base": "4285924",
+  "design": "ADR-0079"
+}

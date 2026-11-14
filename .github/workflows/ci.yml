@@ -2,12 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, "fix/**"]
   pull_request:
     branches: [main, master]
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: '1.99.1'
 
 jobs:
   check:
@@ -17,12 +18,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             ~/.cargo/registry
@@ -35,9 +37,9 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Check
-        run: cargo check --workspace
+        run: cargo check --workspace --locked
       - name: Check native feature opt-out
         run: |
           cargo check -p kiln-editor --no-default-features
@@ -52,10 +54,12 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             ~/.cargo/registry
@@ -63,12 +67,12 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Install cargo-nextest
-        run: cargo install cargo-nextest
+        run: cargo install cargo-nextest --version 0.9.151 --locked
       - name: Install Linux audio/controller development headers
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libgl1-mesa-dri mesa-vulkan-drivers
       - name: Run tests
-        run: cargo nextest run --workspace
+        run: cargo nextest run --workspace --locked
       - name: Test portable package preparation and captured builds
         run: python3 -m unittest discover -s tests/native -p 'test_*.py'
 
@@ -79,10 +83,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             ~/.cargo/registry
@@ -93,19 +99,19 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: Build release
-        run: cargo build --workspace --release
+        run: cargo build --workspace --release --locked
 
   docs:
     name: Build Documentation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Install mdbook
-        run: cargo install mdbook
+        run: cargo install mdbook --version 0.4.52 --locked
       - name: Build documentation
         run: mdbook build docs
       - name: Upload docs artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: docs
           path: docs/book/
@@ -121,7 +127,7 @@ jobs:
       id-token: write
     steps:
       - name: Download docs artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: docs
           path: docs/book
@@ -135,9 +141,10 @@ jobs:
         uses: actions/deploy-pages@v4
 
   dist:
-    name: Build and publish installers
+    name: Build experimental desktop binary archives
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         include:
@@ -148,38 +155,65 @@ jobs:
           - os: macos-latest
             target: x86_64-apple-darwin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install cargo-dist
-        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.33.0/installer.sh | sh
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install cargo-dist on Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          curl --proto '=https' --tlsv1.2 -fsSL https://github.com/axodotdev/cargo-dist/releases/download/v0.33.0/cargo-dist-installer.sh --output "$RUNNER_TEMP/cargo-dist-installer.sh"
+          sh "$RUNNER_TEMP/cargo-dist-installer.sh"
+      - name: Install cargo-dist on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Join-Path $env:RUNNER_TEMP 'cargo-dist-installer.ps1'
+          Invoke-WebRequest -Uri 'https://github.com/axodotdev/cargo-dist/releases/download/v0.33.0/cargo-dist-installer.ps1' -OutFile $installer -ErrorAction Stop
+          & $installer
+      - name: Require pinned cargo-dist version
+        shell: bash
+        run: test "$(dist --version)" = 'cargo-dist 0.33.0'
       - name: Install Linux audio/controller development headers
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: Run cargo-dist
-        run: cargo dist build --artifacts=all --target=${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/distribution-logs
+          dist build --artifacts=all --target=${{ matrix.target }} 2>&1 | tee target/distribution-logs/build.log
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: dist-${{ matrix.os }}
-          path: dist/
-      - name: Publish to GitHub Releases
-        if: startsWith(github.ref, 'refs/tags/')
-        run: cargo dist upload --target=${{ matrix.target }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          path: target/distrib/
+          if-no-files-found: error
+      - name: Retain distribution diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: dist-diagnostics-${{ matrix.os }}
+          path: target/distribution-logs/
+          if-no-files-found: warn
+          retention-days: 7
 
   native-ui-smoke:
     name: Native editor and saved UI smoke tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
       - name: Install native test dependencies
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libxkbcommon-x11-0 libgl1-mesa-dri mesa-vulkan-drivers xvfb xdotool imagemagick
       - name: Build the native editor and player
         env:
           CARGO_PROFILE_DEV_DEBUG: 0
-        run: cargo build -p kiln-player -p kiln-editor -p kiln-cli --bins
+        run: cargo build --locked -p kiln-player -p kiln-editor -p kiln-cli --bins
       - name: Exercise editor authoring, preview isolation and Play controls
         env:
           KILN_EDITOR_EVIDENCE_DIR: target/editor-design-evidence
@@ -192,6 +226,14 @@ jobs:
         env:
           KILN_TASK7_EDITOR_EVIDENCE_DIR: target/task7-editor-evidence
         run: python3 tests/native/task7_editor_smoke.py
+      - name: Recover unsaved source after forced editor crashes
+        run: python3 tests/native/script_recovery_smoke.py
+      - name: Verify entity clipboard across scenes and restart
+        run: python3 tests/native/entity_clipboard_smoke.py
+      - name: Verify scene selection, locks, visibility, alignment and recovery
+        run: python3 tests/native/scene_controls_smoke.py
+      - name: Verify external art refresh and structured gameplay authoring
+        run: python3 tests/native/asset_script_workflow_smoke.py
       - name: Pack the saved UI game
         run: target/debug/kiln-cli pack --source samples/ui2d_editor --output target/task7-game.kar
       - name: Exercise Task 7 save/resume across player restarts
@@ -209,7 +251,7 @@ jobs:
         run: python3 tests/native/relocated_export.py
       - name: Upload native UI evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: native-ui-evidence
           path: |
@@ -220,18 +262,35 @@ jobs:
             target/task8-export-evidence/
             target/task8-relocated-evidence/
             target/task8-material-native-evidence/
+            target/a02-script-recovery/result.json
+            target/a02-script-recovery/editor/*.png
+            target/a02-script-recovery/editor/*.log
+            target/a02-script-recovery/*_before_crash.log
+            target/a02-scene-controls/result.json
+            target/a02-scene-controls/editor/*.png
+            target/a02-scene-controls/editor/*.log
+            target/a02-entity-clipboard/result.json
+            target/a02-entity-clipboard/editor/*.png
+            target/a02-entity-clipboard/editor/*.log
+            target/a02-entity-clipboard/reopened/*.png
+            target/a03-a04-workflow/*.log
+            target/a03-a04-workflow/failure.json
+            target/a03-a04-workflow/result.json
+            target/a03-a04-workflow/editor/*.png
+            target/a03-a04-workflow/editor/*.log
           retention-days: 7
 
   web-smoke:
     name: Browser WASM and portable editor compatibility
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: wasm32-unknown-unknown
           components: clippy
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: npm
@@ -241,15 +300,15 @@ jobs:
       - name: Build the native editor, exporter and player
         env:
           CARGO_PROFILE_DEV_DEBUG: 0
-        run: cargo build -p kiln-editor -p kiln-cli -p kiln-player --bins
+        run: cargo build --locked -p kiln-editor -p kiln-cli -p kiln-player --bins
       - name: Check WASM-specific code and feature opt-out
         run: |
           cargo clippy -p kiln-web --target wasm32-unknown-unknown -- -D warnings
           cargo clippy -p kiln-web --target wasm32-unknown-unknown --no-default-features -- -D warnings
       - name: Build the browser runtime
-        run: cargo build --target wasm32-unknown-unknown -p kiln-web
+        run: cargo build --locked --target wasm32-unknown-unknown -p kiln-web
       - name: Install matching wasm-bindgen CLI
-        run: cargo install wasm-bindgen-cli --version "$(cargo tree -p wasm-bindgen --depth 0 | awk '{print substr($2,2)}')" --locked
+        run: cargo install wasm-bindgen-cli --version "$(cargo tree -p wasm-bindgen --depth 0 --locked | awk '{print substr($2,2)}')" --locked
       - name: Generate JavaScript bindings
         run: wasm-bindgen target/wasm32-unknown-unknown/debug/kiln_web.wasm --target web --out-dir target/debug/web-runtime
       - name: Prepare matched browser runtime bundle
@@ -259,13 +318,15 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npx playwright install --with-deps chromium
+      - name: Verify editor-authored counted loops and dictionaries in the browser
+        run: python3 tests/native/asset_script_workflow_smoke.py --web-runtime target/debug/web-runtime
       - name: Exercise rendering and input
         run: node tests/web/smoke.cjs target/debug/web-runtime
       - name: Exercise browser menus, audio, controller input and save/resume
         run: node tests/web/task7.cjs target/debug/web-runtime
       - name: Prepare a physics-disabled browser runtime for rejection coverage
         run: |
-          cargo build -p kiln-web --target wasm32-unknown-unknown --no-default-features --features fonts
+          cargo build --locked -p kiln-web --target wasm32-unknown-unknown --no-default-features --features fonts
           wasm-bindgen target/wasm32-unknown-unknown/debug/kiln_web.wasm --target web --out-dir target/web-no-physics-runtime
           target/debug/kiln-cli web-runtime --input target/web-no-physics-runtime
       - name: Exercise exported physics, joints, tile collision and save/scene restoration
@@ -291,7 +352,7 @@ jobs:
         run: python3 tools/test_clean_linux.py target/dist/kiln-portable-development.tar.gz
       - name: Upload browser UI and export evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: task7-browser-evidence
           path: |
@@ -302,5 +363,10 @@ jobs:
             target/task8-clean-linux-evidence/
             target/task8-physics-evidence/
             target/task8-material-evidence/
+            target/a03-a04-workflow/*.log
+            target/a03-a04-workflow/failure.json
+            target/a03-a04-workflow/result.json
+            target/a03-a04-workflow/editor/*.png
+            target/a03-a04-workflow/editor/*.log
             target/dist/kiln-portable-development.tar.gz
           retention-days: 7

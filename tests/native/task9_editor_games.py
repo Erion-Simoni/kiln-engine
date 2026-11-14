@@ -6,6 +6,7 @@ text and ordinary artwork come from the checked-in games. No engine test hooks.
 Requires Linux/Xvfb/xdotool/ImageMagick and built editor tools. Outputs stay outside Git.
 """
 import argparse
+import difflib
 import hashlib
 import itertools
 import json
@@ -21,6 +22,34 @@ from ui_smoke import REPO, TOOLS, executable
 from export_notices import verify_export_notices
 
 GAMES = ('emberwatch', 'switchyard', 'skybridge')
+
+
+def stop_process(process, timeout=10):
+    """Bound cleanup even when an editor refuses termination during a modal."""
+    if process is None or process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=timeout)
+
+
+def record_failure(output, game, phase, error):
+    """Retain a specific failure and expose it in hosted run annotations."""
+    message = f"{game} {phase}: {type(error).__name__}: {error}"
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=True)
+    (output/'failure.json').write_text(json.dumps({
+        'game': game, 'phase': phase, 'error_type': type(error).__name__,
+        'message': str(error),
+    }, indent=2)+'\n')
+    if os.environ.get('GITHUB_ACTIONS') == 'true':
+        escaped = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+        print('::error title=Reference-game replay::'+escaped, flush=True)
+    else:
+        print(message, file=sys.stderr, flush=True)
 
 
 class Editor:
@@ -58,7 +87,7 @@ class Editor:
         log=self.output/('player.log' if (self.output/'player.log').exists() else 'editor.log')
         return log.read_text()[-4000:] if log.exists() else 'No process log yet'
 
-    def wait(self, predicate, seconds=15):
+    def wait(self, predicate, seconds=15, *, description="Editor operation"):
         until = time.monotonic()+seconds
         while time.monotonic()<until:
             value = predicate()
@@ -67,7 +96,7 @@ class Editor:
             if self.process and self.process.poll() is not None:
                 raise RuntimeError('Editor exited: '+self.diagnostic())
             time.sleep(.1)
-        raise RuntimeError('Editor operation timed out: '+self.diagnostic())
+        raise RuntimeError(description+' timed out: '+self.diagnostic())
 
     def start(self):
         self.wait(lambda: subprocess.run([self.xdo, 'getdisplaygeometry'], env=self.env, capture_output=True).returncode == 0)
@@ -91,6 +120,12 @@ class Editor:
 
     def click(self, x, y):
         self.command('mousemove', '--window', self.window, x, y, 'click', '1')
+
+    def held_click(self, x, y):
+        # Keep press/release visible across frames, as in export_smoke.py.
+        self.command('mousemove', '--window', self.window, x, y)
+        self.command('mousedown', '1')
+        self.command('mouseup', '1')
 
     def key(self, key):
         self.command('key', '--clearmodifiers', key)
@@ -120,21 +155,25 @@ class Editor:
         # title bar and drag to a consistent origin before using widget points.
         # This is screen observation and an ordinary title-bar drag, not an
         # application state hook or an assumed hidden window position.
-        capture = subprocess.check_output([executable('import'), '-display', self.env['DISPLAY'],
-                                          '-window', self.window, '-depth', '8', 'ppm:-'], env=self.env)
-        header, pixels = capture.split(b'\n255\n', 1)
-        width, height = map(int, header.splitlines()[-1].split())
-        assert (width, height) == (1440, 900)
-        row_pixels = [pixels[(102*width+x)*3:(102*width+x)*3+3] == bytes((35,38,44)) for x in range(width)]
-        runs, start = [], 0
-        for match, group in itertools.groupby(row_pixels):
-            length = len(list(group))
-            if match and length > 200:
-                runs.append((length, start))
-            start += length
-        if not runs:
-            raise RuntimeError('Floating panel title bar not visible')
-        _, start = max(runs)
+        def title_bar():
+            capture = subprocess.check_output([executable('import'), '-display', self.env['DISPLAY'],
+                                              '-window', self.window, '-depth', '8', 'ppm:-'], env=self.env,
+                                             timeout=10)
+            header, pixels = capture.split(b'\n255\n', 1)
+            width, height = map(int, header.splitlines()[-1].split())
+            assert (width, height) == (1440, 900)
+            row_pixels = [pixels[(102*width+x)*3:(102*width+x)*3+3] == bytes((35,38,44)) for x in range(width)]
+            runs, start = [], 0
+            for match, group in itertools.groupby(row_pixels):
+                length = len(list(group))
+                if match and length > 200:
+                    runs.append((length, start))
+                start += length
+            return (max(runs)[1],) if runs else None
+
+        # Menu clicks enqueue a new floating panel; wait for its rendered title
+        # before measuring/dragging, rather than requiring the very next frame.
+        start, = self.wait(title_bar)
         if start != 33:
             self.command('mousemove', '--window', self.window, start+30, 102, 'mousedown', '1')
             self.command('mousemove', '--window', self.window, 63, 102)
@@ -168,17 +207,16 @@ class Editor:
     def save(self):
         self.click(500,78); self.key('ctrl+s'); time.sleep(.2)
 
-    def close(self):
+    def close(self, *, failed=False):
         try:
-            if self.process and self.process.poll() is None and self.window is not None:
+            if not failed and self.process and self.process.poll() is None and self.window is not None:
                 self.panel(18,262)
                 self.process.wait(timeout=10)
                 if self.process.returncode != 0:
                     raise RuntimeError('Editor normal close failed')
         finally:
-            if self.process and self.process.poll() is None:
-                self.process.terminate(); self.process.wait(timeout=10)
-            self.server.terminate(); self.server.wait(timeout=10)
+            stop_process(self.process)
+            stop_process(self.server)
             (self.output/'interactions.json').write_text(json.dumps(self.actions,indent=2)+'\n')
 
 
@@ -230,24 +268,42 @@ def author(tools, name, destination, evidence):
             editor.command('mousemove','--window',editor.window,1320,400,'click','--repeat','12','--delay','50','4')
             editor.value(1269,202,1100); editor.save()
             editor.panel(80,550)
+            # Let the moved floating panel settle and retain its visible layout
+            # before targeting Add Action; immediate clicks raced software rendering.
+            editor.shot('input_before_bindings')
             # Input Rebinding sorts actions by stable ID.
-            editor.click(80,214); editor.click(160,233); editor.press('s')
-            editor.click(80,308); editor.click(160,327); editor.press('l')
-            editor.click(80,402); editor.click(160,421); editor.press('r')
+            for index, (row, key) in enumerate(((214, 's'), (308, 'l'), (402, 'r'))):
+                action_id = f'action_{index}'
+                editor.click(80, row)
+                editor.save()
+                def actions():
+                    return tomllib.loads((destination/'kiln.toml').read_text())['action_map']['actions']
+                editor.wait(lambda: action_id in actions(), description=f"Create input {action_id}")
+                editor.held_click(160, row+19)
+                editor.shot('binding_'+action_id+'_waiting')
+                editor.press(key)
+                editor.save()
+                editor.wait(lambda: actions()[action_id]['bindings'] ==
+                            expected['action_map']['actions'][action_id]['bindings'],
+                            description=f"Bind input {action_id} to {key}")
             editor.click(149,132); editor.click(480,146)
         editor.save()
         actual=tomllib.loads((destination/'kiln.toml').read_text())
         if actual!=expected:
             (evidence/'actual-project.json').write_text(json.dumps(actual,indent=2))
             (evidence/'expected-project.json').write_text(json.dumps(expected,indent=2))
-            raise RuntimeError(name+' UI authoring did not reproduce the checked-in project')
+            difference = '\n'.join(difflib.unified_diff(
+                json.dumps(expected, indent=2, sort_keys=True).splitlines(),
+                json.dumps(actual, indent=2, sort_keys=True).splitlines(),
+                fromfile='expected', tofile='actual', n=2))
+            raise RuntimeError(name+' UI authoring did not reproduce the checked-in project\n'+difference[:2000])
         assert (base/'kiln.toml').read_bytes()==original, 'Source template changed'
         editor.shot('saved_project')
     except Exception:
         editor.shot("failure")
         raise
     finally:
-        editor.close()
+        editor.close(failed=sys.exc_info()[0] is not None)
     return {'game':name,'project':str(destination),'manifest_created_by':'native editor Save As and real authoring widgets','source_pasted_and_byte_verified':True,'project_matches_checked_in_game':True,'template_unchanged':True}
 
 
@@ -259,10 +315,13 @@ def export(tools, name, project, evidence):
         editor.panel(80,242); editor.enlarge()
         for web in (False,True):
             output=evidence/('browser game' if web else 'native game')
-            if web: editor.click(155,206)
+            if web: editor.held_click(155,206)
             successes=(evidence/'editor.log').read_text().count('Export result: Success')
-            editor.text(250,273,str(output)); editor.key('Return'); editor.click(75,346)
-            editor.wait(lambda:(output/'export.json').exists(),60)
+            editor.held_click(250,273); editor.key('ctrl+a')
+            editor.command('type','--clearmodifiers','--delay','2',str(output)); editor.key('Return')
+            editor.shot('browser_configured' if web else 'native_configured')
+            editor.held_click(75,346)
+            editor.wait(lambda:(output/'export.json').exists(),60, description=f'{name} create {"browser" if web else "native"} export receipt')
             editor.wait(lambda:(evidence/'editor.log').read_text().count('Export result: Success')>successes,60)
             verify_export_notices(tools,output,web)
             editor.shot('browser_exported' if web else 'native_exported')
@@ -270,15 +329,16 @@ def export(tools, name, project, evidence):
             # This attempt must fail without changing the successful artifact.
             before=(output/'export.json').read_bytes()
             old=(evidence/'editor.log').read_text().count('Export result: Failed')
-            editor.click(75,346)
-            editor.wait(lambda:(evidence/'editor.log').read_text().count('Export result: Failed')>old)
+            editor.held_click(75,346)
+            editor.wait(lambda:(evidence/'editor.log').read_text().count('Export result: Failed')>old,
+                        description=f"{name} reject overwrite of {'browser' if web else 'native'} export")
             assert (output/'export.json').read_bytes()==before
         editor.click(132,132)  # Close the Build / Export tab.
     except Exception:
         editor.shot("failure")
         raise
     finally:
-        editor.close()
+        editor.close(failed=sys.exc_info()[0] is not None)
     return {'game':name,'opened_saved_project':str(project),'outputs':outputs,'native_browser_notices_verified':True,'overwrite_preserved':True,'tools_absent_from_child_path':True}
 
 
@@ -292,13 +352,19 @@ def main():
     result={'scope':'Xvfb software GUI authoring/export; not physical devices','games':[]}
     for name in GAMES:
         destination=root/'projects'/name
-        if args.author:
-            destination.parent.mkdir(parents=True,exist_ok=True)
-            authored=author(args.tools.resolve(),name,destination,root/name/'authoring')
-        else:
-            shutil.copytree(REPO/'games'/name,destination)
-            authored=None
-        exported=export(args.tools.resolve(),name,destination,root/name/'export')
+        phase = 'authoring'
+        try:
+            if args.author:
+                destination.parent.mkdir(parents=True,exist_ok=True)
+                authored=author(args.tools.resolve(),name,destination,root/name/'authoring')
+            else:
+                shutil.copytree(REPO/'games'/name,destination)
+                authored=None
+            phase = 'export'
+            exported=export(args.tools.resolve(),name,destination,root/name/'export')
+        except Exception as error:
+            record_failure(root/name/phase, name, phase, error)
+            raise
         result['games'].append({'authoring':authored,'export':exported})
         (root/'result.json').write_text(json.dumps(result,indent=2)+'\n')
         print(name+' authoring/export passed',flush=True)

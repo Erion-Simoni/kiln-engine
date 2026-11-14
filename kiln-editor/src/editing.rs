@@ -475,6 +475,7 @@ pub fn propagate_prefab_in_scenes(
                     prefab_id,
                     overrides,
                 });
+            crate::scene_controls::preserve_flags(entity, &mut propagated);
             *entity = propagated;
             updated += 1;
         }
@@ -572,6 +573,7 @@ pub fn apply_prefab_instance_to_definition(
                     prefab_id: updated.id.clone(),
                     overrides,
                 });
+            crate::scene_controls::preserve_flags(instance, &mut propagated);
             *instance = propagated;
         }
     }

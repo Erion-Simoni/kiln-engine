@@ -50,6 +50,18 @@ impl ProjectLifecycle {
         Ok(current != saved)
     }
 
+    /// Refuse to replace an externally edited, deleted or unreadable manifest.
+    /// Formatting-only changes are allowed; supported document values must match.
+    pub fn require_unchanged_disk(&self, path: &std::path::Path) -> Result<(), String> {
+        let disk = crate::project_files::load(path).map_err(|error| {
+            format!("Cannot verify the saved project; use Save As to preserve your draft: {error}")
+        })?;
+        if self.is_dirty(Some(&disk.project))? {
+            return Err("Project changed outside the editor. Use Save As to preserve your draft, or discard and reopen the external version.".into());
+        }
+        Ok(())
+    }
+
     /// The operation awaiting a decision. Repeated requests cannot replace it.
     pub fn pending(&self) -> Option<&ProjectAction> {
         self.pending.as_ref()
@@ -146,5 +158,36 @@ mod external_draft_tests {
             lifecycle.resolve(SaveDecision::Discard, Ok(())).unwrap(),
             Some(ProjectAction::Exit)
         );
+    }
+}
+
+#[cfg(test)]
+mod disk_conflict_tests {
+    use super::*;
+    #[test]
+    fn semantic_external_changes_deletion_and_corruption_block_manifest_replacement() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("kiln.toml");
+        let project = Project::default();
+        crate::project_files::save(&project, &path).unwrap();
+        let mut lifecycle = ProjectLifecycle::default();
+        lifecycle.mark_saved(&project);
+        let original = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(&path, format!("# external formatting\n{original}")).unwrap();
+        lifecycle.require_unchanged_disk(&path).unwrap();
+        let mut external = project.clone();
+        external.name = "External edit".into();
+        crate::project_files::save(&external, &path).unwrap();
+        let external_bytes = std::fs::read(&path).unwrap();
+        assert!(lifecycle
+            .require_unchanged_disk(&path)
+            .unwrap_err()
+            .contains("outside"));
+        assert_eq!(std::fs::read(&path).unwrap(), external_bytes);
+        std::fs::write(&path, "broken = [").unwrap();
+        assert!(lifecycle.require_unchanged_disk(&path).is_err());
+        std::fs::remove_file(&path).unwrap();
+        assert!(lifecycle.require_unchanged_disk(&path).is_err());
+        assert!(!path.exists());
     }
 }

@@ -1,5 +1,8 @@
 # Kiln: Roadmap to GameMaker / Unity 2D Level
 
+> **Historical plan / technical reference.** The [unified engine completion plan](ENGINE_COMPLETION_PLAN.md) is authoritative for current scope, order, status and release gates. Older completion claims and package-size goals below are historical; preserve their evidence, but do not use them to close current milestones.
+
+
 **Status:** Recommended plan to follow — the 2D production-readiness roadmap for Kiln.
 **Goal:** Kiln 2D v1.0: a complete, standalone 2D game development environment, reached and verified before serious 3D development begins.
 

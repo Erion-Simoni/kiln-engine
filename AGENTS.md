@@ -1,6 +1,10 @@
 # Kiln — Agent Brief
 
-Standalone desktop game engine (editor + runtime + CLI). Light like Godot's install story; art-directed looks; working web/native exports. **M0–M28 and the 2D-first gate (G-1 … G-6) are complete; M29 (3D foundation) is in progress** — the `3d` feature and mesh/material types landed in `kiln-core` (commit `4556431`).
+Standalone desktop game engine (editor + runtime + CLI). Current completion scope,
+ordering and gates live in `docs/ENGINE_COMPLETION_PLAN.md`. 2D release acceptance
+is still open; full 3D remains gated on G2D. Existing 3D types and visual preview
+are scaffolding, not a completed 3D runtime. Historical milestone claims below
+must be checked against the authoritative plan and recorded evidence.
 
 ## Crate map (planned)
 
@@ -38,7 +42,7 @@ just run      # editor or demo window
 just web      # wasm demo in browser
 just size     # optional artifact size report; no release-size target
 just assets   # import / pack
-just package  # installers via cargo-dist
+just package  # experimental binary archives; complete bundles use portable-editor
 ```
 
 ## Coding rules
@@ -59,7 +63,7 @@ just package  # installers via cargo-dist
 ## Session protocol
 
 1. Read `/AGENTS.md` and `/docs/STATE.md` first.
-2. Read `/ROADMAP_FULL_M14_PLUS.md` for the detailed milestone plan.
+2. Read `/docs/ENGINE_COMPLETION_PLAN.md` for the authoritative milestone plan; older roadmap files are historical references.
 3. Confirm current milestone; do only that milestone.
 4. Update `STATE.md` before finishing (Done / Next / Known issues).
 
@@ -74,8 +78,8 @@ just package  # installers via cargo-dist
 ## Context pointers
 
 - Architecture: `docs/ARCHITECTURE.md`
-- Roadmap: `docs/ROADMAP.md`
-- M14+ milestones: `ROADMAP_FULL_M14_PLUS.md`
+- Active plan: `docs/ENGINE_COMPLETION_PLAN.md`
+- Historical milestones: `docs/ROADMAP.md`, `ROADMAP_FULL_M14_PLUS.md`
 - ADRs: `docs/DECISIONS.md`
 - Budgets: `docs/BUDGETS.md`
 - Handoff: `docs/STATE.md`

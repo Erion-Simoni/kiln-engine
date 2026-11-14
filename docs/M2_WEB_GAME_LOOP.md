@@ -1,5 +1,8 @@
 # M2 Web Game Loop — Design Doc
 
+> **Historical plan / technical reference.** The [unified engine completion plan](ENGINE_COMPLETION_PLAN.md) is authoritative for current scope, order, status and release gates. Older completion claims and package-size goals below are historical; preserve their evidence, but do not use them to close current milestones.
+
+
 **Problem:** `kiln-web/src/lib.rs` is a stub. It initializes a console panic hook, reports `crossOriginIsolated` / worker availability, and runs a background ping job — but it draws nothing. The 2D-first gate (M2) promises a working 2D web export (WASM + WebGPU/WebGL2). This doc specifies how to wire `kiln-web` to the real game loop so a Kiln 2D game runs in the browser.
 
 **Scope:** Add a `run` entry point that creates a `wgpu` surface on a `<canvas>`, initializes `Renderer` + `SpriteRenderer`, loads a project (`kiln.toml` + PNG assets), runs the `GameLoop` + `SliceSession`, and presents each frame. No `cargo` is available here, so this is a design doc to implement when `cargo` is present.

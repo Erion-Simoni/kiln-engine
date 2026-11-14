@@ -1,33 +1,59 @@
 # Kiln Session Handoff
 
-**Active focus:** Resolve PR #21's master conflicts and verify the combined Task 9 editor/reference-game work. Task 9 remains IN PROGRESS for independent tutorial, hardware, stress and release gates. Task 8 distribution/platform review remains open; full 3D is paused.
-**Branch:** feat/task9-editor-reference-games. Integration commit f7c8f9da50fa2d8e32e8811250c4e199870838cf is pushed and its exact remote SHA verified; public PR #21 head matches. It merges reference-game HEAD 4628429 and master 9da5551 without rewriting history or merging the PR. New source-pinned CI run 43404644543 is in progress; later documentation-only checkpoint commits do not change that source identity.
-**Owner preferences:** no package/release-size goal; performance/resource and bounded-input requirements remain. Kiln code uses MIT OR Apache-2.0; no license decision is pending.
+Active instruction: finish A01 through A04; do not close a gate without its listed
+acceptance. Branch `fix/a01-ci-baseline`, baseline `27fa148`. Full 3D stays gated
+on G2D; no release-size ceiling; MIT OR Apache-2.0 remains settled.
 
-## Done
+## Done in this checkpoint
 
-- Reconciled the five conflicting files: DECISIONS.md, STATE.md, app.rs, lib.rs and script_editor.rs. Preserve master's Quick Actions, workspace polish, default source tab, inspector/asset script opening, movement starter and KilnScript control flow/short-circuit changes alongside all three reference games and general authoring improvements.
-- One ScriptEditor buffer now lives in EditorShell and serves inspector, assets, tabs, Save/Save As, Play and export. Keep generic project-relative Open/New, bounded text, import-aware validation, atomic saves and external-change detection. Refocusing the same dirty file preserves the draft; switching files remains guarded.
-- Include source drafts in normal project Save/Discard/Cancel. A failed save keeps the prompt/draft; Discard clears the shared buffer before loading a replacement. Existing crash snapshots cover project documents, not unsaved source text.
-- Actual GUI replay exposed duplicated Animation Editor panels/egui widget-ID collisions. Menu routes now reuse an existing panel; regression covers default and floating panel reopening. Keep the upstream default layout. The authoring driver follows the merged theme, closes default authoring tabs before floating them, and uses visible title-bar pixels plus ordinary dragging to handle staggered windows.
-- Preserve all upstream ADRs (0073–0075); renumber the reference-game decision to 0076 and document this integration in ADR-0077. No engine dependency, save/project format or performance-budget exception.
-- Keep games/emberwatch (combat/relay), games/switchyard (three circuits), games/skybridge (two physical levels), real editor authoring/export and native/browser gameplay drivers. These are small reference games, not all Task 9 acceptance.
+- Persistent optional EditorFlags components implement inherited lock/hide.
+  Locks guard hierarchy, component, transform, sprite-property and Sprite Editor
+  paths. Hide filters edit-mode sprite/tile/particle drawing and collider outlines;
+  player/Play rendering ignores editor hide. Hierarchy context menus unlock/show.
+  Scene snapshots and prefab propagation/revert preserve instance editor flags.
+- Viewport sprite picking follows painter order and actual rotated/pivoted/scaled
+  quads. Q-mode marquee supports additive selection. World-position alignment of
+  independent selections is one atomic undo command, without moving children twice.
+- Real widget acceptance passed: viewport select/copy, group alignment and undo/
+  redo, hide in Edit/show in Play, lock rejecting a viewport drag, two scenes,
+  real 30-second autosave, forced kill/restore/save and identical restart properties.
+  Raw evidence: target/a02-scene-controls/result.json and editor/reopened captures.
+- Added regressions for inherited guards, transaction rollback/history, parent/
+  child alignment, negative-scale/rotated picking, player visibility and metadata
+  preservation on snapshot, prefab propagation and revert.
+- A01 browser-export radio/path entry now uses separate held events. Export requests
+  log their actual target/output; receipt waits name the failed game/target.
+  New editor-to-browser acceptance publishes exact authoring/browser exceptions,
+  retaining browser logs and all assertions. Scene-controls smoke is added to CI.
 
 ## Validation
 
-- Integrated just check passes: format, strict workspace/all-target Clippy, workspace and separate audio sample checks. just test: 700 passed, zero skipped, including all tests from both branches and the new duplicate-panel regression. All 29 Python tests, workflow actionlint and changed Python/JS syntax checks pass.
-- Rebuilt native editor/CLI/player and WASM kiln-web from the merged source; packaged and verified a matching installation. Development archive records preparing HEAD 4628429 with source_dirty=true, not captured clean release provenance. Cargo.lock is unchanged; no dependency added.
-- Fresh authoring replay reproduces all serialized project values and exact source bytes for all three games through real widgets. All six Native/Browser exports pass notice/runtime verification and overwrite preservation, with no build tools in child PATH. All native and browser gameplay passes: combat victory, puzzle fresh-process/reload Continue, and both physical platformer levels with saved-position restoration. See docs/evidence/task9-games/merge-validation.json. Incomplete virtual-display startup attempts are excluded; native acceptance reran with Xvfb -noreset and failed-start cleanup.
-- Logs/captures stay under target/task9-merged-acceptance, target/task9-merged-native-accepted, target/task9-merged-browser and target/task9-merge-quality-commit.log. Earlier docs/evidence/task9-games/local-validation.json remains the historical pre-master 680-test checkpoint.
-- Previous hosted run 43317157963 (source 135c7f1) passed strict gates/tool packaging but failed authoring; gameplay was skipped. Recorded in pre-merge-hosted-failure.json. Authenticated logs/artifacts were unavailable, so no exact failure cause or hosted fix is claimed from it.
+- just check passed (strict workspace all-target Clippy, fmt, native/audio checks).
+- Workspace suite: 731 passed, zero skipped; four focused scene-controls tests
+  include inherited guards, alignment, player visibility and prefab-flag retention.
+- 34 Python regressions and actionlint passed. Native editor/player/CLI built.
+- tests/native/scene_controls_smoke.py passed on actual Linux Xvfb/software graphics.
+  Existing A02–A04 baseline evidence remains docs/evidence/A02_A04_AUTHORING.md.
 
-## Next / known issues
+## A01 hosted observations / remaining work
 
-1. Observe https://github.com/Erion-Simoni/kiln-engine/actions/runs/43404644543 for source f7c8f9d to completion. It is in progress at merge-hosted-checkpoint.json; no completed hosted acceptance is claimed. Local software acceptance is complete. PR #21 remains open; current master is included and the remote source was verified.
-2. Another developer must follow the tutorial unaided. Automation is not independent human acceptance. Test long sessions, large projects, recovery and clean exports.
-3. Measure actual reference-hardware startup/frame time/memory. No physical i7-6600U/Intel HD 520, audible audio device or controller is attached here.
-4. Finish Task 8's full Windows GUI workflow, other physical GPUs, macOS, SDK/dependency/exact-linked-code review, independent artifact/signature/capture review, OS signing and public release preparation. Previous Task 8 a0f1d85 Linux/Windows candidates passed but do not validate Task 9. Local Linux tools require GLIBC 2.39/system libraries; binaries are not OS signed.
+On 27fa148: Windows candidate 43574843434 PASSED (7m47); Linux candidate
+43574843462 was running. General CI 43574843465 FAILED only in browser job
+132386754460, step 13: Verify editor-authored counted loops and dictionaries in
+browser. All three-OS checks/build/archive groups, docs, Rust/Python and native UI
+passed. Reference games 43574843470 FAILED after Switchyard native export and its
+expected overwrite rejection, before the browser receipt. Binding failure progressed.
+Public browser-step logs return 404; exact browser exception is not established.
+The diagnostic and held-event followups need fresh matching-source hosted results.
 
-## Boundaries
+Continue A03 resource/dependency coverage, prefab nesting/variants/atlas production
+workflow and platform presets; then A04 enums, scheduler, source tooling and actual
+live source debugging/graph acceptance. A02's broad combined property/transform and
+cross-platform acceptance remains open despite the newly passing Linux workflow.
+Keep docs/ENGINE_COMPLETION_PLAN.md authoritative; A01–A04 are not marked accepted.
 
-Xvfb/SwiftShader/ALSA-null/Chromium checks are local software evidence, not physical/Windows/macOS/performance proof. api.github.com is excluded by enforced cloud policy; public GitHub observations and managed Git fetch/push work. No credentials were extracted or policies bypassed. No PR merge, release publication or binary Git payload is authorized by this conflict fix. Package size remains informational.
+Toolchain: source /workspace/.kiln-tools/activate.sh; use CARGO_INCREMENTAL=0,
+CARGO_PROFILE_DEV_DEBUG=0, CARGO_PROFILE_TEST_DEBUG=0. Rust 1.99.1, nextest0.9.151;
+Chromium local tests use CHROMIUM_PATH=/usr/bin/chromium. just check before commits.
+Git push/public GitHub HTML work; authenticated API is Forbidden. Software targets
+are not physical-device certification. Do not kill unrelated old editor processes.

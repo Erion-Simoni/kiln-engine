@@ -1,5 +1,8 @@
 # Kiln Editor Fix Plan
 
+> **Historical plan / technical reference.** The [unified engine completion plan](ENGINE_COMPLETION_PLAN.md) is authoritative for current scope, order, status and release gates. Older completion claims and package-size goals below are historical; preserve their evidence, but do not use them to close current milestones.
+
+
 **Goal:** Get the editor compiling and opening so it can be used.
 **Approach:** Fix errors session by session, never adding new errors. Each session ends with a working (or closer-to-working) build.
 **Architecture inspiration:** Godot's `Editor` + `EditorInterface` pattern — `EditorApp` owns all state, `TabViewer` holds references to what it needs for rendering, and UI logic delegates cleanly.

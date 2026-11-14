@@ -99,7 +99,7 @@ def main():
 
         def designer():
             click(80, 12)
-            click(105, 588)
+            click(105, 631)
             # Resize the floating dock using real drag events.
             command('mousemove', '--window', window, 365, 510)
             command('mousedown', 1)
@@ -110,18 +110,18 @@ def main():
         original = manifest_data()['ui']
         designer()
         shot('ui_designer')
-        click(135, 354)  # Add Label.
+        click(145, 375)  # Add Label.
         shot('label_added')
-        command('mousemove', '--window', window, 130, 510)
+        command('mousemove', '--window', window, 130, 531)
         command('mousedown', 1)
-        for point in [(150,530),(180,550),(210,570)]:
+        for point in [(150,551),(180,571),(210,591)]:
             command('mousemove', '--window', window, *point)
         command('mouseup', 1)
         shot('label_dragged')
         # Exercise document undo/redo through the specialist panel.
-        click(60, 198)
+        click(60, 207)
         shot('label_undo')
-        click(124, 198)
+        click(124, 207)
         shot('label_redo')
         click(1084, 98)
         key('ctrl+s')

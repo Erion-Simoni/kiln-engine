@@ -21,6 +21,7 @@ pub enum Token {
     Let,
     Fn,
     While,
+    For,
     Break,
     Continue,
 
@@ -215,6 +216,7 @@ impl<'a> Lexer<'a> {
             "let" => Token::Let,
             "fn" => Token::Fn,
             "while" => Token::While,
+            "for" => Token::For,
             "break" => Token::Break,
             "continue" => Token::Continue,
             _ => Token::Identifier(ident),

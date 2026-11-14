@@ -1952,3 +1952,90 @@ checks remain separate Task 8 gates.
 - Reuse an existing dock panel when menus reopen it. Master adds default animation
   and source tabs; duplicate copies cause egui widget-ID collisions and ambiguous
   authoring. Keep the default layout and allow a floating panel after closing it.
+
+### ADR-0078 — Explicit experimental binary archive distribution (2026-11-13)
+
+- The legacy cargo-dist.toml filename is not loaded by cargo-dist 0.33.0. Put
+  distribution configuration in supported Cargo workspace/package metadata.
+- Opt in only kiln-editor, kiln-cli and kiln-player; exclude sample/demo binaries.
+  Configure desktop binary archives and upload target/distrib, the tool's actual
+  output. Do not invoke the nonexistent `cargo dist upload` command.
+- Archives are experimental separate tools, not complete editor installations.
+  Keep complete matched tools/assets/templates/notices/browser runtime in the
+  existing portable Linux/Windows candidate workflows. DMG/AppImage/MSI installers
+  remain planned; do not call executable archives installers or release acceptance.
+- No new dependency, runtime architecture or package-size goal. A future installer
+  must wrap the full portable contract and pass target-specific install/uninstall,
+  signing and clean-machine acceptance before publication is enabled.
+
+### ADR-0079 — Recover unsaved gameplay source alongside project drafts (2026-11-13)
+
+- The owner requested continuing all tasks in batches. While A01 hosted verification
+  runs, implement the independent A02 draft-recovery substep; keep both milestone
+  acceptance gates open until their own checks pass. Full 3D remains gated on G2D.
+- Store a versioned recovery envelope containing Project and an optional script
+  draft (loaded relative path, unsaved text, original disk baseline). Continue to
+  read legacy project-only snapshots. This changes editor sidecars, not project,
+  game-save or export formats, and adds no dependency.
+- Recovery never writes gameplay source. Restore into the shared Script Editor
+  buffer after validating existing path/link/size rules; preserve the original disk
+  baseline so external edits still block Save. If disk already equals recovered
+  text, treat that text as saved. Failed restore retains the prompt and sidecar.
+- Preserve script drafts even if the project manifest was saved more recently;
+  retain that newer saved project rather than restoring stale scene contents.
+- Write sidecars through unique same-directory temporary files and atomic replace.
+  Keep recovery until successful Save or explicit Discard. Escape must not delete
+  unsaved recovery data. Validate actual force-close/restart/widget recovery as
+  well as roundtrip, external-change, invalid-path and legacy-format regressions.
+
+### ADR-0080 — Complete authoring, asset and script work in staged commands (2026-11-14)
+
+- The owner explicitly requested continuing through A04, overriding the one-
+  milestone session default. Keep individual acceptance gates and evidence honest;
+  full 3D remains gated on G2D. Implement and test small steps across A02–A04.
+- Entity clipboard operations use the authoritative scene command/history model,
+  not direct ECS edits. Capture selected subtrees, preserve external-parent world
+  poses, remap stable internal references and prefab instance identities, and
+  reject invalid/missing dependencies before mutation. Paste is one undo step.
+- Keep project/game formats compatible where practical; new persisted authoring
+  metadata needs explicit backward defaults and must not alter game visibility.
+- Reuse existing asset IDs, import settings, prefab and language/IR facilities;
+  do not invent parallel scene models or duplicate schedulers. New language/debug
+  capabilities must retain bounded execution and native/browser semantics.
+- No new dependency or package-size goal is authorized by this decision.
+
+### ADR-0081 — Bounded dictionary values in the shared gameplay VM (2026-11-14)
+
+- Add first-class string-keyed dictionary values to the existing IR value model,
+  with deterministic key order and recursive equality. Expose value-returning
+  dict_new/get/set/has/remove/keys through the shared host registry, like arrays.
+- Enforce existing state-value depth/item/string limits and 256-byte dictionary
+  keys. Extend tagged saved values so dictionaries survive save/load and runtime
+  snapshots without losing numeric types. Older engines reject unknown variants
+  rather than silently converting them. No parallel interpreter or dependency.
+- Counted for loops lower to existing jump/local instructions; continue reaches
+  the increment, break exits the innermost loop, and initializer locals are scoped
+  to the loop (including shadowing an outer name). Existing VM budgets still apply.
+- The VM owns configured and remaining instruction limits; both normal execution
+  and bytecode debugger steps consume the same budget. Resume skips only the
+  breakpoint just reported; step-over/out follow actual bytecode call depth.
+  This repairs the bytecode debugger and does not establish source-level/live
+  gameplay debugging or evaluation of conditional watches.
+
+### ADR-0082 — Finish A01–A04 with persistent authoring controls (2026-11-14)
+
+- The owner's explicit instruction to finish A01 through A04 authorizes staged
+  work across these milestones. Keep existing scope and acceptance gates; do not
+  relabel omitted features as optional or claim a pending target has passed.
+- Store editor-only locked/hidden flags as an optional EditorFlags component in
+  the authoritative scene document. Missing flags mean unlocked/visible; parent
+  flags inherit down the hierarchy. Players ignore these authoring flags.
+- Locks reject direct property/component/hierarchy edits through command paths;
+  unlocking is always possible from hierarchy controls. Hiding affects edit-mode
+  drawing/picking only, including inherited children; Play uses normal visibility.
+- Viewport picking/marquee and alignment reuse runtime sprite geometry and stable
+  scene IDs. Alignment is explicitly alignment of world-space transform positions,
+  not sprite edges. Each group alignment is one undo transaction; descendants of
+  selected ancestors retain their local transforms rather than moving twice.
+- New controls require real widget/save/reopen and negative-command regressions.
+  Continue using the existing dependencies, scene history and host/IR systems.

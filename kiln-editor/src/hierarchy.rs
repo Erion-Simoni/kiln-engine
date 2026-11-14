@@ -9,6 +9,11 @@ use kiln_core::project::{Component, Project, Scene};
 /// Action requested by the hierarchy panel.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HierarchyAction {
+    SetEditorFlags {
+        entity_id: String,
+        locked: bool,
+        hidden: bool,
+    },
     /// User wants to add a new entity with the given name.
     AddEntity(String),
     /// User wants to remove the entity with the given project ID.
@@ -108,6 +113,15 @@ impl HierarchyPanel {
         self.select_primary(entity_id);
     }
 
+    /// Select a pasted group while retaining the first entity as inspector target.
+    pub fn select_many(&mut self, ids: &[String]) {
+        self.selected_ids = ids.to_vec();
+        self.selected_id = ids.first().cloned();
+        for node in &mut self.nodes {
+            node.selected = self.selected_ids.contains(&node.entity_id);
+        }
+    }
+
     /// Add or remove an entity from the current selection.
     pub fn toggle_select(&mut self, entity_id: &str) {
         if let Some(index) = self.selected_ids.iter().position(|id| id == entity_id) {
@@ -166,6 +180,11 @@ pub fn render_hierarchy_panel(
     scene_id: &str,
 ) -> Option<HierarchyAction> {
     let mut action = None;
+    let flags = project
+        .scenes
+        .get(scene_id)
+        .map(crate::scene_controls::resolved_flags)
+        .unwrap_or_default();
 
     ui.add(
         egui::TextEdit::singleline(&mut state.filter)
@@ -209,6 +228,51 @@ pub fn render_hierarchy_panel(
                             .sense(egui::Sense::click_and_drag()),
                     )
                     .on_hover_text(&node.entity_id);
+                response.context_menu(|ui| {
+                    let own = project
+                        .scenes
+                        .get(scene_id)
+                        .map(|s| crate::scene_controls::own_flags(s, &node.entity_id))
+                        .unwrap_or_default();
+                    if ui
+                        .button(if own.locked {
+                            "Unlock entity"
+                        } else {
+                            "Lock entity"
+                        })
+                        .clicked()
+                    {
+                        action = Some(HierarchyAction::SetEditorFlags {
+                            entity_id: node.entity_id.clone(),
+                            locked: !own.locked,
+                            hidden: own.hidden,
+                        });
+                        ui.close_menu();
+                    }
+                    if ui
+                        .button(if own.hidden {
+                            "Show in editor"
+                        } else {
+                            "Hide in editor"
+                        })
+                        .clicked()
+                    {
+                        action = Some(HierarchyAction::SetEditorFlags {
+                            entity_id: node.entity_id.clone(),
+                            locked: own.locked,
+                            hidden: !own.hidden,
+                        });
+                        ui.close_menu();
+                    }
+                    if let Some(flags) = flags.get(&node.entity_id) {
+                        if flags.locked {
+                            ui.weak("Locked (including inherited locks)");
+                        }
+                        if flags.hidden {
+                            ui.weak("Hidden in edit mode; visible in Play");
+                        }
+                    }
+                });
                 if response.drag_started() {
                     response.dnd_set_drag_payload(node.entity_id.clone());
                 }

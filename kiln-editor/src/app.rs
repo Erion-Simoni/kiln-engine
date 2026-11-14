@@ -68,7 +68,7 @@ struct SceneClosePrompt {
 
 struct RecoveryPrompt {
     project_path: PathBuf,
-    project: Project,
+    snapshot: Result<crate::recovery::RecoverySnapshot, String>,
 }
 
 enum ProjectRequest {
@@ -161,6 +161,9 @@ pub enum EditorError {
 
 #[derive(Debug, Clone)]
 enum MenuAction {
+    Align(crate::scene_controls::Alignment),
+    CopyEntities,
+    PasteEntities,
     Exit,
     NewProject,
     OpenProject,
@@ -727,6 +730,7 @@ impl EditorApp {
             .project_path
             .clone()
             .ok_or("No project file open. Use Save As first.")?;
+        self.lifecycle.require_unchanged_disk(&path)?;
         let project = self.project_to_save()?;
         self.shell.script_editor.save()?;
         let path = crate::project_files::save(&project, &path)?;
@@ -758,9 +762,13 @@ impl EditorApp {
             .project_path
             .as_ref()
             .ok_or("Open or create a project before Save As")?;
+        if path.canonicalize().ok().as_ref() == Some(source) {
+            self.lifecycle.require_unchanged_disk(source)?;
+        }
         let project = self.project_to_save()?;
         let path = crate::project_files::save_as(&project, source, &path)?;
         self.shell.script_editor.reset();
+        self.shell.entity_clipboard = None;
         self.prefab_apply_undo.clear();
         self.prefab_apply_redo.clear();
         let _ = crate::recovery::clear(&path);
@@ -788,6 +796,7 @@ impl EditorApp {
         self.shell.script_editor.require_saved()?;
         let loaded = crate::project_files::load(&path)?;
         self.shell.script_editor.reset();
+        self.shell.entity_clipboard = None;
         self.prefab_apply_undo.clear();
         self.prefab_apply_redo.clear();
         self.finish_transform_edit();
@@ -800,13 +809,13 @@ impl EditorApp {
         self.prefab_editor
             .state
             .replace_prefabs(project.prefabs.clone());
-        let recovery = match crate::recovery::load_if_newer(&path) {
-            Ok(recovery) => recovery.map(|(_, project)| project),
+        let recovery = match crate::recovery::load_snapshot_if_newer(&path) {
+            Ok(recovery) => recovery.map(|(_, snapshot)| Ok(snapshot)),
             Err(error) => {
                 self.console_log.push(format!(
-                    "[WARN] Ignoring unreadable recovery snapshot: {error}"
+                    "[WARN] Keeping unreadable recovery snapshot: {error}"
                 ));
-                None
+                Some(Err(error))
             }
         };
         self.scenes = SceneWorkspace::open(&project);
@@ -819,9 +828,9 @@ impl EditorApp {
             .add_recent(path.clone(), project.name.clone());
         self.project_path = Some(path.clone());
         self.current_project = Some(project);
-        self.pending_recovery = recovery.map(|project| RecoveryPrompt {
+        self.pending_recovery = recovery.map(|snapshot| RecoveryPrompt {
             project_path: path.clone(),
-            project,
+            snapshot,
         });
         self.last_autosave = Instant::now();
 
@@ -905,9 +914,15 @@ impl EditorApp {
         } else {
             Ok(())
         };
+        if decision == SaveDecision::Discard {
+            if let Some(path) = self.project_path.as_deref() {
+                crate::recovery::clear(path)?;
+            }
+        }
         if let Some(action) = self.lifecycle.resolve(decision, saved)? {
             if decision == SaveDecision::Discard {
                 self.shell.script_editor.reset();
+                self.shell.entity_clipboard = None;
             }
             self.execute_project_action(action)?;
         }
@@ -1630,7 +1645,18 @@ impl EditorApp {
             crate::entity_command::EntityEdit::Delete { entity_id } => Some(entity_id.as_str()),
             _ => None,
         };
+        let before_count = scene.entities.len();
         let selected = command.execute(&mut scene, project, &mut self.scenes.history)?;
+        let pasted_ids = matches!(
+            &command.edit,
+            crate::entity_command::EntityEdit::Paste { .. }
+        )
+        .then(|| {
+            scene.entities[before_count..]
+                .iter()
+                .map(|entity| entity.id.clone())
+                .collect::<Vec<_>>()
+        });
         if matches!(
             command.edit,
             crate::entity_command::EntityEdit::CreateSprite { .. }
@@ -1645,6 +1671,9 @@ impl EditorApp {
         if let Some(id) = selected {
             self.selected_entity = self.entity_id_to_hecs.get(&id).copied();
             self.hierarchy_panel.select(&id);
+        }
+        if let Some(ids) = pasted_ids {
+            self.hierarchy_panel.select_many(&ids);
         }
         Ok(())
     }
@@ -2036,16 +2065,32 @@ impl EditorApp {
             self.last_autosave = Instant::now();
             return Ok(());
         }
-        let Some(prompt) = self.pending_recovery.take() else {
-            return Ok(());
-        };
+        let snapshot = prompt.snapshot.as_ref().map_err(Clone::clone)?;
+        let recovered_project = snapshot.project.clone();
+        let saved_project = self.current_project.clone().ok_or("No project loaded")?;
+        let recovered_script = snapshot
+            .script
+            .as_ref()
+            .map(|draft| {
+                crate::script_editor::ScriptEditor::from_recovery(
+                    prompt
+                        .project_path
+                        .parent()
+                        .ok_or("Missing project directory")?,
+                    draft,
+                )
+            })
+            .transpose()?;
+        self.pending_recovery = None;
         {
-            let saved_project = self.current_project.clone().ok_or("No project loaded")?;
-            self.current_project = Some(prompt.project.clone());
-            self.scenes = SceneWorkspace::open(&prompt.project);
+            self.current_project = Some(recovered_project.clone());
+            self.scenes = SceneWorkspace::open(&recovered_project);
             self.scenes.set_saved_baselines(&saved_project);
             self.lifecycle.mark_saved(&saved_project);
             self.reset_scene_view();
+            if let Some(editor) = recovered_script {
+                self.shell.script_editor = editor;
+            }
             self.console_log
                 .push("[INFO] Recovered unsaved project changes".into());
         }
@@ -2190,6 +2235,21 @@ impl winit::application::ApplicationHandler for EditorApp {
 impl EditorApp {
     fn render_frame(&mut self) {
         self.build_panel.poll();
+        if self.play.is_none() && self.pending_recovery.is_none() {
+            let changed = self.asset_browser.poll_changes();
+            if changed
+                .iter()
+                .any(|path| path.to_ascii_lowercase().ends_with(".png"))
+            {
+                self.upload_scene_textures();
+            }
+            if !changed.is_empty() {
+                self.console_log.push(format!(
+                    "[INFO] Refreshed {} changed project assets",
+                    changed.len()
+                ));
+            }
+        }
         if !self
             .project_requests
             .iter()
@@ -2375,6 +2435,12 @@ impl EditorApp {
             }
         }
 
+        let authoring_flags = self
+            .current_project
+            .as_ref()
+            .and_then(|p| self.scenes.active_id().and_then(|id| p.scenes.get(id)))
+            .map(crate::scene_controls::resolved_flags)
+            .unwrap_or_default();
         let project_blocked = self.lifecycle.pending().is_some();
         let project_dirty = self
             .authoring_document()
@@ -2386,7 +2452,11 @@ impl EditorApp {
                 if self.play.is_none() && project_dirty {
                     if self.last_autosave.elapsed() >= std::time::Duration::from_secs(30) {
                         if let Ok(Some(project)) = self.authoring_document() {
-                            if let Err(error) = crate::recovery::save(&path, &project) {
+                            if let Err(error) = crate::recovery::save_with_script(
+                                &path,
+                                &project,
+                                self.shell.script_editor.recovery_draft(),
+                            ) {
                                 self.console_log.push(format!(
                                     "[WARN] Could not write recovery snapshot: {error}"
                                 ));
@@ -2482,6 +2552,22 @@ impl EditorApp {
             self.shell.quick_actions.open = false;
         }
 
+        if !project_blocked && self.play.is_none() && !ctx.wants_keyboard_input() {
+            let events = ctx.input(|i| i.events.clone());
+            for event in events {
+                match event {
+                    egui::Event::Copy => menu_actions.push(MenuAction::CopyEntities),
+                    egui::Event::Paste(text)
+                        if text.starts_with(crate::entity_clipboard::PREFIX) =>
+                    {
+                        self.shell.entity_clipboard = Some(text);
+                        menu_actions.push(MenuAction::PasteEntities);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         // Top menu bar
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             if project_blocked {
@@ -2527,6 +2613,27 @@ impl EditorApp {
 
                 ui.menu_button("Edit", |ui| {
                     if ui
+                        .add_enabled(
+                            !self.hierarchy_panel.selected_ids.is_empty() && self.play.is_none(),
+                            egui::Button::new("Copy Entities"),
+                        )
+                        .clicked()
+                    {
+                        menu_actions.push(MenuAction::CopyEntities);
+                        ui.close_menu();
+                    }
+                    if ui
+                        .add_enabled(
+                            self.shell.entity_clipboard.is_some() && self.play.is_none(),
+                            egui::Button::new("Paste Entities"),
+                        )
+                        .clicked()
+                    {
+                        menu_actions.push(MenuAction::PasteEntities);
+                        ui.close_menu();
+                    }
+                    ui.separator();
+                    if ui
                         .add_enabled(self.scenes.history.can_undo(), egui::Button::new("Undo"))
                         .clicked()
                     {
@@ -2541,6 +2648,19 @@ impl EditorApp {
                         ui.close_menu();
                     }
                     ui.separator();
+                    ui.add_enabled_ui(
+                        self.play.is_none() && self.hierarchy_panel.selected_ids.len() > 1,
+                        |ui| {
+                            ui.menu_button("Align World Positions", |ui| {
+                                for (mode, label) in crate::scene_controls::Alignment::ALL {
+                                    if ui.button(label).clicked() {
+                                        menu_actions.push(MenuAction::Align(mode));
+                                        ui.close_menu();
+                                    }
+                                }
+                            });
+                        },
+                    );
                     if ui.button("Preferences...").clicked() {
                         open_panel(&mut self.dock_state, Tab::Preferences);
                         ui.close_menu();
@@ -2938,6 +3058,7 @@ impl EditorApp {
                         current_project: &mut self.current_project,
                         project_requests: &mut self.project_requests,
                         project_blocked,
+                        authoring_flags: &authoring_flags,
                         play: self.play.as_mut(),
                         scenes: &mut self.scenes,
                         entity_textures: &self.entity_textures,
@@ -3059,10 +3180,27 @@ impl EditorApp {
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .show(ctx, |ui| {
-                    ui.label("A newer recovery snapshot was found for this project.");
+                    ui.label("Unsaved changes were found for this project.");
                     ui.label("Restore it to continue from your last autosave.");
+                    let snapshot = self.pending_recovery.as_ref().map(|p| &p.snapshot);
+                    if let Some(Err(error)) = snapshot {
+                        ui.colored_label(egui::Color32::LIGHT_RED, error);
+                        ui.label("The recovery file is kept until you explicitly discard it.");
+                    }
+                    if snapshot
+                        .and_then(|s| s.as_ref().ok())
+                        .is_some_and(|s| s.script.is_some())
+                    {
+                        ui.label("Your unsaved script text is included.");
+                    }
                     ui.horizontal(|ui| {
-                        if ui.button("Restore").clicked() {
+                        if ui
+                            .add_enabled(
+                                snapshot.is_some_and(Result::is_ok),
+                                egui::Button::new("Restore"),
+                            )
+                            .clicked()
+                        {
                             self.project_requests
                                 .push(ProjectRequest::ResolveRecovery(true));
                         }
@@ -3072,10 +3210,7 @@ impl EditorApp {
                         }
                     });
                 });
-            if ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
-                self.project_requests
-                    .push(ProjectRequest::ResolveRecovery(false));
-            }
+            // Recovery is discarded only by the explicit button, never Escape.
         }
 
         // A hidden canvas or a release outside its bounds must still end the drag.
@@ -3147,6 +3282,8 @@ impl EditorApp {
 
         let full_output = ctx.end_pass();
         let paint_jobs = ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
+        self.egui_winit
+            .handle_platform_output(&gpu.window, full_output.platform_output);
 
         let screen_descriptor = egui_wgpu::ScreenDescriptor {
             size_in_pixels: [size.width, size.height],
@@ -3264,10 +3401,16 @@ impl EditorApp {
                 let camera = &scene_camera;
                 let view_bounds = camera.view_bounds();
                 let _ = kiln_runtime::update_global_transforms(&mut self.world);
-                for (texture, instance) in kiln_runtime::visual::collect_scene_draws_with_materials(
+                for (texture, instance) in kiln_runtime::visual::collect_scene_draws_filtered(
                     &self.world,
                     view_bounds,
                     |name| gpu.scene_view_sprite_renderer.material_id(name),
+                    |source| {
+                        self.is_playing
+                            || !source
+                                .and_then(|id| authoring_flags.get(id))
+                                .is_some_and(|f| f.hidden)
+                    },
                 ) {
                     gpu.scene_view_sprite_renderer
                         .push_textured(texture, instance);
@@ -3434,6 +3577,54 @@ impl EditorApp {
         // Execute menu actions after UI pass (borrows are released)
         for action in menu_actions {
             match action {
+                MenuAction::Align(alignment) => {
+                    if let Some(scene_id) = self.scenes.active_id().map(str::to_owned) {
+                        let command = crate::entity_command::EntityCommand {
+                            scene_id,
+                            edit: crate::entity_command::EntityEdit::Align {
+                                entity_ids: self.hierarchy_panel.selected_ids.clone(),
+                                alignment,
+                            },
+                        };
+                        if let Err(error) = self.apply_entity_command(command) {
+                            self.project_error = Some(error);
+                        }
+                    }
+                }
+                MenuAction::CopyEntities => {
+                    let result = self
+                        .current_project
+                        .as_ref()
+                        .ok_or("No project loaded".to_string())
+                        .and_then(|project| {
+                            crate::entity_clipboard::copy(
+                                project,
+                                &self.scene_from_world(),
+                                &self.hierarchy_panel.selected_ids,
+                            )
+                        });
+                    match result {
+                        Ok(text) => {
+                            self.egui_winit.set_clipboard_text(text.clone());
+                            self.shell.entity_clipboard = Some(text);
+                        }
+                        Err(error) => self.project_error = Some(error),
+                    }
+                }
+                MenuAction::PasteEntities => {
+                    if let (Some(scene_id), Some(document)) = (
+                        self.scenes.active_id().map(str::to_owned),
+                        self.shell.entity_clipboard.clone(),
+                    ) {
+                        let command = crate::entity_command::EntityCommand {
+                            scene_id,
+                            edit: crate::entity_command::EntityEdit::Paste { document },
+                        };
+                        if let Err(error) = self.apply_entity_command(command) {
+                            self.project_error = Some(error);
+                        }
+                    }
+                }
                 MenuAction::FocusPanel(tab) => {
                     if let Some(location) = self.dock_state.find_tab(&tab) {
                         self.dock_state.set_active_tab(location);
@@ -3616,6 +3807,7 @@ struct TabViewer<'a> {
     current_project: &'a mut Option<Project>,
     project_requests: &'a mut Vec<ProjectRequest>,
     project_blocked: bool,
+    authoring_flags: &'a HashMap<String, crate::scene_controls::Flags>,
     /// The running game session, drawn over the scene view.
     play: Option<&'a mut PlaySession>,
     /// The history of scene edits, used by undo and redo.
@@ -3915,7 +4107,7 @@ impl TabViewer<'_> {
         let response = ui.interact(
             canvas,
             ui.id().with("transform_gizmo_canvas"),
-            egui::Sense::drag(),
+            egui::Sense::click_and_drag(),
         );
         if let Some(asset) = response.dnd_release_payload::<crate::assets::SpriteAssetPayload>() {
             let point = ui.input(|input| input.pointer.interact_pos());
@@ -3972,7 +4164,74 @@ impl TabViewer<'_> {
                 ));
             }
         }
-        if self.gizmo.mode == GizmoMode::None || !self.shell.gizmos {
+        let to_world = |point: egui::Pos2| {
+            kiln_core::Vec2::new(
+                self.scene_camera.position[0] + (point.x - canvas.left()) * units[0],
+                self.scene_camera.position[1] + (canvas.bottom() - point.y) * units[1],
+            )
+        };
+        if response.clicked() {
+            if let Some(point) = response.interact_pointer_pos() {
+                let id =
+                    crate::scene_selection::pick(self.world, self.authoring_flags, to_world(point));
+                let additive =
+                    ui.input(|i| i.modifiers.command || i.modifiers.ctrl || i.modifiers.shift);
+                match id {
+                    Some(id) if additive => self.hierarchy_panel.toggle_select(&id),
+                    Some(id) => self.hierarchy_panel.select(&id),
+                    None if !additive => self.hierarchy_panel.clear_selection(),
+                    None => {}
+                }
+                *self.selected_entity = self
+                    .hierarchy_panel
+                    .selected_entity_id()
+                    .and_then(|id| self.entity_id_to_hecs.get(id))
+                    .copied();
+            }
+        }
+        if self.gizmo.mode == GizmoMode::None {
+            if response.drag_started() {
+                self.shell.selection_origin = ui.input(|i| i.pointer.press_origin());
+            }
+            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.shell.selection_origin = None;
+            }
+            if let (Some(origin), Some(pointer)) =
+                (self.shell.selection_origin, response.interact_pointer_pos())
+            {
+                let rect = egui::Rect::from_two_pos(origin, pointer);
+                ui.painter().rect_stroke(
+                    rect,
+                    0.0,
+                    egui::Stroke::new(1.0_f32, egui::Color32::LIGHT_BLUE),
+                );
+                if response.drag_stopped() {
+                    let ids = crate::scene_selection::rectangle(
+                        self.world,
+                        self.authoring_flags,
+                        to_world(origin),
+                        to_world(pointer),
+                    );
+                    if ui.input(|i| i.modifiers.command || i.modifiers.ctrl || i.modifiers.shift) {
+                        for id in ids {
+                            if !self.hierarchy_panel.selected_ids.contains(&id) {
+                                self.hierarchy_panel.toggle_select(&id);
+                            }
+                        }
+                    } else {
+                        self.hierarchy_panel.select_many(&ids);
+                    }
+                    *self.selected_entity = self
+                        .hierarchy_panel
+                        .selected_entity_id()
+                        .and_then(|id| self.entity_id_to_hecs.get(id))
+                        .copied();
+                    self.shell.selection_origin = None;
+                }
+            }
+            return;
+        }
+        if !self.shell.gizmos {
             return;
         }
         if response.drag_started() {
@@ -3992,6 +4251,13 @@ impl TabViewer<'_> {
                     .map(|t| t.0);
                 let origin = ui.input(|input| input.pointer.press_origin());
                 if let (Some(source), Some(initial), Some(origin)) = (source, initial, origin) {
+                    if self
+                        .authoring_flags
+                        .get(&source)
+                        .is_some_and(|f| f.locked || f.hidden)
+                    {
+                        return;
+                    }
                     let canvas = egui::Rect::from_min_size(
                         egui::pos2(viewport.x as f32 / ppp, viewport.y as f32 / ppp),
                         egui::vec2(viewport.width as f32 / ppp, viewport.height as f32 / ppp),
@@ -4016,6 +4282,12 @@ impl TabViewer<'_> {
                             .hierarchy_panel
                             .selected_ids
                             .iter()
+                            .filter(|id| {
+                                !self
+                                    .authoring_flags
+                                    .get(id.as_str())
+                                    .is_some_and(|f| f.locked || f.hidden)
+                            })
                             .filter_map(|id| {
                                 let entity = *self.entity_id_to_hecs.get(id)?;
                                 let transform = self
@@ -4174,6 +4446,14 @@ impl TabViewer<'_> {
     ///
     /// While the game is playing the world belongs to the running game, so
     /// editing it would change the game instead of the scene.
+    fn selected_flags(&self) -> crate::scene_controls::Flags {
+        self.selected_entity
+            .and_then(|entity| self.world.world_ref().get::<&SourceId>(entity).ok())
+            .and_then(|id| self.authoring_flags.get(&id.0))
+            .copied()
+            .unwrap_or_default()
+    }
+
     fn editing_locked(&self) -> bool {
         *self.is_playing
     }
@@ -4515,15 +4795,23 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         egui::vec2(viewport.width as f32 / ppp, viewport.height as f32 / ppp),
                     );
                     let painter = ui.painter().with_clip_rect(canvas);
-                    for (collider, pose) in self
+                    for (source, collider, pose) in self
                         .world
                         .world_ref()
                         .query::<(
+                            Option<&SourceId>,
                             &kiln_runtime::world::Collider2D,
                             &kiln_runtime::GlobalTransform,
                         )>()
                         .iter()
                     {
+                        if !*self.is_playing
+                            && source
+                                .and_then(|id| self.authoring_flags.get(&id.0))
+                                .is_some_and(|f| f.hidden)
+                        {
+                            continue;
+                        }
                         let points: Vec<_> =
                             crate::physics_inspector::collider_outline(pose.0, collider.shape)
                                 .into_iter()
@@ -4550,7 +4838,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 }
 
                 // Draw gizmo mode indicator in the top-left of the scene view
-                if self.shell.gizmos && self.gizmo.mode != GizmoMode::None {
+                if self.shell.gizmos
+                    && self.gizmo.mode != GizmoMode::None
+                    && !self.selected_flags().hidden
+                    && !self.selected_flags().locked
+                {
                     if let Some(entity) = self.selected_entity {
                         let gizmo_color = match self.gizmo.mode {
                             GizmoMode::Translate => egui::Color32::from_rgb(255, 0, 0),
@@ -4654,6 +4946,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             ui.label("Select a root-scene entity to edit components.");
                             return;
                         };
+                        if self.authoring_flags.get(&authored.id).is_some_and(|f|f.locked) { ui.label("Locked in editor — unlock from the hierarchy context menu.");ui.disable();}
                         let has = |kind| authored.components.iter().any(|c| ComponentKind::of(c) == Some(kind));
                         let has_transform = has(ComponentKind::Transform);
                         let has_sprite = has(ComponentKind::Sprite);
@@ -6383,6 +6676,23 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             }
                             self.gizmo.drag = None;
                             match action {
+                                crate::hierarchy::HierarchyAction::SetEditorFlags {
+                                    entity_id,
+                                    locked,
+                                    hidden,
+                                } => {
+                                    self.project_requests.push(ProjectRequest::Entity(
+                                        crate::entity_command::EntityCommand {
+                                            scene_id: scene_id.clone(),
+                                            edit:
+                                                crate::entity_command::EntityEdit::SetEditorFlags {
+                                                    entity_id,
+                                                    locked,
+                                                    hidden,
+                                                },
+                                        },
+                                    ));
+                                }
                                 crate::hierarchy::HierarchyAction::SelectEntity(project_id) => {
                                     // Sync selection: project entity ID -> hecs Entity
                                     let selected_id = self
