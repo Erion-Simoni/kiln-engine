@@ -23,6 +23,11 @@ world-space transforms, grid snapping, Play/Stop, pause and frame stepping.
 Local transforms remain in the inspector. The viewport provides grid/gizmo/
 collider visibility, framing and real saved scene tabs.
 
+**Snap** uses the adjacent grid size for movement, 15° increments for rotation,
+and 0.1 increments for uniform scale. Scaling preserves proportions and stops at
+the smallest positive snapped scale of 0.1. Disable Snap for continuous drags.
+Each gesture is one undo step; Escape cancels the current gesture.
+
 The asset shelf contains actual bounded image thumbnails, category/search
 filters and scene cards. Double-click a scene card to open it. Drag image
 cards into the 2D viewport to create sprites; import, folder creation,

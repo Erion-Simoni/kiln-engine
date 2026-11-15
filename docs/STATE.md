@@ -1,51 +1,49 @@
 # Kiln Session Handoff
 
 Active owner scope: A01 through A04 on `fix/a01-ci-baseline`.
-A01 configured baseline accepted on pushed source `6de428b168aff0b3cbad86038461e7c2731ad081`
-(2026-11-15). A02 is next; A02–A04 and broader release gates remain open.
-No full 3D work; G2D remains open. MIT OR Apache-2.0 is settled; no size ceiling.
+Current focus: A02 transform snapping checkpoint, 2026-11-15. A02–A04 remain
+PARTIAL. A01 configured baseline is accepted on source `6de428b`; matching general
+CI 43606018834, reference games 43606018842 and Linux candidate 43606018785 passed.
+Evidence: docs/evidence/A01_RESUMED_VALIDATION.md. No broader release gate is
+accepted. Full 3D remains behind G2D; MIT OR Apache-2.0 settled; no size ceiling.
 
 ## Done
 
-- Startup fix `6de428b` waits for the painted editor menu before closing default
-  tabs and holds menu clicks across frames. Delayed-render GUI regression is in CI.
-- Matching hosted SUCCESS: general CI 43606018834; reference games 43606018842;
-  Linux candidate 43606018785. General CI includes three OS check/build/archive
-  matrices, native UI, browser/graph/portable flows and the delayed startup test.
-  Candidate checks include fresh locked replay/payload comparison, artifact-service
-  roundtrip, clean Ubuntu runtime acceptance and origin attestation.
-- Reconnected after environment suspension; checkout, toolchain and target evidence
-  survived. Temporary /tmp logs did not. No experimental graph patch was retained.
-- Local complete three-game widget authoring/native+browser export receipt and moved
-  portable integrity/template/export/relocated-gameplay acceptance survived and pass.
-- Evidence and public artifact digests: docs/evidence/A01_RESUMED_VALIDATION.md and
-  A01_HOSTED_STATUS.json. Public summaries inspected; hosted artifact contents and
-  attestation signatures were not independently downloaded/verified here.
+- Snap previously affected only translation. It now snaps world rotation to 15°
+  and uniform scale to 0.1 steps, preserving proportions and a positive snapped
+  magnitude. Invalid/disabled grids retain continuous rotation/scale. Existing
+  press-state math, group application, history and save/recovery commands are used.
+- Added toolbar hover guidance and user documentation for the three Snap modes.
+  Fixed increments are a routine editor behavior choice; no new dependencies,
+  architecture or project-format change was required.
+- Added real widget acceptance to native CI with retained receipts/screenshots.
+  New test moves/rotates/scales through gizmos, verifies one-step undo/redo,
+  Escape cancellation without extra history and continuous scale when Snap is off.
+- The same test copies into a newly created second scene, makes an unsaved Inspector
+  scale edit, waits for actual autosave, force-kills/reopens/Restores/Saves, then
+  restarts and compares the complete saved project. The first scene stays intact.
+- Evidence: docs/evidence/A02_TRANSFORM_SNAP.md. Raw receipt/captures under
+  target/a02-transform-snap; logs under target/a02-transform-logs.
 
-## Validation
+## Executed validation
 
-- Before suspension: cargo test --workspace --locked, 752 passed including doc tests
-  (751 ordinary tests), zero failures/ignored. Default WASM build, matching bindings,
-  strict WASM default/feature-off Clippy and editor/player feature opt-out passed.
-- After reconnection: just check PASSED; 38 Python regressions PASSED.
-- External texture refresh and structured source authoring → browser movement pass.
-  Browser menus/audio/controller/save-resume and exported materials pass.
-- Parallel local GUI/build/export workloads exposed graph-dialog and physics-capture
-  timing failures. An attempted graph timing patch was reverted after unsuccessful
-  verification; no assertions or engine behavior were changed. Both unchanged tests
-  passed in isolated reruns after reconnection, matching hosted CI. Graph native
-  score 252/browser 324, 392 rendered pixels and three saved node values; physics
-  restored upward velocity 121.900024 and correct collision/joint/scene state.
-- Run timed GUI/gameplay checks serially. Parallel-resource-contention reliability
-  is not established. Raw new logs: target/a01-resume-logs; graph receipt/screenshots:
-  target/a01-resumed-graph; other receipts: target/a01-reference-replay and
-  target/task8-portable-evidence. No new physical-GPU/audio/controller claim.
+- just check PASSED (fmt, strict workspace/all-target Clippy, workspace and audio).
+- Gizmo math: 8 PASSED. Targeted transform/property/scene-workspace/two-scene
+  integration: 27 PASSED. Python regressions: 38 PASSED.
+- Real Linux Xvfb widget test PASSED: 45° rotation, scale 1.1, snapped (64,96),
+  continuous scale opt-out, history/cancel, second-scene recovered scale 1.7 and
+  exact restart. Recovery screenshot inspected. No new hosted or cross-platform
+  GUI/device acceptance is claimed yet; run matching hosted checks after push.
 
 ## Next
 
-A02: prior fc78575 implements saved inherited lock/hide, selection/marquee,
-alignment, clipboard, recovery and guarded writes with real two-scene evidence.
-Broad combined transform/property and cross-platform acceptance remains open.
+Continue A02: local-axis viewport tools are still absent (World toolbar indicator
+is disabled; local values are edited in Inspector). Complete broader combined
+transform/property/reparent/duplicate/delete acceptance with two scenes, recovery,
+failed-save preservation and cross-platform checks. Earlier lock/hide, marquee,
+alignment, clipboard, recovery and guarded-file-write work remains implemented.
+Do not close A02 from this isolated snapping checkpoint.
+
 A03: 3daaa1c adds typed dependencies/reference-safe moves, per-target import rules,
 worker diagnostics and fixed GPU preview lifetime. Full nested prefab/variants,
 integrated atlas build/rebuild/reopen/export, source-module import refactoring and
@@ -56,16 +54,11 @@ with equivalent graph and complete exports remain open. Cooperative task payload
 are explicit state machines, not automatic suspended function stacks/yield syntax.
 The legacy separate bytecode debugger is not the live gameplay source debugger.
 
-## Known boundaries / tools
+## Tools / boundaries
 
-Windows candidate did not trigger for the Linux-test-only startup change; the older
-3efb687 candidate does not validate this revision. Matching Windows check/build/
-archive jobs in general CI did pass. No fresh full Windows GUI/candidate acceptance
-is claimed. Baseline CI acceptance does not close any broader engine release gate.
-
-Source /workspace/.kiln-tools/activate.sh for Rust 1.99.1, Cargo, rootless system
-libraries/software Vulkan and CHROMIUM_PATH. Chromium 156.0.8078.79 is installed
-rootlessly from Debian; Playwright's browser download domain is network-denied.
-CARGO_INCREMENTAL=0 and debug-info overrides keep disk use bounded. Generated
-artifacts stay out of Git. Do not kill unrelated editor/Xvfb processes.
-just check before every commit. Continue A02 implementation/acceptance next.
+Source /workspace/.kiln-tools/activate.sh for Rust 1.99.1, Cargo, rootless libraries,
+software Vulkan and CHROMIUM_PATH (Debian Chromium 156). Run timed GUI/gameplay
+checks serially: parallel local build/export work exposed timing failures in old
+graph/physics captures, while unchanged serial checks and hosted CI passed.
+Generated artifacts stay out of Git. Do not kill unrelated editor/Xvfb processes.
+just check before every commit. No physical-GPU/audio/controller claims.

@@ -220,6 +220,15 @@ Workspace flags survive prefab propagation. Windows candidate now passes on
 27fa148, but matching general CI/reference results failed and remain under repair.
 A02's broad cross-platform acceptance is still open; see STATE.md for current work.
 
+**Transform snapping checkpoint 2026-11-15:** Snap now covers 15° world rotation
+and proportional uniform scale in 0.1 steps, in addition to the configured move
+grid. Real widget acceptance verifies each gesture's Undo/Redo, Escape cancellation,
+Snap-off continuous scaling, copying into a second scene, an unsaved inspector
+scale edit, real-timer autosave/forced-crash recovery and exact project restart.
+Math and editor integration checks pass; CI retains the new acceptance evidence.
+Local-axis viewport tools and broader combined/cross-platform acceptance remain
+open. [Evidence](evidence/A02_TRANSFORM_SNAP.md). A02 remains PARTIAL.
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.

@@ -3,6 +3,9 @@
 use egui::{Pos2, Vec2 as EguiVec2};
 use kiln_core::{Component, Scene, Transform, Vec2};
 
+const ROTATION_SNAP: f32 = std::f32::consts::PI / 12.0;
+const SCALE_SNAP: f32 = 0.1;
+
 /// Transform operation selected for viewport interaction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GizmoMode {
@@ -135,11 +138,13 @@ impl GizmoDrag {
         })
     }
 
-    /// Evaluate the gesture at the current pointer position.
+    /// Evaluate the gesture from its press state. A positive finite grid enables
+    /// position snapping, 15-degree rotation snapping and 0.1 uniform scale steps.
     pub fn at(&self, pointer: Pos2, grid: Option<f32>) -> Transform {
         let mut value = self.initial_world;
         let dx = pointer.x - self.origin.x;
         let dy = pointer.y - self.origin.y;
+        let snapping = grid.is_some_and(|grid| grid.is_finite() && grid > 0.0);
         match self.mode {
             GizmoMode::None => {}
             GizmoMode::Translate => {
@@ -163,10 +168,18 @@ impl GizmoDrag {
                     .rem_euclid(std::f32::consts::TAU)
                     - std::f32::consts::PI;
                 value.rotation += delta;
+                if snapping {
+                    value.rotation = (value.rotation / ROTATION_SNAP).round() * ROTATION_SNAP;
+                }
             }
             GizmoMode::Scale => {
                 let factor = (-dy * 0.01).exp().clamp(0.001, 1000.0);
                 value.scale *= factor;
+                let magnitude = value.scale.x.abs();
+                if snapping && magnitude.is_finite() && magnitude > 0.0 {
+                    let target = (magnitude / SCALE_SNAP).round().max(1.0) * SCALE_SNAP;
+                    value.scale *= target / magnitude;
+                }
             }
         }
         value
@@ -202,6 +215,58 @@ mod tests {
         .unwrap();
         let value = drag.at(Pos2::new(12.0, 8.0), Some(2.0));
         assert_eq!(value.position, Vec2::new(6.0, 8.0));
+    }
+
+    #[test]
+    fn rotation_snap_uses_world_angle_without_changing_position_or_scale() {
+        let initial = Transform::new(10.0, 20.0)
+            .with_rotation(0.2)
+            .with_scale(Vec2::splat(2.0));
+        let drag = GizmoDrag::new(
+            GizmoMode::Rotate,
+            Pos2::ZERO,
+            initial,
+            [1.0, 1.0],
+            initial.position + Vec2::new(40.0, 0.0),
+        )
+        .unwrap();
+        let pointer = Pos2::new(-5.36, -20.0);
+        let free = drag.at(pointer, None);
+        let snapped = drag.at(pointer, Some(32.0));
+        assert!((free.rotation - (0.2 + std::f32::consts::PI / 6.0)).abs() < 0.001);
+        assert!((snapped.rotation - std::f32::consts::FRAC_PI_4).abs() < 0.001);
+        assert_eq!(snapped.position, initial.position);
+        assert_eq!(snapped.scale, initial.scale);
+        for grid in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            assert_eq!(drag.at(pointer, Some(grid)), free);
+        }
+    }
+
+    #[test]
+    fn scale_snap_preserves_aspect_ratio_and_never_collapses_small_scales() {
+        let initial = Transform::new(10.0, 20.0)
+            .with_rotation(0.4)
+            .with_scale(Vec2::new(1.0, 2.0));
+        let drag = GizmoDrag::new(
+            GizmoMode::Scale,
+            Pos2::ZERO,
+            initial,
+            [1.0, 1.0],
+            initial.position,
+        )
+        .unwrap();
+        let pointer = Pos2::new(0.0, -13.0);
+        let free = drag.at(pointer, None);
+        let snapped = drag.at(pointer, Some(32.0));
+        assert!((free.scale.x - 0.13_f32.exp()).abs() < 0.0001);
+        assert!((snapped.scale.x - 1.1).abs() < 0.0001);
+        assert!((snapped.scale.y - 2.2).abs() < 0.0001);
+        assert_eq!(snapped.position, initial.position);
+        assert_eq!(snapped.rotation, initial.rotation);
+        let tiny = drag.at(Pos2::new(0.0, 10000.0), Some(32.0));
+        assert!((tiny.scale.x - 0.1).abs() < 0.0001);
+        assert!((tiny.scale.y - 0.2).abs() < 0.0001);
+        assert_eq!(drag.at(pointer, Some(f32::NAN)), free);
     }
 
     #[test]

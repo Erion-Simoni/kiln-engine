@@ -171,6 +171,7 @@ impl EditorShell {
                     !self.preview_3d && !playing,
                     egui::Button::new("Snap").selected(*snap).frame(false),
                 )
+                .on_hover_text("Snap movement to the grid, rotation to 15°, and scale to 0.1 steps")
                 .clicked()
             {
                 *snap = !*snap;
