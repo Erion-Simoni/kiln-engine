@@ -736,3 +736,64 @@ fn sprite_layout_and_effect_commands_preserve_history_projection_and_disk() {
         assert_disk(&project);
     }
 }
+
+#[test]
+fn joint_endpoints_require_unique_entities_in_the_edited_composition() {
+    let mut project = fixture();
+    let mut scene = project.scenes["main"].clone();
+    let mut bad = joint();
+    bad.entity_b = "missing".into();
+    let before = json(&scene);
+    let mut history = SceneHistory::new();
+    let error = command(ComponentEdit::Add(Component::Joint { joint: bad }))
+        .execute(&mut scene, &project, &mut history)
+        .unwrap_err();
+    assert!(error.contains("missing"), "{error}");
+    assert_eq!(json(&scene), before);
+    assert_eq!(history.undo_depth(), 0);
+    project
+        .scenes
+        .get_mut("other")
+        .unwrap()
+        .entities
+        .push(Entity {
+            id: "remote".into(),
+            name: "Remote".into(),
+            components: vec![],
+        });
+    let mut remote = joint();
+    remote.entity_b = "remote".into();
+    assert!(command(ComponentEdit::Add(Component::Joint {
+        joint: remote.clone()
+    }))
+    .execute(&mut scene, &project, &mut history)
+    .is_err());
+    scene.nested_scenes.push(kiln_core::NestedScene {
+        scene_id: "other".into(),
+        additive: true,
+        offset: Default::default(),
+    });
+    command(ComponentEdit::Add(Component::Joint {
+        joint: remote.clone(),
+    }))
+    .execute(&mut scene, &project, &mut history)
+    .unwrap();
+    let before = json(&scene);
+    let depth = history.undo_depth();
+    project
+        .scenes
+        .get_mut("other")
+        .unwrap()
+        .entities
+        .push(Entity {
+            id: "hero".into(),
+            name: "Ambiguous".into(),
+            components: vec![],
+        });
+    let error = command(ComponentEdit::SetJoint { joint: remote })
+        .execute(&mut scene, &project, &mut history)
+        .unwrap_err();
+    assert!(error.contains("hero"), "{error}");
+    assert_eq!(json(&scene), before);
+    assert_eq!(history.undo_depth(), depth);
+}

@@ -52,6 +52,15 @@ the documents unchanged. Legacy ambiguous compositions retain their authored dat
 the inspector/gizmo disables ambiguous targets. Edit a child through its own tab.
 Repeated instances with scoped identities are not implemented.
 
+Deletion refuses entities still used by a joint or camera follow target, including
+references from containing scene compositions. Remove the joint or change the
+camera target first; the refusal preserves the document and undo/redo history.
+Joint endpoints must each resolve to one entity in the edited composition.
+The joint inspector keeps a form draft: **Apply Joint** validates and commits all
+fields as one undo step; **Cancel Joint Edit** discards the form and preserves redo.
+Invalid forms retain their input with an inline error. Form drafts require Apply
+before they become project edits eligible for saving or recovery.
+
 The hierarchy follows entity Parent links, with indented children and branch
 expanders. Drag an entity onto another to reparent it, or onto the **SCENE**
 heading to detach it to the scene root; both preserve its world transform.

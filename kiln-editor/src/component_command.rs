@@ -168,6 +168,12 @@ impl ComponentCommand {
             ComponentEdit::SetSpriteReferences { .. } => ComponentKind::Sprite,
             ComponentEdit::SetTilemapReference { .. } => ComponentKind::Tilemap,
         };
+        match &self.edit {
+            ComponentEdit::Add(Component::Joint { joint }) | ComponentEdit::SetJoint { joint } => {
+                crate::scene_references::require_joint_endpoints(project, scene, joint)?;
+            }
+            _ => {}
+        }
         let components = &mut scene.entities[*index].components;
         let matches: Vec<_> = components
             .iter()

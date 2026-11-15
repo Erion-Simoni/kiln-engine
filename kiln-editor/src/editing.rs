@@ -758,7 +758,7 @@ fn validate_nested_identities(project: &Project, parent: &str, child: &str) -> R
     Ok(())
 }
 
-fn scene_reaches(
+pub(crate) fn scene_reaches(
     project: &Project,
     from: &str,
     target: &str,

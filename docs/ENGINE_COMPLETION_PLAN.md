@@ -310,6 +310,14 @@ gizmo handles. Before/after disk and real-widget regressions pass. Valid distinc
 composition remains functional. [Evidence](evidence/A02_NESTED_IDENTITY.md).
 Scoped/repeated instances remain open; this protection does not close A02.
 
+**Entity-reference checkpoint 2026-11-15:** deletion refuses dangling joint/camera
+dependencies in containing compositions and preserves history on failure. Joint
+Add/Set validate unique endpoints; the inspector supports retained invalid drafts,
+explicit single-command Apply and Cancel. Generic errors stay above floating panels.
+Before/after regressions and real widgets verify reference resolution, safe deletion,
+history and exact restart. [Evidence](evidence/A02_ENTITY_REFERENCES.md). Full A02
+acceptance and matching hosted checks remain open; prior-source CI failed local axes.
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.

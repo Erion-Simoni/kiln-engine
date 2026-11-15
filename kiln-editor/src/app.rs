@@ -53,6 +53,13 @@ use crate::ui_layout_editor::UiLayoutEditorState;
 use crate::version_control_panel::VersionControlPanel;
 use crate::vfx_editor::VfxEditorState;
 
+fn project_error_window() -> egui::Window<'static> {
+    egui::Window::new("Project operation failed")
+        .order(egui::Order::Foreground)
+        .collapsible(false)
+        .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+}
+
 #[derive(Debug, Clone)]
 enum SceneAction {
     Open(String),
@@ -2496,6 +2503,7 @@ impl EditorApp {
                 }
             };
             if let Err(error) = result {
+                log::warn!("Project operation rejected: {error}");
                 self.console_log.push(format!("[ERROR] {error}"));
                 if self.lifecycle.pending().is_none() {
                     self.project_error = Some(error);
@@ -3091,12 +3099,9 @@ impl EditorApp {
             .filter(|_| !project_blocked && !self.show_save_as)
         {
             let mut open = true;
-            egui::Window::new("Project operation failed")
-                .open(&mut open)
-                .collapsible(false)
-                .show(ctx, |ui| {
-                    ui.colored_label(ui.visuals().error_fg_color, error);
-                });
+            project_error_window().open(&mut open).show(ctx, |ui| {
+                ui.colored_label(ui.visuals().error_fg_color, error);
+            });
             if !open {
                 self.project_error = None;
             }
@@ -5505,10 +5510,35 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 if ui.button("Remove Physics").clicked() { self.remove_component(entity,ComponentKind::Physics); }
                             });
                         } else if ui.button("+ Physics Body / Collider").clicked() { self.add_component(entity,ComponentKind::Physics); }
-                        if let Some(mut joint)=authored.components.iter().find_map(|component| match component {kiln_core::Component::Joint {joint}=>Some(joint.clone()),_=>None}) {
+                        if let Some(joint)=authored.components.iter().find_map(|component| match component {kiln_core::Component::Joint {joint}=>Some(joint.clone()),_=>None}) {
                             ui.group(|ui| {
                                 ui.strong("Physics Joint");
-                                if crate::physics_inspector::joint_ui(ui,&mut joint) {self.queue_component(entity,ComponentEdit::SetJoint {joint:joint.clone()});}
+                                let key = ui.id().with(("joint_draft", self.asset_browser.root(), self.scenes.active_id(), &authored.id));
+                                let error_key = key.with("error");
+                                let mut draft = ui.data(|data| data.get_temp::<(kiln_core::physics_data::Joint2D,kiln_core::physics_data::Joint2D)>(key))
+                                    .filter(|(base,_)| base == &joint).unwrap_or_else(|| (joint.clone(),joint.clone()));
+                                if crate::physics_inspector::joint_ui(ui,&mut draft.1) {
+                                    ui.data_mut(|data| data.remove::<String>(error_key));
+                                }
+                                ui.small("Apply Joint commits these fields together; Cancel discards them.");
+                                let mut clear = false;
+                                ui.horizontal_wrapped(|ui| {
+                                    if ui.button("Apply Joint").clicked() {
+                                        let result = kiln_core::physics_data::validate_joint(&draft.1).and_then(|_| {
+                                            let project = self.current_project.as_ref().ok_or("No project loaded")?;
+                                            let scene = self.scenes.active_id().and_then(|id| project.scenes.get(id)).ok_or("No active scene")?;
+                                            crate::scene_references::require_joint_endpoints(project,scene,&draft.1)
+                                        });
+                                        match result {
+                                            Ok(()) => {self.queue_component(entity,ComponentEdit::SetJoint {joint:draft.1.clone()});clear=true;}
+                                            Err(error) => {ui.data_mut(|data| data.insert_temp(error_key,error));}
+                                        }
+                                    }
+                                    clear |= ui.button("Cancel Joint Edit").clicked();
+                                });
+                                if let Some(error) = ui.data(|data|data.get_temp::<String>(error_key)) {ui.colored_label(egui::Color32::LIGHT_RED,error);}
+                                if clear {ui.data_mut(|data| {data.remove::<(kiln_core::physics_data::Joint2D,kiln_core::physics_data::Joint2D)>(key);data.remove::<String>(error_key);});}
+                                else {ui.data_mut(|data|data.insert_temp(key,draft));}
                                 if ui.button("Remove Joint").clicked() {self.remove_component(entity,ComponentKind::Joint);}
                             });
                         } else {
@@ -6986,6 +7016,45 @@ impl<'a> TabViewer<'a> {
 #[cfg(test)]
 mod play_tests {
     use super::*;
+
+    #[test]
+    fn project_failure_stays_visible_above_raised_editor_panels() {
+        let ctx = egui::Context::default();
+        crate::editor_shell::apply_theme(&ctx);
+        let parent = egui::Id::new("covering_editor_panel");
+        for _ in 0..4 {
+            let _ = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1440.0, 900.0),
+                    )),
+                    ..Default::default()
+                },
+                |ctx| {
+                    // The application draws error windows before the docking tree.
+                    project_error_window().show(ctx, |ui| {
+                        ui.colored_label(
+                            egui::Color32::RED,
+                            "Entity is referenced; deletion was not applied",
+                        );
+                    });
+                    egui::Window::new("Floating editor")
+                        .id(parent)
+                        .fixed_rect(egui::Rect::from_min_max(
+                            egui::pos2(20.0, 20.0),
+                            egui::pos2(1400.0, 880.0),
+                        ))
+                        .show(ctx, |ui| {
+                            ui.allocate_space(egui::vec2(1300.0, 800.0));
+                        });
+                    ctx.move_to_top(egui::LayerId::new(egui::Order::Middle, parent));
+                },
+            );
+        }
+        let layer = ctx.layer_id_at(egui::pos2(720.0, 450.0)).unwrap();
+        assert_eq!(layer.id, egui::Id::new("Project operation failed"));
+    }
 
     #[test]
     fn play_input_reads_quick_edges_with_precomputed_display_scale() {

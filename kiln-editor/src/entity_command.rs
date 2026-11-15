@@ -338,6 +338,7 @@ fn apply(
             Ok(None)
         }
         EntityEdit::Delete { entity_id } => {
+            crate::scene_references::require_unreferenced(project, scene, entity_id)?;
             let flags = crate::scene_controls::resolved_flags(scene);
             if scene.entities.iter().any(|child| {
                 child
