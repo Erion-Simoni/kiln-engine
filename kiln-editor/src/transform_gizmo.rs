@@ -2,6 +2,7 @@
 
 use egui::{Pos2, Vec2 as EguiVec2};
 use kiln_core::{Component, Scene, Transform, Vec2};
+use std::collections::{HashMap, HashSet};
 
 const ROTATION_SNAP: f32 = std::f32::consts::PI / 12.0;
 const SCALE_SNAP: f32 = 0.1;
@@ -162,6 +163,46 @@ pub fn order_group_targets(
     ordered
 }
 
+/// Keep only selection roots for a shared move/rotate/uniform-scale operation.
+/// Selected descendants inherit that same operation from a selected ancestor;
+/// rewriting their local values would introduce needless floating-point drift.
+pub fn group_root_targets(
+    scene: &Scene,
+    targets: &[(String, Transform)],
+) -> Vec<(String, Transform)> {
+    let selected: HashSet<_> = targets.iter().map(|(id, _)| id.as_str()).collect();
+    let parents: HashMap<_, _> = scene
+        .entities
+        .iter()
+        .filter_map(|entity| {
+            entity
+                .components
+                .iter()
+                .find_map(|component| match component {
+                    Component::Parent { parent } => Some((entity.id.as_str(), parent.as_str())),
+                    _ => None,
+                })
+        })
+        .collect();
+    targets
+        .iter()
+        .filter(|(id, _)| {
+            let mut current = id.as_str();
+            for _ in 0..scene.entities.len() {
+                let Some(parent) = parents.get(current) else {
+                    return true;
+                };
+                if selected.contains(parent) {
+                    return false;
+                }
+                current = parent;
+            }
+            false
+        })
+        .cloned()
+        .collect()
+}
+
 /// One pointer gesture evaluated from its press state, independent of frame rate.
 #[derive(Debug, Clone)]
 pub struct GizmoDrag {
@@ -299,6 +340,40 @@ pub fn hits_handle(mode: GizmoMode, pointer: Pos2, center: Pos2) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn group_roots_skip_selected_descendants_through_unselected_intermediate_parents() {
+        let scene = Scene {
+            id: "main".into(),
+            name: "Main".into(),
+            script: None,
+            nested_scenes: vec![],
+            entities: [
+                ("child", Some("bridge")),
+                ("parent", None),
+                ("bridge", Some("parent")),
+                ("other", None),
+            ]
+            .into_iter()
+            .map(|(id, parent)| kiln_core::Entity {
+                id: id.into(),
+                name: id.into(),
+                components: parent
+                    .map(|id| Component::Parent { parent: id.into() })
+                    .into_iter()
+                    .collect(),
+            })
+            .collect(),
+        };
+        let targets =
+            ["child", "other", "parent"].map(|id| (id.into(), Transform::new(10.0, 20.0)));
+        let roots = group_root_targets(&scene, &targets);
+        assert_eq!(
+            roots.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(),
+            ["other", "parent"]
+        );
+        assert_eq!(group_root_targets(&scene, &targets[..1]), targets[..1]);
+    }
 
     #[test]
     fn displayed_local_handles_and_hit_testing_use_the_same_orientation() {

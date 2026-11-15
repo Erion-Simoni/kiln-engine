@@ -279,6 +279,14 @@ original/resources preservation, continued copy editing and exact restart.
 full A02/cross-platform acceptance stays open. Prior-source Linux candidate failed
 artifact preflight before application build; matching hosted rerun remains needed.
 
+**Parented selection checkpoint 2026-11-15:** clearing the last hierarchy
+selection now clears the inspector/gizmo target. Shared group transforms update
+selection roots, preserving selected descendants’ exact local documents. Real
+widget coverage verifies descendant-first selection, move/rotate/scale, one-step
+undo/redo, cancellation, retained selection and exact restart; CI retains evidence.
+See [parented selection evidence](evidence/A02_PARENTED_SELECTION.md). A02 remains
+PARTIAL; full component/property coverage and cross-platform acceptance remain.
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.

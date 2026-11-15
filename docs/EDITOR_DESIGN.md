@@ -34,6 +34,12 @@ World movement snaps to the absolute scene grid; Local movement snaps displaceme
 from the gesture's starting position along the displayed axes. Rotation and uniform
 scale retain the shared 2D controls. Coordinate space is a session preference.
 
+Ctrl-click toggles hierarchy selection; clearing the last selected row also clears
+the inspector and gizmo target. The last selected entity is the primary group
+pivot. Group move, rotation and uniform scale transform selected roots; selected
+descendants inherit the operation without rewriting their stored local properties.
+Selection survives undo/redo, and Escape preserves the previous redo history.
+
 The hierarchy follows entity Parent links, with indented children and branch
 expanders. Drag an entity onto another to reparent it, or onto the **SCENE**
 heading to detach it to the scene root; both preserve its world transform.

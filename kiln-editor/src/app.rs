@@ -4000,7 +4000,8 @@ impl TabViewer<'_> {
         let mut after = before.clone();
         let scene_id = after.id.clone();
         let mut updated = false;
-        let ordered_targets = crate::transform_gizmo::order_group_targets(&after, targets);
+        let roots = crate::transform_gizmo::group_root_targets(&after, targets);
+        let ordered_targets = crate::transform_gizmo::order_group_targets(&after, &roots);
         for (entity_id, target) in &ordered_targets {
             let Ok(local) =
                 kiln_core::hierarchy_transform::local_from_world(&after, entity_id, *target)
@@ -6664,14 +6665,13 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                         },
                                     ));
                                 }
-                                crate::hierarchy::HierarchyAction::SelectEntity(project_id) => {
+                                crate::hierarchy::HierarchyAction::SelectEntity(_) => {
                                     // Sync selection: project entity ID -> hecs Entity
-                                    let selected_id = self
+                                    *self.selected_entity = self
                                         .hierarchy_panel
                                         .selected_entity_id()
-                                        .unwrap_or(&project_id);
-                                    *self.selected_entity =
-                                        self.entity_id_to_hecs.get(selected_id).copied();
+                                        .and_then(|id| self.entity_id_to_hecs.get(id))
+                                        .copied();
                                 }
                                 crate::hierarchy::HierarchyAction::RemoveEntity(source_id) => {
                                     self.project_requests.push(ProjectRequest::Entity(

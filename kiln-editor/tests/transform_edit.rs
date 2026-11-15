@@ -296,6 +296,46 @@ fn group_rotation_and_scale_preserve_parented_world_targets() {
 }
 
 #[test]
+fn shared_group_scale_keeps_selected_child_local_document_exact() {
+    use kiln_editor::transform_gizmo::group_root_targets;
+    let mut scene = sample();
+    let mut world = spawn(&scene);
+    SetTransform {
+        scene_id: "main",
+        entity_id: "marker",
+        value: Transform::new(40.0, 60.0)
+            .with_rotation(std::f32::consts::FRAC_PI_2)
+            .with_scale(kiln_core::Vec2::splat(2.0)),
+    }
+    .apply(&mut scene, &mut world)
+    .unwrap();
+    let child_before = json(&scene.entities[0]);
+    let initial = vec![
+        ("hero".into(), global(&world, "hero")),
+        ("marker".into(), global(&world, "marker")),
+    ];
+    let mut primary = initial[1].1;
+    primary.scale = kiln_core::Vec2::splat(2.3);
+    let targets = apply_group_transform(GizmoMode::Scale, "marker", primary, &initial);
+    let expected_child = targets[0].1;
+    for (id, target) in group_root_targets(&scene, &targets) {
+        let local = kiln_core::hierarchy_transform::local_from_world(&scene, &id, target).unwrap();
+        SetTransform {
+            scene_id: "main",
+            entity_id: &id,
+            value: local,
+        }
+        .apply(&mut scene, &mut world)
+        .unwrap();
+    }
+    assert_eq!(json(&scene.entities[0]), child_before);
+    let actual = global(&world, "hero");
+    assert!((actual.position - expected_child.position).length() < 0.001);
+    assert!((actual.rotation - expected_child.rotation).abs() < 0.001);
+    assert!((actual.scale - expected_child.scale).length() < 0.001);
+}
+
+#[test]
 fn repeated_preview_frames_form_one_undo_step_and_reopen_exactly() {
     let mut scene = sample();
     let before = scene.clone();

@@ -1,7 +1,7 @@
 # Kiln Session Handoff
 
 Owner scope: A01 through A04 on `fix/a01-ci-baseline`.
-Current focus: A02 external-manifest draft rescue (2026-11-15), following ac0a86c.
+Current focus: A02 parented selection/group transforms (2026-11-15), following c9958d7.
 A02–A04 remain PARTIAL. A01 baseline acceptance is pinned to green 6de428b
 (CI 43606018834, reference 43606018842, Linux 43606018785). New source needs
 matching results. Full 3D remains behind G2D; no broader release gate accepted.
@@ -9,51 +9,43 @@ MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
 
-- Reproduced missing-manifest Save As failure in a disk regression: normal Save
-  refused the external deletion but Save As canonicalized the missing file and
-  failed too. The new test failed before the fix, passes after it.
-- Resource copying now excludes the loaded manifest's filename under its already
-  canonical source root. The copy's manifest comes from the in-memory draft.
-  It need not read/resolve a deleted/corrupt/replaced input manifest. Unrelated
-  TOML resources still copy exactly; linked resources remain rejected.
-- Project-operation errors are visibly marked and Escape-dismissable without
-  dropping the draft. Existing Save As form retry/cancel, clean-script requirement,
-  hierarchy rebuild and all copy publication guards remain in place.
-- Added disk/symlink regressions and three real widget rescue cases to CI with
-  retained evidence. No dependency, format or command architecture changes.
-- Evidence: docs/evidence/A02_MANIFEST_RESCUE.md. Earlier Save As source protection,
-  graph dialog foreground repair, Parent tree, World/Local axes, snapping, clipboard,
-  flags/alignment and actual two-scene recovery remain implemented.
+- Reproduced and fixed Ctrl-deselect leaving a stale inspector/gizmo target.
+  Empty hierarchy selection now synchronizes to no selected entity.
+- Reproduced group scaling changing child-local floats. Shared group transforms
+  now update selected roots; selected descendants inherit without rewriting their
+  local documents. Ancestor traversal includes intermediate unselected parents
+  and is bounded. Existing general target ordering is unchanged.
+- Added unit/integration and real-widget coverage to CI with retained evidence.
+  No dependencies, project format or command architecture changes.
+- Evidence: docs/evidence/A02_PARENTED_SELECTION.md. Earlier manifest rescue,
+  Save As protection, graph dialog foreground repair, Parent tree, World/Local
+  axes, snapping, clipboard, flags/alignment and two-scene recovery remain.
 
 ## Executed validation
 
 - just check PASSED: fmt, strict workspace/all-target Clippy, workspace/audio.
-- Roundtrip/lifecycle/two-scene integration: 22 PASSED. Python: 38 PASSED.
-- Before/after missing-manifest regression; deleted/corrupt/externally changed
-  source cases; replaced manifest link exclusion and resource-link rejection pass.
-- manifest_rescue_smoke.py PASSED all three cases: unsaved X=88, normal Save visibly
-  refused, Escape retained draft, Save As rescued data/resources without changing
-  the original external state, Y=72 saved only to copy, exact complete restart.
-- Existing save_as_failure_smoke.py PASSED again: occupied/staged copy failures,
-  cancel/retry, original preservation, copied hierarchy editing, dirty-source guard,
-  explicit Save Script and exact restart. Screenshots inspected.
-- Raw logs/receipts: target/a02-manifest-rescue-logs, target/a02-manifest-rescue,
-  target/a02-save-as-failure. No new cross-platform GUI/device acceptance.
+- Targeted gizmo math: 11 PASSED. Transform/entity-command/scene-workspace/
+  two-scene integration: 35 PASSED. Python: 38 PASSED.
+- parented_multiselect_smoke.py PASSED: empty-selection safety, descendant-first
+  selection, move/rotate/scale, exact child properties, single-gesture undo/redo,
+  selection retained across history, cancel preserves redo, exact project restart.
+- Existing local_axes_smoke.py PASSED again. Screenshots inspected.
+- Raw receipts/logs: target/a02-parented-selection, target/a02-parented-selection-logs,
+  target/a02-local-axes. Linux Xvfb/software graphics only.
 
-## Hosted / next
+## Next / known issues
 
-On prior source ac0a86c, Linux candidate 43708624752 FAILED before application
-build: artifact-service preflight download reported probe artifact not found.
-No service root cause was established; no preflight check was weakened. Windows
-43708624748, CI 43708624755 and reference 43708624764 were still IN_PROGRESS
-at observation. Obtain matching new-source checks and a successful candidate
-artifact preflight; do not promote earlier green source results to newer code.
+At observation on prior c9958d7, reference 43709956415, Windows 43709956361,
+CI 43709956368 and Linux 43709956395 were IN_PROGRESS. Obtain matching new-source
+checks; earlier green source results cannot accept newer code. Prior ac0a86c Linux
+candidate 43708624752 failed artifact-probe download before application build;
+root cause unestablished and preflight unchanged.
 
-Continue A02 remaining full component/property and parented multiselect transform
-coverage and cross-platform acceptance. Source directory/resources must still
-exist for Save As rescue; whole-resource-tree reconstruction is not implemented.
-Dirty code deliberately requires explicit Save/Revert before a copy. Entity-parent
-trees do not close nested-scene authoring. Do not close A02 from isolated workflows.
+Continue A02 full component/property coverage and cross-platform acceptance.
+Inspector property edits retain primary-entity semantics. Entity-parent trees do
+not close nested-scene authoring. Source resources must still exist for Save As
+rescue; whole-resource-tree reconstruction is not implemented. Dirty source still
+requires explicit Save/Revert before copying. Do not close A02 from isolated flows.
 
 A03: 3daaa1c adds typed dependencies/reference-safe moves, per-target import rules,
 worker diagnostics and fixed GPU preview lifetime. Full nested prefab/variants,
