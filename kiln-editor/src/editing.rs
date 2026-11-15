@@ -582,42 +582,7 @@ pub fn apply_prefab_instance_to_definition(
 
 /// Update authored Sprite, audio and UI font paths after a project-relative asset move.
 pub fn rewrite_asset_references(project: &mut Project, old: &str, new: &str) -> usize {
-    fn rewrite(entity: &mut kiln_core::Entity, old: &str, new: &str) -> usize {
-        entity
-            .components
-            .iter_mut()
-            .filter_map(|component| match component {
-                kiln_core::Component::Sprite { texture, .. } => texture.as_mut(),
-                _ => None,
-            })
-            .filter(|path| path.as_str() == old)
-            .map(|path| {
-                *path = new.to_owned();
-            })
-            .count()
-    }
-    let mut changed = 0;
-    for scene in project.scenes.values_mut() {
-        for entity in &mut scene.entities {
-            changed += rewrite(entity, old, new);
-        }
-    }
-    for prefab in project.prefabs.values_mut() {
-        changed += rewrite(&mut prefab.root_entity, old, new);
-    }
-    for font in project.ui.fonts.values_mut() {
-        if font.path == old {
-            font.path = new.into();
-            changed += 1;
-        }
-    }
-    for audio in &mut project.audio_assets {
-        if audio.path == old {
-            audio.path = new.into();
-            changed += 1;
-        }
-    }
-    changed
+    project.rewrite_resource_path(old, new)
 }
 
 /// The default size of a sprite without a texture, in world units.
@@ -673,7 +638,7 @@ pub fn nest_scene(project: &mut Project, parent_id: &str, child_id: &str) -> Res
     if scene_reaches(project, child_id, parent_id, &mut HashSet::new()) {
         return Err("Nesting this scene would create a scene cycle".into());
     }
-    let Some(parent) = project.scenes.get_mut(parent_id) else {
+    let Some(parent) = project.scenes.get(parent_id) else {
         return Err(format!("The scene '{parent_id}' does not exist"));
     };
     if parent
@@ -683,6 +648,11 @@ pub fn nest_scene(project: &mut Project, parent_id: &str, child_id: &str) -> Res
     {
         return Err(format!("The scene '{child_id}' is already nested"));
     }
+    validate_nested_identities(project, parent_id, child_id)?;
+    let parent = project
+        .scenes
+        .get_mut(parent_id)
+        .ok_or("Parent scene is missing")?;
     parent.nested_scenes.push(kiln_core::project::NestedScene {
         scene_id: child_id.to_string(),
         offset: kiln_core::project::SceneOffset::default(),
@@ -736,24 +706,81 @@ pub fn configure_nested_scene(
     Ok(())
 }
 
-fn scene_reaches(
+// SourceId is the live identity contract. Reject compositions that would make
+// it ambiguous before publishing a link, including already-containing ancestors.
+fn validate_nested_identities(project: &Project, parent: &str, child: &str) -> Result<(), String> {
+    let mut affected = HashSet::from([parent.to_owned()]);
+    loop {
+        let before = affected.len();
+        for scene in project.scenes.values() {
+            if scene
+                .nested_scenes
+                .iter()
+                .any(|link| affected.contains(&link.scene_id))
+            {
+                affected.insert(scene.id.clone());
+            }
+        }
+        if affected.len() == before {
+            break;
+        }
+    }
+    let mut roots: Vec<_> = affected.into_iter().collect();
+    roots.sort();
+    for root in roots {
+        let mut scenes = HashSet::new();
+        let mut owners = HashMap::new();
+        let mut pending = vec![root.as_str()];
+        while let Some(id) = pending.pop() {
+            let scene = project
+                .scenes
+                .get(id)
+                .ok_or_else(|| format!("Nested scene `{id}` is missing"))?;
+            if !scenes.insert(id) {
+                return Err(format!("Scene `{id}` would occur more than once in `{root}`; nested instances require distinct entity identities"));
+            }
+            for entity in &scene.entities {
+                if let Some(previous) = owners.insert(entity.id.as_str(), id) {
+                    return Err(format!("Entity ID `{}` is shared by scenes `{previous}` and `{id}` in `{root}`; nesting was not applied", entity.id));
+                }
+            }
+            pending.extend(
+                scene
+                    .nested_scenes
+                    .iter()
+                    .map(|link| link.scene_id.as_str()),
+            );
+            if id == parent {
+                pending.push(child);
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn scene_reaches(
     project: &Project,
     from: &str,
     target: &str,
     visited: &mut HashSet<String>,
 ) -> bool {
-    if from == target {
-        return true;
+    let mut pending = vec![from];
+    while let Some(id) = pending.pop() {
+        if id == target {
+            return true;
+        }
+        if visited.insert(id.to_owned()) {
+            if let Some(scene) = project.scenes.get(id) {
+                pending.extend(
+                    scene
+                        .nested_scenes
+                        .iter()
+                        .map(|link| link.scene_id.as_str()),
+                );
+            }
+        }
     }
-    if !visited.insert(from.to_owned()) {
-        return false;
-    }
-    project.scenes.get(from).is_some_and(|scene| {
-        scene
-            .nested_scenes
-            .iter()
-            .any(|nested| scene_reaches(project, &nested.scene_id, target, visited))
-    })
+    false
 }
 
 /// The files of a project directory, ready to be packed.
@@ -807,6 +834,61 @@ mod tests {
             script: None,
             nested_scenes: Vec::new(),
         }
+    }
+
+    #[test]
+    fn nesting_rejects_entity_identity_collisions_without_mutating_documents() {
+        let mut project = Project::default();
+        for (id, x) in [("a", 10.0), ("b", 80.0)] {
+            let mut scene = empty_scene(id);
+            scene.entities.push(kiln_core::Entity {
+                id: "hero".into(),
+                name: id.into(),
+                components: vec![kiln_core::Component::Transform {
+                    x,
+                    y: 0.0,
+                    rotation: 0.0,
+                    scale: 1.0,
+                }],
+            });
+            project.scenes.insert(id.into(), scene);
+        }
+        let before = serde_json::to_value(&project).unwrap();
+        let error = nest_scene(&mut project, "a", "b").unwrap_err();
+        assert!(error.contains("hero"), "{error}");
+        assert_eq!(serde_json::to_value(&project).unwrap(), before);
+    }
+
+    #[test]
+    fn nesting_checks_ancestor_compositions_and_repeated_transitive_instances() {
+        let mut project = Project::default();
+        for id in ["a", "b", "c", "d"] {
+            project.scenes.insert(id.into(), empty_scene(id));
+        }
+        for id in ["a", "c"] {
+            project
+                .scenes
+                .get_mut(id)
+                .unwrap()
+                .entities
+                .push(kiln_core::Entity {
+                    id: "hero".into(),
+                    name: id.into(),
+                    components: vec![],
+                });
+        }
+        nest_scene(&mut project, "a", "b").unwrap();
+        let before = serde_json::to_value(&project).unwrap();
+        assert!(nest_scene(&mut project, "b", "c")
+            .unwrap_err()
+            .contains("hero"));
+        assert_eq!(serde_json::to_value(&project).unwrap(), before);
+        project.scenes.get_mut("a").unwrap().entities.clear();
+        nest_scene(&mut project, "b", "c").unwrap();
+        nest_scene(&mut project, "a", "d").unwrap();
+        let before = serde_json::to_value(&project).unwrap();
+        assert!(nest_scene(&mut project, "d", "c").is_err());
+        assert_eq!(serde_json::to_value(&project).unwrap(), before);
     }
 
     #[test]

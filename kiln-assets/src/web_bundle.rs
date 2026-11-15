@@ -75,14 +75,19 @@ pub fn runtime_info(wasm: &[u8]) -> Result<RuntimeInfo, String> {
         .ok_or("WASM lacks Kiln runtime metadata; rebuild the runtime")?
         .lines()
         .collect();
-    if !(3..=5).contains(&lines.len())
+    if !(3..=6).contains(&lines.len())
         || !["fonts=0", "fonts=1"].contains(&lines[2])
         || (lines.len() >= 4 && !["physics=0", "physics=1"].contains(&lines[3]))
-        || (lines.len() == 5 && !["materials=0", "materials=1"].contains(&lines[4]))
+        || (lines.len() >= 5 && !["materials=0", "materials=1"].contains(&lines[4]))
     {
         return Err("Unsupported WASM runtime metadata".into());
     }
     let runtime = RuntimeInfo {
+        contract: lines
+            .get(5)
+            .and_then(|line| line.strip_prefix("contract="))
+            .unwrap_or_default()
+            .into(),
         protocol: lines[0].parse().map_err(|_| "Invalid runtime protocol")?,
         version: lines[1].into(),
         platform: "web".into(),
@@ -154,7 +159,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let js="export function run(){}\nexport function prepare_game(){}\nexport function start_game(){}";
         fs::write(dir.path().join(FILES[0]), js).unwrap();
-        let wasm = module(&format!("1\n{}\nfonts=1\n", env!("CARGO_PKG_VERSION")));
+        let wasm = module(&format!(
+            "1\n{}\nfonts=1\nphysics=1\nmaterials=1\ncontract={}\n",
+            env!("CARGO_PKG_VERSION"),
+            kiln_core::export::RUNTIME_CONTRACT
+        ));
         fs::write(dir.path().join(FILES[1]), &wasm).unwrap();
         prepare(dir.path()).unwrap();
         assert_eq!(verify(dir.path()).unwrap().platform, "web");
@@ -190,20 +199,20 @@ mod capability_tests {
             module.extend(text.as_bytes());
             module
         }
-        assert!(!super::runtime_info(&wasm("")).unwrap().physics);
-        assert!(super::runtime_info(&wasm("physics=1\n")).unwrap().physics);
-        assert!(!super::runtime_info(&wasm("physics=0\n")).unwrap().physics);
-        assert!(!super::runtime_info(&wasm("physics=1\n")).unwrap().materials);
-        assert!(
-            super::runtime_info(&wasm("physics=1\nmaterials=1\n"))
-                .unwrap()
-                .materials
-        );
-        assert!(
-            !super::runtime_info(&wasm("physics=1\nmaterials=0\n"))
-                .unwrap()
-                .materials
-        );
+        assert!(super::runtime_info(&wasm("")).is_err());
+        assert!(super::runtime_info(&wasm("physics=1\nmaterials=1\n")).is_err());
+        for (physics, materials) in [(false, false), (true, false), (true, true)] {
+            let tail = format!(
+                "physics={}\nmaterials={}\ncontract={}\n",
+                u8::from(physics),
+                u8::from(materials),
+                kiln_core::export::RUNTIME_CONTRACT
+            );
+            let runtime = super::runtime_info(&wasm(&tail)).unwrap();
+            assert_eq!(runtime.physics, physics);
+            assert_eq!(runtime.materials, materials);
+        }
+        assert!(super::runtime_info(&wasm("physics=1\nmaterials=1\ncontract=old\n")).is_err());
         assert!(super::runtime_info(&wasm("physics=1\nmaterials=true\n")).is_err());
         for tail in [
             "physics=true\n",

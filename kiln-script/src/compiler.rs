@@ -29,6 +29,7 @@ struct LoopContext {
 }
 
 pub struct Compiler {
+    constants: HashMap<String, Value>,
     loops: Vec<LoopContext>,
     functions: HashMap<String, (Vec<String>, Vec<Stmt>)>,
     function_stack: Vec<String>,
@@ -51,6 +52,7 @@ impl Compiler {
         let mut arities = HashMap::new();
         arities.insert("print".to_string(), 1u32);
         Self {
+            constants: HashMap::new(),
             loops: Vec::new(),
             functions: HashMap::new(),
             function_stack: Vec::new(),
@@ -94,6 +96,28 @@ impl Compiler {
 
     pub fn compile(&mut self, stmts: &[Stmt]) -> Result<Program, CompileError> {
         Self::validate_loop_controls(stmts, 0)?;
+        let mut enum_names = std::collections::HashSet::new();
+        for stmt in stmts {
+            if let Stmt::Enum {
+                name,
+                variants,
+                span,
+            } = stmt
+            {
+                if !enum_names.insert(name.clone()) {
+                    return Err(CompileError::Custom(format!(
+                        "Duplicate enum '{name}' at {}",
+                        span.start
+                    )));
+                }
+                for variant in variants {
+                    self.constants.insert(
+                        format!("{name}.{variant}"),
+                        Value::Str(format!("{name}::{variant}")),
+                    );
+                }
+            }
+        }
         for stmt in stmts {
             if let Stmt::Function { name, params, body } = stmt {
                 if self.builtins.contains_key(name)
@@ -107,7 +131,7 @@ impl Compiler {
             }
         }
         for stmt in stmts {
-            if !matches!(stmt, Stmt::Function { .. }) {
+            if !matches!(stmt, Stmt::Function { .. } | Stmt::Enum { .. }) {
                 self.compile_stmt(stmt)?;
             }
         }
@@ -155,9 +179,9 @@ impl Compiler {
             return Err(CompileError::Custom("Too many script locals".into()));
         }
         match stmt {
-            Stmt::Function { .. } => {
+            Stmt::Function { .. } | Stmt::Enum { .. } => {
                 return Err(CompileError::Custom(
-                    "Function definitions must be at module top level".into(),
+                    "Enum/function definitions must be at module top level".into(),
                 ));
             }
             Stmt::Expr(expr) => {
@@ -375,10 +399,14 @@ impl Compiler {
                     .add_instruction(Instruction::PushConst(Value::Str(s.clone())));
             }
             Expr::Identifier(name, span) => {
-                let slot = self
-                    .find_slot(name)
-                    .ok_or_else(|| CompileError::UndefinedVariable(name.clone(), *span))?;
-                self.program.add_instruction(Instruction::GetLocal(slot));
+                if let Some(slot) = self.find_slot(name) {
+                    self.program.add_instruction(Instruction::GetLocal(slot));
+                } else if let Some(value) = self.constants.get(name) {
+                    self.program
+                        .add_instruction(Instruction::PushConst(value.clone()));
+                } else {
+                    return Err(CompileError::UndefinedVariable(name.clone(), *span));
+                }
             }
             Expr::Not(operand, _) => {
                 self.compile_expr(operand)?;

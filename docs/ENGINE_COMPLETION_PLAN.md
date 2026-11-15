@@ -116,10 +116,10 @@ Evidence ledger template (one row per accepted substep/target):
 
 ### A01 — Restore trustworthy CI and baseline
 
-**Status:** PARTIAL. **Depends on:** None.
+**Status:** ACCEPTED (configured baseline on `6de428b`, 2026-11-15). **Depends on:** None.
 
-- [ ] Diagnose current CI/release/reference-game failures; repair causes without weakening checks. Run reference-game authoring/export/play acceptance on master and relevant pull requests. Align native, audio, WASM, feature-off and browser gates; detect stale/mismatched runtime bundles.
-- [ ] **Acceptance:** A fresh source revision passes required hosted checks, all three game replays and artifact verification; deliberate exporter failures still fail visibly.
+- [x] Diagnose current CI/release/reference-game failures; repair causes without weakening checks. Run reference-game authoring/export/play acceptance on master and relevant pull requests. Align native, audio, WASM, feature-off and browser gates; detect stale/mismatched runtime bundles.
+- [x] **Acceptance:** A fresh source revision passes required hosted checks, all three game replays and artifact verification; deliberate exporter failures still fail visibly.
 
 **Progress 2026-11-13:** repaired reproducible documentation build failures and
 stale saved-UI/native/browser export smoke interactions; promoted reference-game
@@ -168,6 +168,26 @@ Windows capture selected a tiny helper before the main client was ready. Held
 binding presses and largest-valid-client selection repair those specific paths,
 with regression coverage. Fresh matching-source hosted results remain required.
 
+**Seventh batch 2026-11-14:** current `3efb687` Windows candidate and reference
+games passed, but general CI still timed out opening the floating source editor.
+Delaying the first render locally reproduced lost default-tab close clicks and
+the same timeout. Startup now observes the painted menu before closing tabs and
+holds menu clicks across frames; native CI retains a real delayed-render
+regression. [Evidence](evidence/A01_EDITOR_STARTUP.md). Matching hosted
+confirmation remains required; A01 stays PARTIAL.
+
+**Resumed verification 2026-11-15:** `6de428b` passed matching general CI
+43606018834, reference games 43606018842 and Linux candidate 43606018785,
+including release replay/payload comparison, clean Ubuntu acceptance and origin
+attestation. The startup repair is confirmed remotely. Local three-game exports
+and portable acceptance also passed. Resource-contention-sensitive graph-dialog
+and physics-capture failures were observed locally; physics passes in isolation,
+and unverified graph changes were reverted. Both unchanged flows pass in isolated
+serial reruns, matching hosted CI. Windows candidate was path-filtered for this change and was not a required triggered check;
+prior-source candidate evidence is not promoted. A01's configured baseline is
+ACCEPTED on `6de428b`; parallel local GUI/build/export execution and physical-device
+certification are not inferred. See [resumed validation](evidence/A01_RESUMED_VALIDATION.md).
+
 ### A02 — Durable projects, scene editing and recovery
 
 **Status:** PARTIAL. **Depends on:** A01.
@@ -200,6 +220,104 @@ Workspace flags survive prefab propagation. Windows candidate now passes on
 27fa148, but matching general CI/reference results failed and remain under repair.
 A02's broad cross-platform acceptance is still open; see STATE.md for current work.
 
+**Transform snapping checkpoint 2026-11-15:** Snap now covers 15° world rotation
+and proportional uniform scale in 0.1 steps, in addition to the configured move
+grid. Real widget acceptance verifies each gesture's Undo/Redo, Escape cancellation,
+Snap-off continuous scaling, copying into a second scene, an unsaved inspector
+scale edit, real-timer autosave/forced-crash recovery and exact project restart.
+Math and editor integration checks pass; CI retains the new acceptance evidence.
+Local-axis viewport tools and broader combined/cross-platform acceptance remain
+open. [Evidence](evidence/A02_TRANSFORM_SNAP.md). A02 remains PARTIAL.
+
+**Local move-axis checkpoint 2026-11-15:** enabled World/Local selection, shared
+projected handle drawing/hit testing, constrained X/Y movement and free-center
+dragging. Local handles use the entity's world orientation (including parents),
+with snapped displacement; World handles use absolute grid snapping without moving
+the constrained perpendicular coordinate. Real widgets verify both orientations,
+constraints, snap semantics, history/cancel and exact restart. Parented-child
+world/local storage integration and prior two-scene snapping/recovery pass.
+[Evidence](evidence/A02_LOCAL_AXES.md). Combined hierarchy/property and cross-platform
+acceptance remain open. Prior-source `20ab011` general CI hit the known graph
+widget timeout; its Windows candidate passed. A02 remains PARTIAL.
+
+**Hierarchy checkpoint 2026-11-15:** replaced the flat entity list and inert
+expanders with a stable Parent-link tree, real folding, search with ancestor
+context and branch-state preservation during same-scene edits. Dropping onto the
+SCENE header detaches through the existing world-pose-preserving command. Real
+widgets combine duplicate, nontrivial reparent/property edits, detach, Delete/Undo,
+two-scene subtree copy, negative local-property autosave/crash recovery and exact
+restart. Existing clipboard and scene-controls regressions pass. Full property/
+cross-platform acceptance and the known hosted graph-dialog timeout remain open.
+[Evidence](evidence/A02_HIERARCHY_TREE.md). A02 remains PARTIAL.
+
+**Authoring-dialog reliability followup 2026-11-15:** reproduced a real graph
+parameter window being obscured when its containing floating graph panel is
+raised. The new deterministic hit-test regression fails before the fix and passes
+with parameter editors in the foreground. Host-picker replay waits for measured
+dialog/menu states without weakening source/gameplay/history assertions. Two fresh
+native/browser graph authoring and save-restoration runs pass. Matching hosted
+confirmation remains open; this fixes an editor interaction defect, not an A04
+feature or completion gate. [Evidence](evidence/A02_GRAPH_DIALOG_LAYERING.md).
+
+**Save As reliability checkpoint 2026-11-15:** failed copies retain the form,
+destination and inline error for retry or Cancel/Escape. Successful copies rebuild
+the active hierarchy. Save As now requires Save/Revert of dirty source instead of
+implicitly writing it before a possible copy failure. Real widgets verify occupied
+destination and staged symlink failures, byte preservation, cleanup, cancelled
+scene/source drafts, corrected retry, copied-project editing and exact restart.
+Source-guard and lifecycle integration checks pass. Broader A02 and matching hosted
+acceptance remain open. [Evidence](evidence/A02_SAVE_AS_RETRY.md).
+
+**External-manifest rescue checkpoint 2026-11-15:** fixed Save As failing when
+the loaded manifest had been deleted. Resource copying excludes the old manifest
+entry by filename under the canonical source root and writes the in-memory draft
+into the copy. Disk regression fails before/passes after; linked resources remain
+rejected. Three real widget cases verify normal Save rejection after deletion,
+corruption or external edits, Escape retaining the draft, successful Save As,
+original/resources preservation, continued copy editing and exact restart.
+[Evidence](evidence/A02_MANIFEST_RESCUE.md). Source resources must remain available;
+full A02/cross-platform acceptance stays open. Prior-source Linux candidate failed
+artifact preflight before application build; matching hosted rerun remains needed.
+
+**Parented selection checkpoint 2026-11-15:** clearing the last hierarchy
+selection now clears the inspector/gizmo target. Shared group transforms update
+selection roots, preserving selected descendants’ exact local documents. Real
+widget coverage verifies descendant-first selection, move/rotate/scale, one-step
+undo/redo, cancellation, retained selection and exact restart; CI retains evidence.
+See [parented selection evidence](evidence/A02_PARENTED_SELECTION.md). A02 remains
+PARTIAL; full component/property coverage and cross-platform acceptance remain.
+
+**Floating-panel replay checkpoint 2026-11-15:** reproduced the hosted Skybridge
+missing-animation failure locally. The shared observer now waits for settled
+rendered panel geometry and verifies the origin after a drag before targeting
+widgets. Skybridge authoring again matches its complete checked-in project;
+no property assertions were weakened. See [replay evidence](evidence/A02_PANEL_REPLAY.md).
+This reliability repair does not close A02's remaining breadth or acceptance.
+
+**Scene-settings checkpoint 2026-11-15:** scene name/script, camera and nested-link
+edits now share scene-scoped undo/cancel history; camera-only changes mark tabs
+dirty and Discard restores saved camera presence/value. Nested selection is explicit,
+link changes refresh the preview, and composition controls respect Play/project
+operation guards. Real widgets verify complete settings Undo/Redo, camera cancellation,
+two-scene composition/offset/remove preview, real-timer camera-only crash recovery
+and exact restart. [Evidence](evidence/A02_SCENE_SETTINGS.md). Broader combined
+property coverage and cross-platform acceptance remain open; A02 stays PARTIAL.
+
+**Nested-identity protection checkpoint 2026-11-15:** reproduced nesting/saving
+ambiguous entity IDs. New links validate affected ancestor compositions atomically;
+legacy ambiguous roots keep authored data and cannot target arbitrary inspector/
+gizmo handles. Before/after disk and real-widget regressions pass. Valid distinct-ID
+composition remains functional. [Evidence](evidence/A02_NESTED_IDENTITY.md).
+Scoped/repeated instances remain open; this protection does not close A02.
+
+**Entity-reference checkpoint 2026-11-15:** deletion refuses dangling joint/camera
+dependencies in containing compositions and preserves history on failure. Joint
+Add/Set validate unique endpoints; the inspector supports retained invalid drafts,
+explicit single-command Apply and Cancel. Generic errors stay above floating panels.
+Before/after regressions and real widgets verify reference resolution, safe deletion,
+history and exact restart. [Evidence](evidence/A02_ENTITY_REFERENCES.md). Full A02
+acceptance and matching hosted checks remain open; prior-source CI failed local axes.
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.
@@ -215,6 +333,15 @@ fallible allocation. Pixel/preview tests and actual rendered reimport pass.
 Polling uses size/mtime; content-preserving metadata changes, the complete renamed-
 prefab/atlas/export workflow, platform presets and nested/variant acceptance remain
 open. See [batch evidence](evidence/A02_A04_AUTHORING.md).
+
+**Resource/import batch 2026-11-14:** one typed reference visitor now covers
+prefab overrides, clips, tilesets, scripts, fonts, audio and shader/material
+textures. Stable IDs move with references. Import defaults and separate target
+presets persist through real widget rename/save/restart; background diagnostics
+report missing dependents and duplicate IDs/content. Fixed a real GPU preview
+lifetime crash and hidden import controls. Nested/variant prefab and integrated
+atlas rebuild/export acceptance remain open. See
+[checkpoint evidence](evidence/A03_A04_RESOURCE_TOOLS.md).
 
 ### A04 — General scripting, graphs and real debugging
 
@@ -232,6 +359,24 @@ source breakpoints, imported function frames and watches. Enums, scheduling,
 completion/search/format/navigation and graph authoring/inspection acceptance
 remain open. See [language contract](KILNSCRIPT.md) and
 [batch evidence](evidence/A02_A04_AUTHORING.md). A02–A04 remain PARTIAL.
+
+**Source/scheduling batch 2026-11-14:** qualified enums, cooperative staged tasks
+and one-shot game-time timers use the shared VM and existing typed saves. Added
+indent formatting, shared-registry call insertion, bounded saved-project search
+and literal function navigation. Browser movement passes using editor-authored
+enums/tasks/timers/dictionaries/loops; save/restart and invalid input regressions
+pass. Runtime identities now reject stale same-version language/project contracts.
+This does not supply automatic stackful continuations, live source breakpoints,
+imported frames/watches or complete graph authoring. Those and the new equivalent
+script/graph game remain required. See [checkpoint evidence](evidence/A03_A04_RESOURCE_TOOLS.md).
+
+**Graph batch 2026-11-14:** replaced hashed/stub host calls with bounded lowering
+through the ordinary source compiler/shared registry. Wired the actual node/pin
+editor, guarded single-file visual resources, parameter Cancel/Delete, graph history,
+one-gesture dragging, scene assignment and actual node-value inspection. Real widget
+save/restart, native gameplay and browser save/restore pass; graph/text movement and
+logical-save parity pass. Source debugging and the required new equivalent game
+remain open; see [graph evidence](evidence/A04_GRAPH_WORKFLOW.md).
 
 ### A05 — Sprite rendering, cameras and large-scene behavior
 

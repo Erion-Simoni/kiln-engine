@@ -218,6 +218,8 @@ jobs:
         env:
           KILN_EDITOR_EVIDENCE_DIR: target/editor-design-evidence
         run: python3 tests/native/editor_smoke.py
+      - name: Verify panel opening after delayed editor rendering
+        run: python3 tests/native/editor_startup_smoke.py
       - name: Exercise saved menus and settings
         env:
           KILN_UI_EVIDENCE_DIR: target/native-ui-evidence
@@ -232,6 +234,30 @@ jobs:
         run: python3 tests/native/entity_clipboard_smoke.py
       - name: Verify scene selection, locks, visibility, alignment and recovery
         run: python3 tests/native/scene_controls_smoke.py
+      - name: Verify snapped transform gestures, history and two-scene recovery
+        run: python3 tests/native/transform_snap_smoke.py
+      - name: Verify world and local move axes, constraints and history
+        run: python3 tests/native/local_axes_smoke.py
+      - name: Verify empty selection safety and parented multiselect transforms
+        run: python3 tests/native/parented_multiselect_smoke.py
+      - name: Preserve joint endpoints and camera targets during entity edits
+        run: python3 tests/native/entity_reference_smoke.py
+      - name: Reject ambiguous nested identities and preserve imported scene data
+        run: python3 tests/native/nested_identity_smoke.py
+      - name: Verify scene settings, camera history and composition recovery
+        run: python3 tests/native/scene_settings_smoke.py
+      - name: Verify parent trees, search, root drops and two-scene recovery
+        run: python3 tests/native/hierarchy_tree_smoke.py
+      - name: Verify Save As failure, cancel/retry and copied-project editing
+        run: python3 tests/native/save_as_failure_smoke.py
+      - name: Verify draft rescue after external manifest deletion or changes
+        run: python3 tests/native/manifest_rescue_smoke.py
+      - name: Verify editable gameplay graphs, history and live execution
+        run: python3 tests/native/graph_authoring_smoke.py
+      - name: Verify source formatting, navigation and completion
+        run: python3 tests/native/source_tools_smoke.py
+      - name: Verify asset preview, target presets and reference-safe moves
+        run: python3 tests/native/asset_import_workflow_smoke.py
       - name: Verify external art refresh and structured gameplay authoring
         run: python3 tests/native/asset_script_workflow_smoke.py
       - name: Pack the saved UI game
@@ -257,6 +283,10 @@ jobs:
           path: |
             target/native-ui-evidence/
             target/editor-design-evidence/
+            target/a01-editor-startup/result.json
+            target/a01-editor-startup/failure.json
+            target/a01-editor-startup/editor/*.png
+            target/a01-editor-startup/editor/*.log
             target/task7-native-evidence/
             target/task7-editor-evidence/
             target/task8-export-evidence/
@@ -269,10 +299,73 @@ jobs:
             target/a02-scene-controls/result.json
             target/a02-scene-controls/editor/*.png
             target/a02-scene-controls/editor/*.log
+            target/a02-transform-snap/result.json
+            target/a02-transform-snap/failure.json
+            target/a02-transform-snap/editor/*.png
+            target/a02-transform-snap/editor/*.log
+            target/a02-transform-snap/reopened/*.png
+            target/a02-local-axes/result.json
+            target/a02-local-axes/failure.json
+            target/a02-local-axes/editor/*.png
+            target/a02-local-axes/editor/*.log
+            target/a02-local-axes/reopened/*.png
+            target/a02-entity-references/result.json
+            target/a02-entity-references/failure.json
+            target/a02-entity-references/editor/*.png
+            target/a02-entity-references/editor/*.log
+            target/a02-entity-references/reopened/*.png
+            target/a02-nested-identity/result.json
+            target/a02-nested-identity/failure.json
+            target/a02-nested-identity/editor/*.png
+            target/a02-nested-identity/editor/*.log
+            target/a02-nested-identity/legacy/*.png
+            target/a02-nested-identity/legacy/*.log
+            target/a02-nested-identity/reopened/*.png
+            target/a02-scene-settings/result.json
+            target/a02-scene-settings/failure.json
+            target/a02-scene-settings/editor/*.png
+            target/a02-scene-settings/editor/*.log
+            target/a02-scene-settings/reopened/*.png
+            target/a02-parented-selection/result.json
+            target/a02-parented-selection/failure.json
+            target/a02-parented-selection/editor/*.png
+            target/a02-parented-selection/editor/*.log
+            target/a02-parented-selection/reopened/*.png
+            target/a02-hierarchy-tree/result.json
+            target/a02-hierarchy-tree/failure.json
+            target/a02-hierarchy-tree/editor/*.png
+            target/a02-hierarchy-tree/editor/*.log
+            target/a02-hierarchy-tree/reopened/*.png
+            target/a02-save-as-failure/result.json
+            target/a02-save-as-failure/failure.json
+            target/a02-save-as-failure/editor/*.png
+            target/a02-save-as-failure/editor/*.log
+            target/a02-save-as-failure/reopened/*.png
+            target/a02-manifest-rescue/result.json
+            target/a02-manifest-rescue/*/failure.json
+            target/a02-manifest-rescue/*/editor/*.png
+            target/a02-manifest-rescue/*/editor/*.log
+            target/a02-manifest-rescue/*/reopened/*.png
             target/a02-entity-clipboard/result.json
             target/a02-entity-clipboard/editor/*.png
             target/a02-entity-clipboard/editor/*.log
             target/a02-entity-clipboard/reopened/*.png
+            target/a04-graph-authoring/result.json
+            target/a04-graph-authoring/failure.json
+            target/a04-graph-authoring/browser-play.log
+            target/a04-graph-authoring/editor/*.png
+            target/a04-graph-authoring/editor/*.log
+            target/a04-graph-authoring/reopened/*.png
+            target/a04-source-tools/result.json
+            target/a04-source-tools/failure.json
+            target/a04-source-tools/editor/*.png
+            target/a04-source-tools/editor/*.log
+            target/a04-source-tools/reopened/*.png
+            target/a03-asset-import/result.json
+            target/a03-asset-import/failure.json
+            target/a03-asset-import/editor/*.png
+            target/a03-asset-import/editor/*.log
+            target/a03-asset-import/reopened/*.png
             target/a03-a04-workflow/*.log
             target/a03-a04-workflow/failure.json
             target/a03-a04-workflow/result.json
@@ -320,6 +413,8 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Verify editor-authored counted loops and dictionaries in the browser
         run: python3 tests/native/asset_script_workflow_smoke.py --web-runtime target/debug/web-runtime
+      - name: Verify editor-authored graph gameplay and browser save restoration
+        run: python3 tests/native/graph_authoring_smoke.py --web-runtime target/debug/web-runtime
       - name: Exercise rendering and input
         run: node tests/web/smoke.cjs target/debug/web-runtime
       - name: Exercise browser menus, audio, controller input and save/resume
@@ -356,6 +451,12 @@ jobs:
         with:
           name: task7-browser-evidence
           path: |
+            target/a04-graph-authoring/result.json
+            target/a04-graph-authoring/failure.json
+            target/a04-graph-authoring/browser-play.log
+            target/a04-graph-authoring/editor/*.png
+            target/a04-graph-authoring/editor/*.log
+            target/a04-graph-authoring/reopened/*.png
             target/task7-web-evidence/
             target/task8-browser-export-evidence/
             target/task8-browser-evidence/

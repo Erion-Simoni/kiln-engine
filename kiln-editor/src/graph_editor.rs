@@ -27,6 +27,15 @@ const GRID_SIZE: f32 = 50.0;
 #[derive(Debug, Default)]
 pub struct GraphEditorState {
     pub graph: Graph,
+    source_buffer: String,
+    undo: Vec<String>,
+    redo: Vec<String>,
+    history_resource: Option<(std::path::PathBuf, String)>,
+    drag_undo_recorded: bool,
+    visual_document: bool,
+    document_message: String,
+    pub document_path: String,
+    editing_draft: Option<Node>,
     pub selected_node: Option<uuid::Uuid>,
     pub dragging: Option<(uuid::Uuid, Pos2)>,
     pub creating_connection: Option<uuid::Uuid>,
@@ -51,6 +60,28 @@ impl GraphEditorState {
             zoom: 1.0,
             ..Default::default()
         }
+    }
+
+    fn trim_history(&mut self) {
+        while self.undo.len() + self.redo.len() > 32
+            || self
+                .undo
+                .iter()
+                .chain(&self.redo)
+                .map(String::len)
+                .sum::<usize>()
+                > 8_388_608
+        {
+            if !self.undo.is_empty() {
+                self.undo.remove(0);
+            } else {
+                self.redo.remove(0);
+            }
+        }
+    }
+    fn remember_undo(&mut self, source: String) {
+        self.undo.push(source);
+        self.trim_history();
     }
 
     pub fn add_node(&mut self, node_type: NodeType, pos: Pos2) -> uuid::Uuid {
@@ -90,7 +121,13 @@ impl GraphEditorState {
         });
 
         match (source_pin, target_pin) {
-            (Some(s), Some(t)) => s.pin_type == t.pin_type,
+            (Some(s), Some(t)) => {
+                kiln_graph::compiler::compatible(s.pin_type, t.pin_type)
+                    || self
+                        .graph
+                        .get_pin_node(target)
+                        .is_some_and(|n| matches!(n.node_type, NodeType::Output))
+            }
             _ => false,
         }
     }
@@ -103,6 +140,9 @@ impl GraphEditorState {
                 .iter()
                 .any(|c| c.source_pin == source && c.target_pin == target);
             if !exists {
+                self.graph
+                    .connections
+                    .retain(|connection| connection.target_pin != target);
                 self.graph.connections.push(Connection {
                     id: uuid::Uuid::new_v4(),
                     source_pin: source,
@@ -419,8 +459,140 @@ fn category_name(cat: NodeCategory) -> &'static str {
     }
 }
 
+/// Edit a visual .ks resource using the normal guarded source/recovery buffer.
+pub fn render_document(
+    ui: &mut egui::Ui,
+    state: &mut GraphEditorState,
+    script: &mut crate::script_editor::ScriptEditor,
+    root: &std::path::Path,
+) {
+    ui.horizontal(|ui| {
+        ui.label("Visual script:");
+        if state.document_path.is_empty() {
+            state.document_path = "scripts/gameplay_graph.ks".into();
+        }
+        ui.text_edit_singleline(&mut state.document_path);
+        if ui.button("Open / New").clicked() {
+            let path = state.document_path.clone();
+            match script.open(root, &path) {
+                Ok(()) if script.source.is_empty() => {
+                    let mut graph = Graph::new();
+                    graph.add_node(Node::new(NodeType::Output, (450.0, 100.0)));
+                    match kiln_graph::document::encode(&graph) {
+                        Ok(source) => script.source = source,
+                        Err(error) => state.document_message = error.to_string(),
+                    }
+                }
+                Ok(()) => {}
+                Err(error) => state.document_message = error,
+            }
+        }
+        if ui.button("Save Script").clicked() {
+            state.document_message = match script.save() {
+                Ok(()) => "Visual script saved".into(),
+                Err(error) => error,
+            };
+        }
+        if ui
+            .add_enabled(!state.undo.is_empty(), egui::Button::new("Undo"))
+            .clicked()
+        {
+            if let Some(source) = state.undo.pop() {
+                state
+                    .redo
+                    .push(std::mem::replace(&mut script.source, source));
+                state.trim_history();
+            }
+        }
+        if ui
+            .add_enabled(!state.redo.is_empty(), egui::Button::new("Redo"))
+            .clicked()
+        {
+            if let Some(source) = state.redo.pop() {
+                state.remember_undo(std::mem::replace(&mut script.source, source));
+            }
+        }
+        if script.is_dirty() {
+            ui.colored_label(Color32::YELLOW, "Unsaved script");
+        }
+    });
+    let resource = (root.to_owned(), script.loaded_path().to_owned());
+    if state.history_resource.as_ref() != Some(&resource) {
+        state.undo.clear();
+        state.redo.clear();
+        state.history_resource = Some(resource);
+        state.dragging = None;
+        state.drag_undo_recorded = false;
+    }
+    if script.source != state.source_buffer {
+        match kiln_graph::document::decode(&script.source) {
+            Ok(Some(graph)) => {
+                state.visual_document = true;
+                state.graph = graph;
+                state.document_path = script.loaded_path().into();
+                state.editing_node = None;
+                state.editing_draft = None;
+                state.compile_result = None;
+                state.document_message =
+                    "Visual script uses normal project Save, recovery and export.".into();
+            }
+            Ok(None) => {
+                state.visual_document = false;
+                state.document_message="Choose a new .ks path or open an existing visual script. Current text is preserved.".into();
+            }
+            Err(error) => {
+                state.visual_document = false;
+                state.document_message = error;
+            }
+        }
+        state.source_buffer = script.source.clone();
+    }
+    ui.label(&state.document_message);
+    // A changed/manual body remains text; never replace it with stale visual state.
+    if !state.visual_document {
+        return;
+    }
+    render_graph_editor(ui, state);
+    if state.dirty {
+        match kiln_graph::document::encode(&state.graph) {
+            Ok(source) => {
+                if source != script.source {
+                    state.redo.clear();
+                    if state.dragging.is_none() || !state.drag_undo_recorded {
+                        state.remember_undo(script.source.clone());
+                        if state.dragging.is_some() {
+                            state.drag_undo_recorded = true;
+                        }
+                    }
+                    state.redo.clear();
+                }
+                script.source = source.clone();
+                state.source_buffer = source;
+                state.compile_result = None;
+            }
+            Err(error) => {
+                // Reject edits outside the document budget as one transaction.
+                if let Ok(Some(previous)) = kiln_graph::document::decode(&script.source) {
+                    state.graph = previous;
+                }
+                state.document_message = format!("Graph edit rejected: {error}");
+            }
+        }
+        state.dirty = false;
+    }
+    if !ui.input(|input| input.pointer.primary_down()) {
+        state.dragging = None;
+        state.drag_undo_recorded = false;
+    }
+}
+
 /// Render the node graph editor panel.
 pub fn render_graph_editor(ui: &mut egui::Ui, state: &mut GraphEditorState) {
+    state.zoom = if state.zoom.is_finite() && state.zoom > 0.0 {
+        state.zoom.clamp(0.1, 5.0)
+    } else {
+        1.0
+    };
     ui.heading("Node Graph");
 
     // Toolbar
@@ -428,7 +600,7 @@ pub fn render_graph_editor(ui: &mut egui::Ui, state: &mut GraphEditorState) {
         if ui.button("+ Event").clicked() {
             state.add_node(
                 NodeType::Event {
-                    name: "New Event".to_string(),
+                    name: "On Update".to_string(),
                 },
                 Pos2::new(100.0, 100.0),
             );
@@ -456,6 +628,21 @@ pub fn render_graph_editor(ui: &mut egui::Ui, state: &mut GraphEditorState) {
                 },
                 Pos2::new(100.0, 400.0),
             );
+        }
+        if ui.button("+ Output").clicked() {
+            state.add_node(NodeType::Output, Pos2::new(450.0, 100.0));
+        }
+        if ui
+            .add_enabled(
+                state.selected_node.is_some(),
+                egui::Button::new("Edit Selected"),
+            )
+            .clicked()
+        {
+            state.editing_node = state.selected_node;
+            state.editing_draft = state
+                .selected_node
+                .and_then(|id| state.graph.nodes.get(&id).cloned());
         }
         ui.separator();
         if ui.button("Compile to IR").clicked() {
@@ -522,15 +709,17 @@ pub fn render_graph_editor(ui: &mut egui::Ui, state: &mut GraphEditorState) {
     }
 
     // Handle node interactions
-    handle_node_interactions(ui, state, canvas_rect, &node_rects, &response);
+    if ui.is_enabled() {
+        handle_node_interactions(ui, state, canvas_rect, &node_rects, &response);
+    }
 
     // Show context menu for adding nodes
-    if state.show_add_menu {
+    if state.show_add_menu && ui.is_enabled() {
         show_add_node_menu(ui.ctx(), state, canvas_rect);
     }
 
     // Show node parameter editor if a node is being edited
-    if let Some(node_id) = state.editing_node {
+    if let Some(node_id) = state.editing_node.filter(|_| ui.is_enabled()) {
         show_node_editor(ui.ctx(), state, node_id);
     }
 }
@@ -768,16 +957,21 @@ fn draw_node_pins(painter: &egui::Painter, node: &Node, rect: egui::Rect, zoom: 
         );
 
         // Pin label
-        let _label_pos = match pin.direction {
+        let label_pos = match pin.direction {
             PinDirection::Input => Pos2::new(pin_pos.x + PIN_RADIUS * zoom + 4.0, y),
             PinDirection::Output => Pos2::new(pin_pos.x - PIN_RADIUS * zoom - 4.0, y),
         };
-        let _galign = match pin.direction {
+        let galign = match pin.direction {
             PinDirection::Input => egui::Align2::LEFT_CENTER,
             PinDirection::Output => egui::Align2::RIGHT_CENTER,
         };
-        // Note: We'd need access to ui.fonts() for text, so skip pin labels in painter
-        // They'll be drawn in the UI pass instead
+        painter.text(
+            label_pos,
+            galign,
+            &pin.name,
+            egui::FontId::proportional(11.0 * zoom),
+            Color32::LIGHT_GRAY,
+        );
 
         y += 20.0 * zoom;
     }
@@ -786,6 +980,7 @@ fn draw_node_pins(painter: &egui::Painter, node: &Node, rect: egui::Rect, zoom: 
 /// Get color for pin type.
 fn pin_type_color(pin_type: PinType) -> Color32 {
     match pin_type {
+        PinType::Value => Color32::from_rgb(200, 200, 200),
         PinType::Event => Color32::from_rgb(255, 200, 100),
         PinType::Integer => Color32::from_rgb(100, 200, 255),
         PinType::Float => Color32::from_rgb(150, 255, 150),
@@ -855,7 +1050,6 @@ fn handle_node_interactions(
     response: &Response,
 ) {
     let mut clicked_node: Option<uuid::Uuid> = None;
-    let mut drag_started_node: Option<(uuid::Uuid, Pos2)> = None;
 
     for (node_id, rect) in node_rects {
         let node_response = ui.interact(*rect, ui.id().with(node_id), Sense::click_and_drag());
@@ -863,27 +1057,21 @@ fn handle_node_interactions(
         if node_response.clicked() {
             clicked_node = Some(*node_id);
         }
-        if node_response.drag_started() {
-            drag_started_node = Some((
-                *node_id,
-                node_response.interact_pointer_pos().unwrap_or(Pos2::ZERO),
-            ));
-        }
-        if node_response.dragged() {
-            if let Some((id, _)) = drag_started_node {
-                if id == *node_id {
-                    if let Some(node) = state.graph.nodes.get_mut(node_id) {
-                        node.position.0 += node_response.drag_delta().x / state.zoom;
-                        node.position.1 += node_response.drag_delta().y / state.zoom;
-                        state.dirty = true;
-                    }
-                }
+        if node_response.dragged() && !ui.input(|input| input.modifiers.shift) {
+            state.dragging = Some((*node_id, Pos2::ZERO));
+            if let Some(node) = state.graph.nodes.get_mut(node_id) {
+                node.position.0 = (node.position.0 + node_response.drag_delta().x / state.zoom)
+                    .clamp(-1_000_000.0, 1_000_000.0);
+                node.position.1 = (node.position.1 + node_response.drag_delta().y / state.zoom)
+                    .clamp(-1_000_000.0, 1_000_000.0);
+                state.dirty = true;
             }
         }
 
         // Double-click to edit node parameters
         if node_response.double_clicked() {
             state.editing_node = Some(*node_id);
+            state.editing_draft = state.graph.nodes.get(node_id).cloned();
         }
 
         // Pin interaction
@@ -971,6 +1159,25 @@ fn show_add_node_menu(ctx: &egui::Context, state: &mut GraphEditorState, canvas_
                     let filter = state.search_filter.to_lowercase();
 
                     for (category, nodes) in node_types_by_category() {
+                        let nodes = nodes
+                            .into_iter()
+                            .filter(|(kind, _)| {
+                                matches!(
+                                    kind,
+                                    NodeType::Event { .. }
+                                        | NodeType::Constant { .. }
+                                        | NodeType::Arithmetic { .. }
+                                        | NodeType::Comparison { .. }
+                                        | NodeType::Branch
+                                        | NodeType::HostCall { .. }
+                                        | NodeType::Output
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        if nodes.is_empty() {
+                            continue;
+                        }
+
                         let mut has_match = false;
                         for (_, name) in &nodes {
                             if filter.is_empty() || name.to_lowercase().contains(&filter) {
@@ -1014,11 +1221,18 @@ fn show_add_node_menu(ctx: &egui::Context, state: &mut GraphEditorState, canvas_
 
 /// Show node parameter editor (double-click node).
 fn show_node_editor(ctx: &egui::Context, state: &mut GraphEditorState, node_id: uuid::Uuid) {
-    let Some(mut node) = state.graph.nodes.get(&node_id).cloned() else {
+    let Some(mut node) = state
+        .editing_draft
+        .clone()
+        .or_else(|| state.graph.nodes.get(&node_id).cloned())
+    else {
         return;
     };
 
+    let mut action = None;
     egui::Window::new(format!("Edit {}", node_type_name(&node.node_type)))
+        .id(egui::Id::new(("graph_node_editor", node_id)))
+        .order(egui::Order::Foreground)
         .collapsible(false)
         .resizable(false)
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -1029,6 +1243,30 @@ fn show_node_editor(ctx: &egui::Context, state: &mut GraphEditorState, node_id: 
                     ui.text_edit_singleline(name);
                 }
                 NodeType::Constant { value } => {
+                    let previous = match value {
+                        ConstantValue::Integer(_) => 0,
+                        ConstantValue::Float(_) => 1,
+                        ConstantValue::Boolean(_) => 2,
+                        ConstantValue::String(_) => 3,
+                    };
+                    let mut kind = previous;
+                    egui::ComboBox::from_label("Type")
+                        .selected_text(["Integer", "Float", "Boolean", "String"][kind])
+                        .show_ui(ui, |ui| {
+                            for (index, name) in
+                                ["Integer", "Float", "Boolean", "String"].iter().enumerate()
+                            {
+                                ui.selectable_value(&mut kind, index, *name);
+                            }
+                        });
+                    if kind != previous {
+                        *value = match kind {
+                            0 => ConstantValue::Integer(0),
+                            1 => ConstantValue::Float(0.0),
+                            2 => ConstantValue::Boolean(false),
+                            _ => ConstantValue::String(String::new()),
+                        };
+                    }
                     ui.label("Value:");
                     match value {
                         ConstantValue::Integer(v) => {
@@ -1070,24 +1308,8 @@ fn show_node_editor(ctx: &egui::Context, state: &mut GraphEditorState, node_id: 
                     egui::ComboBox::from_label("")
                         .selected_text(name.as_str())
                         .show_ui(ui, |ui| {
-                            for fname in [
-                                "print",
-                                "move_player",
-                                "add_score",
-                                "collect_coin",
-                                "play_sound",
-                                "set_status",
-                                "spawn_entity",
-                                "find_nearest",
-                                "get_input_x",
-                                "get_input_y",
-                                "get_score",
-                                "get_delta_time",
-                                "play_music",
-                                "stop_music",
-                                "set_volume",
-                            ] {
-                                ui.selectable_value(name, fname.to_string(), fname);
+                            for (fname, _, _) in kiln_runtime::slice::BUILTINS {
+                                ui.selectable_value(name, fname.to_string(), *fname);
                             }
                         });
                 }
@@ -1134,20 +1356,44 @@ fn show_node_editor(ctx: &egui::Context, state: &mut GraphEditorState, node_id: 
             ui.separator();
             ui.horizontal(|ui| {
                 if ui.button("OK").clicked() {
-                    state.editing_node = None;
-                    state.dirty = true;
+                    action = Some(0);
                 }
                 if ui.button("Cancel").clicked() {
-                    state.editing_node = None;
+                    action = Some(1);
                 }
                 if ui.button("Delete Node").clicked() {
-                    state.graph.remove_node(node_id);
-                    state.editing_node = None;
-                    state.dirty = true;
+                    action = Some(2);
                 }
             });
         });
-    state.graph.nodes.insert(node_id, node);
+    match action {
+        Some(0) => {
+            node.refresh_pins();
+            state.graph.nodes.insert(node_id, node.clone());
+            let pins = state
+                .graph
+                .nodes
+                .values()
+                .flat_map(|n| n.pins.iter().map(|p| p.id))
+                .collect::<std::collections::HashSet<_>>();
+            state
+                .graph
+                .connections
+                .retain(|c| pins.contains(&c.source_pin) && pins.contains(&c.target_pin));
+            state.dirty = true;
+        }
+        Some(2) => {
+            state.graph.remove_node(node_id);
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    if action.is_some() {
+        state.editing_node = None;
+        state.editing_draft = None;
+    } else {
+        state.editing_draft = Some(node);
+    }
 }
 
 fn node_type_name(node_type: &NodeType) -> String {
@@ -1175,5 +1421,50 @@ fn node_type_name(node_type: &NodeType) -> String {
         NodeType::QuestObjectiveUpdate { .. } => "Quest Objective".to_string(),
         NodeType::DataTableLookup { .. } => "DataTable Lookup".to_string(),
         NodeType::DataTableRowGet { .. } => "DataTable Row".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod parameter_window_tests {
+    use super::*;
+
+    #[test]
+    fn node_parameters_stay_above_the_floating_graph_when_its_parent_is_raised() {
+        let ctx = egui::Context::default();
+        crate::editor_shell::apply_theme(&ctx);
+        let mut state = GraphEditorState::new();
+        let node = state.add_node(
+            NodeType::Constant {
+                value: ConstantValue::Integer(5),
+            },
+            Pos2::new(100.0, 200.0),
+        );
+        state.editing_node = Some(node);
+        let parent = egui::Id::new("floating_graph_test");
+        for _ in 0..4 {
+            let _ = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(1440.0, 900.0),
+                    )),
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::Window::new("Graph")
+                        .id(parent)
+                        .fixed_rect(egui::Rect::from_min_max(
+                            egui::pos2(20.0, 20.0),
+                            egui::pos2(1400.0, 880.0),
+                        ))
+                        .show(ctx, |ui| render_graph_editor(ui, &mut state));
+                    // Model the containing dock regaining focus after a click.
+                    ctx.move_to_top(egui::LayerId::new(egui::Order::Middle, parent));
+                },
+            );
+        }
+        let layer = ctx.layer_id_at(egui::pos2(720.0, 450.0)).unwrap();
+        assert_eq!(layer.id, egui::Id::new(("graph_node_editor", node)));
+        assert_eq!(state.editing_node, Some(node));
     }
 }

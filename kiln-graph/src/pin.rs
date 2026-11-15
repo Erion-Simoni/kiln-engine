@@ -12,6 +12,8 @@ pub enum PinDirection {
 /// Data type of a pin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PinType {
+    /// Any non-event VM value (host arguments/results).
+    Value,
     /// Integer value (i64 in IR).
     Integer,
     /// Float value (f64 in IR).

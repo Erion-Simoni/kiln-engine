@@ -4,15 +4,22 @@
 //! edit, so undo restores the scene as it was and redo applies the edit
 //! again.
 
-use kiln_core::project::Scene;
+use kiln_core::{camera::CameraSettings, project::Scene};
+
+#[derive(Debug)]
+struct Snapshot {
+    scene: Scene,
+    // None means an entity edit that must preserve the current camera.
+    camera: Option<Option<CameraSettings>>,
+}
 
 /// The history of scene edits.
 #[derive(Debug, Default)]
 pub struct SceneHistory {
     /// The states that can be undone, oldest first.
-    undo: Vec<Scene>,
+    undo: Vec<Snapshot>,
     /// The states that can be redone, most recent first.
-    redo: Vec<Scene>,
+    redo: Vec<Snapshot>,
 }
 
 impl SceneHistory {
@@ -26,7 +33,10 @@ impl SceneHistory {
     /// This clears the redo stack, because a new edit makes the undone states
     /// unreachable.
     pub fn record(&mut self, scene: Scene) {
-        self.undo.push(scene);
+        self.undo.push(Snapshot {
+            scene,
+            camera: None,
+        });
         self.redo.clear();
     }
 
@@ -35,18 +45,50 @@ impl SceneHistory {
     /// The current state is pushed onto the redo stack, so the edit can be
     /// applied again.
     pub fn undo(&mut self, current: Scene) -> Option<Scene> {
-        let previous = self.undo.pop()?;
-        self.redo.push(current);
-        Some(previous)
+        self.undo_document(current, None).map(|(scene, _)| scene)
     }
 
-    /// The state to redo to, given the current state.
-    ///
-    /// The current state is pushed onto the undo stack.
+    /// Redo a scene-only edit. Camera-aware callers must use `redo_document`.
     pub fn redo(&mut self, current: Scene) -> Option<Scene> {
+        self.redo_document(current, None).map(|(scene, _)| scene)
+    }
+
+    /// Record settings including the exact presence/value of this scene's camera.
+    pub fn record_document(&mut self, scene: Scene, camera: Option<CameraSettings>) {
+        self.undo.push(Snapshot {
+            scene,
+            camera: Some(camera),
+        });
+        self.redo.clear();
+    }
+
+    /// Undo settings and return an optional camera replacement; entity edits
+    /// leave the current camera unchanged. Capture the current value for Redo.
+    pub fn undo_document(
+        &mut self,
+        current: Scene,
+        camera: Option<CameraSettings>,
+    ) -> Option<(Scene, Option<Option<CameraSettings>>)> {
+        let previous = self.undo.pop()?;
+        self.redo.push(Snapshot {
+            scene: current,
+            camera: previous.camera.as_ref().map(|_| camera),
+        });
+        Some((previous.scene, previous.camera))
+    }
+
+    /// Redo with the same camera replacement contract as `undo_document`.
+    pub fn redo_document(
+        &mut self,
+        current: Scene,
+        camera: Option<CameraSettings>,
+    ) -> Option<(Scene, Option<Option<CameraSettings>>)> {
         let next = self.redo.pop()?;
-        self.undo.push(current);
-        Some(next)
+        self.undo.push(Snapshot {
+            scene: current,
+            camera: next.camera.as_ref().map(|_| camera),
+        });
+        Some((next.scene, next.camera))
     }
 
     /// Whether there is a state to undo to.

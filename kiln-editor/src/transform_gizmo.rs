@@ -2,6 +2,73 @@
 
 use egui::{Pos2, Vec2 as EguiVec2};
 use kiln_core::{Component, Scene, Transform, Vec2};
+use std::collections::{HashMap, HashSet};
+
+const ROTATION_SNAP: f32 = std::f32::consts::PI / 12.0;
+const SCALE_SNAP: f32 = 0.1;
+
+/// Orientation of viewport movement handles, captured when a gesture begins.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GizmoSpace {
+    /// Align with the scene's world axes and absolute movement grid.
+    #[default]
+    World,
+    /// Align with the primary entity's world orientation; snap displacement.
+    Local,
+}
+
+impl GizmoSpace {
+    fn basis(self, rotation: f32) -> [Vec2; 2] {
+        let (sin, cos) = match self {
+            Self::World => (0.0, 1.0),
+            Self::Local => rotation.sin_cos(),
+        };
+        [Vec2::new(cos, sin), Vec2::new(-sin, cos)]
+    }
+}
+
+/// Movement constraint selected by pressing an axis or the free-move area.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TranslationAxis {
+    /// Move freely in the scene plane.
+    #[default]
+    Free,
+    /// Move along the displayed red axis.
+    X,
+    /// Move along the displayed green axis.
+    Y,
+}
+
+/// Screen endpoints of the displayed move handles, independent of zoom and DPI.
+pub fn translation_handles(
+    space: GizmoSpace,
+    rotation: f32,
+    center: Pos2,
+    units: [f32; 2],
+) -> [Pos2; 2] {
+    space.basis(rotation).map(|axis| {
+        center + EguiVec2::new(axis.x / units[0], -axis.y / units[1]).normalized() * 42.0
+    })
+}
+
+/// Choose the closest visible axis segment, leaving the center free to move.
+pub fn translation_axis(pointer: Pos2, center: Pos2, handles: [Pos2; 2]) -> TranslationAxis {
+    if pointer.distance(center) < 12.0 {
+        return TranslationAxis::Free;
+    }
+    let distances = handles.map(|end| {
+        let direction = end - center;
+        let t = ((pointer - center).dot(direction) / direction.length_sq()).clamp(12.0 / 42.0, 1.0);
+        pointer.distance(center + direction * t)
+    });
+    if distances[0] <= 8.0 && distances[0] <= distances[1] {
+        TranslationAxis::X
+    } else if distances[1] <= 8.0 {
+        TranslationAxis::Y
+    } else {
+        TranslationAxis::Free
+    }
+}
 
 /// Transform operation selected for viewport interaction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -96,6 +163,46 @@ pub fn order_group_targets(
     ordered
 }
 
+/// Keep only selection roots for a shared move/rotate/uniform-scale operation.
+/// Selected descendants inherit that same operation from a selected ancestor;
+/// rewriting their local values would introduce needless floating-point drift.
+pub fn group_root_targets(
+    scene: &Scene,
+    targets: &[(String, Transform)],
+) -> Vec<(String, Transform)> {
+    let selected: HashSet<_> = targets.iter().map(|(id, _)| id.as_str()).collect();
+    let parents: HashMap<_, _> = scene
+        .entities
+        .iter()
+        .filter_map(|entity| {
+            entity
+                .components
+                .iter()
+                .find_map(|component| match component {
+                    Component::Parent { parent } => Some((entity.id.as_str(), parent.as_str())),
+                    _ => None,
+                })
+        })
+        .collect();
+    targets
+        .iter()
+        .filter(|(id, _)| {
+            let mut current = id.as_str();
+            for _ in 0..scene.entities.len() {
+                let Some(parent) = parents.get(current) else {
+                    return true;
+                };
+                if selected.contains(parent) {
+                    return false;
+                }
+                current = parent;
+            }
+            false
+        })
+        .cloned()
+        .collect()
+}
+
 /// One pointer gesture evaluated from its press state, independent of frame rate.
 #[derive(Debug, Clone)]
 pub struct GizmoDrag {
@@ -105,6 +212,8 @@ pub struct GizmoDrag {
     units_per_point: [f32; 2],
     start_angle: f32,
     start_vector: Vec2,
+    space: GizmoSpace,
+    axis: TranslationAxis,
 }
 
 impl GizmoDrag {
@@ -132,22 +241,56 @@ impl GizmoDrag {
             units_per_point,
             start_angle,
             start_vector,
+            space: GizmoSpace::World,
+            axis: TranslationAxis::Free,
         })
     }
 
-    /// Evaluate the gesture at the current pointer position.
+    /// Capture the selected move space and constraint for this entire gesture.
+    pub fn in_space(mut self, space: GizmoSpace, axis: TranslationAxis) -> Self {
+        self.space = space;
+        self.axis = axis;
+        self
+    }
+
+    /// Evaluate the gesture from its press state. A positive finite grid enables
+    /// position snapping, 15-degree rotation snapping and 0.1 uniform scale steps.
     pub fn at(&self, pointer: Pos2, grid: Option<f32>) -> Transform {
         let mut value = self.initial_world;
         let dx = pointer.x - self.origin.x;
         let dy = pointer.y - self.origin.y;
+        let snapping = grid.is_some_and(|grid| grid.is_finite() && grid > 0.0);
         match self.mode {
             GizmoMode::None => {}
             GizmoMode::Translate => {
-                value.position.x += dx * self.units_per_point[0];
-                value.position.y -= dy * self.units_per_point[1];
+                let [x_axis, y_axis] = self.space.basis(self.initial_world.rotation);
+                let delta = Vec2::new(dx * self.units_per_point[0], -dy * self.units_per_point[1]);
+                let mut along_x = if self.axis == TranslationAxis::Y {
+                    0.0
+                } else {
+                    delta.dot(x_axis)
+                };
+                let mut along_y = if self.axis == TranslationAxis::X {
+                    0.0
+                } else {
+                    delta.dot(y_axis)
+                };
                 if let Some(grid) = grid.filter(|grid| grid.is_finite() && *grid > 0.0) {
-                    value.position.x = (value.position.x / grid).round() * grid;
-                    value.position.y = (value.position.y / grid).round() * grid;
+                    if self.space == GizmoSpace::Local {
+                        along_x = (along_x / grid).round() * grid;
+                        along_y = (along_y / grid).round() * grid;
+                    }
+                }
+                value.position += x_axis * along_x + y_axis * along_y;
+                if let Some(grid) = grid.filter(|grid| grid.is_finite() && *grid > 0.0) {
+                    if self.space == GizmoSpace::World {
+                        if self.axis != TranslationAxis::Y {
+                            value.position.x = (value.position.x / grid).round() * grid;
+                        }
+                        if self.axis != TranslationAxis::X {
+                            value.position.y = (value.position.y / grid).round() * grid;
+                        }
+                    }
                 }
             }
             GizmoMode::Rotate => {
@@ -163,10 +306,18 @@ impl GizmoDrag {
                     .rem_euclid(std::f32::consts::TAU)
                     - std::f32::consts::PI;
                 value.rotation += delta;
+                if snapping {
+                    value.rotation = (value.rotation / ROTATION_SNAP).round() * ROTATION_SNAP;
+                }
             }
             GizmoMode::Scale => {
                 let factor = (-dy * 0.01).exp().clamp(0.001, 1000.0);
                 value.scale *= factor;
+                let magnitude = value.scale.x.abs();
+                if snapping && magnitude.is_finite() && magnitude > 0.0 {
+                    let target = (magnitude / SCALE_SNAP).round().max(1.0) * SCALE_SNAP;
+                    value.scale *= target / magnitude;
+                }
             }
         }
         value
@@ -191,6 +342,102 @@ mod tests {
     use super::*;
 
     #[test]
+    fn group_roots_skip_selected_descendants_through_unselected_intermediate_parents() {
+        let scene = Scene {
+            id: "main".into(),
+            name: "Main".into(),
+            script: None,
+            nested_scenes: vec![],
+            entities: [
+                ("child", Some("bridge")),
+                ("parent", None),
+                ("bridge", Some("parent")),
+                ("other", None),
+            ]
+            .into_iter()
+            .map(|(id, parent)| kiln_core::Entity {
+                id: id.into(),
+                name: id.into(),
+                components: parent
+                    .map(|id| Component::Parent { parent: id.into() })
+                    .into_iter()
+                    .collect(),
+            })
+            .collect(),
+        };
+        let targets =
+            ["child", "other", "parent"].map(|id| (id.into(), Transform::new(10.0, 20.0)));
+        let roots = group_root_targets(&scene, &targets);
+        assert_eq!(
+            roots.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(),
+            ["other", "parent"]
+        );
+        assert_eq!(group_root_targets(&scene, &targets[..1]), targets[..1]);
+    }
+
+    #[test]
+    fn displayed_local_handles_and_hit_testing_use_the_same_orientation() {
+        let center = Pos2::new(100.0, 100.0);
+        let handles = translation_handles(
+            GizmoSpace::Local,
+            std::f32::consts::FRAC_PI_2,
+            center,
+            [2.0, 3.0],
+        );
+        assert!(handles[0].distance(Pos2::new(100.0, 58.0)) < 0.001);
+        assert!(handles[1].distance(Pos2::new(58.0, 100.0)) < 0.001);
+        assert_eq!(
+            translation_axis(Pos2::new(101.0, 70.0), center, handles),
+            TranslationAxis::X
+        );
+        assert_eq!(
+            translation_axis(Pos2::new(70.0, 101.0), center, handles),
+            TranslationAxis::Y
+        );
+        assert_eq!(
+            translation_axis(center, center, handles),
+            TranslationAxis::Free
+        );
+        assert_eq!(
+            translation_axis(Pos2::new(140.0, 140.0), center, handles),
+            TranslationAxis::Free
+        );
+    }
+
+    #[test]
+    fn constrained_moves_distinguish_world_grid_from_local_displacement() {
+        let initial = Transform::new(40.0, 60.0).with_rotation(std::f32::consts::FRAC_PI_2);
+        let drag = GizmoDrag::new(
+            GizmoMode::Translate,
+            Pos2::ZERO,
+            initial,
+            [1.0, 1.0],
+            initial.position,
+        )
+        .unwrap();
+        let pointer = Pos2::new(20.0, -20.0);
+        let world = drag
+            .clone()
+            .in_space(GizmoSpace::World, TranslationAxis::X)
+            .at(pointer, Some(32.0));
+        assert_eq!(world.position, Vec2::new(64.0, 60.0));
+        let local = drag.clone().in_space(GizmoSpace::Local, TranslationAxis::X);
+        assert!((local.at(pointer, None).position - Vec2::new(40.0, 80.0)).length() < 0.001);
+        assert!((local.at(pointer, Some(32.0)).position - Vec2::new(40.0, 92.0)).length() < 0.001);
+        let y = drag
+            .clone()
+            .in_space(GizmoSpace::Local, TranslationAxis::Y)
+            .at(pointer, None);
+        assert!((y.position - Vec2::new(60.0, 60.0)).length() < 0.001);
+        let free = drag
+            .in_space(GizmoSpace::Local, TranslationAxis::Free)
+            .at(pointer, None);
+        assert!((free.position - Vec2::new(60.0, 80.0)).length() < 0.001);
+        assert_eq!(world.rotation, initial.rotation);
+        assert_eq!(world.scale, initial.scale);
+    }
+
+    #[test]
     fn translate_drag_uses_world_units_and_grid_snap() {
         let drag = GizmoDrag::new(
             GizmoMode::Translate,
@@ -202,6 +449,58 @@ mod tests {
         .unwrap();
         let value = drag.at(Pos2::new(12.0, 8.0), Some(2.0));
         assert_eq!(value.position, Vec2::new(6.0, 8.0));
+    }
+
+    #[test]
+    fn rotation_snap_uses_world_angle_without_changing_position_or_scale() {
+        let initial = Transform::new(10.0, 20.0)
+            .with_rotation(0.2)
+            .with_scale(Vec2::splat(2.0));
+        let drag = GizmoDrag::new(
+            GizmoMode::Rotate,
+            Pos2::ZERO,
+            initial,
+            [1.0, 1.0],
+            initial.position + Vec2::new(40.0, 0.0),
+        )
+        .unwrap();
+        let pointer = Pos2::new(-5.36, -20.0);
+        let free = drag.at(pointer, None);
+        let snapped = drag.at(pointer, Some(32.0));
+        assert!((free.rotation - (0.2 + std::f32::consts::PI / 6.0)).abs() < 0.001);
+        assert!((snapped.rotation - std::f32::consts::FRAC_PI_4).abs() < 0.001);
+        assert_eq!(snapped.position, initial.position);
+        assert_eq!(snapped.scale, initial.scale);
+        for grid in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            assert_eq!(drag.at(pointer, Some(grid)), free);
+        }
+    }
+
+    #[test]
+    fn scale_snap_preserves_aspect_ratio_and_never_collapses_small_scales() {
+        let initial = Transform::new(10.0, 20.0)
+            .with_rotation(0.4)
+            .with_scale(Vec2::new(1.0, 2.0));
+        let drag = GizmoDrag::new(
+            GizmoMode::Scale,
+            Pos2::ZERO,
+            initial,
+            [1.0, 1.0],
+            initial.position,
+        )
+        .unwrap();
+        let pointer = Pos2::new(0.0, -13.0);
+        let free = drag.at(pointer, None);
+        let snapped = drag.at(pointer, Some(32.0));
+        assert!((free.scale.x - 0.13_f32.exp()).abs() < 0.0001);
+        assert!((snapped.scale.x - 1.1).abs() < 0.0001);
+        assert!((snapped.scale.y - 2.2).abs() < 0.0001);
+        assert_eq!(snapped.position, initial.position);
+        assert_eq!(snapped.rotation, initial.rotation);
+        let tiny = drag.at(Pos2::new(0.0, 10000.0), Some(32.0));
+        assert!((tiny.scale.x - 0.1).abs() < 0.0001);
+        assert!((tiny.scale.y - 0.2).abs() < 0.0001);
+        assert_eq!(drag.at(pointer, Some(f32::NAN)), free);
     }
 
     #[test]

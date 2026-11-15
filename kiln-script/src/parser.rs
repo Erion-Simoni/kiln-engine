@@ -55,6 +55,11 @@ pub enum BinaryOp {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
+    Enum {
+        name: String,
+        variants: Vec<String>,
+        span: Span,
+    },
     /// A reusable non-recursive named function.
     Function {
         name: String,
@@ -151,6 +156,7 @@ impl<'a> Parser<'a> {
 
     fn parse_stmt_inner(&mut self) -> Result<Option<Stmt>, ParseError> {
         match self.peek_token() {
+            Some(Token::Enum) => self.parse_enum(),
             Some(Token::Fn) => self.parse_function(),
             Some(Token::While) => self.parse_while(),
             Some(Token::For) => self.parse_for(),
@@ -171,6 +177,48 @@ impl<'a> Parser<'a> {
                 Ok(Some(Stmt::Expr(expr)))
             }
         }
+    }
+
+    fn parse_enum(&mut self) -> Result<Option<Stmt>, ParseError> {
+        let span = self
+            .current
+            .as_ref()
+            .map(|token| token.span)
+            .unwrap_or(Span::new(0, 0));
+        self.consume(Token::Enum)?;
+        let name = match self.peek_token() {
+            Some(Token::Identifier(name)) => name,
+            _ => return Err(ParseError::Custom("Expected enum name".into())),
+        };
+        self.advance();
+        self.consume(Token::LBrace)?;
+        let mut variants = Vec::new();
+        while self.peek_token() != Some(Token::RBrace) {
+            let variant = match self.peek_token() {
+                Some(Token::Identifier(name)) => name,
+                _ => return Err(ParseError::Custom("Expected enum member".into())),
+            };
+            if variants.len() >= 256 || variants.contains(&variant) {
+                return Err(ParseError::Custom(
+                    "Enum members must be unique and at most 256".into(),
+                ));
+            }
+            variants.push(variant);
+            self.advance();
+            if self.peek_token() != Some(Token::Comma) {
+                break;
+            }
+            self.advance();
+        }
+        self.consume(Token::RBrace)?;
+        if variants.is_empty() {
+            return Err(ParseError::Custom("Enum must have a member".into()));
+        }
+        Ok(Some(Stmt::Enum {
+            name,
+            variants,
+            span,
+        }))
     }
 
     fn parse_function(&mut self) -> Result<Option<Stmt>, ParseError> {
@@ -202,6 +250,11 @@ impl<'a> Parser<'a> {
                 };
                 if params.contains(&param) {
                     return Err(ParseError::Custom("Duplicate function parameter".into()));
+                }
+                if params.len() >= 256 {
+                    return Err(ParseError::Custom(
+                        "Functions support at most 256 parameters".into(),
+                    ));
                 }
                 params.push(param);
                 self.advance();
@@ -558,6 +611,19 @@ impl<'a> Parser<'a> {
             Some(Token::Identifier(name)) => {
                 let span = self.current.as_ref().map(|t| t.span).unwrap();
                 self.advance();
+                let mut name = name;
+                if self.peek_token() == Some(Token::Dot) {
+                    self.advance();
+                    let member = match self.peek_token() {
+                        Some(Token::Identifier(member)) => member,
+                        _ => {
+                            return Err(ParseError::Custom("Expected enum member after '.'".into()))
+                        }
+                    };
+                    self.advance();
+                    name.push('.');
+                    name.push_str(&member);
+                }
                 if self.peek_token() == Some(Token::LParen) {
                     self.parse_call(name.clone(), span)
                 } else {
@@ -592,6 +658,11 @@ impl<'a> Parser<'a> {
 
         if self.peek_token() != Some(Token::RParen) {
             loop {
+                if args.len() >= 256 {
+                    return Err(ParseError::Custom(
+                        "Calls support at most 256 arguments".into(),
+                    ));
+                }
                 args.push(self.parse_expr()?);
                 if self.peek_token() != Some(Token::Comma) {
                     break;

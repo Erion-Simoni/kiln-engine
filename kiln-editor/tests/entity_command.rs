@@ -720,8 +720,8 @@ fn two_scene_prefab_override_rename_save_reopen_and_export_acceptance() {
         .rename_asset("art/enemy.png", "assets/enemy.png")
         .unwrap();
     rewrite_asset_references(&mut project, "art/enemy.png", "assets/enemy.png");
-    let id = project.asset_ids.remove("art/enemy.png").unwrap();
-    project.asset_ids.insert("assets/enemy.png".into(), id);
+    assert!(!project.asset_ids.contains_key("art/enemy.png"));
+    assert_eq!(project.asset_ids["assets/enemy.png"], "asset-enemy");
     project_files::save(&project, &manifest).unwrap();
 
     let reopened = project_files::load(&root).unwrap().project;
@@ -813,4 +813,113 @@ fn reparent_and_parent_delete_preserve_child_world_transform() {
         .components
         .iter()
         .any(|component| matches!(component, Component::Transform { .. })));
+}
+
+fn endpoint_joint(a: &str, b: &str) -> Component {
+    Component::Joint {
+        joint: serde_json::from_value(serde_json::json!({
+            "entity_a":a,"entity_b":b,"joint_type":"Distance","anchor_a":[0,0],"anchor_b":[0,0],
+            "reference_angle":0,"length":5,"lower_translation":0,"upper_translation":0,
+            "enable_limit":false,"motor_speed":0,"max_motor_torque":0,"enable_motor":false
+        }))
+        .unwrap(),
+    }
+}
+
+#[test]
+fn deletion_preserves_joint_endpoints_camera_targets_and_redo_on_refusal() {
+    let mut project = project();
+    project.scenes.get_mut("main").unwrap().entities[1]
+        .components
+        .push(endpoint_joint("child", "root"));
+    let mut history = SceneHistory::new();
+    history.record(project.scenes["main"].clone());
+    let _ = history.undo(project.scenes["main"].clone());
+    let before = serde_json::to_value(&project).unwrap();
+    let edit = || EntityEdit::Delete {
+        entity_id: "root".into(),
+    };
+    let error = run(&mut project, edit(), &mut history).unwrap_err();
+    assert!(
+        error.contains("joint") && error.contains("child"),
+        "{error}"
+    );
+    assert_eq!(serde_json::to_value(&project).unwrap(), before);
+    assert!(history.can_redo());
+    assert_eq!(history.undo_depth(), 0);
+    project.scenes.get_mut("main").unwrap().entities[1]
+        .components
+        .retain(|c| !matches!(c, Component::Joint { .. }));
+    project.cameras.insert(
+        "main".into(),
+        kiln_core::camera::CameraSettings {
+            target: Some("root".into()),
+            ..Default::default()
+        },
+    );
+    let before = serde_json::to_value(&project).unwrap();
+    let error = run(&mut project, edit(), &mut history).unwrap_err();
+    assert!(
+        error.contains("camera") && error.contains("main"),
+        "{error}"
+    );
+    assert_eq!(serde_json::to_value(&project).unwrap(), before);
+    assert!(history.can_redo());
+    project.cameras.get_mut("main").unwrap().target = None;
+    run(&mut project, edit(), &mut history).unwrap();
+    assert_eq!(history.undo_depth(), 1);
+    let restored = history.undo(project.scenes["main"].clone()).unwrap();
+    assert!(restored.entities.iter().any(|e| e.id == "root"));
+}
+
+#[test]
+fn deletion_checks_containing_scene_references_but_isolates_uncomposed_scenes() {
+    let mut project = project();
+    project.cameras.insert(
+        "other".into(),
+        kiln_core::camera::CameraSettings {
+            target: Some("root".into()),
+            ..Default::default()
+        },
+    );
+    let mut independent = project.clone();
+    run(
+        &mut independent,
+        EntityEdit::Delete {
+            entity_id: "root".into(),
+        },
+        &mut SceneHistory::new(),
+    )
+    .unwrap();
+    kiln_editor::editing::nest_scene(&mut project, "other", "main").unwrap();
+    let before = serde_json::to_value(&project).unwrap();
+    let error = run(
+        &mut project,
+        EntityEdit::Delete {
+            entity_id: "root".into(),
+        },
+        &mut SceneHistory::new(),
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("camera") && error.contains("other"),
+        "{error}"
+    );
+    assert_eq!(serde_json::to_value(&project).unwrap(), before);
+    project.cameras.clear();
+    project.scenes.get_mut("other").unwrap().entities[0]
+        .components
+        .push(endpoint_joint("entity_1", "root"));
+    let error = run(
+        &mut project,
+        EntityEdit::Delete {
+            entity_id: "root".into(),
+        },
+        &mut SceneHistory::new(),
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("joint") && error.contains("entity_1"),
+        "{error}"
+    );
 }

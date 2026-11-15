@@ -88,6 +88,43 @@ fn global(world: &GameWorld, id: &str) -> Transform {
         .unwrap()
         .0
 }
+
+#[test]
+fn local_axis_drag_on_a_rotated_parented_child_roundtrips_through_local_storage() {
+    use kiln_editor::transform_gizmo::{GizmoDrag, GizmoSpace, TranslationAxis};
+    let mut scene = sample();
+    let mut world = spawn(&scene);
+    SetTransform {
+        scene_id: "main",
+        entity_id: "marker",
+        value: Transform::new(100.0, 200.0)
+            .with_rotation(std::f32::consts::FRAC_PI_2)
+            .with_scale(kiln_core::Vec2::splat(2.0)),
+    }
+    .apply(&mut scene, &mut world)
+    .unwrap();
+    let initial = global(&world, "hero");
+    let drag = GizmoDrag::new(
+        GizmoMode::Translate,
+        egui::Pos2::ZERO,
+        initial,
+        [1.0, 1.0],
+        initial.position,
+    )
+    .unwrap()
+    .in_space(GizmoSpace::Local, TranslationAxis::X);
+    let target = drag.at(egui::pos2(0.0, -25.0), Some(16.0));
+    let local = kiln_core::hierarchy_transform::local_from_world(&scene, "hero", target).unwrap();
+    apply(&mut scene, &mut world, local);
+    let actual = global(&world, "hero");
+    assert!((actual.position - target.position).length() < 0.001);
+    assert!((actual.rotation - initial.rotation).abs() < 0.001);
+    assert_eq!(actual.scale, initial.scale);
+    let (sin, cos) = initial.rotation.sin_cos();
+    let delta = actual.position - initial.position;
+    assert!((delta.dot(kiln_core::Vec2::new(cos, sin)) - 16.0).abs() < 0.001);
+    assert!(delta.dot(kiln_core::Vec2::new(-sin, cos)).abs() < 0.001);
+}
 fn apply(scene: &mut Scene, world: &mut GameWorld, value: Transform) -> bool {
     SetTransform {
         scene_id: "main",
@@ -256,6 +293,46 @@ fn group_rotation_and_scale_preserve_parented_world_targets() {
         kiln_core::Vec2::new(20.0, 40.0)
     );
     assert!((global(&world, "hero").scale.x - 3.0).abs() < 0.0001);
+}
+
+#[test]
+fn shared_group_scale_keeps_selected_child_local_document_exact() {
+    use kiln_editor::transform_gizmo::group_root_targets;
+    let mut scene = sample();
+    let mut world = spawn(&scene);
+    SetTransform {
+        scene_id: "main",
+        entity_id: "marker",
+        value: Transform::new(40.0, 60.0)
+            .with_rotation(std::f32::consts::FRAC_PI_2)
+            .with_scale(kiln_core::Vec2::splat(2.0)),
+    }
+    .apply(&mut scene, &mut world)
+    .unwrap();
+    let child_before = json(&scene.entities[0]);
+    let initial = vec![
+        ("hero".into(), global(&world, "hero")),
+        ("marker".into(), global(&world, "marker")),
+    ];
+    let mut primary = initial[1].1;
+    primary.scale = kiln_core::Vec2::splat(2.3);
+    let targets = apply_group_transform(GizmoMode::Scale, "marker", primary, &initial);
+    let expected_child = targets[0].1;
+    for (id, target) in group_root_targets(&scene, &targets) {
+        let local = kiln_core::hierarchy_transform::local_from_world(&scene, &id, target).unwrap();
+        SetTransform {
+            scene_id: "main",
+            entity_id: &id,
+            value: local,
+        }
+        .apply(&mut scene, &mut world)
+        .unwrap();
+    }
+    assert_eq!(json(&scene.entities[0]), child_before);
+    let actual = global(&world, "hero");
+    assert!((actual.position - expected_child.position).length() < 0.001);
+    assert!((actual.rotation - expected_child.rotation).abs() < 0.001);
+    assert!((actual.scale - expected_child.scale).length() < 0.001);
 }
 
 #[test]
@@ -478,4 +555,73 @@ fn letterboxed_mapping_accounts_for_offsets_dpi_and_camera_zoom() {
         scene_view::units_per_point(scene_view::letterbox(0, 0, 1.0, 1.0), 1.0, &camera).is_none()
     );
     assert!(scene_view::units_per_point(viewport, 0.0, &camera).is_none());
+}
+
+#[test]
+fn scene_settings_history_keeps_camera_presence_and_interleaved_entity_edits() {
+    use kiln_core::camera::CameraSettings;
+    let before = sample();
+    let mut settings = before.clone();
+    settings.name = "Changed level".into();
+    settings.script = Some("scripts/other.ks".into());
+    settings.nested_scenes.push(kiln_core::NestedScene {
+        scene_id: "room".into(),
+        offset: kiln_core::SceneOffset { x: 15.0, y: -20.0 },
+        additive: true,
+    });
+    let camera = CameraSettings {
+        zoom: 2.5,
+        target: Some("hero".into()),
+        ..Default::default()
+    };
+    let mut history = SceneHistory::new();
+    let mut edit = TransformTransaction::new_document(before.clone(), None);
+    edit.update(settings.clone());
+    edit.update_camera(Some(camera.clone()));
+    edit.commit(&mut history);
+    // An ordinary entity command records a scene, and must leave the camera alone.
+    let mut entity_edit = settings.clone();
+    entity_edit.entities[0].name = "Renamed hero".into();
+    history.record(settings.clone());
+    let (scene, replacement) = history
+        .undo_document(entity_edit.clone(), Some(camera.clone()))
+        .unwrap();
+    assert_eq!(json(&scene), json(&settings));
+    assert_eq!(replacement, None);
+    let (scene, replacement) = history.undo_document(scene, Some(camera.clone())).unwrap();
+    assert_eq!(json(&scene), json(&before));
+    assert_eq!(replacement, Some(None));
+    let (scene, replacement) = history.redo_document(scene, None).unwrap();
+    assert_eq!(json(&scene), json(&settings));
+    assert_eq!(replacement, Some(Some(camera.clone())));
+    let (scene, replacement) = history.redo_document(scene, Some(camera)).unwrap();
+    assert_eq!(json(&scene), json(&entity_edit));
+    assert_eq!(replacement, None);
+}
+
+#[test]
+fn cancelled_and_noop_settings_preserve_camera_and_redo_exactly() {
+    use kiln_core::camera::CameraSettings;
+    let scene = sample();
+    let camera = CameraSettings {
+        zoom: 2.0,
+        ..Default::default()
+    };
+    let mut changed = scene.clone();
+    changed.name = "Changed".into();
+    let mut history = SceneHistory::new();
+    history.record(scene.clone());
+    let _ = history.undo(changed).unwrap();
+    let mut edit = TransformTransaction::new_document(scene.clone(), Some(camera.clone()));
+    edit.update_camera(None);
+    let (restored, replacement) = edit.cancel_document();
+    assert_eq!(json(&restored), json(&scene));
+    assert_eq!(replacement, Some(Some(camera.clone())));
+    assert!(history.can_redo());
+    let mut noop = TransformTransaction::new_document(scene, Some(camera.clone()));
+    noop.update_camera(None);
+    noop.update_camera(Some(camera));
+    noop.commit(&mut history);
+    assert!(history.can_redo());
+    assert_eq!(history.undo_depth(), 0);
 }

@@ -20,6 +20,7 @@ fn write(path: &Path, bytes: impl AsRef<[u8]>) {
 }
 fn runtime(web: bool) -> RuntimeInfo {
     RuntimeInfo {
+        contract: kiln_core::export::RUNTIME_CONTRACT.into(),
         protocol: EXPORT_PROTOCOL,
         version: env!("CARGO_PKG_VERSION").into(),
         platform: if web { "web" } else { std::env::consts::OS }.into(),
@@ -92,8 +93,9 @@ impl Fixture {
             vec![42; 131073],
         );
         let metadata = format!(
-            "{EXPORT_PROTOCOL}\n{}\nfonts=1\nphysics=1\nmaterials=1\n",
-            env!("CARGO_PKG_VERSION")
+            "{EXPORT_PROTOCOL}\n{}\nfonts=1\nphysics=1\nmaterials=1\ncontract={}\n",
+            env!("CARGO_PKG_VERSION"),
+            kiln_core::export::RUNTIME_CONTRACT
         );
         let name = b"kiln.runtime.v1";
         let mut wasm = b"\0asm\x01\0\0\0".to_vec();

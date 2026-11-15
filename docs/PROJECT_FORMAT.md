@@ -281,3 +281,26 @@ offset = [0.0, 0.0]
 - `docs/KILNSCRIPT.md` — KilnScript language reference
 - `docs/TILEMAPS.md` — Chunked tilemaps with collision
 - `kiln-core/src/project.rs` — Source implementation
+
+### Resource dependencies and target import overrides
+
+`Project::resource_dependencies` reports manifest paths and their typed owners;
+`rewrite_resource_path` updates those references and moves the existing stable
+`asset_ids` entry together. Covered paths include scene/entity scripts, sprites,
+prefab sprite overrides, clips, tilesets, audio, fonts and shader/material texture
+parameters. Matching ordinary names, entity IDs and script string literals are
+not rewritten. Source-module imports require their own source-aware refactor.
+
+`asset_platform_import_settings` is an optional table keyed first by stable asset
+ID, then `windows`, `linux`, `macos` or `web`. Each value uses the existing
+`AssetImportSettings` fields. A missing target falls back to the asset's default
+settings; legacy assets retain nearest filtering without mipmaps. The editor
+edits a chosen target through Assets → Preview → Import settings. **Use default
+settings** removes that target's override. Renaming/moving art retains these tables
+because the stable ID is unchanged. This metadata does not certify new targets.
+
+Assets → Dependency diagnostics runs read-only checks on a worker: missing files
+list authored dependents, duplicated stable IDs are named, and equal file content
+is reported without deleting either asset. Content hashes stream from disk instead
+of allocating whole source files. Diagnostics cover manifest references, not code
+imports or arbitrary paths constructed dynamically by scripts.

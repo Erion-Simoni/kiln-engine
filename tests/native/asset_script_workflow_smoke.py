@@ -55,12 +55,25 @@ def main():
         artwork.write_bytes(original_art)
         editor.wait(lambda: red_pixels() <= before+10, description="Restored texture refreshes without reopening")
         source = (project/"scripts/main.ks").read_text()
-        code = source.replace("let speed = 120.0;", """let movement = dict_new();
+        code = source.replace("let speed = 120.0;", """enum Stage { Ready, Waiting }
+if !state_get("task-started",false) {
+    task_schedule("stage",0.0,Stage.Ready);
+    timer_start("cooldown",0.0);
+    state_set("task-started",true);
+}
+if task_ready("stage") {
+    state_set("task-ok",task_take("stage",Stage.Waiting)==Stage.Ready);
+}
+if timer_finished("cooldown") {state_set("timer-ok",true);}
+let movement = dict_new();
 for (let i=0; i<4; i+=1) {
     if i==1 { continue; }
     movement = dict_set(movement, "speed", dict_get(movement, "speed", 0.0)+40.0);
 }
-let speed = dict_get(movement, "speed", 0.0);""")
+let speed = 0.0;
+if state_get("task-ok",false) && state_get("timer-ok",false) {
+    speed = dict_get(movement, "speed", 0.0);
+}""")
         assert code != source
         draft = run/"authored-main.ks"; draft.write_text(code)
         editor.panel(118, 68); editor.enlarge()
@@ -74,8 +87,12 @@ let speed = dict_get(movement, "speed", 0.0);""")
                   "scope": "Real editor under Xvfb/software graphics; exported play is recorded separately"}
         (output/"result.json").write_text(json.dumps(result, indent=2)+"\n")
     except Exception as error:
-        editor.shot("failure")
         record_failure(output,"structured-scripting","authoring",error)
+        try:
+            if editor.process and editor.process.poll() is None:
+                editor.shot("failure")
+        except Exception as capture_error:
+            (output/"capture-error.txt").write_text(str(capture_error))
         raise
     finally:
         editor.close(failed=sys.exc_info()[0] is not None)

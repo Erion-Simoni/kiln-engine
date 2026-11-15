@@ -77,5 +77,74 @@
         "detail": "Installed capture_window.ps1: Window client area is too small. Now select the largest PID-owned visible window with a client area of at least 100x100; regression tests pass. Fresh Windows hosted confirmation pending."
       }
     ]
+  },
+  "current": {
+    "observed_at": "2026-11-14T14:37:21.036164+00:00",
+    "source": "3efb687475569a3a3df0bb9f13f6e28e3bf49ddc",
+    "evidence_source": "Public GitHub Actions workflow list and run summary HTML",
+    "checks": [
+      {
+        "name": "Release candidate verification",
+        "run": 43603620009,
+        "result": "in_progress"
+      },
+      {
+        "name": "Windows portable candidate",
+        "run": 43603619881,
+        "result": "success"
+      },
+      {
+        "name": "CI",
+        "run": 43603619952,
+        "result": "failure",
+        "detail": "Browser structured-scripting authoring timed out waiting for floating Script Editor, before source entry. Delaying first rendering locally reproduces the same failure when initial default-tab close clicks are lost."
+      },
+      {
+        "name": "Editor-authored reference games",
+        "run": 43603619867,
+        "result": "success"
+      }
+    ],
+    "local_followup": "Wait for visibly painted menu before closing default tabs; hold tab/menu clicks across frames; retain delayed-render regression and screenshots in native CI. Matching-source hosted confirmation remains required."
+  },
+  "resumed": {
+    "observed_date": "2026-11-15",
+    "source": "6de428b168aff0b3cbad86038461e7c2731ad081",
+    "evidence_source": "Public GitHub Actions workflow list and run summaries; artifact contents not downloaded",
+    "checks": [
+      {
+        "name": "General CI",
+        "run": 43606018834,
+        "result": "success",
+        "scope": "Three OS check/build/archive matrices, tests, docs, delayed editor startup, native UI, browser/portable acceptance"
+      },
+      {
+        "name": "Reference games",
+        "run": 43606018842,
+        "result": "success",
+        "scope": "All three editor authoring/export/native/browser replays"
+      },
+      {
+        "name": "Linux candidate",
+        "run": 43606018785,
+        "result": "success",
+        "scope": "Artifact service probe, locked release build, fresh replay/payload comparison, moved editor, clean Ubuntu acceptance and origin attestation"
+      }
+    ],
+    "artifacts": [
+      {
+        "name": "kiln-linux-candidate-6de428b168aff0b3cbad86038461e7c2731ad081",
+        "sha256": "4bdd602de659fb28c902ca2e622ae8bcd8fbf3b61c2ab8ae3ba86f000cfb6cc0"
+      },
+      {
+        "name": "kiln-candidate-attestation-6de428b168aff0b3cbad86038461e7c2731ad081",
+        "sha256": "5b92e4c56ab446ae1851de9219b278945809535dd621f0fe8f928a9083414c29"
+      },
+      {
+        "name": "kiln-reference-game-evidence-6de428b168aff0b3cbad86038461e7c2731ad081",
+        "sha256": "2b543efe301c58a47e42c8b4d69329368c47d885a0a4765f81f27b71ccc95204"
+      }
+    ],
+    "windows_candidate": "Not triggered for this Linux-test-only change by its path filter; 3efb687 success is prior-source evidence, not validation of this revision."
   }
 }

@@ -453,13 +453,13 @@ A script's `let` variables are local to its program execution. Persistent
 `state_get`/`state_set` storage belongs to the current scene program or individual
 attached entity script; it is not a shared cross-scene global singleton. Use the
 existing save/scene mechanisms deliberately. No implicit process-global scope or
-new timer/coroutine scheduler is introduced by these functions.
+timer behavior is implied by dictionary mutation; explicit tasks are described below.
 
 The Script Editor colors keywords, literals, comments and built-ins, including
 unfinished text. Its API Reference filters the same built-in registry used by
 scripts, graphs, native games and browser games. The reference currently displays
-argument counts; contextual completion, formatting, project search and navigation
-remain open A04 work.
+argument counts and call insertion. Formatting and bounded project search/navigation
+are described below.
 
 Execution defaults to 1,000,000 bytecode instructions per tick. The host's VM
 instruction-limit setter now governs both full runs and debugger steps, including
@@ -473,3 +473,111 @@ The live gameplay panel currently pauses/steps whole frames and inspects entity
 state. Source breakpoints, statement stepping, imported-function call frames,
 expression watches and a debugger attached to the actual gameplay VM remain
 required before A04 is accepted. Bytecode repairs do not establish those workflows.
+
+## Enums, tasks and source tools (A04)
+
+Top-level enums have 1–256 unique variants. Values are immutable qualified
+constants backed by stable strings (`Stage::Warmup`), so saved task payloads keep
+meaning if declarations are reordered. Nested enum declarations and member
+assignment are rejected. `enum` is reserved; rename older identifiers using it.
+Functions/calls accept at most 256 parameters/arguments.
+
+```kilnscript
+enum Stage { Warmup, Fire }
+if !state_get("started", false) {
+    task_schedule("enemy", 0.25, Stage.Warmup);
+    state_set("started", true);
+}
+if task_ready("enemy") {
+    let stage = task_take("enemy", Stage.Warmup);
+    if stage == Stage.Warmup {
+        task_schedule("enemy", 0.25, Stage.Fire);
+    } else {
+        state_set("projectiles", state_get("projectiles", 0) + 1);
+    }
+}
+```
+
+Tasks are cooperative state machines: take a due resume payload, execute a helper,
+then schedule the next stage explicitly. There are no automatic suspended function
+stacks or `yield` syntax. Each scene/entity script has its own task scope. Game
+pause stops task time; logical save/restore retains deadlines and typed payloads.
+Use different names for independent tasks; rescheduling replaces an existing one.
+
+| Function | Behavior |
+| --- | --- |
+| `task_schedule(name, delay, payload)` | Replace/schedule a task; returns its name |
+| `task_ready(name)` | True when a live task's deadline is reached |
+| `task_take(name, fallback)` | Consume a due payload once; otherwise fallback |
+| `task_cancel(name)` | Remove a task; returns whether it existed |
+| `task_exists(name)` | Test presence, including tasks that are already due |
+| `task_remaining(name)` | Nonnegative seconds remaining; absent tasks return 0 |
+| `timer_start(name, delay)` | Schedule a one-shot timer using the same task scope |
+| `timer_finished(name)` | Consume a due timer once; otherwise false |
+
+Names require 1–240 UTF-8 bytes; delays must be finite and nonnegative. Each script
+allows 256 live tasks within its existing state limit. Payloads obey saved-value
+bounds, including the scheduler's wrapper. Avoid reserved `__kiln_task:` state keys.
+Zero-delay tasks are ready within the current invocation after scheduling.
+
+The Script Editor's **Format Indent** changes indentation/trailing whitespace
+without changing tokens, comments or valid escaped string contents. Invalid quoted
+or unbalanced drafts are preserved. **API Reference** offers insertion of calls
+from the shared registry; replace the `arg1` placeholders with actual expressions.
+**Project Search** searches saved `.ks` files literally and case-sensitively;
+**Find Function** searches `fn name(` for the identifier under the source cursor.
+Navigation requires Save or Revert first, preserving unsaved drafts. Search skips
+symlinks and hidden/generated folders, limits traversal to 4096 entries/64 levels,
+and reads at most 512 files/8 MiB with 256 results. This is literal navigation,
+not a language-server symbol resolver. Source breakpoints/stepping/watches and
+interactive gameplay graph acceptance remain open.
+
+New exports require the matching `kiln-core::export::RUNTIME_CONTRACT` in both
+native and browser runtime identities. Missing/older same-version runtimes are
+rejected explicitly; install the matching tool bundle before exporting again.
+
+
+## Editable gameplay graphs
+
+Open **View → Graph Editor**, choose a new or existing project-relative `.ks`
+resource and press **Open / New**. Add constants, arithmetic/comparisons, lifecycle
+events, branches and Host Calls. Input pins take one connection; connecting a new
+source replaces the previous one. Host Call argument pins follow the shared API
+registry in order (`arg1`, `arg2`, …). The optional trigger gates execution, `done`
+reports execution, and `result` carries the actual returned VM value. Output accepts
+a value or trigger. Numeric pins interoperate; Event pins remain separate from data.
+
+Select a node and **Edit Selected** (or double-click it) to change parameters.
+Constant types include integer, float, Boolean and string. Cancel preserves the
+previous node; Delete removes its connections. Drag nodes, use Shift-drag on empty
+canvas to pan, and Ctrl-scroll to zoom. **Undo/Redo** restore graph edits; a drag is
+one undo gesture. History is bounded to 32 snapshots/8 MiB and scoped to the source
+resource. Save the script, then **Use for Active Scene** and Save Project to run it.
+Entity Script components can use the same saved visual `.ks` resource.
+
+Each invocation evaluates a node at most once, even when its value feeds multiple
+pins. Conditional branches evaluate only their selected upstream event chain.
+Independent host calls need explicit trigger connections to specify order. Lifecycle
+events map to the existing script phases; root On Start runs on its first tick.
+Unsupported specialized AI/dialogue/quest nodes are rejected when connected, rather
+than calling guessed host IDs. They are excluded from the gameplay add menu.
+
+The file contains bounded visual metadata in leading comments followed by ordinary
+generated KilnScript. Native/player/browser loading and export use the normal source
+pipeline, not a parallel graph interpreter. Manual edits to the generated body stay
+valid as text but must be preserved/merged before reopening as a graph. Incomplete
+graphs remain recoverable drafts; their generated compile-error marker prevents
+Play/export or a normal validated Save until connections are repaired. Normal source
+save guards, project dirty prompts and script draft recovery apply to graph edits.
+
+Limits: 256 nodes, 2048 connections, dependency depth 64, generated body 256 KiB and
+complete document 1 MiB. Out-of-budget editor edits are rejected as a transaction.
+During Play the graph is read-only. **Last executed node values (scene script)**
+inspects the actual root VM's reserved `__kiln_graph:<node UUID>` state entries;
+attached-script state is also available in the existing live debugger. Values are
+last-executed results, so inactive branches can show an earlier invocation's value.
+These values survive logical save/restore. Graphs are executable scene/entity
+programs; use ordinary function modules for reusable text libraries.
+
+This workflow does not complete A04's live source breakpoints, statement stepping,
+imported function frames/watches or the required new enemy/projectile/trigger game.

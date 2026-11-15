@@ -133,6 +133,8 @@ pub struct SceneTransaction {
     after: Scene,
     entity_id: String,
     widget: Option<egui::Id>,
+    before_camera: Option<Option<kiln_core::camera::CameraSettings>>,
+    after_camera: Option<kiln_core::camera::CameraSettings>,
 }
 
 impl SceneTransaction {
@@ -143,7 +145,20 @@ impl SceneTransaction {
             before,
             entity_id,
             widget: None,
+            before_camera: None,
+            after_camera: None,
         }
+    }
+    /// Capture scene settings including an absent or configured camera.
+    pub fn new_document(before: Scene, camera: Option<kiln_core::camera::CameraSettings>) -> Self {
+        let mut edit = Self::new(before, "__scene_settings".into());
+        edit.before_camera = Some(camera.clone());
+        edit.after_camera = camera;
+        edit
+    }
+    /// Retain the latest camera preview for a settings transaction.
+    pub fn update_camera(&mut self, camera: Option<kiln_core::camera::CameraSettings>) {
+        self.after_camera = camera;
     }
     /// Check whether an update belongs to this gesture.
     pub fn targets(&self, scene_id: &str, entity_id: &str) -> bool {
@@ -163,9 +178,23 @@ impl SceneTransaction {
     }
     /// Record once; returning to the original scene preserves redo history.
     pub fn commit(self, history: &mut SceneHistory) {
-        if serde_json::to_value(&self.before).ok() != serde_json::to_value(&self.after).ok() {
-            history.record(self.before);
+        let scene_changed =
+            serde_json::to_value(&self.before).ok() != serde_json::to_value(&self.after).ok();
+        let camera_changed = self
+            .before_camera
+            .as_ref()
+            .is_some_and(|before| *before != self.after_camera);
+        if scene_changed || camera_changed {
+            if let Some(camera) = self.before_camera {
+                history.record_document(self.before, camera);
+            } else {
+                history.record(self.before);
+            }
         }
+    }
+    /// Restore settings, including an optional camera replacement.
+    pub fn cancel_document(self) -> (Scene, Option<Option<kiln_core::camera::CameraSettings>>) {
+        (self.before, self.before_camera)
     }
     /// Restore this scene through the editor's normal scene loader.
     pub fn cancel(self) -> Scene {

@@ -34,6 +34,7 @@ pub mod property_edit;
 mod quick_actions;
 pub mod recovery;
 pub mod scene_document;
+mod scene_references;
 pub mod scene_view;
 pub mod scene_workspace;
 pub mod script_editor;
@@ -76,3 +77,7 @@ mod script_highlight;
 
 mod scene_controls;
 mod scene_selection;
+
+mod asset_diagnostics;
+
+mod source_search;

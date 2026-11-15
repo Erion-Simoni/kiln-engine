@@ -128,11 +128,15 @@ pub fn body_ui(ui: &mut egui::Ui, body: &mut RigidBody2D, collider: &mut Collide
 
 pub fn joint_ui(ui: &mut egui::Ui, joint: &mut Joint2D) -> bool {
     let before = joint.clone();
-    ui.horizontal(|ui| {
-        ui.label("Endpoint A / B");
-        ui.text_edit_singleline(&mut joint.entity_a);
-        ui.text_edit_singleline(&mut joint.entity_b);
-    });
+    for (label, endpoint) in [
+        ("Endpoint A", &mut joint.entity_a),
+        ("Endpoint B", &mut joint.entity_b),
+    ] {
+        ui.horizontal_wrapped(|ui| {
+            ui.label(label);
+            ui.add(egui::TextEdit::singleline(endpoint).desired_width(160.0));
+        });
+    }
     egui::ComboBox::from_label("Joint type")
         .selected_text(format!("{:?}", joint.joint_type))
         .show_ui(ui, |ui| {
@@ -144,7 +148,7 @@ pub fn joint_ui(ui: &mut egui::Ui, joint: &mut Joint2D) -> bool {
                 ui.selectable_value(&mut joint.joint_type, kind, name);
             }
         });
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.label("Local anchors A / B");
         for value in joint.anchor_a.iter_mut().chain(joint.anchor_b.iter_mut()) {
             ui.add(egui::DragValue::new(value).speed(0.1));
@@ -161,7 +165,7 @@ pub fn joint_ui(ui: &mut egui::Ui, joint: &mut Joint2D) -> bool {
             .speed(0.01),
     );
     ui.checkbox(&mut joint.enable_limit, "Slider limits");
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.add(egui::DragValue::new(&mut joint.lower_translation));
         ui.add(egui::DragValue::new(&mut joint.upper_translation));
     });

@@ -52,6 +52,35 @@ def record_failure(output, game, phase, error):
         print(message, file=sys.stderr, flush=True)
 
 
+def color_matches(actual, expected, tolerance=2):
+    """Allow egui's documented per-pixel dithering on sRGB framebuffers."""
+    return len(actual)==len(expected) and all(abs(a-b)<=tolerance for a,b in zip(actual,expected))
+
+
+def floating_title_start(row):
+    """Locate a long title-bar run while retaining distinction from canvas gray."""
+    matches=[color_matches(row[x:x+3],(35,38,44)) for x in range(0,len(row),3)]
+    runs,start=[],0
+    for match,group in itertools.groupby(matches):
+        length=len(list(group))
+        if match and length>200:runs.append((length,start))
+        start+=length
+    return max(runs)[1] if runs else None
+
+
+def menu_frame_ready(width, height, pixels):
+    """Observe the painted menu, excluding an allocated but unpainted X11 window."""
+    if (width, height) != (1440, 900) or len(pixels) != width*height*3:
+        return False
+    background = glyphs = 0
+    for y in range(26):
+        for x in range(200):
+            pixel = pixels[(y*width+x)*3:(y*width+x)*3+3]
+            background += color_matches(pixel, (35, 38, 44))
+            glyphs += min(pixel) > 100
+    return background > 2000 and glyphs > 20
+
+
 class Editor:
     def __init__(self, tools, project, output, display=':83'):
         self.tools, self.project, self.output = Path(tools).resolve(), Path(project).resolve(), Path(output).resolve()
@@ -107,10 +136,11 @@ class Editor:
             return result.stdout.strip().splitlines()[0] if result.returncode == 0 else None
         self.window = self.wait(find)
         self.command('windowfocus', '--sync', self.window)
-        time.sleep(.7)
+        self.wait(lambda: menu_frame_ready(*self.frame()),
+                  description='Render editor menu before closing default tabs')
         # Close the default source/animation tabs before reopening them as
         # floating panels. Menus deliberately reuse an already-open panel.
-        self.click(633,78); self.click(520,78)
+        self.held_click(633,78); self.held_click(520,78)
         return self
 
     def command(self, *args):
@@ -136,7 +166,7 @@ class Editor:
 
     def value(self, x, y, value):
         self.command('mousemove', '--window', self.window, x, y, 'click', '--repeat', '2', '--delay', '80', '1')
-        self.key('ctrl+a'); self.command('type', '--clearmodifiers', str(value)); self.key('Return')
+        self.key('ctrl+a'); self.command('type', '--clearmodifiers', '--', str(value)); self.key('Return')
 
     def press(self, key, seconds=.18):
         self.command('keydown', key); time.sleep(seconds); self.command('keyup', key)
@@ -147,37 +177,44 @@ class Editor:
         time.sleep(.2)
         subprocess.run([executable('import'), '-display', self.env['DISPLAY'], '-window', self.window, str(self.output/(name+'.png'))], env=self.env, check=True, timeout=20)
 
+    def frame(self):
+        capture = subprocess.check_output([executable('import'), '-display', self.env['DISPLAY'],
+                                          '-window', self.window, '-depth', '8', 'ppm:-'],
+                                         env=self.env, timeout=10)
+        header, pixels = capture.split(b'\n255\n', 1)
+        width, height = map(int, header.splitlines()[-1].split())
+        return width, height, pixels
+
     def panel(self, menu, row):
-        self.click(menu, 12); self.click(menu+25, row)
+        self.held_click(menu, 12); self.held_click(menu+25, row)
         if menu == 18:
             return
         # egui may stagger newly reopened floating windows. Read their visible
         # title bar and drag to a consistent origin before using widget points.
         # This is screen observation and an ordinary title-bar drag, not an
         # application state hook or an assumed hidden window position.
-        def title_bar():
-            capture = subprocess.check_output([executable('import'), '-display', self.env['DISPLAY'],
-                                              '-window', self.window, '-depth', '8', 'ppm:-'], env=self.env,
-                                             timeout=10)
-            header, pixels = capture.split(b'\n255\n', 1)
-            width, height = map(int, header.splitlines()[-1].split())
-            assert (width, height) == (1440, 900)
-            row_pixels = [pixels[(102*width+x)*3:(102*width+x)*3+3] == bytes((35,38,44)) for x in range(width)]
-            runs, start = [], 0
-            for match, group in itertools.groupby(row_pixels):
-                length = len(list(group))
-                if match and length > 200:
-                    runs.append((length, start))
-                start += length
-            return (max(runs)[1],) if runs else None
+        previous_start, stable_frames = None, 0
 
-        # Menu clicks enqueue a new floating panel; wait for its rendered title
-        # before measuring/dragging, rather than requiring the very next frame.
-        start, = self.wait(title_bar)
+        def title_bar():
+            nonlocal previous_start, stable_frames
+            width, height, pixels = self.frame()
+            assert (width, height) == (1440, 900)
+            start = floating_title_start(pixels[102*width*3:103*width*3])
+            stable_frames = stable_frames+1 if start == previous_start else 1
+            previous_start = start
+            return (start,) if start is not None and stable_frames >= 3 else None
+
+        # Reopened dock windows can resize over successive painted frames. A
+        # first-frame title segment is not a settled drag origin (notably after
+        # closing the enlarged source panel). Observe stability before dragging.
+        start, = self.wait(title_bar, description=f"Settle floating panel from menu {menu}, row {row}")
         if start != 33:
             self.command('mousemove', '--window', self.window, start+30, 102, 'mousedown', '1')
             self.command('mousemove', '--window', self.window, 63, 102)
             self.command('mouseup', '1')
+            previous_start, stable_frames = None, 0
+            self.wait(lambda: title_bar() == (33,),
+                      description='Verify floating panel reached widget origin')
 
     def enlarge(self):
         if self.large:
@@ -200,9 +237,12 @@ class Editor:
             clip.terminate(); clip.wait(timeout=5)
 
     def source(self, relative, source):
-        self.text(225,166,relative); self.click(392,166); self.paste(source)
-        self.click(65,194); self.click(208,194)
-        self.wait(lambda: (self.project/relative).exists() and (self.project/relative).read_bytes()==Path(source).read_bytes())
+        self.held_click(225,166); self.key('ctrl+a')
+        self.command('type', '--clearmodifiers', '--delay', '2', relative)
+        self.held_click(392,166); self.paste(source)
+        self.held_click(65,194); self.held_click(208,194)
+        self.wait(lambda: (self.project/relative).exists() and (self.project/relative).read_bytes()==Path(source).read_bytes(),
+                  description=f"Save exact source buffer {relative}")
 
     def save(self):
         self.click(500,78); self.key('ctrl+s'); time.sleep(.2)

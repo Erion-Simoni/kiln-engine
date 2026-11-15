@@ -179,3 +179,37 @@ fn counted_loops_scope_the_initializer_and_continue_runs_the_increment() {
         &[Value::I64(7)]
     );
 }
+
+#[test]
+fn enums_are_qualified_stable_constants_and_invalid_members_report_errors() {
+    assert_eq!(run("enum Kind { Enemy, Projectile, } enum State { Enemy } fn tag() { return Kind.Enemy; } return tag()==Kind.Enemy && Kind.Enemy!=State.Enemy;").stack(),&[Value::Bool(true)]);
+    assert_eq!(
+        run("enum Mode { Idle, Run } return Mode.Run;").stack(),
+        &[Value::Str("Mode::Run".into())]
+    );
+    for code in [
+        "enum Empty {}",
+        "enum Mode { Idle, Idle }",
+        "enum Mode {Idle} enum Mode{Run}",
+        "enum Mode{Idle} return Mode.Nope;",
+        "enum Mode{Idle} Mode.Idle=2;",
+        "if true {enum Nested { A }}",
+    ] {
+        assert!(KilnScriptFrontend::new().compile(code).is_err(), "{code}");
+    }
+}
+
+#[test]
+fn excessive_function_parameters_and_call_arguments_fail_before_unbounded_allocation() {
+    let params = (0..257)
+        .map(|i| format!("p{i}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    assert!(KilnScriptFrontend::new()
+        .compile(&format!("fn too_many({params}) {{return 0;}}"))
+        .is_err());
+    let args = vec!["0"; 257].join(",");
+    assert!(KilnScriptFrontend::new()
+        .compile(&format!("probe({args});"))
+        .is_err());
+}

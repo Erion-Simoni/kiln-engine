@@ -4,7 +4,8 @@
 //! component management. Selected entities are highlighted and their
 //! components are shown in the inspector.
 
-use kiln_core::project::{Component, Project, Scene};
+use kiln_core::project::{Component, Project};
+use std::collections::HashMap;
 
 /// Action requested by the hierarchy panel.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,8 +41,10 @@ pub struct HierarchyNode {
     pub expanded: bool,
     /// Whether this node is selected.
     pub selected: bool,
-    /// Whether the node has children (nested scenes).
+    /// Whether the node has parented entities below it.
     pub has_children: bool,
+    /// Entity-parent depth in the displayed preorder tree.
+    pub depth: usize,
 }
 
 /// State of the hierarchy panel.
@@ -59,6 +62,7 @@ pub struct HierarchyPanel {
     pub show_add_dialog: bool,
     /// Name typed for the new entity.
     pub new_entity_name: String,
+    scene_key: Option<(String, String)>,
 }
 
 impl HierarchyPanel {
@@ -69,31 +73,80 @@ impl HierarchyPanel {
 
     /// Rebuild the hierarchy from a project scene.
     pub fn rebuild(&mut self, project: &Project, scene_id: &str) {
+        let key = (project.id.clone(), scene_id.to_owned());
+        let expanded: HashMap<_, _> = if self.scene_key.as_ref() == Some(&key) {
+            self.nodes
+                .iter()
+                .map(|n| (n.entity_id.clone(), n.expanded))
+                .collect()
+        } else {
+            HashMap::new()
+        };
+        self.scene_key = Some(key);
         self.nodes.clear();
         if let Some(scene) = project.scenes.get(scene_id) {
-            for entity in &scene.entities {
-                let has_children = self.scene_has_nested(project, scene, &entity.id);
-                self.nodes.push(HierarchyNode {
-                    entity_id: entity.id.clone(),
-                    name: entity.name.clone(),
-                    expanded: true,
-                    selected: false,
-                    has_children,
-                });
+            let indices: HashMap<_, _> = scene
+                .entities
+                .iter()
+                .enumerate()
+                .map(|(index, entity)| (entity.id.as_str(), index))
+                .collect();
+            let mut children = vec![Vec::new(); scene.entities.len()];
+            let mut roots = Vec::new();
+            for (index, entity) in scene.entities.iter().enumerate() {
+                let parent = entity
+                    .components
+                    .iter()
+                    .find_map(|component| match component {
+                        Component::Parent { parent } => indices.get(parent.as_str()).copied(),
+                        _ => None,
+                    })
+                    .filter(|parent| *parent != index);
+                if let Some(parent) = parent {
+                    children[parent].push(index);
+                } else {
+                    roots.push(index);
+                }
+            }
+            let mut visited = vec![false; scene.entities.len()];
+            // Also visit cyclic components without recursion, so malformed data
+            // cannot hide entities or cause an unbounded recursive traversal.
+            for root in roots.into_iter().chain(0..scene.entities.len()) {
+                let mut stack = vec![(root, 0)];
+                while let Some((index, depth)) = stack.pop() {
+                    if visited[index] {
+                        continue;
+                    }
+                    visited[index] = true;
+                    let entity = &scene.entities[index];
+                    self.nodes.push(HierarchyNode {
+                        entity_id: entity.id.clone(),
+                        name: entity.name.clone(),
+                        expanded: expanded.get(&entity.id).copied().unwrap_or(true),
+                        selected: self.selected_ids.contains(&entity.id),
+                        has_children: !children[index].is_empty(),
+                        depth,
+                    });
+                    stack.extend(
+                        children[index]
+                            .iter()
+                            .rev()
+                            .map(|index| (*index, depth + 1)),
+                    );
+                }
             }
         }
     }
 
-    /// Whether a scene entity has nested child scenes.
-    fn scene_has_nested(&self, project: &Project, scene: &Scene, entity_id: &str) -> bool {
-        for nested in &scene.nested_scenes {
-            if let Some(child_scene) = project.scenes.get(&nested.scene_id) {
-                if child_scene.entities.iter().any(|e| e.id == entity_id) {
-                    return true;
-                }
-            }
+    /// Toggle a branch without changing selection or the authored document.
+    pub fn toggle_expanded(&mut self, entity_id: &str) {
+        if let Some(node) = self
+            .nodes
+            .iter_mut()
+            .find(|n| n.entity_id == entity_id && n.has_children)
+        {
+            node.expanded = !node.expanded;
         }
-        false
     }
 
     /// Get the selected node, if any.
@@ -162,12 +215,43 @@ impl HierarchyPanel {
     /// Get filtered nodes.
     pub fn filtered_nodes(&self) -> Vec<&HierarchyNode> {
         if self.filter.is_empty() {
-            return self.nodes.iter().collect();
+            let mut hidden_below = None;
+            return self
+                .nodes
+                .iter()
+                .filter(|node| {
+                    if hidden_below.is_some_and(|depth| node.depth > depth) {
+                        return false;
+                    }
+                    hidden_below = (!node.expanded && node.has_children).then_some(node.depth);
+                    true
+                })
+                .collect();
         }
         let filter = self.filter.to_lowercase();
+        let mut visible: Vec<_> = self
+            .nodes
+            .iter()
+            .map(|n| n.name.to_lowercase().contains(&filter))
+            .collect();
+        let mut ancestors = Vec::new();
+        let mut parents = Vec::new();
+        for (index, node) in self.nodes.iter().enumerate() {
+            ancestors.truncate(node.depth);
+            parents.push(ancestors.last().copied());
+            ancestors.push(index);
+        }
+        for index in (0..self.nodes.len()).rev() {
+            if visible[index] {
+                if let Some(parent) = parents[index] {
+                    visible[parent] = true;
+                }
+            }
+        }
         self.nodes
             .iter()
-            .filter(|n| n.name.to_lowercase().contains(&filter))
+            .zip(visible)
+            .filter_map(|(node, visible)| visible.then_some(node))
             .collect()
     }
 }
@@ -191,7 +275,15 @@ pub fn render_hierarchy_panel(
             .hint_text("Search hierarchy")
             .desired_width(f32::INFINITY),
     );
-    ui.weak(format!("SCENE  {scene_id}"));
+    let root = ui.weak(format!("SCENE  {scene_id}")).on_hover_text(
+        "Drop an entity here to move it to the scene root, preserving its world transform",
+    );
+    if let Some(source) = root.dnd_release_payload::<String>() {
+        action = Some(HierarchyAction::Reparent {
+            child_id: source.as_str().to_owned(),
+            parent_id: None,
+        });
+    }
     ui.separator();
 
     // Entity tree
@@ -199,21 +291,34 @@ pub fn render_hierarchy_panel(
         let nodes: Vec<HierarchyNode> = state.filtered_nodes().into_iter().cloned().collect();
         for node in nodes {
             let selected = state.selected_ids.contains(&node.entity_id);
-            let _node_text = if node.has_children {
-                format!("{} ▾", node.name)
-            } else {
-                node.name.clone()
-            };
-
             ui.horizontal(|ui| {
-                // Expand/collapse toggle (for nested scenes)
+                ui.add_space(node.depth.min(8) as f32 * 14.0);
+                // Expand/collapse an entity's descendants.
                 if node.has_children {
                     let expanded = node.expanded;
-                    let arrow = if expanded { "▼" } else { "▶" };
-                    if ui.button(arrow).clicked() {
-                        // Toggle expansion (handled by caller)
+                    let response = ui.add_sized([16.0, 22.0], egui::Button::new("").frame(false));
+                    let center = response.rect.center();
+                    let offsets = if expanded {
+                        [
+                            egui::vec2(-4.0, -2.0),
+                            egui::vec2(4.0, -2.0),
+                            egui::vec2(0.0, 3.0),
+                        ]
+                    } else {
+                        [
+                            egui::vec2(-2.0, -4.0),
+                            egui::vec2(3.0, 0.0),
+                            egui::vec2(-2.0, 4.0),
+                        ]
+                    };
+                    ui.painter().add(egui::Shape::convex_polygon(
+                        offsets.map(|offset| center + offset).to_vec(),
+                        ui.visuals().text_color(),
+                        egui::Stroke::NONE,
+                    ));
+                    if response.clicked() {
+                        state.toggle_expanded(&node.entity_id);
                     }
-                    ui.label(arrow);
                 } else {
                     ui.label("  ");
                 }
@@ -371,6 +476,118 @@ fn get_entity_role(project: &Project, scene_id: &str, entity_id: &str) -> Option
 #[cfg(test)]
 mod selection_tests {
     use super::*;
+    use kiln_core::Scene;
+
+    fn tree_project() -> Project {
+        let mut project = Project::default();
+        let entities = [
+            ("grandchild", Some("child")),
+            ("parent", None),
+            ("child", Some("parent")),
+            ("other", None),
+        ]
+        .into_iter()
+        .map(|(id, parent)| kiln_core::Entity {
+            id: id.into(),
+            name: id.into(),
+            components: parent
+                .map(|parent| Component::Parent {
+                    parent: parent.into(),
+                })
+                .into_iter()
+                .collect(),
+        })
+        .collect();
+        project.scenes.insert(
+            "main".into(),
+            Scene {
+                id: "main".into(),
+                name: "Main".into(),
+                script: None,
+                nested_scenes: vec![],
+                entities,
+            },
+        );
+        project
+    }
+
+    #[test]
+    fn parent_order_fold_and_search_context_follow_authored_entity_links() {
+        let project = tree_project();
+        let mut panel = HierarchyPanel::new();
+        panel.rebuild(&project, "main");
+        let rows: Vec<_> = panel
+            .nodes
+            .iter()
+            .map(|n| (n.entity_id.as_str(), n.depth, n.has_children))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![
+                ("parent", 0, true),
+                ("child", 1, true),
+                ("grandchild", 2, false),
+                ("other", 0, false)
+            ]
+        );
+        panel.select("child");
+        panel.toggle_expanded("parent");
+        assert_eq!(
+            panel
+                .filtered_nodes()
+                .iter()
+                .map(|n| n.entity_id.as_str())
+                .collect::<Vec<_>>(),
+            ["parent", "other"]
+        );
+        panel.set_filter("GRAND");
+        assert_eq!(
+            panel
+                .filtered_nodes()
+                .iter()
+                .map(|n| n.entity_id.as_str())
+                .collect::<Vec<_>>(),
+            ["parent", "child", "grandchild"]
+        );
+        panel.set_filter("");
+        panel.rebuild(&project, "main");
+        assert!(!panel.nodes[0].expanded);
+        assert_eq!(panel.selected_node().unwrap().entity_id, "child");
+        assert_eq!(panel.filtered_nodes().len(), 2);
+        panel.toggle_expanded("parent");
+        assert_eq!(panel.filtered_nodes().len(), 4);
+    }
+
+    #[test]
+    fn switching_scene_does_not_inherit_a_matching_entitys_fold_state() {
+        let mut project = tree_project();
+        let mut other = project.scenes["main"].clone();
+        other.id = "other".into();
+        project.scenes.insert(other.id.clone(), other);
+        let mut panel = HierarchyPanel::new();
+        panel.rebuild(&project, "main");
+        panel.toggle_expanded("parent");
+        panel.rebuild(&project, "other");
+        assert_eq!(panel.filtered_nodes().len(), 4);
+    }
+
+    #[test]
+    fn cyclic_and_missing_parent_data_remains_inspectable_without_recursion() {
+        let mut project = tree_project();
+        let scene = project.scenes.get_mut("main").unwrap();
+        scene.entities[1].components.push(Component::Parent {
+            parent: "grandchild".into(),
+        });
+        scene.entities[3].components.push(Component::Parent {
+            parent: "missing".into(),
+        });
+        let mut panel = HierarchyPanel::new();
+        panel.rebuild(&project, "main");
+        let ids: std::collections::HashSet<_> =
+            panel.nodes.iter().map(|n| n.entity_id.as_str()).collect();
+        assert_eq!(ids.len(), 4);
+        assert_eq!(panel.filtered_nodes().len(), 4);
+    }
 
     #[test]
     fn hierarchy_click_selects_and_drag_reparents_through_the_real_widgets() {

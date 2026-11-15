@@ -2498,6 +2498,7 @@ dependencies = [
  "kiln-ai",
  "kiln-gameplay",
  "kiln-ir",
+ "kiln-script",
  "ron",
  "serde",
  "thiserror 2.0.21",

@@ -2039,3 +2039,104 @@ checks remain separate Task 8 gates.
   selected ancestors retain their local transforms rather than moving twice.
 - New controls require real widget/save/reopen and negative-command regressions.
   Continue using the existing dependencies, scene history and host/IR systems.
+
+### ADR-0083 — Central resource references and target-specific import defaults (2026-11-14)
+
+- Use one typed project resource visitor for dependency diagnostics and path
+  rewrites. Include prefab sprite overrides, clips, tilesets, shader/material
+  texture parameters, fonts, audio, scene scripts and entity script attachments;
+  do not rewrite unrelated names/IDs merely because their text matches a path.
+- Platform import overrides are optional project metadata keyed by stable asset ID
+  and the runtime target names windows/linux/macos/web (without adding platform certification). Missing target overrides
+  fall back to the existing per-asset options and legacy nearest/no-mip behavior.
+  An empty override table is omitted so legacy project serialization stays stable.
+- The existing renderer/runtime chooses its actual target, so the editor, native
+  player and browser consume the same saved rules without a second asset identity.
+- Reuse the existing cache's content hashes for visible diagnostics. Atlas/prefab
+  production acceptance remains required separately; these utilities alone do not
+  close A03 or replace full reference-safe import/reimport/export verification.
+
+### ADR-0084 — Bounded source tools and enum constants (2026-11-14)
+
+- Keep the existing language/compiler/IR as the only text-script execution path.
+  Top-level named enums lower to qualified, stable tagged strings; dictionaries
+  remain the structured payload mechanism. Reject empty/duplicate enums/variants,
+  unknown members, assignment to constants and excessive parameter/argument lists.
+- Formatting changes indentation/trailing whitespace only, preserving comments,
+  token contents and valid escaped strings. Unsupported multiline strings remain
+  invalid drafts. Do not rewrite an invalid quoted
+  or unbalanced draft; formatting is an ordinary unsaved buffer edit.
+- Completion/docs use the shared host registry; project search/source navigation
+  use bounded project-relative source reads and preserve guarded unsaved buffers.
+  Debugging must eventually operate on the real session VM, not the legacy
+  separately allocated debugger host; source/graph acceptance stays open until
+  that live execution path and its game-level regressions work.
+
+### ADR-0085 — Bind tool compatibility to a shared engine contract (2026-11-14)
+
+- Version/protocol 0.1.0/1 alone cannot identify support for new language syntax
+  or project fields. Add a shared engine-contract identifier to native runtime
+  identity and the WASM custom section. Reject missing/different contracts before
+  accepting an export, even when the package version matches.
+- Keep the export receipt envelope version unchanged; old receipts deserialize
+  with an empty contract and fail explicit compatibility validation. Existing
+  published games remain runnable with their original engine; exporting with the
+  new editor requires matching editor/CLI/player/browser tools.
+- The contract identifier is declared once in kiln-core and copied into WASM
+  metadata at compile time. Feature additions that change runtime semantics must
+  change it; byte hashes still bind exact payload files. This is a compatibility
+  gate, not a claim of source reproducibility or signed provenance.
+
+### ADR-0086 — Deterministic cooperative script tasks and timers (2026-11-14)
+
+- Schedule game-time tasks in the script's existing persistent state, with bounded
+  names/counts/payloads and no threads, blocking waits, or second timer clock.
+  Timers use the same scheduler with an unused payload. UI/Play pause therefore
+  stops elapsed game time; explicit frame stepping advances it normally.
+- A cooperative task stores its resume state as a dictionary/enum payload. A script
+  takes a due payload once, executes its named helper, and schedules the next stage
+  explicitly. This supports resumable state machines, not automatic stackful
+  function continuations or a new `yield` keyword; retain that distinction in docs.
+- Use reserved __kiln_task: state keys, at most 256 live tasks per script, names up
+  to 240 UTF-8 bytes, and existing saved-value bounds. Cancellation and replacement
+  are explicit. Deadlines and payloads survive compatible logical game saves using
+  existing typed script snapshots and source-signature checks.
+- Root and entity scripts use the same registry and separate existing state scopes;
+  native/browser exports use identical semantics. Counted user loops around tasks
+  remain subject to the VM instruction budget.
+
+### ADR-0087 — Graphs lower through the shared source compiler (2026-11-14)
+
+- Replace guessed/hash host-call IDs with the same named/arity registry used by
+  scripts. Move that dependency-free table into kiln-script and retain the runtime
+  re-export. Add only the existing workspace kiln-script dependency to kiln-graph.
+- Lower bounded acyclic gameplay graphs to ordinary KilnScript, then compile with
+  the existing frontend. Constants, arithmetic/comparison, conditional event merges,
+  lifecycle events and host calls use the actual VM/host semantics. Reject missing
+  inputs, ambiguous connections, cycles, unsupported nodes and excessive expansion.
+- Per-invocation computed flags evaluate each node at most once even with fan-out
+  or conditional branches. Trigger outputs and host return values are distinct pins.
+  Runtime inspection stores last executed values under reserved __kiln_graph: keys.
+- Keep visual metadata and generated source in one .ks file: deterministic bounded
+  RON encoded in a leading comment, followed by the exact generated source. This
+  avoids a two-file partial-save contract and uses existing source save/recovery,
+  module loading and export paths. Refuse to overwrite manually changed generated
+  bodies when reopening as a graph; manual source remains runnable/editable as text.
+- Reuse the existing graph widget, fix its drag/parameter/connection defects, and
+  synchronize edits into ScriptEditor drafts so normal guarded saves/autosave and
+  project replacement protection cover graph authoring. Legacy specialized graph
+  nodes remain explicitly unsupported until their runtime contracts are implemented.
+
+
+### ADR-0088 — Scene settings share scene-scoped transactions (2026-11-15)
+
+- Treat a scene's camera settings as part of its editor document for dirty tracking
+  and undo/redo, while retaining the existing project camera table on disk.
+- Extend existing scene history entries with an optional camera snapshot. Ordinary
+  entity commands preserve the current camera; camera-aware settings transactions
+  restore its exact prior presence/value. No manifest migration or new history stack.
+- Scene composition edits use the existing gesture transaction and cancellation
+  path; nested-link changes rebuild the projection through the normal scene loader.
+  Disable all composition controls during Play and project replacement/recovery.
+- Keep per-scene camera baselines alongside scene baselines so closing a dirty
+  camera tab cannot silently discard the change. Track settings by scene ID.

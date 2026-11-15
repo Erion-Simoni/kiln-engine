@@ -356,3 +356,81 @@ fn repeated_untextured_entity_creation_retains_unique_ids_after_switch_and_save(
     assert_eq!(reopened.scenes["a"].entities.len(), 4);
     assert_eq!(json(&reopened.scenes["b"]), json(&scene("b", 80.0)));
 }
+
+#[test]
+fn camera_only_edits_are_dirty_and_require_close_decision() {
+    let mut project = project();
+    let mut tabs = SceneWorkspace::open(&project);
+    project.cameras.insert(
+        "a".into(),
+        kiln_core::camera::CameraSettings {
+            zoom: 2.0,
+            ..Default::default()
+        },
+    );
+    tabs.refresh_dirty(&project, None);
+    assert!(tabs.tabs[0].dirty);
+    assert!(!tabs.tabs[1].dirty);
+    let current = project.scenes["a"].clone();
+    assert!(tabs.close(&mut project, current.clone(), 0).is_err());
+    tabs.discard_and_close(&mut project, current, 0).unwrap();
+    assert!(!project.cameras.contains_key("a"));
+}
+
+#[test]
+fn discard_camera_restores_saved_value_and_leaves_other_scene_untouched() {
+    let mut project = project();
+    let saved = kiln_core::camera::CameraSettings {
+        zoom: 3.0,
+        bounds: Some([-10.0, -20.0, 500.0, 400.0]),
+        ..Default::default()
+    };
+    project.cameras.insert("a".into(), saved.clone());
+    let mut tabs = SceneWorkspace::open(&project);
+    project.cameras.get_mut("a").unwrap().zoom = 7.0;
+    project.cameras.insert(
+        "b".into(),
+        kiln_core::camera::CameraSettings {
+            zoom: 5.0,
+            ..Default::default()
+        },
+    );
+    let current = project.scenes["a"].clone();
+    tabs.discard_and_close(&mut project, current, 0).unwrap();
+    assert_eq!(project.cameras["a"], saved);
+    assert_eq!(project.cameras["b"].zoom, 5.0);
+    tabs.refresh_dirty(&project, None);
+    assert!(tabs.tabs[0].dirty);
+    tabs.mark_saved(&project);
+    assert!(!tabs.tabs[0].dirty);
+}
+
+#[test]
+fn recovered_camera_uses_disk_baseline_and_new_camera_is_removed_on_discard() {
+    let disk = project();
+    let mut recovered = disk.clone();
+    recovered.cameras.insert(
+        "a".into(),
+        kiln_core::camera::CameraSettings {
+            zoom: 2.0,
+            ..Default::default()
+        },
+    );
+    let mut tabs = SceneWorkspace::open(&recovered);
+    tabs.set_saved_baselines(&disk);
+    tabs.refresh_dirty(&recovered, None);
+    assert!(tabs.tabs[0].dirty);
+    let current = recovered.scenes["a"].clone();
+    tabs.discard_and_close(&mut recovered, current, 0).unwrap();
+    assert!(!recovered.cameras.contains_key("a"));
+    let current = recovered.scenes["b"].clone();
+    tabs.create(&mut recovered, Some(current)).unwrap();
+    let id = tabs.active_id().unwrap().to_owned();
+    recovered.cameras.insert(id.clone(), Default::default());
+    let current = recovered.scenes[&id].clone();
+    let index = tabs.active.unwrap();
+    tabs.discard_and_close(&mut recovered, current, index)
+        .unwrap();
+    assert!(!recovered.scenes.contains_key(&id));
+    assert!(!recovered.cameras.contains_key(&id));
+}

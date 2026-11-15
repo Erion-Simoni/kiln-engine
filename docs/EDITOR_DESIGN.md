@@ -19,9 +19,64 @@ The default layout includes hierarchy and inspector sidebars, Scene/Game/
 Animation tabs, and an Assets/Console/Profiler shelf. Panels retain docking,
 resizing and existing editor commands. **Window → Reset Layout** or **Layout:
 Default** restores this arrangement. The global toolbar provides Q/W/E/R tools,
-world-space transforms, grid snapping, Play/Stop, pause and frame stepping.
-Local transforms remain in the inspector. The viewport provides grid/gizmo/
+world/local move axes, grid snapping, Play/Stop, pause and frame stepping.
+Inspector fields edit stored local transforms. **World / Local** changes move
+handle orientation: red is X, green is Y. Drag a handle to constrain movement;
+drag the center to move freely. Local axes follow the primary entity's world
+orientation, including its parents. The viewport provides grid/gizmo/
 collider visibility, framing and real saved scene tabs.
+
+**Snap** uses the adjacent grid size for movement, 15° increments for rotation,
+and 0.1 increments for uniform scale. Scaling preserves proportions and stops at
+the smallest positive snapped scale of 0.1. Disable Snap for continuous drags.
+Each gesture is one undo step; Escape cancels the current gesture.
+World movement snaps to the absolute scene grid; Local movement snaps displacement
+from the gesture's starting position along the displayed axes. Rotation and uniform
+scale retain the shared 2D controls. Coordinate space is a session preference.
+
+Ctrl-click toggles hierarchy selection; clearing the last selected row also clears
+the inspector and gizmo target. The last selected entity is the primary group
+pivot. Group move, rotation and uniform scale transform selected roots; selected
+descendants inherit the operation without rewriting their stored local properties.
+Selection survives undo/redo, and Escape preserves the previous redo history.
+
+The Scene Editor records scene names, gameplay-script paths, camera settings and
+nested-scene links in the active scene's undo history. Choose the child explicitly
+from **Add Nested Scene**. Offset/removal changes refresh the preview immediately
+and leave the child document intact. Camera-only edits mark the tab dirty; Discard
+restores the saved camera. Escape cancels an active settings gesture, and recovery
+includes unsaved camera settings. Composition controls are disabled during Play.
+Composed scenes currently require distinct entity IDs. Nesting refuses collisions
+(including containing ancestor compositions) with an inline explanation and leaves
+the documents unchanged. Legacy ambiguous compositions retain their authored data;
+the inspector/gizmo disables ambiguous targets. Edit a child through its own tab.
+Repeated instances with scoped identities are not implemented.
+
+Deletion refuses entities still used by a joint or camera follow target, including
+references from containing scene compositions. Remove the joint or change the
+camera target first; the refusal preserves the document and undo/redo history.
+Joint endpoints must each resolve to one entity in the edited composition.
+The joint inspector keeps a form draft: **Apply Joint** validates and commits all
+fields as one undo step; **Cancel Joint Edit** discards the form and preserves redo.
+Invalid forms retain their input with an inline error. Form drafts require Apply
+before they become project edits eligible for saving or recovery.
+
+The hierarchy follows entity Parent links, with indented children and branch
+expanders. Drag an entity onto another to reparent it, or onto the **SCENE**
+heading to detach it to the scene root; both preserve its world transform.
+Search shows matching entities with their ancestor paths even in collapsed
+branches. Clearing search restores the branch view. Folding is view state and
+does not edit the project; it survives edits in the current scene.
+
+**Save Project As** keeps its destination and error visible after a failed copy.
+Correct the destination and retry, or use Cancel/Escape to keep editing the draft.
+A new or empty directory receives a project/resource copy; a new manifest filename
+in the current directory shares that directory's resources. Save or Revert unsaved
+script buffers before Save As; the operation does not implicitly write them.
+If the open manifest is deleted, corrupted or changed externally, normal Save
+refuses to replace it. Dismiss the error with Escape and use Save As in a new
+directory to preserve the in-memory draft and remaining resources. This leaves
+the external file state untouched; the source resource directory must still exist.
 
 The asset shelf contains actual bounded image thumbnails, category/search
 filters and scene cards. Double-click a scene card to open it. Drag image

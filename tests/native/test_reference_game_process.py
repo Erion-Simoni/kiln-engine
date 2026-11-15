@@ -7,10 +7,10 @@ import json
 import os
 from pathlib import Path
 import tempfile
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import unittest
 
-from task9_editor_games import stop_process, record_failure
+from task9_editor_games import Editor, stop_process, record_failure, floating_title_start, menu_frame_ready
 
 
 class ProcessCleanupTests(unittest.TestCase):
@@ -57,3 +57,65 @@ class FailureReportingTests(unittest.TestCase):
                 record_failure(temporary, 'emberwatch', 'export', RuntimeError('disk full'))
             self.assertEqual(output.getvalue(), '')
             self.assertIn('emberwatch export: RuntimeError: disk full', errors.getvalue())
+
+
+class FramebufferObservationTests(unittest.TestCase):
+    def test_startup_rejects_unpainted_and_solid_windows(self):
+        for color in [(0, 0, 0), (255, 255, 255), (35, 38, 44)]:
+            self.assertFalse(menu_frame_ready(1440, 900, bytes(color)*1440*900))
+        self.assertFalse(menu_frame_ready(1440, 900, b''))
+
+    def test_startup_recognizes_painted_menu_with_srgb_dithering(self):
+        frame = bytearray(bytes((43, 43, 43))*1440*900)
+        for y in range(26):
+            for x in range(200):
+                d = (x+y)%3-1
+                pixel = (194, 194, 194) if y == 12 and 10 <= x < 100 else (35+d, 38+d, 44+d)
+                offset = (y*1440+x)*3
+                frame[offset:offset+3] = bytes(pixel)
+        self.assertTrue(menu_frame_ready(1440, 900, frame))
+        self.assertFalse(menu_frame_ready(900, 1440, frame))
+
+    def test_dithered_srgb_title_is_found_without_matching_canvas_gray(self):
+        row=bytes((43,43,43))*33
+        row+=b''.join(bytes((35+d,38+d,44+d)) for d in [-1,0,1]*101)
+        row+=bytes((43,43,43))*1104
+        self.assertEqual(floating_title_start(row),33)
+
+    def test_backgrounds_short_matches_and_wrong_colors_are_not_panels(self):
+        for row in [bytes((43,43,43))*1440,bytes((35,38,44))*200+bytes((20,20,20))*1240,bytes((35,44,38))*1440]:
+            self.assertIsNone(floating_title_start(row))
+
+
+class FloatingPanelSettlementTests(unittest.TestCase):
+    @staticmethod
+    def frame(start):
+        width, height = 1440, 900
+        pixels = bytearray(bytes((43, 43, 43))*width*height)
+        offset = (102*width+start)*3
+        pixels[offset:offset+900] = bytes((35, 38, 44))*300
+        return width, height, pixels
+
+    def editor(self, starts):
+        editor = Editor.__new__(Editor)
+        editor.process = None
+        editor.held_click = Mock()
+        editor.command = Mock()
+        editor.window = 'test-window'
+        editor.frame = Mock(side_effect=[self.frame(start) for start in starts])
+        return editor
+
+    def test_transient_title_segment_cannot_become_a_drag_origin(self):
+        # The first painted frame can expose a different title segment while
+        # the reopened dock window adopts the enlarged previous panel size.
+        editor = self.editor([354, 33, 33, 33])
+        editor.panel(80, 214)
+        editor.command.assert_not_called()
+        self.assertEqual(editor.frame.call_count, 4)
+
+    def test_shifted_panel_must_render_at_destination_before_widget_clicks(self):
+        editor = self.editor([120, 120, 120, 120, 33, 33, 33])
+        editor.panel(80, 214)
+        self.assertEqual(editor.command.call_args_list[0].args,
+                         ('mousemove', '--window', 'test-window', 150, 102, 'mousedown', '1'))
+        self.assertEqual(editor.frame.call_count, 7)
