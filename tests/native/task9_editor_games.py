@@ -193,19 +193,28 @@ class Editor:
         # title bar and drag to a consistent origin before using widget points.
         # This is screen observation and an ordinary title-bar drag, not an
         # application state hook or an assumed hidden window position.
+        previous_start, stable_frames = None, 0
+
         def title_bar():
+            nonlocal previous_start, stable_frames
             width, height, pixels = self.frame()
             assert (width, height) == (1440, 900)
             start = floating_title_start(pixels[102*width*3:103*width*3])
-            return (start,) if start is not None else None
+            stable_frames = stable_frames+1 if start == previous_start else 1
+            previous_start = start
+            return (start,) if start is not None and stable_frames >= 3 else None
 
-        # Menu clicks enqueue a new floating panel; wait for its rendered title
-        # before measuring/dragging, rather than requiring the very next frame.
-        start, = self.wait(title_bar, description=f"Render floating panel from menu {menu}, row {row}")
+        # Reopened dock windows can resize over successive painted frames. A
+        # first-frame title segment is not a settled drag origin (notably after
+        # closing the enlarged source panel). Observe stability before dragging.
+        start, = self.wait(title_bar, description=f"Settle floating panel from menu {menu}, row {row}")
         if start != 33:
             self.command('mousemove', '--window', self.window, start+30, 102, 'mousedown', '1')
             self.command('mousemove', '--window', self.window, 63, 102)
             self.command('mouseup', '1')
+            previous_start, stable_frames = None, 0
+            self.wait(lambda: title_bar() == (33,),
+                      description='Verify floating panel reached widget origin')
 
     def enlarge(self):
         if self.large:

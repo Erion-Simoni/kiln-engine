@@ -287,6 +287,13 @@ undo/redo, cancellation, retained selection and exact restart; CI retains eviden
 See [parented selection evidence](evidence/A02_PARENTED_SELECTION.md). A02 remains
 PARTIAL; full component/property coverage and cross-platform acceptance remain.
 
+**Floating-panel replay checkpoint 2026-11-15:** reproduced the hosted Skybridge
+missing-animation failure locally. The shared observer now waits for settled
+rendered panel geometry and verifies the origin after a drag before targeting
+widgets. Skybridge authoring again matches its complete checked-in project;
+no property assertions were weakened. See [replay evidence](evidence/A02_PANEL_REPLAY.md).
+This reliability repair does not close A02's remaining breadth or acceptance.
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.

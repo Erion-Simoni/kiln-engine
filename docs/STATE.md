@@ -1,7 +1,7 @@
 # Kiln Session Handoff
 
 Owner scope: A01 through A04 on `fix/a01-ci-baseline`.
-Current focus: A02 parented selection/group transforms (2026-11-15), following c9958d7.
+Current focus: A02 stable floating-panel replay (2026-11-15), following 276524c.
 A02–A04 remain PARTIAL. A01 baseline acceptance is pinned to green 6de428b
 (CI 43606018834, reference 43606018842, Linux 43606018785). New source needs
 matching results. Full 3D remains behind G2D; no broader release gate accepted.
@@ -9,37 +9,44 @@ MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
 
-- Reproduced and fixed Ctrl-deselect leaving a stale inspector/gizmo target.
-  Empty hierarchy selection now synchronizes to no selected entity.
-- Reproduced group scaling changing child-local floats. Shared group transforms
-  now update selected roots; selected descendants inherit without rewriting their
-  local documents. Ancestor traversal includes intermediate unselected parents
-  and is bounded. Existing general target ordering is unchanged.
-- Added unit/integration and real-widget coverage to CI with retained evidence.
-  No dependencies, project format or command architecture changes.
-- Evidence: docs/evidence/A02_PARENTED_SELECTION.md. Earlier manifest rescue,
-  Save As protection, graph dialog foreground repair, Parent tree, World/Local
+- Retrieved source-pinned hosted results: 276524c CI 43711940922, Linux candidate
+  43711940942 and Windows 43711940872 PASSED. Reference 43711940851 FAILED
+  Skybridge authoring with KeyError: 'run', matching c9958d7 reference failure.
+- Reproduced the exact failure locally. The panel observer dragged from a
+  transient title segment and left Animation at the wrong widget origin.
+- The shared observer now waits for three consecutive matching rendered title
+  origins and verifies the destination after dragging. Existing bounded waits,
+  failure reporting and complete game/source/template comparisons remain intact.
+  No application hook, project-data injection or assertion weakening.
+- Added transient-frame/destination-observation regressions. No production code,
+  dependency, project format or command architecture changes.
+- Evidence: docs/evidence/A02_PANEL_REPLAY.md. Earlier parented group transforms,
+  manifest rescue, Save As protection, graph dialog repair, Parent tree, World/Local
   axes, snapping, clipboard, flags/alignment and two-scene recovery remain.
 
 ## Executed validation
 
 - just check PASSED: fmt, strict workspace/all-target Clippy, workspace/audio.
-- Targeted gizmo math: 11 PASSED. Transform/entity-command/scene-workspace/
-  two-scene integration: 35 PASSED. Python: 38 PASSED.
-- parented_multiselect_smoke.py PASSED: empty-selection safety, descendant-first
-  selection, move/rotate/scale, exact child properties, single-gesture undo/redo,
-  selection retained across history, cancel preserves redo, exact project restart.
-- Existing local_axes_smoke.py PASSED again. Screenshots inspected.
-- Raw receipts/logs: target/a02-parented-selection, target/a02-parented-selection-logs,
-  target/a02-local-axes. Linux Xvfb/software graphics only.
+- Python regressions: 40 PASSED. Both new tests reject the old panel observer.
+- Skybridge authoring FAILED before, PASSED after: real widgets reproduce exact
+  complete project and source bytes, original template unchanged. Animation
+  screenshot inspected: run clip, two frames, second X=16 and correct sheet.
+- Raw evidence/logs: target/a02-animation-authoring-before,
+  target/a02-animation-authoring-after, target/a02-animation-layout,
+  target/a02-animation-authoring-logs.
+- Initial unpackaged debug export correctly failed required license-tree checks;
+  portable package was then prepared/verified with rebuilt native tools and the
+  existing prebuilt browser runtime. Packaged all-three-game replay PASSED:
+  exact authored project/source/template comparisons, all six native/web exports,
+  full notice/runtime binding and overwrite protection. Report:
+  target/a02-panel-packaged-replay/result.json. Gameplay was not rerun.
 
 ## Next / known issues
 
-At observation on prior c9958d7, reference 43709956415, Windows 43709956361,
-CI 43709956368 and Linux 43709956395 were IN_PROGRESS. Obtain matching new-source
-checks; earlier green source results cannot accept newer code. Prior ac0a86c Linux
-candidate 43708624752 failed artifact-probe download before application build;
-root cause unestablished and preflight unchanged.
+Obtain matching hosted results for the panel-observer repair. On prior c9958d7,
+CI 43709956368 and Windows 43709956361 PASSED; reference 43709956415 FAILED
+same missing clip and Linux 43709956395 was CANCELLED. Earlier artifact-preflight
+failure on ac0a86c has no established service root cause; no check was weakened.
 
 Continue A02 full component/property coverage and cross-platform acceptance.
 Inspector property edits retain primary-entity semantics. Entity-parent trees do
