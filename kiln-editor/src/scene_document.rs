@@ -39,14 +39,20 @@ pub fn snapshot_for_scene(
         nested_entity_ids(project, &scene, &mut visited, &mut nested_ids);
     }
     let ecs = world.world_ref();
-    let runtime: BTreeMap<_, _> = ecs
-        .query::<(hecs::Entity, &SourceId)>()
-        .iter()
-        .map(|(entity, id)| (id.0.clone(), entity))
-        .collect();
+    let mut runtime = BTreeMap::new();
+    let mut ambiguous = HashSet::new();
+    for (entity, id) in ecs.query::<(hecs::Entity, &SourceId)>().iter() {
+        if runtime.insert(id.0.clone(), entity).is_some() {
+            ambiguous.insert(id.0.clone());
+        }
+    }
     let mut entities = Vec::new();
     for original in &scene.entities {
-        if let Some(&entity) = runtime.get(&original.id) {
+        if ambiguous.contains(&original.id) {
+            // A legacy/externally composed scene may reuse a runtime SourceId.
+            // Preserve authoring data rather than baking an arbitrary instance.
+            entities.push(original.clone());
+        } else if let Some(&entity) = runtime.get(&original.id) {
             entities.push(reconcile(
                 ecs,
                 entity,
@@ -59,7 +65,7 @@ pub fn snapshot_for_scene(
         }
     }
     for (id, &entity) in &runtime {
-        if !root_ids.contains(id) && !nested_ids.contains(id) {
+        if !root_ids.contains(id) && !nested_ids.contains(id) && !ambiguous.contains(id) {
             entities.push(reconcile(
                 ecs,
                 entity,

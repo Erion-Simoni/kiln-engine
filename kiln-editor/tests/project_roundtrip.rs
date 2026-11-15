@@ -466,3 +466,33 @@ fn tilemap_loading_augments_existing_identity_instead_of_duplicating_it() {
         json(&project.scenes["main"])
     );
 }
+
+#[test]
+fn ambiguous_nested_source_ids_never_overwrite_authored_root_properties() {
+    let mut project = sample();
+    project.scenes.get_mut("overlay").unwrap().entities[0] =
+        entity("hero", vec![transform(987.0), sprite()]);
+    let world = spawn(&project);
+    assert_eq!(
+        world
+            .world_ref()
+            .query::<&SourceId>()
+            .iter()
+            .filter(|id| id.0 == "hero")
+            .count(),
+        2
+    );
+    let before = json(&project.scenes["main"]);
+    assert_eq!(
+        json(&snapshot(&world, &project)),
+        before,
+        "An ambiguous nested projection must retain the authored root document"
+    );
+    let root = tempfile::tempdir().unwrap();
+    let preserved = snapshot(&world, &project);
+    project.scenes.insert("main".into(), preserved);
+    project_files::save(&project, &root.path().join("kiln.toml")).unwrap();
+    let reopened = project_files::load(root.path()).unwrap().project;
+    assert_eq!(json(&reopened), json(&project));
+    assert_eq!(json(&reopened.scenes["main"]), before);
+}

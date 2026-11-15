@@ -240,6 +240,8 @@ jobs:
         run: python3 tests/native/local_axes_smoke.py
       - name: Verify empty selection safety and parented multiselect transforms
         run: python3 tests/native/parented_multiselect_smoke.py
+      - name: Reject ambiguous nested identities and preserve imported scene data
+        run: python3 tests/native/nested_identity_smoke.py
       - name: Verify scene settings, camera history and composition recovery
         run: python3 tests/native/scene_settings_smoke.py
       - name: Verify parent trees, search, root drops and two-scene recovery
@@ -305,6 +307,13 @@ jobs:
             target/a02-local-axes/editor/*.png
             target/a02-local-axes/editor/*.log
             target/a02-local-axes/reopened/*.png
+            target/a02-nested-identity/result.json
+            target/a02-nested-identity/failure.json
+            target/a02-nested-identity/editor/*.png
+            target/a02-nested-identity/editor/*.log
+            target/a02-nested-identity/legacy/*.png
+            target/a02-nested-identity/legacy/*.log
+            target/a02-nested-identity/reopened/*.png
             target/a02-scene-settings/result.json
             target/a02-scene-settings/failure.json
             target/a02-scene-settings/editor/*.png

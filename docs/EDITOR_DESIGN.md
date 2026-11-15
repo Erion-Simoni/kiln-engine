@@ -46,6 +46,11 @@ from **Add Nested Scene**. Offset/removal changes refresh the preview immediatel
 and leave the child document intact. Camera-only edits mark the tab dirty; Discard
 restores the saved camera. Escape cancels an active settings gesture, and recovery
 includes unsaved camera settings. Composition controls are disabled during Play.
+Composed scenes currently require distinct entity IDs. Nesting refuses collisions
+(including containing ancestor compositions) with an inline explanation and leaves
+the documents unchanged. Legacy ambiguous compositions retain their authored data;
+the inspector/gizmo disables ambiguous targets. Edit a child through its own tab.
+Repeated instances with scoped identities are not implemented.
 
 The hierarchy follows entity Parent links, with indented children and branch
 expanders. Drag an entity onto another to reparent it, or onto the **SCENE**

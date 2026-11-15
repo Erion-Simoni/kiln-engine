@@ -1240,10 +1240,22 @@ impl EditorApp {
         let (world, spawned) = spawn_editor_scene(&project, &scene_id, &textures);
         // Build mapping from project entity ID (SourceId) to hecs Entity.
         let world_ref = world.world_ref();
+        let mut ambiguous = std::collections::HashSet::new();
         for entity in world_ref.iter() {
             let eid = entity.entity();
             if let Ok(source_id) = world_ref.get::<&SourceId>(eid) {
-                self.entity_id_to_hecs.insert(source_id.0.clone(), eid);
+                if !ambiguous.contains(&source_id.0)
+                    && self
+                        .entity_id_to_hecs
+                        .insert(source_id.0.clone(), eid)
+                        .is_some()
+                {
+                    self.entity_id_to_hecs.remove(&source_id.0);
+                    ambiguous.insert(source_id.0.clone());
+                    let message = format!("Entity ID `{}` has multiple scene instances; its inspector/gizmo target is disabled to preserve authored data", source_id.0);
+                    log::warn!("{message}");
+                    self.console_log.push(format!("[ERROR] {message}"));
+                }
             }
         }
         self.world = world;
@@ -4648,23 +4660,27 @@ impl TabViewer<'_> {
     }
 
     /// Add another scene as a nested scene of the current one.
-    fn nest_scene(&mut self, child_id: &str) {
+    fn nest_scene(&mut self, child_id: &str) -> Result<(), String> {
         if self.editing_locked() || self.project_blocked {
-            return;
+            return Err(
+                "Stop Play and finish the pending project operation before nesting a scene".into(),
+            );
         }
         self.finish_transform_edit();
-        let Some(project) = self.current_project.as_mut() else {
-            return;
-        };
-        let Some(parent_id) = self.scenes.active_id().map(str::to_owned) else {
-            return;
-        };
-        match crate::editing::nest_scene(project, &parent_id, child_id) {
-            Ok(()) => self.log(&format!(
-                "[INFO] Nested the scene {child_id} in {parent_id}"
-            )),
-            Err(message) => self.log(&format!("[ERROR] {message}")),
-        }
+        let project = self
+            .current_project
+            .as_mut()
+            .ok_or("Open a project before nesting a scene")?;
+        let parent_id = self
+            .scenes
+            .active_id()
+            .ok_or("Open a parent scene first")?
+            .to_owned();
+        crate::editing::nest_scene(project, &parent_id, child_id)?;
+        self.log(&format!(
+            "[INFO] Nested the scene {child_id} in {parent_id}"
+        ));
+        Ok(())
     }
 
     /// Import the assets of the project into the asset cache.
@@ -6098,6 +6114,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         project.cameras.get(id).cloned(),
                     ))
                 });
+                let nested_error_id = ui.id().with((
+                    "nested_scene_error",
+                    self.asset_browser.root(),
+                    self.scenes.active_id(),
+                ));
                 let locked = self.editing_locked() || self.project_blocked;
                 ui.add_enabled_ui(!locked, |ui| {
                     ui.vertical(|ui| {
@@ -6135,19 +6156,36 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 }
                                 for child_id in candidates {
                                     if ui.button(&child_id).clicked() {
-                                        self.nest_scene(&child_id);
+                                        match self.nest_scene(&child_id) {
+                                            Ok(()) => {
+                                                ui.data_mut(|data| {
+                                                    data.remove::<String>(nested_error_id)
+                                                });
+                                            }
+                                            Err(error) => {
+                                                log::warn!("Nested scene rejected: {error}");
+                                                self.log(&format!("[ERROR] {error}"));
+                                                ui.data_mut(|data| {
+                                                    data.insert_temp(nested_error_id, error)
+                                                });
+                                            }
+                                        }
                                         ui.close_menu();
                                     }
                                 }
                             });
-
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    ui.label("Scene Composition");
-                                },
-                            );
                         });
+
+                        if let Some(error) =
+                            ui.data(|data| data.get_temp::<String>(nested_error_id))
+                        {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.colored_label(egui::Color32::LIGHT_RED, error);
+                                if ui.small_button("Dismiss").clicked() {
+                                    ui.data_mut(|data| data.remove::<String>(nested_error_id));
+                                }
+                            });
+                        }
 
                         let locked = self.editing_locked();
                         let scene_id = self.scenes.active_id().map(str::to_owned);

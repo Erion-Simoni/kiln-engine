@@ -1,48 +1,48 @@
 # Kiln Session Handoff
 
-Owner requested fixes for remaining A02 through A04 on `fix/a01-ci-baseline`.
-Current focus: A02 scene settings/camera/composition correctness, following d110141.
-A02–A04 remain PARTIAL. A01 accepted baseline remains 6de428b; full 3D behind G2D.
+Owner requested fixes across A02–A04 on `fix/a01-ci-baseline`.
+Latest focus: A02 nested identity/data preservation, following 9bc2ace settings fix.
+All A02–A04 remain PARTIAL. A01 accepted baseline stays 6de428b; 3D behind G2D.
 MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
 
-- Found Scene Editor metadata/composition/cameras bypassing history, stale nested
-  preview and missing camera dirty/discard protection. Fixed through existing
-  scene transaction/history with optional camera snapshots (ADR-0088).
-- Scene-name/script/camera/nested settings now undo/redo; cancellation restores
-  camera presence/value and retains redo. Ordinary entity commands preserve cameras.
-- Camera-only tabs dirty correctly; close requires a decision; Discard restores
-  disk baselines including absent/recovered/new cameras and other-scene isolation.
-- Nested-scene picker is explicit; offset/removal rebuilds live projection, child
-  documents remain independent. Controls wrap and respect Play/project guards.
-- Evidence/docs/CI: docs/evidence/A02_SCENE_SETTINGS.md and scene_settings_smoke.py.
+- 9bc2ace fixes scene metadata/camera/nesting transactions, camera tab dirtiness/
+  Discard and composition preview/recovery. Evidence: A02_SCENE_SETTINGS.md.
+- Reproduced direct/transitive nested ID collisions and actual root-data overwrite
+  from an ambiguous runtime snapshot. Before regressions failed, after pass.
+- New nested links validate every affected ancestor before mutation. Shared IDs,
+  repeated instances and missing links are refused with a dismissible inline error.
+- Legacy ambiguous root snapshots preserve authored data; inspector/gizmo mapping
+  excludes ambiguous handles. No guessed namespacing, file migration or automatic
+  script-ID rewrite. Separate uncomposed scenes can still share entity IDs.
+- CI/docs/evidence: docs/evidence/A02_NESTED_IDENTITY.md; nested_identity_smoke.py.
 
 ## Executed validation
 
-- Before fix, prior packaged editor FAILED new real-widget scene-name Undo.
-- Final widgets PASSED name/script and camera exact-project Undo/Redo, live camera
-  Escape/cancel preserving redo, explicit two-scene link/offset/remove/Undo with
-  observed rendered bounds, unchanged child, actual autosave/forced-crash camera
-  recovery and exact full-project restart. Screenshots inspected.
-- just check PASSED. Full cargo test --workspace --locked: 770 PASSED, zero failed
-  including doc tests. nextest command unavailable; not counted as success.
-- Python: 40 PASSED; py_compile and diff checks pass. Raw logs/receipts:
-  target/a02-scene-settings-logs, target/a02-scene-settings and before/layout dirs.
+- just check PASSED; full cargo test --workspace --locked: 773 PASSED, zero failed
+  including doc tests. Python: 40 PASSED. New topology/snapshot regressions failed
+  before fixes. Both final widget workflows pass; screenshots inspected.
+- Real-widget invalid-composition regression failed before the guard. Afterward
+  duplicate/collision rejection, project/history preservation, specific diagnostic
+  and restart pass. Legacy colliding input cannot edit arbitrary targets and keeps
+  complete authored project bytes semantically through save/restart.
+- Valid distinct-ID scene-settings composition/camera/recovery rerun retained in
+  target/a02-scene-settings-logs. Raw identity captures/receipts in
+  target/a02-nested-identity and before directory. Linux Xvfb/software graphics only.
 
 ## Next / known issues
 
-Obtain matching hosted checks for new production changes. Prior d110141 PASSED
-CI 43717563394, reference games 43717563395 and Linux candidate 43717563439.
-Windows did not trigger on that test/docs-only change; prior production 276524c
-Windows 43711940872 passed. New source cannot inherit acceptance from these.
+Obtain matching hosted results; earlier green code does not accept new source.
+Prior d110141 PASSED CI 43717563394, reference 43717563395, Linux 43717563439.
+Prior production 276524c Windows 43711940872 passed (d110141 was path-filtered).
 
-Continue A02 combined every-supported-property/reference recovery coverage and
-cross-platform GUI acceptance. General nested-scene identity semantics remain open;
-Parent hierarchy authoring alone does not complete scene composition. Inspector
-property edits retain primary-entity semantics. Save As rescue needs existing
-source resources and explicit Save/Revert of dirty source. A03/A04 remain requested
-but are not closed by this A02 fix; proceed in milestone order.
+Continue A02 all-property combined acceptance and cross-platform GUI acceptance.
+Scoped/repeated nested entity instances need a deliberate runtime/script identity
+contract; new links now refuse ambiguity, and old documents are preserved safely.
+Inspector property edits still target the primary entity. Save As rescue still
+requires source resources and explicit Save/Revert of dirty script buffers.
+A03/A04 remain requested; no completion claimed from these A02 corrections.
 
 A03: 3daaa1c adds typed dependencies/reference-safe moves, per-target import rules,
 worker diagnostics and fixed GPU preview lifetime. Full nested prefab/variants,

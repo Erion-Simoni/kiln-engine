@@ -303,6 +303,13 @@ two-scene composition/offset/remove preview, real-timer camera-only crash recove
 and exact restart. [Evidence](evidence/A02_SCENE_SETTINGS.md). Broader combined
 property coverage and cross-platform acceptance remain open; A02 stays PARTIAL.
 
+**Nested-identity protection checkpoint 2026-11-15:** reproduced nesting/saving
+ambiguous entity IDs. New links validate affected ancestor compositions atomically;
+legacy ambiguous roots keep authored data and cannot target arbitrary inspector/
+gizmo handles. Before/after disk and real-widget regressions pass. Valid distinct-ID
+composition remains functional. [Evidence](evidence/A02_NESTED_IDENTITY.md).
+Scoped/repeated instances remain open; this protection does not close A02.
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.
