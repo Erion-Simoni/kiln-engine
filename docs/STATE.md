@@ -1,63 +1,56 @@
 # Kiln Session Handoff
 
 Owner scope: A01 through A04 on `fix/a01-ci-baseline`.
-Current focus: A02 entity-parent tree/combined recovery checkpoint (2026-11-15).
-A02–A04 remain PARTIAL. A01 baseline acceptance stays pinned to green `6de428b`:
-CI 43606018834, reference 43606018842, Linux candidate 43606018785. New source
-requires matching evidence. Full 3D remains gated on G2D; no broader release gate
-is accepted. MIT OR Apache-2.0 settled; no package-size ceiling.
+Current focus: A02 authoring reliability/CI followup (2026-11-15), following
+4270bd6. A02–A04 remain PARTIAL. A01 baseline acceptance is pinned to green
+6de428b: CI 43606018834, reference 43606018842 and Linux candidate 43606018785.
+Newer code requires matching results. Full 3D remains behind G2D; no broader
+release gate accepted. MIT OR Apache-2.0 settled; no size ceiling.
 
 ## Done
 
-- Hierarchy now follows entity Parent links in stable parent-first order with
-  indented children. Actual folding replaces inert expand buttons; triangle
-  painting avoids missing arrow glyphs. Iterative traversal keeps malformed
-  cyclic/missing-parent entities inspectable without recursive traversal.
-- Search reveals matching descendants with ancestor context even when folded.
-  Clearing search restores branch state; same-scene rebuilds retain branch state
-  and selected flags. Scene switches reset branches; creating/opening projects
-  clears the hierarchy view.
-- A drop on SCENE detaches an entity to root through existing guarded Reparent,
-  world/local transform conversion and scene history. Entity drops remain the
-  normal reparent path. No new dependency, format or command architecture.
-- New CI widget workflow combines duplication, reparenting under a rotated/scaled
-  parent, filtered child-property editing, detach/Undo/Redo, Delete/Undo with stable
-  IDs, parent-subtree copy to scene two, real negative-property autosave/crash
-  recovery and whole-project restart comparison. Numeric test input now places
-  -- before xdotool values, supporting negative numbers.
-- Earlier World/Local constrained move tools, rotation/scale snapping, clipboard,
-  lock/hide, alignment and guarded-file/recovery work remain implemented.
-- Evidence: docs/evidence/A02_HIERARCHY_TREE.md, A02_LOCAL_AXES.md and
-  A02_TRANSFORM_SNAP.md. Generated logs/receipts stay under target/.
+- Reproduced an actual graph parameter-window layering defect: raising the
+  containing floating graph panel covered its Middle-order parameter editor.
+  The new deterministic widget/layer hit-test FAILED before the fix, PASSED after
+  parameter editors were placed in the foreground. Active parameter state remains
+  unchanged; dialogs now stay above their containing graph panel.
+- Host-function widget replay waits for the dialog's measured/recentered layout,
+  visible registry menu and closed picker before committing. No blind retries,
+  increased timeout, engine hooks or removed source/gameplay assertions.
+- Existing native/browser CI already exercises full graph authoring and retains
+  screenshots/receipts. The new Rust regression runs with workspace tests.
+- Evidence: docs/evidence/A02_GRAPH_DIALOG_LAYERING.md. This is editor interaction
+  repair, not new A04 gameplay/compiler/debugger functionality.
+- Prior A02 work remains: Parent-link tree/fold/search/root-drop, World/Local move
+  axes and constraints, move/rotate/scale snapping, clipboard/lock/hide/alignment,
+  guarded file writes and actual two-scene crash recovery. See prior A02 evidence.
 
 ## Executed validation
 
-- just check PASSED (fmt, strict workspace/all-target Clippy, workspace/audio).
-- Hierarchy: 5 PASSED including egui selection/reparent. Entity-command/two-scene/
-  workspace/project-lifecycle integration: 30 PASSED. Python: 38 PASSED.
-- Final open-path reset correction: just check and 9 lifecycle tests PASSED.
-- New hierarchy_tree_smoke.py PASSED end-to-end with real widgets and actual
-  recovery timer. Copied parent reference and negative local Y=-15 recovered;
-  first scene untouched; exact complete project after restart. Screenshots inspected.
-- Existing entity_clipboard_smoke.py and scene_controls_smoke.py PASSED again:
-  clipboard/identity/history/restart and selection/alignment/lock/hide/two-scene
-  recovery/restart. All UI tests run serially on Xvfb/software graphics.
-- Raw evidence: target/a02-hierarchy-tree, a02-entity-clipboard, a02-scene-controls;
-  logs: target/a02-hierarchy-logs. No new Windows/macOS GUI/device certification.
+- just check PASSED: fmt, strict workspace/all-target Clippy, workspace/audio.
+- New occlusion regression: before FAIL, after PASS. Graph/text gameplay/inspection
+  save/restore integration: 1 PASSED. Python regressions: 38 PASSED.
+- Full native + browser graph replay PASSED twice with separate fresh projects and
+  profiles: real host arguments, Cancel, Undo/Redo, one-gesture drag undo, scene
+  assignment, actual execution/F5 save, saved values, exact restart and browser
+  F9/F5 restoration. First native/browser scores 261/360; repeat 252/342. Browser
+  rendered 392 hero pixels and saved three node values in both runs.
+- Raw evidence: target/a02-dialog-logs, target/a02-graph-dialog and
+  target/a02-graph-dialog-repeat. No new hosted/cross-platform/device claim yet.
 
 ## Hosted / next
 
-Previous source bdab5e4 Windows candidate 43703292617 and reference games
-43703292602 PASSED. General CI 43703292628 FAILED browser graph authoring with
-Render-constant-parameter-dialog timeout; Linux candidate 43703292634 was still
-IN_PROGRESS at observation. Public summaries only; no job-specific logs/artifact
-contents retrieved. This predates entity-tree changes. Prior greens do not validate
-new source. Repair graph widget timing and review matching hosted checks.
+At start on prior source 4270bd6: Windows candidate 43705134977 PASSED; CI
+43705135020, reference 43705134990 and Linux candidate 43705134979 were still
+running. This predates the dialog fix. Earlier bdab5e4 CI failed the browser graph
+constant-dialog wait. The local occlusion reproduction is a sufficient cause, not
+proof of every hosted timeout; obtain matching hosted confirmation for this fix.
 
-Continue A02 full supported component/property and parented multiselect transform
-acceptance, guarded failed-write UI workflows and cross-platform coverage. Entity
-Parent trees now work; nested-scene authoring is a separate remaining boundary.
-Do not close A02 from this Linux combined editing checkpoint.
+After CI review, continue A02 full component/property and parented multiselect
+acceptance, failed-write UI flows and cross-platform coverage. Current entity-tree
+combined workflow and previous constrained-transform/recovery workflows passed
+locally in prior checkpoints; they do not close full A02. Nested-scene authoring
+is separate from the now-functional entity-parent tree.
 
 A03: 3daaa1c adds typed dependencies/reference-safe moves, per-target import rules,
 worker diagnostics and fixed GPU preview lifetime. Full nested prefab/variants,
@@ -71,8 +64,8 @@ The legacy separate bytecode debugger is not the live gameplay source debugger.
 
 ## Tools / boundaries
 
-Source /workspace/.kiln-tools/activate.sh (Rust 1.99.1, rootless libraries/software
-Vulkan, CHROMIUM_PATH Debian Chromium 156). Run timed GUI/gameplay checks serially;
-parallel local build/export work exposed timing issues in old graph/physics tests.
-Generated artifacts stay out of Git. Do not kill unrelated editor/Xvfb processes.
-just check before every commit. No physical GPU/audio/controller claims.
+Source /workspace/.kiln-tools/activate.sh for Rust 1.99.1, rootless libraries/software
+Vulkan and CHROMIUM_PATH (Debian Chromium 156). Run timed UI/gameplay serially;
+concurrent local build/export load previously exposed graph/physics timing issues.
+Generated target artifacts stay out of Git. Do not kill unrelated editor/Xvfb.
+just check before every commit. No physical-GPU/audio/controller claims.

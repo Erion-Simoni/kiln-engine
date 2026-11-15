@@ -10,7 +10,7 @@ import sys
 import tempfile
 import time
 import tomllib
-from task9_editor_games import Editor, REPO, color_matches, executable, record_failure
+from task9_editor_games import Editor, REPO, color_matches, record_failure
 
 
 def main():
@@ -24,12 +24,17 @@ def main():
     source=project/'scripts/gameplay_graph.ks';manifest=project/'kiln.toml'
     editor=Editor(REPO/'target/debug',project,output/'editor',':85')
     def save_graph():editor.held_click(535,194)
-    def constant_dialog_visible():
-        capture=subprocess.check_output([executable('import'),'-display',editor.env['DISPLAY'],'-window',editor.window,'-depth','8','ppm:-'],env=editor.env,timeout=10)
-        header,pixels=capture.split(b'\n255\n',1)
-        width,height=map(int,header.splitlines()[-1].split());assert (width,height)==(1440,900)
+    def rendered_colors(points):
+        width,height,pixels=editor.frame();assert (width,height)==(1440,900)
         def pixel(x,y):return pixels[(y*width+x)*3:(y*width+x)*3+3]
-        return color_matches(pixel(580,475),(47,51,59)) and color_matches(pixel(880,510),(35,38,44))
+        return all(color_matches(pixel(x,y),color) for x,y,color in points)
+    def constant_dialog_visible():
+        return rendered_colors([(580,475,(47,51,59)),(880,510,(35,38,44))])
+    def host_dialog_visible():
+        # Wait for egui's initial measurement/recentering before targeting the combo.
+        return rendered_colors([(552,460,(47,51,59)),(880,510,(35,38,44))])
+    def host_menu_visible():
+        return rendered_colors([(700,575,(35,38,44)),(710,630,(35,38,44))])
     def edit_constant(value,accept=True):
         editor.held_click(200,550);editor.held_click(465,262)
         editor.wait(constant_dialog_visible,description='Render constant parameter dialog before editing')
@@ -38,8 +43,13 @@ def main():
         editor.start();editor.panel(80,180);editor.enlarge();editor.held_click(450,194)
         editor.held_click(150,262);editor.held_click(320,262)
         edit_constant(5)
-        editor.held_click(210,696);editor.held_click(465,262);editor.held_click(600,461)
-        editor.held_click(600,630);editor.held_click(565,499)
+        editor.held_click(210,696);editor.held_click(465,262)
+        editor.wait(host_dialog_visible,description='Render settled host-function dialog before opening picker')
+        editor.held_click(600,461)
+        editor.wait(host_menu_visible,description='Render shared-registry function choices')
+        editor.held_click(600,630)
+        editor.wait(host_dialog_visible,description='Close function picker before committing host call')
+        editor.held_click(565,499)
         # Value -> registered add_score argument; done -> graph Output.
         editor.held_click(292,506);editor.held_click(132,726)
         editor.held_click(292,766);editor.held_click(482,406);save_graph()

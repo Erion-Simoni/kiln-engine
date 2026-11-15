@@ -250,6 +250,15 @@ restart. Existing clipboard and scene-controls regressions pass. Full property/
 cross-platform acceptance and the known hosted graph-dialog timeout remain open.
 [Evidence](evidence/A02_HIERARCHY_TREE.md). A02 remains PARTIAL.
 
+**Authoring-dialog reliability followup 2026-11-15:** reproduced a real graph
+parameter window being obscured when its containing floating graph panel is
+raised. The new deterministic hit-test regression fails before the fix and passes
+with parameter editors in the foreground. Host-picker replay waits for measured
+dialog/menu states without weakening source/gameplay/history assertions. Two fresh
+native/browser graph authoring and save-restoration runs pass. Matching hosted
+confirmation remains open; this fixes an editor interaction defect, not an A04
+feature or completion gate. [Evidence](evidence/A02_GRAPH_DIALOG_LAYERING.md).
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.

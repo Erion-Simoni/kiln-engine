@@ -1232,6 +1232,7 @@ fn show_node_editor(ctx: &egui::Context, state: &mut GraphEditorState, node_id: 
     let mut action = None;
     egui::Window::new(format!("Edit {}", node_type_name(&node.node_type)))
         .id(egui::Id::new(("graph_node_editor", node_id)))
+        .order(egui::Order::Foreground)
         .collapsible(false)
         .resizable(false)
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -1420,5 +1421,50 @@ fn node_type_name(node_type: &NodeType) -> String {
         NodeType::QuestObjectiveUpdate { .. } => "Quest Objective".to_string(),
         NodeType::DataTableLookup { .. } => "DataTable Lookup".to_string(),
         NodeType::DataTableRowGet { .. } => "DataTable Row".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod parameter_window_tests {
+    use super::*;
+
+    #[test]
+    fn node_parameters_stay_above_the_floating_graph_when_its_parent_is_raised() {
+        let ctx = egui::Context::default();
+        crate::editor_shell::apply_theme(&ctx);
+        let mut state = GraphEditorState::new();
+        let node = state.add_node(
+            NodeType::Constant {
+                value: ConstantValue::Integer(5),
+            },
+            Pos2::new(100.0, 200.0),
+        );
+        state.editing_node = Some(node);
+        let parent = egui::Id::new("floating_graph_test");
+        for _ in 0..4 {
+            let _ = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        Pos2::ZERO,
+                        egui::vec2(1440.0, 900.0),
+                    )),
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::Window::new("Graph")
+                        .id(parent)
+                        .fixed_rect(egui::Rect::from_min_max(
+                            egui::pos2(20.0, 20.0),
+                            egui::pos2(1400.0, 880.0),
+                        ))
+                        .show(ctx, |ui| render_graph_editor(ui, &mut state));
+                    // Model the containing dock regaining focus after a click.
+                    ctx.move_to_top(egui::LayerId::new(egui::Order::Middle, parent));
+                },
+            );
+        }
+        let layer = ctx.layer_id_at(egui::pos2(720.0, 450.0)).unwrap();
+        assert_eq!(layer.id, egui::Id::new(("graph_node_editor", node)));
+        assert_eq!(state.editing_node, Some(node));
     }
 }
