@@ -15,7 +15,8 @@ is accepted. MIT OR Apache-2.0 settled; no package-size ceiling.
   cyclic/missing-parent entities inspectable without recursive traversal.
 - Search reveals matching descendants with ancestor context even when folded.
   Clearing search restores branch state; same-scene rebuilds retain branch state
-  and selected flags. Scene switches reset branches, opening projects clears view.
+  and selected flags. Scene switches reset branches; creating/opening projects
+  clears the hierarchy view.
 - A drop on SCENE detaches an entity to root through existing guarded Reparent,
   world/local transform conversion and scene history. Entity drops remain the
   normal reparent path. No new dependency, format or command architecture.
@@ -34,6 +35,7 @@ is accepted. MIT OR Apache-2.0 settled; no package-size ceiling.
 - just check PASSED (fmt, strict workspace/all-target Clippy, workspace/audio).
 - Hierarchy: 5 PASSED including egui selection/reparent. Entity-command/two-scene/
   workspace/project-lifecycle integration: 30 PASSED. Python: 38 PASSED.
+- Final open-path reset correction: just check and 9 lifecycle tests PASSED.
 - New hierarchy_tree_smoke.py PASSED end-to-end with real widgets and actual
   recovery timer. Copied parent reference and negative local Y=-15 recovered;
   first scene untouched; exact complete project after restart. Screenshots inspected.
