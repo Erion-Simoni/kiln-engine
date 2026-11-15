@@ -116,10 +116,10 @@ Evidence ledger template (one row per accepted substep/target):
 
 ### A01 — Restore trustworthy CI and baseline
 
-**Status:** PARTIAL. **Depends on:** None.
+**Status:** ACCEPTED (configured baseline on `6de428b`, 2026-11-15). **Depends on:** None.
 
-- [ ] Diagnose current CI/release/reference-game failures; repair causes without weakening checks. Run reference-game authoring/export/play acceptance on master and relevant pull requests. Align native, audio, WASM, feature-off and browser gates; detect stale/mismatched runtime bundles.
-- [ ] **Acceptance:** A fresh source revision passes required hosted checks, all three game replays and artifact verification; deliberate exporter failures still fail visibly.
+- [x] Diagnose current CI/release/reference-game failures; repair causes without weakening checks. Run reference-game authoring/export/play acceptance on master and relevant pull requests. Align native, audio, WASM, feature-off and browser gates; detect stale/mismatched runtime bundles.
+- [x] **Acceptance:** A fresh source revision passes required hosted checks, all three game replays and artifact verification; deliberate exporter failures still fail visibly.
 
 **Progress 2026-11-13:** repaired reproducible documentation build failures and
 stale saved-UI/native/browser export smoke interactions; promoted reference-game
@@ -175,6 +175,18 @@ the same timeout. Startup now observes the painted menu before closing tabs and
 holds menu clicks across frames; native CI retains a real delayed-render
 regression. [Evidence](evidence/A01_EDITOR_STARTUP.md). Matching hosted
 confirmation remains required; A01 stays PARTIAL.
+
+**Resumed verification 2026-11-15:** `6de428b` passed matching general CI
+43606018834, reference games 43606018842 and Linux candidate 43606018785,
+including release replay/payload comparison, clean Ubuntu acceptance and origin
+attestation. The startup repair is confirmed remotely. Local three-game exports
+and portable acceptance also passed. Resource-contention-sensitive graph-dialog
+and physics-capture failures were observed locally; physics passes in isolation,
+and unverified graph changes were reverted. Both unchanged flows pass in isolated
+serial reruns, matching hosted CI. Windows candidate was path-filtered for this change and was not a required triggered check;
+prior-source candidate evidence is not promoted. A01's configured baseline is
+ACCEPTED on `6de428b`; parallel local GUI/build/export execution and physical-device
+certification are not inferred. See [resumed validation](evidence/A01_RESUMED_VALIDATION.md).
 
 ### A02 — Durable projects, scene editing and recovery
 
