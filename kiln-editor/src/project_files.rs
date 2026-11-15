@@ -155,7 +155,13 @@ fn copy_project_directory(
     source_manifest: &Path,
     destination: &Path,
 ) -> Result<(), String> {
-    let source_manifest = source_manifest.canonicalize().map_err(|e| e.to_string())?;
+    // The saved manifest may have disappeared or been replaced externally.
+    // Exclude its entry by name; the copy's manifest comes from the memory draft.
+    let source_manifest = source_root.join(
+        source_manifest
+            .file_name()
+            .ok_or("The project has no manifest filename")?,
+    );
     copy_directory_contents(source_root, &source_manifest, destination)
 }
 

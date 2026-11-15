@@ -3033,6 +3033,13 @@ impl EditorApp {
                     }
                 });
         }
+        if !self.show_save_as
+            && !project_blocked
+            && self.project_error.is_some()
+            && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+        {
+            self.project_error = None;
+        }
         if let Some(error) = self
             .project_error
             .clone()
@@ -3043,7 +3050,7 @@ impl EditorApp {
                 .open(&mut open)
                 .collapsible(false)
                 .show(ctx, |ui| {
-                    ui.label(error);
+                    ui.colored_label(ui.visuals().error_fg_color, error);
                 });
             if !open {
                 self.project_error = None;

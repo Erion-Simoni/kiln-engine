@@ -46,6 +46,10 @@ Correct the destination and retry, or use Cancel/Escape to keep editing the draf
 A new or empty directory receives a project/resource copy; a new manifest filename
 in the current directory shares that directory's resources. Save or Revert unsaved
 script buffers before Save As; the operation does not implicitly write them.
+If the open manifest is deleted, corrupted or changed externally, normal Save
+refuses to replace it. Dismiss the error with Escape and use Save As in a new
+directory to preserve the in-memory draft and remaining resources. This leaves
+the external file state untouched; the source resource directory must still exist.
 
 The asset shelf contains actual bounded image thumbnails, category/search
 filters and scene cards. Double-click a scene card to open it. Drag image

@@ -1,60 +1,59 @@
 # Kiln Session Handoff
 
 Owner scope: A01 through A04 on `fix/a01-ci-baseline`.
-Current focus: A02 Save As failure/retry and source protection (2026-11-15),
-following d012e01. A02–A04 remain PARTIAL. A01 baseline acceptance remains pinned
-to green 6de428b (CI 43606018834, reference 43606018842, Linux 43606018785).
-New source requires matching results. Full 3D remains gated on G2D; no broader
-release gate accepted. MIT OR Apache-2.0 settled; no package-size ceiling.
+Current focus: A02 external-manifest draft rescue (2026-11-15), following ac0a86c.
+A02–A04 remain PARTIAL. A01 baseline acceptance is pinned to green 6de428b
+(CI 43606018834, reference 43606018842, Linux 43606018785). New source needs
+matching results. Full 3D remains behind G2D; no broader release gate accepted.
+MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
 
-- Save As now closes only after success or explicit cancellation. Failures stay
-  inline with the destination and draft available for retry. Cancel/Escape clears
-  the copy error without resurrecting a generic failure popup. Guidance describes
-  new-directory copies vs same-directory manifests sharing assets.
-- Successful Save As rebuilds the active hierarchy and clears stale selection;
-  the former view reset could leave no rows until another rebuild occurred.
-- Save As now requires a clean source buffer via the existing guard, rather than
-  implicitly writing a dirty script before later copy validation could fail.
-  This restores documented Save/Revert behavior; no unsaved-source overlay copy
-  is implemented. Explicit Save Script after cancellation targets the copied root.
-- Added real Save As acceptance to native CI with retained evidence. No new
-  dependency, format or command architecture. Prior graph parameter foreground
-  fix, Parent tree/root drops, World/Local axes, snapping, clipboard/lock/hide/
-  alignment and guarded recovery work remain implemented.
-- Evidence: docs/evidence/A02_SAVE_AS_RETRY.md and prior A02 evidence files.
+- Reproduced missing-manifest Save As failure in a disk regression: normal Save
+  refused the external deletion but Save As canonicalized the missing file and
+  failed too. The new test failed before the fix, passes after it.
+- Resource copying now excludes the loaded manifest's filename under its already
+  canonical source root. The copy's manifest comes from the in-memory draft.
+  It need not read/resolve a deleted/corrupt/replaced input manifest. Unrelated
+  TOML resources still copy exactly; linked resources remain rejected.
+- Project-operation errors are visibly marked and Escape-dismissable without
+  dropping the draft. Existing Save As form retry/cancel, clean-script requirement,
+  hierarchy rebuild and all copy publication guards remain in place.
+- Added disk/symlink regressions and three real widget rescue cases to CI with
+  retained evidence. No dependency, format or command architecture changes.
+- Evidence: docs/evidence/A02_MANIFEST_RESCUE.md. Earlier Save As source protection,
+  graph dialog foreground repair, Parent tree, World/Local axes, snapping, clipboard,
+  flags/alignment and actual two-scene recovery remain implemented.
 
 ## Executed validation
 
-- just check PASSED (fmt, strict workspace/all-target Clippy, workspace/audio).
-- Source guard tests: 7 PASSED. Lifecycle/roundtrip/two-scene integration:
-  20 PASSED. Python regressions: 38 PASSED.
-- New save_as_failure_smoke.py PASSED: occupied destination rejection, Escape
-  retaining X=88 draft, staged resource-symlink copy failure, no output/staging
-  leaks, corrected retry from the same form, exact resource copying, rebuilt
-  hierarchy editable, Y=72 saved only to the copy, guarded dirty-script rejection,
-  cancelled buffer preserved and explicitly saved only in copy, exact restart.
-- Original source manifest/assets and foreign project/sentinel remain byte-identical.
-  Inspected inline copy error, copied-project and source guard screenshots.
-- Existing clipboard smoke PASSED identity/history/cross-scene paste/restart.
-  Raw evidence: target/a02-save-as-failure and target/a02-save-as-logs.
-  No new cross-platform/device acceptance claimed.
+- just check PASSED: fmt, strict workspace/all-target Clippy, workspace/audio.
+- Roundtrip/lifecycle/two-scene integration: 22 PASSED. Python: 38 PASSED.
+- Before/after missing-manifest regression; deleted/corrupt/externally changed
+  source cases; replaced manifest link exclusion and resource-link rejection pass.
+- manifest_rescue_smoke.py PASSED all three cases: unsaved X=88, normal Save visibly
+  refused, Escape retained draft, Save As rescued data/resources without changing
+  the original external state, Y=72 saved only to copy, exact complete restart.
+- Existing save_as_failure_smoke.py PASSED again: occupied/staged copy failures,
+  cancel/retry, original preservation, copied hierarchy editing, dirty-source guard,
+  explicit Save Script and exact restart. Screenshots inspected.
+- Raw logs/receipts: target/a02-manifest-rescue-logs, target/a02-manifest-rescue,
+  target/a02-save-as-failure. No new cross-platform GUI/device acceptance.
 
 ## Hosted / next
 
-Prior source d012e01 Windows candidate 43706643993 PASSED. CI 43706643952,
-reference 43706643985 and Linux candidate 43706644024 were IN_PROGRESS at latest
-observation. This predates Save As changes. Public workflow-list evidence only;
-obtain matching confirmation for this commit and the graph-dialog fix. Do not
-promote prior green source results to newer revisions.
+On prior source ac0a86c, Linux candidate 43708624752 FAILED before application
+build: artifact-service preflight download reported probe artifact not found.
+No service root cause was established; no preflight check was weakened. Windows
+43708624748, CI 43708624755 and reference 43708624764 were still IN_PROGRESS
+at observation. Obtain matching new-source checks and a successful candidate
+artifact preflight; do not promote earlier green source results to newer code.
 
-Continue A02 full supported component/property and parented multiselect coverage,
-additional external-file deletion/corruption and failed-save UI cases, and full
-cross-platform acceptance. Dirty source is deliberately Save/Revert-before-copy;
-Save As does not rescue unsaved code without that explicit action. Do not close
-A02 from these isolated Linux workflows. Entity-parent tree support does not close
-nested-scene authoring.
+Continue A02 remaining full component/property and parented multiselect transform
+coverage and cross-platform acceptance. Source directory/resources must still
+exist for Save As rescue; whole-resource-tree reconstruction is not implemented.
+Dirty code deliberately requires explicit Save/Revert before a copy. Entity-parent
+trees do not close nested-scene authoring. Do not close A02 from isolated workflows.
 
 A03: 3daaa1c adds typed dependencies/reference-safe moves, per-target import rules,
 worker diagnostics and fixed GPU preview lifetime. Full nested prefab/variants,
@@ -68,8 +67,8 @@ The legacy separate bytecode debugger is not the live gameplay source debugger.
 
 ## Tools / boundaries
 
-Source /workspace/.kiln-tools/activate.sh for Rust 1.99.1, rootless libraries/software
-Vulkan and CHROMIUM_PATH (Debian Chromium 156). Run timed UI/gameplay serially;
+Source /workspace/.kiln-tools/activate.sh (Rust 1.99.1, rootless libraries/software
+Vulkan, CHROMIUM_PATH Debian Chromium 156). Run timed UI/gameplay checks serially;
 concurrent build/export load previously exposed graph/physics timing issues.
 Generated target artifacts stay out of Git. Do not kill unrelated editor/Xvfb.
-just check before every commit. No physical GPU/audio/controller claims.
+just check before every commit. No physical-GPU/audio/controller claims.

@@ -268,6 +268,17 @@ scene/source drafts, corrected retry, copied-project editing and exact restart.
 Source-guard and lifecycle integration checks pass. Broader A02 and matching hosted
 acceptance remain open. [Evidence](evidence/A02_SAVE_AS_RETRY.md).
 
+**External-manifest rescue checkpoint 2026-11-15:** fixed Save As failing when
+the loaded manifest had been deleted. Resource copying excludes the old manifest
+entry by filename under the canonical source root and writes the in-memory draft
+into the copy. Disk regression fails before/passes after; linked resources remain
+rejected. Three real widget cases verify normal Save rejection after deletion,
+corruption or external edits, Escape retaining the draft, successful Save As,
+original/resources preservation, continued copy editing and exact restart.
+[Evidence](evidence/A02_MANIFEST_RESCUE.md). Source resources must remain available;
+full A02/cross-platform acceptance stays open. Prior-source Linux candidate failed
+artifact preflight before application build; matching hosted rerun remains needed.
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.

@@ -240,6 +240,87 @@ fn save_as_copies_relative_assets_and_refuses_to_overwrite_destination_files() {
     assert!(!occupied.join("kiln.toml").exists());
 }
 
+#[test]
+fn save_as_rescues_memory_draft_after_manifest_deletion_corruption_or_external_edit() {
+    for state in ["deleted", "corrupt", "changed"] {
+        let directory = tempfile::tempdir().unwrap();
+        let loaded =
+            project_files::create("Original", &directory.path().join("original"), "empty_2d")
+                .unwrap();
+        let root = loaded.path.parent().unwrap();
+        std::fs::write(root.join("keep.txt"), b"original resource").unwrap();
+        std::fs::write(root.join("other.toml"), b"unrelated resource").unwrap();
+        let mut guard = kiln_editor::project_lifecycle::ProjectLifecycle::default();
+        guard.mark_saved(&loaded.project);
+        match state {
+            "deleted" => std::fs::remove_file(&loaded.path).unwrap(),
+            "corrupt" => std::fs::write(&loaded.path, b"[not valid toml").unwrap(),
+            _ => {
+                let mut external = loaded.project.clone();
+                external.name = "External version".into();
+                project_files::save(&external, &loaded.path).unwrap();
+            }
+        }
+        let disk_before = std::fs::read(&loaded.path).ok();
+        assert!(guard.require_unchanged_disk(&loaded.path).is_err());
+        let mut draft = loaded.project.clone();
+        draft.name = "Rescued draft".into();
+        draft.window.width = 777;
+        let destination = directory.path().join("rescued/kiln.toml");
+        project_files::save_as(&draft, &loaded.path, &destination)
+            .unwrap_or_else(|error| panic!("{state}: {error}"));
+        assert_eq!(
+            json(&project_files::load(&destination).unwrap().project),
+            json(&draft)
+        );
+        assert_eq!(std::fs::read(&loaded.path).ok(), disk_before);
+        for file in ["keep.txt", "other.toml"] {
+            assert_eq!(
+                std::fs::read(destination.parent().unwrap().join(file)).unwrap(),
+                std::fs::read(root.join(file)).unwrap()
+            );
+        }
+        assert!(!std::fs::read_dir(directory.path())
+            .unwrap()
+            .any(|entry| entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".kiln-save-as-")));
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn rescue_excludes_a_replaced_manifest_link_but_still_rejects_linked_resources() {
+    let directory = tempfile::tempdir().unwrap();
+    let loaded =
+        project_files::create("Original", &directory.path().join("original"), "empty_2d").unwrap();
+    let outside = directory.path().join("outside.txt");
+    std::fs::write(&outside, b"do not import this manifest target").unwrap();
+    std::fs::remove_file(&loaded.path).unwrap();
+    std::os::unix::fs::symlink(&outside, &loaded.path).unwrap();
+    let destination = directory.path().join("rescued/kiln.toml");
+    project_files::save_as(&loaded.project, &loaded.path, &destination).unwrap();
+    assert_eq!(
+        json(&project_files::load(&destination).unwrap().project),
+        json(&loaded.project)
+    );
+    assert!(loaded.path.is_symlink());
+    assert_eq!(
+        std::fs::read(&outside).unwrap(),
+        b"do not import this manifest target"
+    );
+    std::os::unix::fs::symlink(
+        &outside,
+        loaded.path.parent().unwrap().join("resource-link.txt"),
+    )
+    .unwrap();
+    let rejected = directory.path().join("rejected/kiln.toml");
+    assert!(project_files::save_as(&loaded.project, &loaded.path, &rejected).is_err());
+    assert!(!rejected.parent().unwrap().exists());
+}
+
 #[cfg(unix)]
 #[test]
 fn save_as_rejects_symlinks_without_creating_a_partial_copy() {
