@@ -259,6 +259,15 @@ native/browser graph authoring and save-restoration runs pass. Matching hosted
 confirmation remains open; this fixes an editor interaction defect, not an A04
 feature or completion gate. [Evidence](evidence/A02_GRAPH_DIALOG_LAYERING.md).
 
+**Save As reliability checkpoint 2026-11-15:** failed copies retain the form,
+destination and inline error for retry or Cancel/Escape. Successful copies rebuild
+the active hierarchy. Save As now requires Save/Revert of dirty source instead of
+implicitly writing it before a possible copy failure. Real widgets verify occupied
+destination and staged symlink failures, byte preservation, cleanup, cancelled
+scene/source drafts, corrected retry, copied-project editing and exact restart.
+Source-guard and lifecycle integration checks pass. Broader A02 and matching hosted
+acceptance remain open. [Evidence](evidence/A02_SAVE_AS_RETRY.md).
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.

@@ -136,7 +136,7 @@ impl ScriptEditor {
     }
     pub(crate) fn require_saved(&self) -> Result<(), String> {
         if self.is_dirty() {
-            Err("Save or Revert the script before switching files or creating movement code".into())
+            Err("Save or Revert the script before continuing".into())
         } else {
             Ok(())
         }

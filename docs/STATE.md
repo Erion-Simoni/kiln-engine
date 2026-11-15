@@ -1,56 +1,60 @@
 # Kiln Session Handoff
 
 Owner scope: A01 through A04 on `fix/a01-ci-baseline`.
-Current focus: A02 authoring reliability/CI followup (2026-11-15), following
-4270bd6. A02–A04 remain PARTIAL. A01 baseline acceptance is pinned to green
-6de428b: CI 43606018834, reference 43606018842 and Linux candidate 43606018785.
-Newer code requires matching results. Full 3D remains behind G2D; no broader
-release gate accepted. MIT OR Apache-2.0 settled; no size ceiling.
+Current focus: A02 Save As failure/retry and source protection (2026-11-15),
+following d012e01. A02–A04 remain PARTIAL. A01 baseline acceptance remains pinned
+to green 6de428b (CI 43606018834, reference 43606018842, Linux 43606018785).
+New source requires matching results. Full 3D remains gated on G2D; no broader
+release gate accepted. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
 
-- Reproduced an actual graph parameter-window layering defect: raising the
-  containing floating graph panel covered its Middle-order parameter editor.
-  The new deterministic widget/layer hit-test FAILED before the fix, PASSED after
-  parameter editors were placed in the foreground. Active parameter state remains
-  unchanged; dialogs now stay above their containing graph panel.
-- Host-function widget replay waits for the dialog's measured/recentered layout,
-  visible registry menu and closed picker before committing. No blind retries,
-  increased timeout, engine hooks or removed source/gameplay assertions.
-- Existing native/browser CI already exercises full graph authoring and retains
-  screenshots/receipts. The new Rust regression runs with workspace tests.
-- Evidence: docs/evidence/A02_GRAPH_DIALOG_LAYERING.md. This is editor interaction
-  repair, not new A04 gameplay/compiler/debugger functionality.
-- Prior A02 work remains: Parent-link tree/fold/search/root-drop, World/Local move
-  axes and constraints, move/rotate/scale snapping, clipboard/lock/hide/alignment,
-  guarded file writes and actual two-scene crash recovery. See prior A02 evidence.
+- Save As now closes only after success or explicit cancellation. Failures stay
+  inline with the destination and draft available for retry. Cancel/Escape clears
+  the copy error without resurrecting a generic failure popup. Guidance describes
+  new-directory copies vs same-directory manifests sharing assets.
+- Successful Save As rebuilds the active hierarchy and clears stale selection;
+  the former view reset could leave no rows until another rebuild occurred.
+- Save As now requires a clean source buffer via the existing guard, rather than
+  implicitly writing a dirty script before later copy validation could fail.
+  This restores documented Save/Revert behavior; no unsaved-source overlay copy
+  is implemented. Explicit Save Script after cancellation targets the copied root.
+- Added real Save As acceptance to native CI with retained evidence. No new
+  dependency, format or command architecture. Prior graph parameter foreground
+  fix, Parent tree/root drops, World/Local axes, snapping, clipboard/lock/hide/
+  alignment and guarded recovery work remain implemented.
+- Evidence: docs/evidence/A02_SAVE_AS_RETRY.md and prior A02 evidence files.
 
 ## Executed validation
 
-- just check PASSED: fmt, strict workspace/all-target Clippy, workspace/audio.
-- New occlusion regression: before FAIL, after PASS. Graph/text gameplay/inspection
-  save/restore integration: 1 PASSED. Python regressions: 38 PASSED.
-- Full native + browser graph replay PASSED twice with separate fresh projects and
-  profiles: real host arguments, Cancel, Undo/Redo, one-gesture drag undo, scene
-  assignment, actual execution/F5 save, saved values, exact restart and browser
-  F9/F5 restoration. First native/browser scores 261/360; repeat 252/342. Browser
-  rendered 392 hero pixels and saved three node values in both runs.
-- Raw evidence: target/a02-dialog-logs, target/a02-graph-dialog and
-  target/a02-graph-dialog-repeat. No new hosted/cross-platform/device claim yet.
+- just check PASSED (fmt, strict workspace/all-target Clippy, workspace/audio).
+- Source guard tests: 7 PASSED. Lifecycle/roundtrip/two-scene integration:
+  20 PASSED. Python regressions: 38 PASSED.
+- New save_as_failure_smoke.py PASSED: occupied destination rejection, Escape
+  retaining X=88 draft, staged resource-symlink copy failure, no output/staging
+  leaks, corrected retry from the same form, exact resource copying, rebuilt
+  hierarchy editable, Y=72 saved only to the copy, guarded dirty-script rejection,
+  cancelled buffer preserved and explicitly saved only in copy, exact restart.
+- Original source manifest/assets and foreign project/sentinel remain byte-identical.
+  Inspected inline copy error, copied-project and source guard screenshots.
+- Existing clipboard smoke PASSED identity/history/cross-scene paste/restart.
+  Raw evidence: target/a02-save-as-failure and target/a02-save-as-logs.
+  No new cross-platform/device acceptance claimed.
 
 ## Hosted / next
 
-At start on prior source 4270bd6: Windows candidate 43705134977 PASSED; CI
-43705135020, reference 43705134990 and Linux candidate 43705134979 were still
-running. This predates the dialog fix. Earlier bdab5e4 CI failed the browser graph
-constant-dialog wait. The local occlusion reproduction is a sufficient cause, not
-proof of every hosted timeout; obtain matching hosted confirmation for this fix.
+Prior source d012e01 Windows candidate 43706643993 PASSED. CI 43706643952,
+reference 43706643985 and Linux candidate 43706644024 were IN_PROGRESS at latest
+observation. This predates Save As changes. Public workflow-list evidence only;
+obtain matching confirmation for this commit and the graph-dialog fix. Do not
+promote prior green source results to newer revisions.
 
-After CI review, continue A02 full component/property and parented multiselect
-acceptance, failed-write UI flows and cross-platform coverage. Current entity-tree
-combined workflow and previous constrained-transform/recovery workflows passed
-locally in prior checkpoints; they do not close full A02. Nested-scene authoring
-is separate from the now-functional entity-parent tree.
+Continue A02 full supported component/property and parented multiselect coverage,
+additional external-file deletion/corruption and failed-save UI cases, and full
+cross-platform acceptance. Dirty source is deliberately Save/Revert-before-copy;
+Save As does not rescue unsaved code without that explicit action. Do not close
+A02 from these isolated Linux workflows. Entity-parent tree support does not close
+nested-scene authoring.
 
 A03: 3daaa1c adds typed dependencies/reference-safe moves, per-target import rules,
 worker diagnostics and fixed GPU preview lifetime. Full nested prefab/variants,
@@ -66,6 +70,6 @@ The legacy separate bytecode debugger is not the live gameplay source debugger.
 
 Source /workspace/.kiln-tools/activate.sh for Rust 1.99.1, rootless libraries/software
 Vulkan and CHROMIUM_PATH (Debian Chromium 156). Run timed UI/gameplay serially;
-concurrent local build/export load previously exposed graph/physics timing issues.
+concurrent build/export load previously exposed graph/physics timing issues.
 Generated target artifacts stay out of Git. Do not kill unrelated editor/Xvfb.
-just check before every commit. No physical-GPU/audio/controller claims.
+just check before every commit. No physical GPU/audio/controller claims.

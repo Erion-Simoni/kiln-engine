@@ -759,7 +759,7 @@ impl EditorApp {
     /// Save a project copy while preserving relative assets, committing state only on success.
     pub fn save_project_as(&mut self, path: PathBuf) -> Result<(), String> {
         self.finish_transform_edit();
-        self.shell.script_editor.save()?;
+        self.shell.script_editor.require_saved()?;
         let source = self
             .project_path
             .as_ref()
@@ -790,7 +790,11 @@ impl EditorApp {
         if let Some(project) = self.current_project.as_ref() {
             self.project_hub
                 .add_recent(path.clone(), project.name.clone());
+            if let Some(scene_id) = self.scenes.active_id() {
+                self.hierarchy_panel.rebuild(project, scene_id);
+            }
         }
+        self.selected_entity = None;
         self.upload_scene_textures();
         self.project_error = None;
         Ok(())
@@ -2427,7 +2431,13 @@ impl EditorApp {
                 ProjectRequest::Open(path) => {
                     self.request_project_action(ProjectAction::Open(path))
                 }
-                ProjectRequest::SaveAs(path) => self.save_project_as(path),
+                ProjectRequest::SaveAs(path) => {
+                    let result = self.save_project_as(path);
+                    if result.is_ok() {
+                        self.show_save_as = false;
+                    }
+                    result
+                }
                 ProjectRequest::CreateDialog => {
                     self.begin_new_project();
                     Ok(())
@@ -2991,27 +3001,43 @@ impl EditorApp {
         }
         self.project_requests.extend(requests.into_inner());
 
+        if self.show_save_as
+            && !project_blocked
+            && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+        {
+            self.show_save_as = false;
+            self.project_error = None;
+        }
         if self.show_save_as && !project_blocked {
             egui::Window::new("Save Project As")
                 .collapsible(false)
                 .show(ctx, |ui| {
-                    ui.label("Project file (in the current project directory):");
-                    ui.text_edit_singleline(&mut self.save_as_path);
+                    ui.label("Project file:");
+                    ui.text_edit_singleline(&mut self.save_as_path).on_hover_text(
+                        "A new or empty directory copies the project and relative assets. A new filename in the current directory shares its assets.",
+                    );
                     ui.horizontal(|ui| {
                         if ui.button("Cancel").clicked() {
                             self.show_save_as = false;
+                            self.project_error = None;
                         }
                         if ui.button("Save").clicked() {
                             self.project_requests
                                 .push(ProjectRequest::SaveAs(PathBuf::from(
                                     self.save_as_path.trim(),
                                 )));
-                            self.show_save_as = false;
                         }
                     });
+                    if let Some(error) = &self.project_error {
+                        ui.colored_label(ui.visuals().error_fg_color, error);
+                    }
                 });
         }
-        if let Some(error) = self.project_error.clone().filter(|_| !project_blocked) {
+        if let Some(error) = self
+            .project_error
+            .clone()
+            .filter(|_| !project_blocked && !self.show_save_as)
+        {
             let mut open = true;
             egui::Window::new("Project operation failed")
                 .open(&mut open)
@@ -3674,6 +3700,7 @@ impl EditorApp {
                     }
                 }
                 MenuAction::SaveProjectAs => {
+                    self.project_error = None;
                     self.save_as_path = self
                         .project_path
                         .as_ref()

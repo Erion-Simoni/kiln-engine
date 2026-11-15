@@ -41,6 +41,12 @@ Search shows matching entities with their ancestor paths even in collapsed
 branches. Clearing search restores the branch view. Folding is view state and
 does not edit the project; it survives edits in the current scene.
 
+**Save Project As** keeps its destination and error visible after a failed copy.
+Correct the destination and retry, or use Cancel/Escape to keep editing the draft.
+A new or empty directory receives a project/resource copy; a new manifest filename
+in the current directory shares that directory's resources. Save or Revert unsaved
+script buffers before Save As; the operation does not implicitly write them.
+
 The asset shelf contains actual bounded image thumbnails, category/search
 filters and scene cards. Double-click a scene card to open it. Drag image
 cards into the 2D viewport to create sprites; import, folder creation,
