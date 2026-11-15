@@ -166,7 +166,7 @@ class Editor:
 
     def value(self, x, y, value):
         self.command('mousemove', '--window', self.window, x, y, 'click', '--repeat', '2', '--delay', '80', '1')
-        self.key('ctrl+a'); self.command('type', '--clearmodifiers', str(value)); self.key('Return')
+        self.key('ctrl+a'); self.command('type', '--clearmodifiers', '--', str(value)); self.key('Return')
 
     def press(self, key, seconds=.18):
         self.command('keydown', key); time.sleep(seconds); self.command('keyup', key)

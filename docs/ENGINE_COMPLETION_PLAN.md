@@ -240,6 +240,16 @@ world/local storage integration and prior two-scene snapping/recovery pass.
 acceptance remain open. Prior-source `20ab011` general CI hit the known graph
 widget timeout; its Windows candidate passed. A02 remains PARTIAL.
 
+**Hierarchy checkpoint 2026-11-15:** replaced the flat entity list and inert
+expanders with a stable Parent-link tree, real folding, search with ancestor
+context and branch-state preservation during same-scene edits. Dropping onto the
+SCENE header detaches through the existing world-pose-preserving command. Real
+widgets combine duplicate, nontrivial reparent/property edits, detach, Delete/Undo,
+two-scene subtree copy, negative local-property autosave/crash recovery and exact
+restart. Existing clipboard and scene-controls regressions pass. Full property/
+cross-platform acceptance and the known hosted graph-dialog timeout remain open.
+[Evidence](evidence/A02_HIERARCHY_TREE.md). A02 remains PARTIAL.
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.

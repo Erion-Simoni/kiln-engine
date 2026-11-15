@@ -34,6 +34,13 @@ World movement snaps to the absolute scene grid; Local movement snaps displaceme
 from the gesture's starting position along the displayed axes. Rotation and uniform
 scale retain the shared 2D controls. Coordinate space is a session preference.
 
+The hierarchy follows entity Parent links, with indented children and branch
+expanders. Drag an entity onto another to reparent it, or onto the **SCENE**
+heading to detach it to the scene root; both preserve its world transform.
+Search shows matching entities with their ancestor paths even in collapsed
+branches. Clearing search restores the branch view. Folding is view state and
+does not edit the project; it survives edits in the current scene.
+
 The asset shelf contains actual bounded image thumbnails, category/search
 filters and scene cards. Double-click a scene card to open it. Drag image
 cards into the 2D viewport to create sprites; import, folder creation,

@@ -773,6 +773,7 @@ impl EditorApp {
         self.shell.entity_clipboard = None;
         self.shell.selection_origin = None;
         self.shell.asset_diagnostics = Default::default();
+        self.hierarchy_panel = crate::hierarchy::HierarchyPanel::default();
         self.prefab_apply_undo.clear();
         self.prefab_apply_redo.clear();
         let _ = crate::recovery::clear(&path);
