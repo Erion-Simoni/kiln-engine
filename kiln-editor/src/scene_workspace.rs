@@ -24,6 +24,7 @@ pub struct SceneWorkspace {
     pub history: SceneHistory,
     histories: HashMap<String, SceneHistory>,
     saved: HashMap<String, Scene>,
+    saved_cameras: HashMap<String, kiln_core::camera::CameraSettings>,
 }
 
 impl SceneWorkspace {
@@ -41,6 +42,7 @@ impl SceneWorkspace {
     /// Use a disk-loaded project as the clean baseline for recovered documents.
     pub fn set_saved_baselines(&mut self, project: &Project) {
         self.saved = project.scenes.clone();
+        self.saved_cameras = project.cameras.clone();
     }
 
     /// Open all documents, selecting the game's startup scene initially.
@@ -60,6 +62,7 @@ impl SceneWorkspace {
                 .collect(),
             active,
             saved: project.scenes.clone(),
+            saved_cameras: project.cameras.clone(),
             ..Self::default()
         }
     }
@@ -188,6 +191,8 @@ impl SceneWorkspace {
             tab.dirty = match (scene, self.saved.get(&tab.scene_id)) {
                 (Some(scene), Some(saved)) => {
                     serde_json::to_value(scene).ok() != serde_json::to_value(saved).ok()
+                        || project.cameras.get(&tab.scene_id)
+                            != self.saved_cameras.get(&tab.scene_id)
                 }
                 _ => true,
             };
@@ -197,6 +202,7 @@ impl SceneWorkspace {
     /// Clear dirty indicators only after a successful project save.
     pub fn mark_saved(&mut self, project: &Project) {
         self.saved = project.scenes.clone();
+        self.saved_cameras = project.cameras.clone();
         self.refresh_dirty(project, None);
     }
 
@@ -261,6 +267,11 @@ impl SceneWorkspace {
         } else {
             project.scenes.remove(&scene_id);
             self.saved.remove(&scene_id);
+        }
+        if let Some(camera) = self.saved_cameras.get(&scene_id).cloned() {
+            project.cameras.insert(scene_id.clone(), camera);
+        } else {
+            project.cameras.remove(&scene_id);
         }
         self.histories.remove(&scene_id);
         self.tabs.remove(index);

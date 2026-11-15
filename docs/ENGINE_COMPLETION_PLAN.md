@@ -294,6 +294,15 @@ widgets. Skybridge authoring again matches its complete checked-in project;
 no property assertions were weakened. See [replay evidence](evidence/A02_PANEL_REPLAY.md).
 This reliability repair does not close A02's remaining breadth or acceptance.
 
+**Scene-settings checkpoint 2026-11-15:** scene name/script, camera and nested-link
+edits now share scene-scoped undo/cancel history; camera-only changes mark tabs
+dirty and Discard restores saved camera presence/value. Nested selection is explicit,
+link changes refresh the preview, and composition controls respect Play/project
+operation guards. Real widgets verify complete settings Undo/Redo, camera cancellation,
+two-scene composition/offset/remove preview, real-timer camera-only crash recovery
+and exact restart. [Evidence](evidence/A02_SCENE_SETTINGS.md). Broader combined
+property coverage and cross-platform acceptance remain open; A02 stays PARTIAL.
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.

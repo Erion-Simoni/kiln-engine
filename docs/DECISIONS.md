@@ -2126,3 +2126,17 @@ checks remain separate Task 8 gates.
   synchronize edits into ScriptEditor drafts so normal guarded saves/autosave and
   project replacement protection cover graph authoring. Legacy specialized graph
   nodes remain explicitly unsupported until their runtime contracts are implemented.
+
+
+### ADR-0088 — Scene settings share scene-scoped transactions (2026-11-15)
+
+- Treat a scene's camera settings as part of its editor document for dirty tracking
+  and undo/redo, while retaining the existing project camera table on disk.
+- Extend existing scene history entries with an optional camera snapshot. Ordinary
+  entity commands preserve the current camera; camera-aware settings transactions
+  restore its exact prior presence/value. No manifest migration or new history stack.
+- Scene composition edits use the existing gesture transaction and cancellation
+  path; nested-link changes rebuild the projection through the normal scene loader.
+  Disable all composition controls during Play and project replacement/recovery.
+- Keep per-scene camera baselines alongside scene baselines so closing a dirty
+  camera tab cannot silently discard the change. Track settings by scene ID.

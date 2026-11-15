@@ -556,3 +556,72 @@ fn letterboxed_mapping_accounts_for_offsets_dpi_and_camera_zoom() {
     );
     assert!(scene_view::units_per_point(viewport, 0.0, &camera).is_none());
 }
+
+#[test]
+fn scene_settings_history_keeps_camera_presence_and_interleaved_entity_edits() {
+    use kiln_core::camera::CameraSettings;
+    let before = sample();
+    let mut settings = before.clone();
+    settings.name = "Changed level".into();
+    settings.script = Some("scripts/other.ks".into());
+    settings.nested_scenes.push(kiln_core::NestedScene {
+        scene_id: "room".into(),
+        offset: kiln_core::SceneOffset { x: 15.0, y: -20.0 },
+        additive: true,
+    });
+    let camera = CameraSettings {
+        zoom: 2.5,
+        target: Some("hero".into()),
+        ..Default::default()
+    };
+    let mut history = SceneHistory::new();
+    let mut edit = TransformTransaction::new_document(before.clone(), None);
+    edit.update(settings.clone());
+    edit.update_camera(Some(camera.clone()));
+    edit.commit(&mut history);
+    // An ordinary entity command records a scene, and must leave the camera alone.
+    let mut entity_edit = settings.clone();
+    entity_edit.entities[0].name = "Renamed hero".into();
+    history.record(settings.clone());
+    let (scene, replacement) = history
+        .undo_document(entity_edit.clone(), Some(camera.clone()))
+        .unwrap();
+    assert_eq!(json(&scene), json(&settings));
+    assert_eq!(replacement, None);
+    let (scene, replacement) = history.undo_document(scene, Some(camera.clone())).unwrap();
+    assert_eq!(json(&scene), json(&before));
+    assert_eq!(replacement, Some(None));
+    let (scene, replacement) = history.redo_document(scene, None).unwrap();
+    assert_eq!(json(&scene), json(&settings));
+    assert_eq!(replacement, Some(Some(camera.clone())));
+    let (scene, replacement) = history.redo_document(scene, Some(camera)).unwrap();
+    assert_eq!(json(&scene), json(&entity_edit));
+    assert_eq!(replacement, None);
+}
+
+#[test]
+fn cancelled_and_noop_settings_preserve_camera_and_redo_exactly() {
+    use kiln_core::camera::CameraSettings;
+    let scene = sample();
+    let camera = CameraSettings {
+        zoom: 2.0,
+        ..Default::default()
+    };
+    let mut changed = scene.clone();
+    changed.name = "Changed".into();
+    let mut history = SceneHistory::new();
+    history.record(scene.clone());
+    let _ = history.undo(changed).unwrap();
+    let mut edit = TransformTransaction::new_document(scene.clone(), Some(camera.clone()));
+    edit.update_camera(None);
+    let (restored, replacement) = edit.cancel_document();
+    assert_eq!(json(&restored), json(&scene));
+    assert_eq!(replacement, Some(Some(camera.clone())));
+    assert!(history.can_redo());
+    let mut noop = TransformTransaction::new_document(scene, Some(camera.clone()));
+    noop.update_camera(None);
+    noop.update_camera(Some(camera));
+    noop.commit(&mut history);
+    assert!(history.can_redo());
+    assert_eq!(history.undo_depth(), 0);
+}

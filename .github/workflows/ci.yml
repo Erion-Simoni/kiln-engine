@@ -240,6 +240,8 @@ jobs:
         run: python3 tests/native/local_axes_smoke.py
       - name: Verify empty selection safety and parented multiselect transforms
         run: python3 tests/native/parented_multiselect_smoke.py
+      - name: Verify scene settings, camera history and composition recovery
+        run: python3 tests/native/scene_settings_smoke.py
       - name: Verify parent trees, search, root drops and two-scene recovery
         run: python3 tests/native/hierarchy_tree_smoke.py
       - name: Verify Save As failure, cancel/retry and copied-project editing
@@ -303,6 +305,11 @@ jobs:
             target/a02-local-axes/editor/*.png
             target/a02-local-axes/editor/*.log
             target/a02-local-axes/reopened/*.png
+            target/a02-scene-settings/result.json
+            target/a02-scene-settings/failure.json
+            target/a02-scene-settings/editor/*.png
+            target/a02-scene-settings/editor/*.log
+            target/a02-scene-settings/reopened/*.png
             target/a02-parented-selection/result.json
             target/a02-parented-selection/failure.json
             target/a02-parented-selection/editor/*.png

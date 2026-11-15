@@ -40,6 +40,13 @@ pivot. Group move, rotation and uniform scale transform selected roots; selected
 descendants inherit the operation without rewriting their stored local properties.
 Selection survives undo/redo, and Escape preserves the previous redo history.
 
+The Scene Editor records scene names, gameplay-script paths, camera settings and
+nested-scene links in the active scene's undo history. Choose the child explicitly
+from **Add Nested Scene**. Offset/removal changes refresh the preview immediately
+and leave the child document intact. Camera-only edits mark the tab dirty; Discard
+restores the saved camera. Escape cancels an active settings gesture, and recovery
+includes unsaved camera settings. Composition controls are disabled during Play.
+
 The hierarchy follows entity Parent links, with indented children and branch
 expanders. Drag an entity onto another to reparent it, or onto the **SCENE**
 heading to detach it to the scene root; both preserve its world transform.

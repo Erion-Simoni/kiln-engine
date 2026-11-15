@@ -884,7 +884,8 @@ impl EditorApp {
 
     fn cancel_transform_edit(&mut self) {
         if let Some(edit) = self.transform_edit.take() {
-            let before = edit.cancel();
+            let (before, camera) = edit.cancel_document();
+            self.restore_scene_camera(&before.id, camera);
             let _ = self.apply_scene(before);
         }
         self.gizmo.drag = None;
@@ -1593,14 +1594,34 @@ impl EditorApp {
         }
     }
 
+    fn restore_scene_camera(
+        &mut self,
+        scene_id: &str,
+        camera: Option<Option<kiln_core::camera::CameraSettings>>,
+    ) {
+        if let (Some(project), Some(camera)) = (self.current_project.as_mut(), camera) {
+            if let Some(camera) = camera {
+                project.cameras.insert(scene_id.into(), camera);
+            } else {
+                project.cameras.remove(scene_id);
+            }
+        }
+    }
+
     /// Undo the last scene edit.
     pub fn undo(&mut self) -> Result<(), String> {
         self.finish_transform_edit();
         self.require_edit_mode()?;
         let current = self.scene_from_world();
-        let Some(previous) = self.scenes.history.undo(current) else {
+        let camera = self
+            .current_project
+            .as_ref()
+            .and_then(|project| project.cameras.get(&current.id))
+            .cloned();
+        let Some((previous, camera)) = self.scenes.history.undo_document(current, camera) else {
             return Err("Nothing to undo".to_string());
         };
+        self.restore_scene_camera(&previous.id, camera);
         self.apply_scene(previous)
     }
 
@@ -1609,9 +1630,15 @@ impl EditorApp {
         self.finish_transform_edit();
         self.require_edit_mode()?;
         let current = self.scene_from_world();
-        let Some(next) = self.scenes.history.redo(current) else {
+        let camera = self
+            .current_project
+            .as_ref()
+            .and_then(|project| project.cameras.get(&current.id))
+            .cloned();
+        let Some((next, camera)) = self.scenes.history.redo_document(current, camera) else {
             return Err("Nothing to redo".to_string());
         };
+        self.restore_scene_camera(&next.id, camera);
         self.apply_scene(next)
     }
 
@@ -2216,6 +2243,12 @@ impl winit::application::ApplicationHandler for EditorApp {
             ..
         } = event
         {
+            if key == Key::Named(NamedKey::Escape)
+                && self.transform_edit.is_some()
+                && !self.shell.quick_actions.open
+            {
+                self.project_requests.push(ProjectRequest::CancelTransform);
+            }
             if !response.consumed && !self.shell.quick_actions.open {
                 match key {
                     Key::Character(key) if ["q", "w", "e", "r"].contains(&key.as_str()) => {
@@ -4615,32 +4648,18 @@ impl TabViewer<'_> {
     }
 
     /// Add another scene as a nested scene of the current one.
-    fn nest_scene(&mut self) {
+    fn nest_scene(&mut self, child_id: &str) {
+        if self.editing_locked() || self.project_blocked {
+            return;
+        }
         self.finish_transform_edit();
         let Some(project) = self.current_project.as_mut() else {
-            self.log("[INFO] Open a project to nest a scene in it");
             return;
         };
         let Some(parent_id) = self.scenes.active_id().map(str::to_owned) else {
-            self.log("[INFO] The project has no scene to nest in");
             return;
         };
-        let mut candidates: Vec<_> = project.scenes.keys().cloned().collect();
-        candidates.sort();
-        let already_nested: std::collections::HashSet<_> = project.scenes[&parent_id]
-            .nested_scenes
-            .iter()
-            .map(|nested| nested.scene_id.as_str())
-            .collect();
-        let Some(child_id) = candidates
-            .into_iter()
-            .find(|id| id != &parent_id && !already_nested.contains(id.as_str()))
-        else {
-            self.log("[INFO] The project has no other scene to nest");
-            return;
-        };
-
-        match crate::editing::nest_scene(project, &parent_id, &child_id) {
+        match crate::editing::nest_scene(project, &parent_id, child_id) {
             Ok(()) => self.log(&format!(
                 "[INFO] Nested the scene {child_id} in {parent_id}"
             )),
@@ -6072,144 +6091,240 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 });
             }
             Tab::SceneEditor => {
-                ui.vertical(|ui| {
-                    ui.heading("Scene Editor");
-                    ui.add_space(8.0);
+                let settings_before = self.current_project.as_ref().and_then(|project| {
+                    let id = self.scenes.active_id()?;
+                    Some((
+                        project.scenes.get(id)?.clone(),
+                        project.cameras.get(id).cloned(),
+                    ))
+                });
+                let locked = self.editing_locked() || self.project_blocked;
+                ui.add_enabled_ui(!locked, |ui| {
+                    ui.vertical(|ui| {
+                        ui.heading("Scene Editor");
+                        ui.add_space(8.0);
 
-                    // Toolbar
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = egui::vec2(8.0, 0.0);
+                        // Toolbar
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = egui::vec2(8.0, 0.0);
 
-                        if ui.button("Create New Scene").clicked() {
-                            self.create_scene();
-                        }
+                            if ui.button("Create New Scene").clicked() {
+                                self.create_scene();
+                            }
 
-                        ui.separator();
+                            ui.separator();
 
-                        if ui.button("Add Nested Scene").clicked() {
-                            self.nest_scene();
-                        }
+                            ui.menu_button("Add Nested Scene", |ui| {
+                                let mut candidates: Vec<_> = self
+                                    .current_project
+                                    .as_ref()
+                                    .map(|project| {
+                                        project
+                                            .scenes
+                                            .keys()
+                                            .filter(|id| {
+                                                Some(id.as_str()) != self.scenes.active_id()
+                                            })
+                                            .cloned()
+                                            .collect()
+                                    })
+                                    .unwrap_or_default();
+                                candidates.sort();
+                                if candidates.is_empty() {
+                                    ui.label("Create another scene first.");
+                                }
+                                for child_id in candidates {
+                                    if ui.button(&child_id).clicked() {
+                                        self.nest_scene(&child_id);
+                                        ui.close_menu();
+                                    }
+                                }
+                            });
 
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.label("Scene Composition");
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    ui.label("Scene Composition");
+                                },
+                            );
                         });
-                    });
 
-                    let locked = self.editing_locked();
-                    let scene_id = self.scenes.active_id().map(str::to_owned);
-                    if let (Some(project), Some(id)) = (self.current_project.as_mut(), scene_id) {
-                        if let Some(scene) = project.scenes.get_mut(&id) {
-                            ui.add_enabled_ui(!locked, |ui| {
-                                ui.horizontal(|ui| {
-                                    ui.label("Scene name");
-                                    ui.text_edit_singleline(&mut scene.name);
+                        let locked = self.editing_locked();
+                        let scene_id = self.scenes.active_id().map(str::to_owned);
+                        if let (Some(project), Some(id)) = (self.current_project.as_mut(), scene_id)
+                        {
+                            if let Some(scene) = project.scenes.get_mut(&id) {
+                                ui.add_enabled_ui(!locked, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.label("Scene name");
+                                        ui.text_edit_singleline(&mut scene.name);
+                                    });
+                                    let mut path = scene.script.clone().unwrap_or_default();
+                                    ui.horizontal(|ui| {
+                                        ui.label("Gameplay script");
+                                        if ui.text_edit_singleline(&mut path).changed() {
+                                            scene.script = (!path.trim().is_empty())
+                                                .then(|| path.trim().to_string());
+                                        }
+                                    });
                                 });
-                                let mut path = scene.script.clone().unwrap_or_default();
-                                ui.horizontal(|ui| {
-                                    ui.label("Gameplay script");
-                                    if ui.text_edit_singleline(&mut path).changed() {
-                                        scene.script = (!path.trim().is_empty())
-                                            .then(|| path.trim().to_string());
+                            }
+                            let mut settings =
+                                project.cameras.get(&id).cloned().unwrap_or_default();
+                            let mut ids: Vec<_> = project
+                                .scenes
+                                .get(&id)
+                                .map(|scene| {
+                                    scene
+                                        .entities
+                                        .iter()
+                                        .map(|entity| entity.id.clone())
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            ids.sort();
+                            ui.collapsing("Gameplay Camera", |ui| {
+                                ui.add_enabled_ui(!locked, |ui| {
+                                    if crate::physics_inspector::camera_ui(
+                                        ui,
+                                        &mut settings,
+                                        &ids,
+                                        [project.window.width as f32, project.window.height as f32],
+                                    ) && settings.validate().is_ok()
+                                    {
+                                        project.cameras.insert(id, settings);
                                     }
                                 });
                             });
                         }
-                        let mut settings = project.cameras.get(&id).cloned().unwrap_or_default();
-                        let mut ids: Vec<_> = project
-                            .scenes
-                            .get(&id)
-                            .map(|scene| {
-                                scene
-                                    .entities
-                                    .iter()
-                                    .map(|entity| entity.id.clone())
-                                    .collect()
-                            })
-                            .unwrap_or_default();
-                        ids.sort();
-                        ui.collapsing("Gameplay Camera", |ui| {
-                            ui.add_enabled_ui(!locked, |ui| {
-                                if crate::physics_inspector::camera_ui(
-                                    ui,
-                                    &mut settings,
-                                    &ids,
-                                    [project.window.width as f32, project.window.height as f32],
-                                ) && settings.validate().is_ok()
+
+                        ui.add_space(8.0);
+
+                        // Scene composition info
+                        egui::Frame::none()
+                            .fill(egui::Color32::from_gray(38))
+                            .rounding(4.0)
+                            .inner_margin(12.0)
+                            .show(ui, |ui| {
+                                ui.strong("Nested Scenes");
+                                ui.add_space(8.0);
+
+                                let active_id = self.scenes.active_id().map(str::to_owned);
+                                if let (Some(project), Some(parent_id)) =
+                                    (self.current_project.as_mut(), active_id)
                                 {
-                                    project.cameras.insert(id, settings);
-                                }
-                            });
-                        });
-                    }
-
-                    ui.add_space(8.0);
-
-                    // Scene composition info
-                    egui::Frame::none()
-                        .fill(egui::Color32::from_gray(38))
-                        .rounding(4.0)
-                        .inner_margin(12.0)
-                        .show(ui, |ui| {
-                            ui.strong("Nested Scenes");
-                            ui.add_space(8.0);
-
-                            let active_id = self.scenes.active_id().map(str::to_owned);
-                            if let (Some(project), Some(parent_id)) =
-                                (self.current_project.as_mut(), active_id)
-                            {
-                                let nested = project
-                                    .scenes
-                                    .get(&parent_id)
-                                    .map(|scene| scene.nested_scenes.clone())
-                                    .unwrap_or_default();
-                                if nested.is_empty() {
-                                    ui.label(
+                                    let nested = project
+                                        .scenes
+                                        .get(&parent_id)
+                                        .map(|scene| scene.nested_scenes.clone())
+                                        .unwrap_or_default();
+                                    if nested.is_empty() {
+                                        ui.label(
                                         "No nested scenes. Use Add Nested Scene to compose scenes.",
                                     );
-                                }
-                                for link in nested {
-                                    let name = project
-                                        .scenes
-                                        .get(&link.scene_id)
-                                        .map(|scene| scene.name.as_str())
-                                        .unwrap_or("Missing scene");
-                                    let mut offset = [link.offset.x, link.offset.y];
-                                    let mut additive = link.additive;
-                                    let mut remove = false;
-                                    let mut changed = false;
-                                    ui.horizontal(|ui| {
-                                        ui.label(format!("{} ({})", name, link.scene_id));
-                                        changed |= ui
-                                            .add(egui::DragValue::new(&mut offset[0]).prefix("X "))
-                                            .changed();
-                                        changed |= ui
-                                            .add(egui::DragValue::new(&mut offset[1]).prefix("Y "))
-                                            .changed();
-                                        changed |= ui.checkbox(&mut additive, "Additive").changed();
-                                        remove = ui.small_button("Remove").clicked();
-                                    });
-                                    if changed {
-                                        let _ = crate::editing::configure_nested_scene(
-                                            project,
-                                            &parent_id,
-                                            &link.scene_id,
-                                            offset,
-                                            additive,
-                                        );
                                     }
-                                    if remove {
-                                        let _ = crate::editing::unnest_scene(
-                                            project,
-                                            &parent_id,
-                                            &link.scene_id,
-                                        );
+                                    for link in nested {
+                                        let name = project
+                                            .scenes
+                                            .get(&link.scene_id)
+                                            .map(|scene| scene.name.as_str())
+                                            .unwrap_or("Missing scene");
+                                        let mut offset = [link.offset.x, link.offset.y];
+                                        let mut additive = link.additive;
+                                        let mut remove = false;
+                                        let mut changed = false;
+                                        ui.horizontal_wrapped(|ui| {
+                                            ui.label(format!("{} ({})", name, link.scene_id));
+                                            changed |= ui
+                                                .add(
+                                                    egui::DragValue::new(&mut offset[0])
+                                                        .prefix("X "),
+                                                )
+                                                .changed();
+                                            changed |= ui
+                                                .add(
+                                                    egui::DragValue::new(&mut offset[1])
+                                                        .prefix("Y "),
+                                                )
+                                                .changed();
+                                            changed |=
+                                                ui.checkbox(&mut additive, "Additive").changed();
+                                            remove = ui.small_button("Remove").clicked();
+                                        });
+                                        if changed {
+                                            if let Err(error) =
+                                                crate::editing::configure_nested_scene(
+                                                    project,
+                                                    &parent_id,
+                                                    &link.scene_id,
+                                                    offset,
+                                                    additive,
+                                                )
+                                            {
+                                                self.console_log.push(format!("[ERROR] {error}"));
+                                            }
+                                        }
+                                        if remove {
+                                            if let Err(error) = crate::editing::unnest_scene(
+                                                project,
+                                                &parent_id,
+                                                &link.scene_id,
+                                            ) {
+                                                self.console_log.push(format!("[ERROR] {error}"));
+                                            }
+                                        }
                                     }
+                                } else {
+                                    ui.label("Open a project scene to edit its composition.");
                                 }
-                            } else {
-                                ui.label("Open a project scene to edit its composition.");
-                            }
-                        });
+                            });
+                    });
                 });
+                if !locked {
+                    if let Some((before, before_camera)) = settings_before {
+                        let after = self
+                            .current_project
+                            .as_ref()
+                            .and_then(|project| project.scenes.get(&before.id))
+                            .cloned();
+                        let after_camera = self
+                            .current_project
+                            .as_ref()
+                            .and_then(|project| project.cameras.get(&before.id))
+                            .cloned();
+                        if let Some(after) = after {
+                            let changed = serde_json::to_value(&before).ok()
+                                != serde_json::to_value(&after).ok()
+                                || before_camera != after_camera;
+                            if changed {
+                                let widget = ui
+                                    .ctx()
+                                    .memory(|memory| memory.focused())
+                                    .or_else(|| ui.ctx().dragged_id());
+                                if self.transform_edit.as_ref().is_some_and(|edit| {
+                                    !edit.targets(&before.id, "__scene_settings")
+                                        || widget.is_some_and(|id| !edit.owns_widget(id))
+                                }) {
+                                    self.finish_transform_edit();
+                                }
+                                let nested_changed = serde_json::to_value(&before.nested_scenes)
+                                    .ok()
+                                    != serde_json::to_value(&after.nested_scenes).ok();
+                                let edit = self.transform_edit.get_or_insert_with(|| {
+                                    SceneTransaction::new_document(before, before_camera)
+                                });
+                                if let Some(widget) = widget {
+                                    edit.set_widget(widget);
+                                }
+                                edit.update(after);
+                                edit.update_camera(after_camera);
+                                if nested_changed {
+                                    self.project_requests.push(ProjectRequest::RefreshVisuals);
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Tab::GameplayEditor => {
                 ui.vertical(|ui| {

@@ -1,58 +1,48 @@
 # Kiln Session Handoff
 
-Owner scope: A01 through A04 on `fix/a01-ci-baseline`.
-Current focus: A02 stable floating-panel replay (2026-11-15), following 276524c.
-A02–A04 remain PARTIAL. A01 baseline acceptance is pinned to green 6de428b
-(CI 43606018834, reference 43606018842, Linux 43606018785). New source needs
-matching results. Full 3D remains behind G2D; no broader release gate accepted.
+Owner requested fixes for remaining A02 through A04 on `fix/a01-ci-baseline`.
+Current focus: A02 scene settings/camera/composition correctness, following d110141.
+A02–A04 remain PARTIAL. A01 accepted baseline remains 6de428b; full 3D behind G2D.
 MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
 
-- Retrieved source-pinned hosted results: 276524c CI 43711940922, Linux candidate
-  43711940942 and Windows 43711940872 PASSED. Reference 43711940851 FAILED
-  Skybridge authoring with KeyError: 'run', matching c9958d7 reference failure.
-- Reproduced the exact failure locally. The panel observer dragged from a
-  transient title segment and left Animation at the wrong widget origin.
-- The shared observer now waits for three consecutive matching rendered title
-  origins and verifies the destination after dragging. Existing bounded waits,
-  failure reporting and complete game/source/template comparisons remain intact.
-  No application hook, project-data injection or assertion weakening.
-- Added transient-frame/destination-observation regressions. No production code,
-  dependency, project format or command architecture changes.
-- Evidence: docs/evidence/A02_PANEL_REPLAY.md. Earlier parented group transforms,
-  manifest rescue, Save As protection, graph dialog repair, Parent tree, World/Local
-  axes, snapping, clipboard, flags/alignment and two-scene recovery remain.
+- Found Scene Editor metadata/composition/cameras bypassing history, stale nested
+  preview and missing camera dirty/discard protection. Fixed through existing
+  scene transaction/history with optional camera snapshots (ADR-0088).
+- Scene-name/script/camera/nested settings now undo/redo; cancellation restores
+  camera presence/value and retains redo. Ordinary entity commands preserve cameras.
+- Camera-only tabs dirty correctly; close requires a decision; Discard restores
+  disk baselines including absent/recovered/new cameras and other-scene isolation.
+- Nested-scene picker is explicit; offset/removal rebuilds live projection, child
+  documents remain independent. Controls wrap and respect Play/project guards.
+- Evidence/docs/CI: docs/evidence/A02_SCENE_SETTINGS.md and scene_settings_smoke.py.
 
 ## Executed validation
 
-- just check PASSED: fmt, strict workspace/all-target Clippy, workspace/audio.
-- Python regressions: 40 PASSED. Both new tests reject the old panel observer.
-- Skybridge authoring FAILED before, PASSED after: real widgets reproduce exact
-  complete project and source bytes, original template unchanged. Animation
-  screenshot inspected: run clip, two frames, second X=16 and correct sheet.
-- Raw evidence/logs: target/a02-animation-authoring-before,
-  target/a02-animation-authoring-after, target/a02-animation-layout,
-  target/a02-animation-authoring-logs.
-- Initial unpackaged debug export correctly failed required license-tree checks;
-  portable package was then prepared/verified with rebuilt native tools and the
-  existing prebuilt browser runtime. Packaged all-three-game replay PASSED:
-  exact authored project/source/template comparisons, all six native/web exports,
-  full notice/runtime binding and overwrite protection. Report:
-  target/a02-panel-packaged-replay/result.json. Gameplay was not rerun.
+- Before fix, prior packaged editor FAILED new real-widget scene-name Undo.
+- Final widgets PASSED name/script and camera exact-project Undo/Redo, live camera
+  Escape/cancel preserving redo, explicit two-scene link/offset/remove/Undo with
+  observed rendered bounds, unchanged child, actual autosave/forced-crash camera
+  recovery and exact full-project restart. Screenshots inspected.
+- just check PASSED. Full cargo test --workspace --locked: 770 PASSED, zero failed
+  including doc tests. nextest command unavailable; not counted as success.
+- Python: 40 PASSED; py_compile and diff checks pass. Raw logs/receipts:
+  target/a02-scene-settings-logs, target/a02-scene-settings and before/layout dirs.
 
 ## Next / known issues
 
-Obtain matching hosted results for the panel-observer repair. On prior c9958d7,
-CI 43709956368 and Windows 43709956361 PASSED; reference 43709956415 FAILED
-same missing clip and Linux 43709956395 was CANCELLED. Earlier artifact-preflight
-failure on ac0a86c has no established service root cause; no check was weakened.
+Obtain matching hosted checks for new production changes. Prior d110141 PASSED
+CI 43717563394, reference games 43717563395 and Linux candidate 43717563439.
+Windows did not trigger on that test/docs-only change; prior production 276524c
+Windows 43711940872 passed. New source cannot inherit acceptance from these.
 
-Continue A02 full component/property coverage and cross-platform acceptance.
-Inspector property edits retain primary-entity semantics. Entity-parent trees do
-not close nested-scene authoring. Source resources must still exist for Save As
-rescue; whole-resource-tree reconstruction is not implemented. Dirty source still
-requires explicit Save/Revert before copying. Do not close A02 from isolated flows.
+Continue A02 combined every-supported-property/reference recovery coverage and
+cross-platform GUI acceptance. General nested-scene identity semantics remain open;
+Parent hierarchy authoring alone does not complete scene composition. Inspector
+property edits retain primary-entity semantics. Save As rescue needs existing
+source resources and explicit Save/Revert of dirty source. A03/A04 remain requested
+but are not closed by this A02 fix; proceed in milestone order.
 
 A03: 3daaa1c adds typed dependencies/reference-safe moves, per-target import rules,
 worker diagnostics and fixed GPU preview lifetime. Full nested prefab/variants,
