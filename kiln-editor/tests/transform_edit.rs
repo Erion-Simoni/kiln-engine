@@ -88,6 +88,43 @@ fn global(world: &GameWorld, id: &str) -> Transform {
         .unwrap()
         .0
 }
+
+#[test]
+fn local_axis_drag_on_a_rotated_parented_child_roundtrips_through_local_storage() {
+    use kiln_editor::transform_gizmo::{GizmoDrag, GizmoSpace, TranslationAxis};
+    let mut scene = sample();
+    let mut world = spawn(&scene);
+    SetTransform {
+        scene_id: "main",
+        entity_id: "marker",
+        value: Transform::new(100.0, 200.0)
+            .with_rotation(std::f32::consts::FRAC_PI_2)
+            .with_scale(kiln_core::Vec2::splat(2.0)),
+    }
+    .apply(&mut scene, &mut world)
+    .unwrap();
+    let initial = global(&world, "hero");
+    let drag = GizmoDrag::new(
+        GizmoMode::Translate,
+        egui::Pos2::ZERO,
+        initial,
+        [1.0, 1.0],
+        initial.position,
+    )
+    .unwrap()
+    .in_space(GizmoSpace::Local, TranslationAxis::X);
+    let target = drag.at(egui::pos2(0.0, -25.0), Some(16.0));
+    let local = kiln_core::hierarchy_transform::local_from_world(&scene, "hero", target).unwrap();
+    apply(&mut scene, &mut world, local);
+    let actual = global(&world, "hero");
+    assert!((actual.position - target.position).length() < 0.001);
+    assert!((actual.rotation - initial.rotation).abs() < 0.001);
+    assert_eq!(actual.scale, initial.scale);
+    let (sin, cos) = initial.rotation.sin_cos();
+    let delta = actual.position - initial.position;
+    assert!((delta.dot(kiln_core::Vec2::new(cos, sin)) - 16.0).abs() < 0.001);
+    assert!(delta.dot(kiln_core::Vec2::new(-sin, cos)).abs() < 0.001);
+}
 fn apply(scene: &mut Scene, world: &mut GameWorld, value: Transform) -> bool {
     SetTransform {
         scene_id: "main",

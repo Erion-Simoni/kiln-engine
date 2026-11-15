@@ -19,14 +19,20 @@ The default layout includes hierarchy and inspector sidebars, Scene/Game/
 Animation tabs, and an Assets/Console/Profiler shelf. Panels retain docking,
 resizing and existing editor commands. **Window → Reset Layout** or **Layout:
 Default** restores this arrangement. The global toolbar provides Q/W/E/R tools,
-world-space transforms, grid snapping, Play/Stop, pause and frame stepping.
-Local transforms remain in the inspector. The viewport provides grid/gizmo/
+world/local move axes, grid snapping, Play/Stop, pause and frame stepping.
+Inspector fields edit stored local transforms. **World / Local** changes move
+handle orientation: red is X, green is Y. Drag a handle to constrain movement;
+drag the center to move freely. Local axes follow the primary entity's world
+orientation, including its parents. The viewport provides grid/gizmo/
 collider visibility, framing and real saved scene tabs.
 
 **Snap** uses the adjacent grid size for movement, 15° increments for rotation,
 and 0.1 increments for uniform scale. Scaling preserves proportions and stops at
 the smallest positive snapped scale of 0.1. Disable Snap for continuous drags.
 Each gesture is one undo step; Escape cancels the current gesture.
+World movement snaps to the absolute scene grid; Local movement snaps displacement
+from the gesture's starting position along the displayed axes. Rotation and uniform
+scale retain the shared 2D controls. Coordinate space is a session preference.
 
 The asset shelf contains actual bounded image thumbnails, category/search
 filters and scene cards. Double-click a scene card to open it. Drag image

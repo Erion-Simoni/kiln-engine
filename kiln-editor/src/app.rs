@@ -46,7 +46,9 @@ use crate::shader_editor::ShaderEditorState;
 use crate::sprite_editor::SpriteEditorState;
 use crate::tilemap_editor::TilemapEditorState;
 use crate::transform_edit::{SceneTransaction, SetTransform};
-use crate::transform_gizmo::{hits_handle, GizmoDrag, GizmoMode};
+use crate::transform_gizmo::{
+    hits_handle, translation_axis, translation_handles, GizmoDrag, GizmoMode,
+};
 use crate::ui_layout_editor::UiLayoutEditorState;
 use crate::version_control_panel::VersionControlPanel;
 use crate::vfx_editor::VfxEditorState;
@@ -2873,6 +2875,7 @@ impl EditorApp {
                         ui.disable();
                     }
                     let previous_mode = self.gizmo.mode;
+                    let previous_space = self.shell.gizmo_space;
                     let actions = self.shell.toolbar(
                         ui,
                         &mut self.gizmo.mode,
@@ -2881,7 +2884,8 @@ impl EditorApp {
                         self.is_playing,
                         self.play.as_ref().is_some_and(|play| play.clock.paused()),
                     );
-                    if self.gizmo.mode != previous_mode {
+                    if self.gizmo.mode != previous_mode || self.shell.gizmo_space != previous_space
+                    {
                         if let Some(edit) = self.transform_edit.take() {
                             edit.commit(&mut self.scenes.history);
                         }
@@ -4297,6 +4301,16 @@ impl TabViewer<'_> {
                     if let Some(drag) =
                         GizmoDrag::new(self.gizmo.mode, origin, initial, units, pointer_world)
                     {
+                        let handles = translation_handles(
+                            self.shell.gizmo_space,
+                            initial.rotation,
+                            center,
+                            units,
+                        );
+                        let drag = drag.in_space(
+                            self.shell.gizmo_space,
+                            translation_axis(origin, center, handles),
+                        );
                         let mut selected: Vec<(String, Transform)> = self
                             .hierarchy_panel
                             .selected_ids
@@ -4893,15 +4907,21 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 );
                                 match self.gizmo.mode {
                                     GizmoMode::Translate => {
+                                        let handles = translation_handles(
+                                            self.shell.gizmo_space,
+                                            transform.rotation,
+                                            center,
+                                            units,
+                                        );
                                         ui.painter().line_segment(
-                                            [center, center + egui::vec2(42.0, 0.0)],
+                                            [center, handles[0]],
                                             egui::Stroke::new(
                                                 2.0_f32,
                                                 egui::Color32::from_rgb(255, 80, 80),
                                             ),
                                         );
                                         ui.painter().line_segment(
-                                            [center, center + egui::vec2(0.0, -42.0)],
+                                            [center, handles[1]],
                                             egui::Stroke::new(
                                                 2.0_f32,
                                                 egui::Color32::from_rgb(80, 255, 100),

@@ -1,48 +1,58 @@
 # Kiln Session Handoff
 
 Active owner scope: A01 through A04 on `fix/a01-ci-baseline`.
-Current focus: A02 transform snapping checkpoint, 2026-11-15. A02–A04 remain
-PARTIAL. A01 configured baseline is accepted on source `6de428b`; matching general
-CI 43606018834, reference games 43606018842 and Linux candidate 43606018785 passed.
-Evidence: docs/evidence/A01_RESUMED_VALIDATION.md. No broader release gate is
-accepted. Full 3D remains behind G2D; MIT OR Apache-2.0 settled; no size ceiling.
+Current focus: A02 World/Local move-axis checkpoint, 2026-11-15. A02–A04 remain
+PARTIAL. A01 baseline acceptance stays pinned to green `6de428b` (general CI
+43606018834, reference games 43606018842, Linux candidate 43606018785). Newer
+source requires matching results; no broader release gate is accepted. Full 3D
+remains behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
 
-- Snap previously affected only translation. It now snaps world rotation to 15°
-  and uniform scale to 0.1 steps, preserving proportions and a positive snapped
-  magnitude. Invalid/disabled grids retain continuous rotation/scale. Existing
-  press-state math, group application, history and save/recovery commands are used.
-- Added toolbar hover guidance and user documentation for the three Snap modes.
-  Fixed increments are a routine editor behavior choice; no new dependencies,
-  architecture or project-format change was required.
-- Added real widget acceptance to native CI with retained receipts/screenshots.
-  New test moves/rotates/scales through gizmos, verifies one-step undo/redo,
-  Escape cancellation without extra history and continuous scale when Snap is off.
-- The same test copies into a newly created second scene, makes an unsaved Inspector
-  scale edit, waits for actual autosave, force-kills/reopens/Restores/Saves, then
-  restarts and compares the complete saved project. The first scene stays intact.
-- Evidence: docs/evidence/A02_TRANSFORM_SNAP.md. Raw receipt/captures under
-  target/a02-transform-snap; logs under target/a02-transform-logs.
+- Enabled the formerly disabled World/Local toolbar selector in Edit mode. Local
+  move handles follow the primary entity's world rotation, including parents.
+  Drawing and hit testing share projected 42-point handle endpoints.
+- Red X/green Y handle presses constrain movement; center/off-handle presses remain
+  free planar drags. World snap is absolute, preserving the perpendicular coordinate;
+  Local snap rounds displacement along the captured basis from the press position.
+- Gesture space/orientation/axis are captured once. Existing group target ordering,
+  world-to-local storage conversion, command validation and scene history remain
+  in use. Switching space finishes pending edits like switching tools. Space is
+  session-only; shared 2D rotation/uniform-scale tools are unchanged.
+- Added parented-child storage integration and real widget axis acceptance to CI,
+  retaining receipts, diagnostics and screenshots. User docs describe the controls.
+- Prior 20ab011 rotation/scale snapping and two-scene recovery remain implemented.
+  Evidence: docs/evidence/A02_LOCAL_AXES.md and A02_TRANSFORM_SNAP.md.
 
 ## Executed validation
 
-- just check PASSED (fmt, strict workspace/all-target Clippy, workspace and audio).
-- Gizmo math: 8 PASSED. Targeted transform/property/scene-workspace/two-scene
-  integration: 27 PASSED. Python regressions: 38 PASSED.
-- Real Linux Xvfb widget test PASSED: 45° rotation, scale 1.1, snapped (64,96),
-  continuous scale opt-out, history/cancel, second-scene recovered scale 1.7 and
-  exact restart. Recovery screenshot inspected. No new hosted or cross-platform
-  GUI/device acceptance is claimed yet; run matching hosted checks after push.
+- just check PASSED: fmt, strict workspace/all-target Clippy, workspace/audio.
+- Gizmo math: 10 PASSED. Transform/property/workspace/two-scene integration:
+  28 PASSED, including rotated/scaled-parent child local-axis roundtrip.
+  Python regressions: 38 PASSED.
+- Real local_axes_smoke.py PASSED: visible Local X upward for 90° actor vs World X
+  rightward; X/Y constraints, local (40,92) vs world (64,60) snaps, free drag,
+  one-step undo/redo, cancel preserving redo, exact full-project restart. Inspected
+  Local/World screenshots. Fixture projection is 883×497, not 1:1 pixels/world.
+- Existing transform_snap_smoke.py PASSED again: snapped move/rotate/scale, continuous
+  opt-out, history/cancel, two scenes, actual autosave/crash recovery and restart.
+- Logs/receipts: target/a02-local-logs, a02-local-axes and a02-transform-snap.
+  No new hosted, Windows/macOS GUI or physical-device acceptance claimed.
 
-## Next
+## Hosted observation / next
 
-Continue A02: local-axis viewport tools are still absent (World toolbar indicator
-is disabled; local values are edited in Inspector). Complete broader combined
-transform/property/reparent/duplicate/delete acceptance with two scenes, recovery,
-failed-save preservation and cross-platform checks. Earlier lock/hide, marquee,
-alignment, clipboard, recovery and guarded-file-write work remains implemented.
-Do not close A02 from this isolated snapping checkpoint.
+Previous source 20ab011 Windows candidate 43701746095 PASSED. General CI
+43701746146 FAILED native UI/browser; public annotation reports the known graph
+Save-connected-host-call timeout. Job-specific logs/artifact contents were not
+retrieved. Reference 43701746096 and Linux candidate 43701746100 were still running
+at observation. This predates the local-axis work. Do not promote older green
+results to current-source acceptance. Repair graph widget timing and review matching
+hosted checks; run timed UI workflows serially without concurrent build/export load.
+
+Continue A02 combined hierarchy/property/multiselect-parented-actor acceptance,
+reparent/duplicate/delete, two-scene recovery, guarded failed writes and full
+cross-platform checks. Local-axis movement is now implemented; 2D rotation/scale
+share the existing controls. Do not close A02 from isolated feature checks.
 
 A03: 3daaa1c adds typed dependencies/reference-safe moves, per-target import rules,
 worker diagnostics and fixed GPU preview lifetime. Full nested prefab/variants,
@@ -56,9 +66,7 @@ The legacy separate bytecode debugger is not the live gameplay source debugger.
 
 ## Tools / boundaries
 
-Source /workspace/.kiln-tools/activate.sh for Rust 1.99.1, Cargo, rootless libraries,
-software Vulkan and CHROMIUM_PATH (Debian Chromium 156). Run timed GUI/gameplay
-checks serially: parallel local build/export work exposed timing failures in old
-graph/physics captures, while unchanged serial checks and hosted CI passed.
-Generated artifacts stay out of Git. Do not kill unrelated editor/Xvfb processes.
+Source /workspace/.kiln-tools/activate.sh for Rust 1.99.1, Cargo, rootless system
+libraries/software Vulkan and CHROMIUM_PATH (Debian Chromium 156). Generated
+artifacts stay out of Git. Do not kill unrelated editor/Xvfb processes.
 just check before every commit. No physical-GPU/audio/controller claims.

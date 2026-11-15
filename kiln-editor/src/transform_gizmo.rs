@@ -6,6 +6,69 @@ use kiln_core::{Component, Scene, Transform, Vec2};
 const ROTATION_SNAP: f32 = std::f32::consts::PI / 12.0;
 const SCALE_SNAP: f32 = 0.1;
 
+/// Orientation of viewport movement handles, captured when a gesture begins.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GizmoSpace {
+    /// Align with the scene's world axes and absolute movement grid.
+    #[default]
+    World,
+    /// Align with the primary entity's world orientation; snap displacement.
+    Local,
+}
+
+impl GizmoSpace {
+    fn basis(self, rotation: f32) -> [Vec2; 2] {
+        let (sin, cos) = match self {
+            Self::World => (0.0, 1.0),
+            Self::Local => rotation.sin_cos(),
+        };
+        [Vec2::new(cos, sin), Vec2::new(-sin, cos)]
+    }
+}
+
+/// Movement constraint selected by pressing an axis or the free-move area.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TranslationAxis {
+    /// Move freely in the scene plane.
+    #[default]
+    Free,
+    /// Move along the displayed red axis.
+    X,
+    /// Move along the displayed green axis.
+    Y,
+}
+
+/// Screen endpoints of the displayed move handles, independent of zoom and DPI.
+pub fn translation_handles(
+    space: GizmoSpace,
+    rotation: f32,
+    center: Pos2,
+    units: [f32; 2],
+) -> [Pos2; 2] {
+    space.basis(rotation).map(|axis| {
+        center + EguiVec2::new(axis.x / units[0], -axis.y / units[1]).normalized() * 42.0
+    })
+}
+
+/// Choose the closest visible axis segment, leaving the center free to move.
+pub fn translation_axis(pointer: Pos2, center: Pos2, handles: [Pos2; 2]) -> TranslationAxis {
+    if pointer.distance(center) < 12.0 {
+        return TranslationAxis::Free;
+    }
+    let distances = handles.map(|end| {
+        let direction = end - center;
+        let t = ((pointer - center).dot(direction) / direction.length_sq()).clamp(12.0 / 42.0, 1.0);
+        pointer.distance(center + direction * t)
+    });
+    if distances[0] <= 8.0 && distances[0] <= distances[1] {
+        TranslationAxis::X
+    } else if distances[1] <= 8.0 {
+        TranslationAxis::Y
+    } else {
+        TranslationAxis::Free
+    }
+}
+
 /// Transform operation selected for viewport interaction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GizmoMode {
@@ -108,6 +171,8 @@ pub struct GizmoDrag {
     units_per_point: [f32; 2],
     start_angle: f32,
     start_vector: Vec2,
+    space: GizmoSpace,
+    axis: TranslationAxis,
 }
 
 impl GizmoDrag {
@@ -135,7 +200,16 @@ impl GizmoDrag {
             units_per_point,
             start_angle,
             start_vector,
+            space: GizmoSpace::World,
+            axis: TranslationAxis::Free,
         })
+    }
+
+    /// Capture the selected move space and constraint for this entire gesture.
+    pub fn in_space(mut self, space: GizmoSpace, axis: TranslationAxis) -> Self {
+        self.space = space;
+        self.axis = axis;
+        self
     }
 
     /// Evaluate the gesture from its press state. A positive finite grid enables
@@ -148,11 +222,34 @@ impl GizmoDrag {
         match self.mode {
             GizmoMode::None => {}
             GizmoMode::Translate => {
-                value.position.x += dx * self.units_per_point[0];
-                value.position.y -= dy * self.units_per_point[1];
+                let [x_axis, y_axis] = self.space.basis(self.initial_world.rotation);
+                let delta = Vec2::new(dx * self.units_per_point[0], -dy * self.units_per_point[1]);
+                let mut along_x = if self.axis == TranslationAxis::Y {
+                    0.0
+                } else {
+                    delta.dot(x_axis)
+                };
+                let mut along_y = if self.axis == TranslationAxis::X {
+                    0.0
+                } else {
+                    delta.dot(y_axis)
+                };
                 if let Some(grid) = grid.filter(|grid| grid.is_finite() && *grid > 0.0) {
-                    value.position.x = (value.position.x / grid).round() * grid;
-                    value.position.y = (value.position.y / grid).round() * grid;
+                    if self.space == GizmoSpace::Local {
+                        along_x = (along_x / grid).round() * grid;
+                        along_y = (along_y / grid).round() * grid;
+                    }
+                }
+                value.position += x_axis * along_x + y_axis * along_y;
+                if let Some(grid) = grid.filter(|grid| grid.is_finite() && *grid > 0.0) {
+                    if self.space == GizmoSpace::World {
+                        if self.axis != TranslationAxis::Y {
+                            value.position.x = (value.position.x / grid).round() * grid;
+                        }
+                        if self.axis != TranslationAxis::X {
+                            value.position.y = (value.position.y / grid).round() * grid;
+                        }
+                    }
                 }
             }
             GizmoMode::Rotate => {
@@ -202,6 +299,68 @@ pub fn hits_handle(mode: GizmoMode, pointer: Pos2, center: Pos2) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn displayed_local_handles_and_hit_testing_use_the_same_orientation() {
+        let center = Pos2::new(100.0, 100.0);
+        let handles = translation_handles(
+            GizmoSpace::Local,
+            std::f32::consts::FRAC_PI_2,
+            center,
+            [2.0, 3.0],
+        );
+        assert!(handles[0].distance(Pos2::new(100.0, 58.0)) < 0.001);
+        assert!(handles[1].distance(Pos2::new(58.0, 100.0)) < 0.001);
+        assert_eq!(
+            translation_axis(Pos2::new(101.0, 70.0), center, handles),
+            TranslationAxis::X
+        );
+        assert_eq!(
+            translation_axis(Pos2::new(70.0, 101.0), center, handles),
+            TranslationAxis::Y
+        );
+        assert_eq!(
+            translation_axis(center, center, handles),
+            TranslationAxis::Free
+        );
+        assert_eq!(
+            translation_axis(Pos2::new(140.0, 140.0), center, handles),
+            TranslationAxis::Free
+        );
+    }
+
+    #[test]
+    fn constrained_moves_distinguish_world_grid_from_local_displacement() {
+        let initial = Transform::new(40.0, 60.0).with_rotation(std::f32::consts::FRAC_PI_2);
+        let drag = GizmoDrag::new(
+            GizmoMode::Translate,
+            Pos2::ZERO,
+            initial,
+            [1.0, 1.0],
+            initial.position,
+        )
+        .unwrap();
+        let pointer = Pos2::new(20.0, -20.0);
+        let world = drag
+            .clone()
+            .in_space(GizmoSpace::World, TranslationAxis::X)
+            .at(pointer, Some(32.0));
+        assert_eq!(world.position, Vec2::new(64.0, 60.0));
+        let local = drag.clone().in_space(GizmoSpace::Local, TranslationAxis::X);
+        assert!((local.at(pointer, None).position - Vec2::new(40.0, 80.0)).length() < 0.001);
+        assert!((local.at(pointer, Some(32.0)).position - Vec2::new(40.0, 92.0)).length() < 0.001);
+        let y = drag
+            .clone()
+            .in_space(GizmoSpace::Local, TranslationAxis::Y)
+            .at(pointer, None);
+        assert!((y.position - Vec2::new(60.0, 60.0)).length() < 0.001);
+        let free = drag
+            .in_space(GizmoSpace::Local, TranslationAxis::Free)
+            .at(pointer, None);
+        assert!((free.position - Vec2::new(60.0, 80.0)).length() < 0.001);
+        assert_eq!(world.rotation, initial.rotation);
+        assert_eq!(world.scale, initial.scale);
+    }
 
     #[test]
     fn translate_drag_uses_world_units_and_grid_snap() {

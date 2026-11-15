@@ -229,6 +229,17 @@ Math and editor integration checks pass; CI retains the new acceptance evidence.
 Local-axis viewport tools and broader combined/cross-platform acceptance remain
 open. [Evidence](evidence/A02_TRANSFORM_SNAP.md). A02 remains PARTIAL.
 
+**Local move-axis checkpoint 2026-11-15:** enabled World/Local selection, shared
+projected handle drawing/hit testing, constrained X/Y movement and free-center
+dragging. Local handles use the entity's world orientation (including parents),
+with snapped displacement; World handles use absolute grid snapping without moving
+the constrained perpendicular coordinate. Real widgets verify both orientations,
+constraints, snap semantics, history/cancel and exact restart. Parented-child
+world/local storage integration and prior two-scene snapping/recovery pass.
+[Evidence](evidence/A02_LOCAL_AXES.md). Combined hierarchy/property and cross-platform
+acceptance remain open. Prior-source `20ab011` general CI hit the known graph
+widget timeout; its Windows candidate passed. A02 remains PARTIAL.
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.

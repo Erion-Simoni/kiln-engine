@@ -1,7 +1,7 @@
 //! Native editor chrome matching the supplied Kiln design.
 
 use crate::preview_3d::Preview3d;
-use crate::transform_gizmo::GizmoMode;
+use crate::transform_gizmo::{GizmoMode, GizmoSpace};
 use egui::{Color32, Stroke};
 
 /// Transient workspace presentation; never serialized into a game project.
@@ -15,6 +15,7 @@ pub struct EditorShell {
     pub(crate) preview_3d: bool,
     pub(crate) grid: bool,
     pub(crate) gizmos: bool,
+    pub(crate) gizmo_space: GizmoSpace,
     pub(crate) preview: Preview3d,
     pub(crate) asset_category: AssetCategory,
     pub(crate) thumbnails: crate::asset_shelf::Thumbnails,
@@ -32,6 +33,7 @@ impl Default for EditorShell {
             preview_3d: false,
             grid: true,
             gizmos: true,
+            gizmo_space: GizmoSpace::World,
             preview: Preview3d::default(),
             asset_category: AssetCategory::All,
             thumbnails: crate::asset_shelf::Thumbnails::default(),
@@ -161,10 +163,19 @@ impl EditorShell {
             }
             ui.separator();
             if full.width() >= 1000.0 {
-                ui.add_enabled(false, egui::Button::new("World"))
-                    .on_disabled_hover_text(
-                        "Viewport gizmos use world space. Edit local transforms in the Inspector.",
-                    );
+                let label = match self.gizmo_space {
+                    GizmoSpace::World => "World",
+                    GizmoSpace::Local => "Local",
+                };
+                if ui.add_enabled(!self.preview_3d && !playing, egui::Button::new(label))
+                    .on_hover_text("Switch move axes between world and entity orientation. Drag an axis to constrain movement; drag the center to move freely. Local snapping uses displacement from the press position. Rotation and uniform scale share the same 2D controls.")
+                    .clicked()
+                {
+                    self.gizmo_space = match self.gizmo_space {
+                        GizmoSpace::World => GizmoSpace::Local,
+                        GizmoSpace::Local => GizmoSpace::World,
+                    };
+                }
             }
             if ui
                 .add_enabled(
