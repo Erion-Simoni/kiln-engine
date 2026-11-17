@@ -141,10 +141,6 @@ pub(crate) fn paste(
                     for endpoint in [&mut joint.entity_a, &mut joint.entity_b] {
                         if let Some(id) = remap.get(endpoint) {
                             *endpoint = id.clone();
-                        } else if !scene.entities.iter().any(|e| &e.id == endpoint) {
-                            return Err(
-                                "Clipboard joint references an entity outside this scene".into()
-                            );
                         }
                     }
                 }
@@ -307,6 +303,121 @@ mod tests {
             assert_eq!(serde_json::to_value(&scene).unwrap(), original);
             assert!(!history.can_undo());
         }
+    }
+    fn referencing_clipboard() -> (Project, Scene, String) {
+        let (mut project, mut scene) = fixture();
+        let joint=serde_json::from_value(serde_json::json!({"entity_a":"child","entity_b":"remote","joint_type":"Distance","anchor_a":[1,2],"anchor_b":[3,4],"reference_angle":0.25,"length":7,"lower_translation":0,"upper_translation":0,"enable_limit":false,"motor_speed":0,"max_motor_torque":0,"enable_motor":false})).unwrap();
+        scene.entities[1]
+            .components
+            .push(Component::Joint { joint });
+        project.scenes.insert("main".into(), scene.clone());
+        let text = copy(&project, &scene, &["child".into()]).unwrap();
+        (project, scene, text)
+    }
+
+    #[test]
+    fn paste_joint_resolves_nested_endpoint_after_all_entities_are_staged() {
+        let (mut project, mut scene, text) = referencing_clipboard();
+        project.scenes.insert(
+            "overlay".into(),
+            Scene {
+                id: "overlay".into(),
+                name: "Overlay".into(),
+                script: None,
+                nested_scenes: vec![],
+                entities: vec![Entity {
+                    id: "remote".into(),
+                    name: "Remote".into(),
+                    components: vec![],
+                }],
+            },
+        );
+        scene.nested_scenes.push(kiln_core::NestedScene {
+            scene_id: "overlay".into(),
+            additive: true,
+            offset: Default::default(),
+        });
+        let before = serde_json::to_value(&scene).unwrap();
+        let mut history = SceneHistory::new();
+        let id = EntityCommand {
+            scene_id: "main".into(),
+            edit: EntityEdit::Paste { document: text },
+        }
+        .execute(&mut scene, &project, &mut history)
+        .unwrap()
+        .unwrap();
+        let copied = scene.entities.iter().find(|e| e.id == id).unwrap();
+        let joint = copied
+            .components
+            .iter()
+            .find_map(|c| {
+                if let Component::Joint { joint } = c {
+                    Some(joint)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        assert_eq!(joint.entity_a, id);
+        assert_eq!(joint.entity_b, "remote");
+        assert_eq!(joint.anchor_a, [1.0, 2.0]);
+        assert_eq!(joint.length, 7.0);
+        assert_eq!(history.undo_depth(), 1);
+        let after = serde_json::to_value(&scene).unwrap();
+        scene = history.undo(scene).unwrap();
+        assert_eq!(serde_json::to_value(&scene).unwrap(), before);
+        scene = history.redo(scene).unwrap();
+        assert_eq!(serde_json::to_value(&scene).unwrap(), after);
+        project.scenes.insert("main".into(), scene);
+        let root = tempfile::tempdir().unwrap();
+        crate::project_files::save(&project, &root.path().join("kiln.toml")).unwrap();
+        assert_eq!(
+            serde_json::to_value(crate::project_files::load(root.path()).unwrap().project).unwrap(),
+            serde_json::to_value(&project).unwrap()
+        );
+    }
+
+    #[test]
+    fn paste_joint_rejects_ambiguous_nested_endpoint_without_losing_redo() {
+        let (mut project, mut scene, text) = referencing_clipboard();
+        scene.entities.push(Entity {
+            id: "remote".into(),
+            name: "Root remote".into(),
+            components: vec![],
+        });
+        project.scenes.insert(
+            "overlay".into(),
+            Scene {
+                id: "overlay".into(),
+                name: "Overlay".into(),
+                script: None,
+                nested_scenes: vec![],
+                entities: vec![Entity {
+                    id: "remote".into(),
+                    name: "Nested remote".into(),
+                    components: vec![],
+                }],
+            },
+        );
+        scene.nested_scenes.push(kiln_core::NestedScene {
+            scene_id: "overlay".into(),
+            additive: true,
+            offset: Default::default(),
+        });
+        let before = serde_json::to_value(&scene).unwrap();
+        let mut history = SceneHistory::new();
+        history.record(scene.clone());
+        let _ = history.undo(scene.clone());
+        let error = EntityCommand {
+            scene_id: "main".into(),
+            edit: EntityEdit::Paste { document: text },
+        }
+        .execute(&mut scene, &project, &mut history)
+        .unwrap_err();
+        assert!(error.contains("remote"), "{error}");
+        assert_eq!(serde_json::to_value(&scene).unwrap(), before);
+        assert_eq!(history.undo_depth(), 0);
+        assert!(history.can_redo());
     }
 }
 

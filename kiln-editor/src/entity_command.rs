@@ -73,6 +73,7 @@ impl EntityCommand {
         }
         let mut edited = scene.clone();
         let result = apply(&mut edited, project, &self.edit)?;
+        crate::scene_references::require_changed_joints(project, scene, &edited)?;
         if edited.entities.len() != scene.entities.len()
             || serde_json::to_value(&edited).ok() != serde_json::to_value(&*scene).ok()
         {
@@ -241,6 +242,7 @@ fn apply(
             let id = next_id(project, scene);
             let mut instance = prefab.root_entity.clone();
             instance.id = id.clone();
+            crate::scene_references::remap_joint_owner(&mut instance, &prefab.root_entity.id);
             instance.name = format!("{} Instance", prefab.name);
             instance.components.retain(|component| {
                 !matches!(
@@ -319,6 +321,7 @@ fn apply(
                 .ok_or("Prefab definition is missing")?;
             let mut restored = prefab.root_entity.clone();
             restored.id = entity_id.clone();
+            crate::scene_references::remap_joint_owner(&mut restored, &prefab.root_entity.id);
             restored.name = scene.entities[index].name.clone();
             restored.components.retain(|component| {
                 !matches!(
@@ -377,15 +380,8 @@ fn apply(
             let id = next_id(project, scene);
             copy.id = id.clone();
             copy.name = format!("{} Copy", copy.name);
+            crate::scene_references::remap_joint_owner(&mut copy, entity_id);
             for component in &mut copy.components {
-                if let Component::Joint { joint } = component {
-                    if joint.entity_a == *entity_id {
-                        joint.entity_a = id.clone();
-                    }
-                    if joint.entity_b == *entity_id {
-                        joint.entity_b = id.clone();
-                    }
-                }
                 if let Component::PrefabInstance { overrides, .. } = component {
                     overrides.entity_id = id.clone();
                 }

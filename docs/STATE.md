@@ -1,54 +1,53 @@
 # Kiln Session Handoff
 
 Owner scope remains A02–A04 on `fix/a01-ci-baseline`.
-Current focus: A02 centered-error replay repair (2026-11-17), following 7796386.
-A02–A04 remain PARTIAL; A01 accepted baseline stays 6de428b. Full 3D behind G2D.
+Current focus: A02 copied-joint references/recovery (2026-11-17), following 50b74d1.
+A02–A04 remain PARTIAL. A01 accepted baseline stays 6de428b; full 3D behind G2D.
 MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
 
-- Retrieved source-pinned hosted results: production 7796386 Linux candidate
-  43725520736, Windows 43725520747 and reference games 43725520724 PASSED.
-  General CI 43725520708 FAILED manifest rescue's visible-error wait.
-- Reproduced that exact deletion-case timeout. Production error window is centered,
-  but rescue's observer still searched top-left. The captured failure frame visibly
-  contains the intended refusal and unsaved X=88. Old observer false/new true on
-  the exact same frame. No unsafe Save or source-data mutation was observed.
-- Shared centered project-error observer now used by manifest-rescue and joint/
-  camera reference replays. Retains the latter's stricter red-pixel threshold.
-- Four new observer regressions reject stale-region, inspector/gizmo, blank,
-  malformed and sparse frames; accept centered error colors with sRGB variation.
-- No production code, project format, assertion weakening or timeout/retry changes.
-  Evidence: docs/evidence/A02_CENTERED_ERROR_OBSERVER.md.
+- Reproduced clipboard rejection of valid nested joint targets, acceptance of
+  ambiguous targets, Duplicate accepting a missing target, and prefab joint owner
+  references retaining the template ID. Four Rust regressions failed before fixes.
+- Entity commands now check newly published/changed joints on the fully staged
+  composition before assigning the scene or recording history. Clipboard remaps
+  internal references first; external IDs must resolve uniquely in the target scope.
+- Shared owner remapping covers Duplicate, prefab placement and Revert. Unchanged
+  legacy joints remain editable via unrelated operations. No new format/dependency,
+  ID namespace or history architecture.
+- New real-widget workflow/CI/evidence: docs/evidence/A02_COPIED_JOINT_REFERENCES.md.
 
 ## Executed validation
 
-- just check PASSED. Python regressions: 44 PASSED. py_compile/diff checks pass.
-- Manifest rescue PASSED all three cases: visible Save refusal, Escape retains
-  draft, X=88/resources rescued, external originals untouched, subsequent Y=72
-  writes only copy, exact complete-project restart. Before/failure screenshot
-  inspected; raw exact-frame comparison recorded.
-- Entity-reference replay PASSED again: joint draft correction/Undo/Cancel, visible
-  joint/camera delete guards, reference resolution, deletion history and exact
-  restart. Final screenshots inspected. Receipts/logs retained alongside rescue.
-- Raw evidence: target/a02-error-observer-before, target/a02-error-observer-after,
-  target/a02-error-observer-references, target/a02-error-observer-logs.
-  Linux Xvfb/software graphics only. CI keeps its existing default artifact paths.
+- just check PASSED. Full cargo test --workspace --locked: 781 PASSED, zero failed
+  including docs. Python: 44 PASSED. py_compile/diff checks pass.
+- Four before/after regressions pass, with prefab complete disk roundtrip and real
+  runtime joint projection. Before claims are Rust logs, not the preliminary GUI
+  run whose integration-test build had already relinked the editor.
+- Final widgets PASSED: reject unresolved paste without mutation; nest target
+  scene and paste joint/script data; new owner IDs, unchanged external ID/source;
+  exact one-command Undo/Redo; second unsaved paste through actual autosave timer;
+  forced crash/Restore/Save compares full expected project, then exact restart.
+- Existing clipboard and entity-reference widget regressions PASSED again.
+  Screenshots inspected. Linux Xvfb/software graphics only, not physics/device proof.
+- Raw evidence: target/a02-copy-joint, target/a02-copy-reference-logs,
+  target/a02-copy-reference-guards and target/a02-entity-clipboard.
 
 ## Next / known issues
 
-Obtain matching hosted checks for this observer repair. Prior 7796386 CI reached
-manifest rescue, advancing through the earlier local-axis failure on bf206f9.
-The older timeout's root cause is not established by a later successful step.
-Public run annotations were available; authenticated logs/artifact contents were
-not independently retrieved. Do not promote prior green source to newer code.
+Prior 50b74d1 CI 44078732105 and reference games 44078732134 PASSED, confirming
+centered-error observation repair remotely. Linux candidate 44078732106 was still
+IN_PROGRESS at observation; Windows did not trigger on that test/docs-only change.
+Prior production 7796386 Windows 43725520747/Linux 43725520736 PASSED. Obtain
+matching new-source checks; do not promote those results to changed production code.
 
 Continue A02 combined every-property/reference acceptance and cross-platform GUI
-coverage. Scoped/repeated nested identities still need a runtime/script contract;
-new ambiguous links are refused and legacy authored data preserved. Joint form
-input requires Apply before it becomes a saved/recoverable project edit. Inspector
-edits remain primary-entity scoped. Save As rescue needs source resources and
-explicit Save/Revert of dirty scripts. A03/A04 remain requested and PARTIAL.
+coverage. Scoped/repeated nested identities need a deliberate runtime/script
+contract; ambiguous links are refused and existing authored data preserved. Joint
+form input requires Apply before becoming a saved/recoverable project edit.
+Inspector edits remain primary-entity scoped. Save As rescue needs source resources
+and explicit Save/Revert of dirty scripts. A03/A04 remain requested and PARTIAL.
 
 A03: 3daaa1c adds typed dependencies/reference-safe moves, per-target import rules,
 worker diagnostics and fixed GPU preview lifetime. Full nested prefab/variants,

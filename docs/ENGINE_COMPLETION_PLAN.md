@@ -326,6 +326,14 @@ resource/history assertions. All three rescue cases pass locally; matching hoste
 confirmation remains required. [Evidence](evidence/A02_CENTERED_ERROR_OBSERVER.md).
 A02 stays PARTIAL; this reliability repair does not close broader authoring gates.
 
+**Copied-joint reference checkpoint 2026-11-17:** clipboard/duplicate and prefab
+placement/Revert now validate staged joint references before publishing history.
+Unique nested endpoints work, ambiguous/missing references fail atomically, and
+joint self-references follow the copied owner ID. Real two-scene widgets combine
+failed/successful paste, one-step history, real-timer crash recovery and complete
+project restart; prefab disk/runtime checks pass. [Evidence](evidence/A02_COPIED_JOINT_REFERENCES.md).
+A02 remains PARTIAL; this does not complete nested prefab/variant production workflows.
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.
