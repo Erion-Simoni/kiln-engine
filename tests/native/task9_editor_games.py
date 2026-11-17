@@ -81,6 +81,18 @@ def menu_frame_ready(width, height, pixels):
     return background > 2000 and glyphs > 20
 
 
+def project_error_visible(width, height, pixels):
+    """Observe error-colored text where the centered project error is rendered."""
+    if (width, height) != (1440, 900) or len(pixels) != width*height*3:
+        return False
+    red = 0
+    for y in range(300, 600):
+        for x in range(400, 1040):
+            r, g, b = pixels[(y*width+x)*3:(y*width+x)*3+3]
+            red += r > 180 and r > g*1.4 and r > b*1.3
+    return red > 120
+
+
 class Editor:
     def __init__(self, tools, project, output, display=':83'):
         self.tools, self.project, self.output = Path(tools).resolve(), Path(project).resolve(), Path(output).resolve()

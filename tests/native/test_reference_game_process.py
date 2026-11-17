@@ -10,7 +10,7 @@ import tempfile
 from unittest.mock import Mock, patch
 import unittest
 
-from task9_editor_games import Editor, stop_process, record_failure, floating_title_start, menu_frame_ready
+from task9_editor_games import Editor, stop_process, record_failure, floating_title_start, menu_frame_ready, project_error_visible
 
 
 class ProcessCleanupTests(unittest.TestCase):
@@ -119,3 +119,34 @@ class FloatingPanelSettlementTests(unittest.TestCase):
         self.assertEqual(editor.command.call_args_list[0].args,
                          ('mousemove', '--window', 'test-window', 150, 102, 'mousedown', '1'))
         self.assertEqual(editor.frame.call_count, 7)
+
+
+class ProjectErrorObservationTests(unittest.TestCase):
+    @staticmethod
+    def frame(rectangles=()):
+        width, height = 1440, 900
+        pixels = bytearray(bytes((26, 26, 26))*width*height)
+        for x, y, w, h, color in rectangles:
+            for row in range(y, y+h):
+                offset = (row*width+x)*3
+                pixels[offset:offset+w*3] = bytes(color)*w
+        return width, height, pixels
+
+    def test_centered_error_is_visible_with_srgb_color_variation(self):
+        for color in [(255, 0, 0), (242, 78, 78), (244, 80, 80)]:
+            self.assertTrue(project_error_visible(*self.frame([(555, 440, 80, 2, color)])))
+
+    def test_old_error_location_inspector_and_gizmo_do_not_count(self):
+        frame = self.frame([(50, 200, 300, 3, (255, 0, 0)),
+                            (1160, 450, 200, 3, (255, 0, 0)),
+                            (370, 580, 43, 2, (255, 0, 0))])
+        self.assertFalse(project_error_visible(*frame))
+
+    def test_unpainted_incomplete_or_wrong_size_frame_is_rejected(self):
+        self.assertFalse(project_error_visible(*self.frame()))
+        self.assertFalse(project_error_visible(1440, 900, b''))
+        self.assertFalse(project_error_visible(900, 1440, self.frame()[2]))
+
+    def test_sparse_pixels_are_not_a_visible_error(self):
+        self.assertFalse(project_error_visible(*self.frame([(555, 440, 60, 2, (255, 0, 0))])))
+        self.assertTrue(project_error_visible(*self.frame([(555, 440, 61, 2, (255, 0, 0))])))

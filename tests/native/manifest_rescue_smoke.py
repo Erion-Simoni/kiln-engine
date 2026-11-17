@@ -8,7 +8,7 @@ import sys
 import tempfile
 import tomllib
 
-from task9_editor_games import Editor, REPO, record_failure
+from task9_editor_games import Editor, REPO, project_error_visible, record_failure
 
 
 def check_case(output, state):
@@ -33,14 +33,7 @@ def check_case(output, state):
         return manifest.read_bytes() if manifest.exists() else None
 
     def error_visible():
-        width, height, pixels = editor.frame()
-        assert (width, height) == (1440, 900)
-        count = 0
-        for y in range(120, 400):
-            for x in range(20, 700):
-                r, g, b = pixels[(y*width+x)*3:(y*width+x)*3+3]
-                count += r > 140 and g < 110 and b < 130
-        return count > 20
+        return project_error_visible(*editor.frame())
 
     def rescued():
         return tomllib.loads((destination/'kiln.toml').read_text())

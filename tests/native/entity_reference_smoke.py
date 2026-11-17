@@ -8,7 +8,7 @@ import sys
 import tempfile
 import tomllib
 
-from task9_editor_games import Editor, REPO, color_matches, record_failure
+from task9_editor_games import Editor, REPO, color_matches, project_error_visible, record_failure
 
 
 def main():
@@ -45,14 +45,7 @@ def main():
         editor.held_click(100, 166); editor.held_click(130, 234)
         editor.wait(lambda: reason in editor.diagnostic(), description='Explain blocked reference-safe deletion')
         def visible_error():
-            width, height, pixels = editor.frame()
-            assert (width, height) == (1440, 900)
-            red = 0
-            for y in range(300, 600):
-                for x in range(400, 1040):
-                    r, g, b = pixels[(y*width+x)*3:(y*width+x)*3+3]
-                    red += r > 180 and r > g*1.4 and r > b*1.3
-            return red > 120
+            return project_error_visible(*editor.frame())
         editor.wait(visible_error, description='Show deletion error above editor panels')
         assert saved() == before, 'Referenced entity deletion changed authored data'
         editor.shot(screenshot); editor.key('Escape'); editor.save()

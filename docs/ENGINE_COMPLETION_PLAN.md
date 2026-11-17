@@ -318,6 +318,14 @@ Before/after regressions and real widgets verify reference resolution, safe dele
 history and exact restart. [Evidence](evidence/A02_ENTITY_REFERENCES.md). Full A02
 acceptance and matching hosted checks remain open; prior-source CI failed local axes.
 
+**Centered-error replay checkpoint 2026-11-17:** reproduced current-source hosted
+manifest-rescue failure: the replay searched the old error-window location after
+the production dialog was centered. Both rescue and reference-deletion tests now
+share the centered screen observer, with negative controls and unchanged project/
+resource/history assertions. All three rescue cases pass locally; matching hosted
+confirmation remains required. [Evidence](evidence/A02_CENTERED_ERROR_OBSERVER.md).
+A02 stays PARTIAL; this reliability repair does not close broader authoring gates.
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.
