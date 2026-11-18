@@ -262,6 +262,8 @@ jobs:
         run: python3 tests/native/source_tools_smoke.py
       - name: Verify asset preview, target presets and reference-safe moves
         run: python3 tests/native/asset_import_workflow_smoke.py
+      - name: Move source modules and preserve imports and open buffers
+        run: python3 tests/native/source_move_smoke.py
       - name: Verify external art refresh and structured gameplay authoring
         run: python3 tests/native/asset_script_workflow_smoke.py
       - name: Pack the saved UI game
@@ -374,6 +376,11 @@ jobs:
             target/a04-source-tools/editor/*.png
             target/a04-source-tools/editor/*.log
             target/a04-source-tools/reopened/*.png
+            target/a03-source-move/result.json
+            target/a03-source-move/failure.json
+            target/a03-source-move/editor/*.png
+            target/a03-source-move/editor/*.log
+            target/a03-source-move/reopened/*.png
             target/a03-asset-import/result.json
             target/a03-asset-import/failure.json
             target/a03-asset-import/editor/*.png

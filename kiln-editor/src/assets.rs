@@ -51,6 +51,7 @@ pub struct AssetBrowser {
     entries: Vec<AssetEntry>,
     /// Path of the asset the preview was built from.
     preview_source: Option<String>,
+    selected_source: Option<String>,
     /// Decoded preview pixels (RGBA8) of the selected asset.
     preview_pixels: Option<Vec<u8>>,
     preview_texture: Option<egui::TextureHandle>,
@@ -114,6 +115,32 @@ impl AssetBrowser {
         self.preview_source.as_deref()
     }
 
+    /// Selected file used by Move / Rename, including non-image sources.
+    pub fn selected_source(&self) -> Option<&str> {
+        self.selected_source.as_deref()
+    }
+
+    /// Select a file for asset operations; images also decode their preview.
+    pub fn select_source(&mut self, path: &str) -> Result<(), String> {
+        if Path::new(path).extension().is_some_and(|ext| ext == "png") {
+            self.select(path)?;
+        } else {
+            let root = self.root.as_ref().ok_or("No project directory")?;
+            let file = root.join(safe_project_path(path)?);
+            if !file
+                .canonicalize()
+                .map_err(|e| e.to_string())?
+                .starts_with(root.canonicalize().map_err(|e| e.to_string())?)
+                || !file.is_file()
+            {
+                return Err("Select a file inside the project directory".into());
+            }
+            self.clear_preview();
+        }
+        self.selected_source = Some(path.into());
+        Ok(())
+    }
+
     /// Decoded preview pixels of the selected asset, as RGBA8.
     pub fn preview_pixels(&self) -> Option<&[u8]> {
         self.preview_pixels.as_deref()
@@ -151,6 +178,7 @@ impl AssetBrowser {
         self.last_poll = Some(Instant::now());
         self.errors.clear();
         self.preview_source = None;
+        self.selected_source = None;
         self.preview_pixels = None;
         self.preview_texture = None;
         self.preview_size = None;
@@ -225,10 +253,10 @@ impl AssetBrowser {
         changed.sort();
         changed.dedup();
         if !changed.is_empty() {
-            let preview = self.preview_source.clone();
+            let selected = self.selected_source.clone();
             self.scan(&root);
-            if let Some(path) = preview.filter(|path| current.contains_key(path)) {
-                let _ = self.select(&path);
+            if let Some(path) = selected.filter(|path| current.contains_key(path)) {
+                let _ = self.select_source(&path);
             }
         }
         changed
@@ -297,6 +325,7 @@ impl AssetBrowser {
         match result {
             Ok((width, height, pixels)) => {
                 self.preview_source = Some(path.to_string());
+                self.selected_source = Some(path.to_string());
                 self.preview_size = Some((width, height));
                 self.preview_pixels = Some(pixels);
                 self.preview_texture = None;
@@ -529,5 +558,29 @@ mod reimport_tests {
         assert!(browser.entries().is_empty());
         assert!(browser.select("../outside.png").is_err());
         assert!(browser.select("/outside.png").is_err());
+    }
+}
+
+#[cfg(test)]
+mod source_selection_tests {
+    use super::*;
+    #[test]
+    fn selecting_scripts_enables_file_operations_without_decoding_images() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("main.ks"), "// source").unwrap();
+        let mut browser = AssetBrowser::new();
+        browser.scan(root.path());
+        browser.select_source("main.ks").unwrap();
+        assert_eq!(browser.selected_source(), Some("main.ks"));
+        assert!(browser.preview_source().is_none());
+        assert!(browser.preview_pixels().is_none());
+        assert!(browser.select_source("../escape.ks").is_err());
+        assert_eq!(browser.selected_source(), Some("main.ks"));
+        std::fs::write(root.path().join("main.ks"), "// changed source").unwrap();
+        browser.refresh_changed_files();
+        assert_eq!(browser.selected_source(), Some("main.ks"));
+        browser.rename_asset("main.ks", "renamed.ks").unwrap();
+        browser.select_source("renamed.ks").unwrap();
+        assert_eq!(browser.selected_source(), Some("renamed.ks"));
     }
 }

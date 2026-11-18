@@ -81,3 +81,5 @@ mod scene_selection;
 mod asset_diagnostics;
 
 mod source_search;
+
+mod source_move;

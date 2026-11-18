@@ -374,6 +374,15 @@ lifetime crash and hidden import controls. Nested/variant prefab and integrated
 atlas rebuild/export acceptance remain open. See
 [checkpoint evidence](evidence/A03_A04_RESOURCE_TOOLS.md).
 
+**Source-module refactor 2026-11-18:** source cards now support Move / Rename.
+Caller imports and moved-file relative imports update with typed manifest paths
+and stable IDs; clean open buffers retarget and dirty buffers block moves. Staged
+publication rollback, runtime import compilation, complete source restart, and
+real widget moves pass; full Rust workspace has 790 passing tests. Process-crash
+atomicity across source moves and manifest Save remains open. Nested/variant,
+atlas and combined visual acceptance remain open; A03 stays PARTIAL.
+[Evidence](evidence/A03_SOURCE_MODULE_MOVES.md).
+
 ### A04 — General scripting, graphs and real debugging
 
 **Status:** PARTIAL. **Depends on:** A02.

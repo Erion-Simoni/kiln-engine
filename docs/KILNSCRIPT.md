@@ -379,6 +379,22 @@ state is separate from this per-instance runtime persistence.
 Existing top-level scene scripts still execute once per gameplay tick and need
 no migration. `fn` is now reserved for function declarations and top-level
 `import` is a module directive; rename legacy variables using those names.
+
+To move a `.ks` module, select its file card in Assets and use **Move / Rename**.
+Save or Revert any unsaved source first. The editor updates scene/entity script
+paths, stable asset identities, incoming imports and the moved file's own relative
+imports, then reloads the open source buffer. Comments, other strings and line
+endings stay unchanged. Save Project afterwards to persist manifest references.
+
+Moves stage source edits and backups before changing files and roll back published
+edits if a write fails. Multiple file replacements commit sequentially; a process
+crash during publication can leave a partially completed move. Refactoring supports
+the same top-level `import "relative.ks";` lines as the runtime and keeps the `.ks`
+extension. Unsafe paths, symbolic links,
+malformed imports or scans beyond 512 scripts/4096 entries/16 directory levels,
+1 MiB per script or 8 MiB total are refused before moving files. Hidden folders
+and generated `target`, `export` and `dist` trees are excluded.
+
 The native editor and player both use `SliceSession::with_scene_sources`.
 The live debugger controls real gameplay at frame granularity and displays
 actual instance state; instruction breakpoints/watch expressions are not part

@@ -1874,7 +1874,30 @@ impl EditorApp {
             .to_path_buf();
         let old_cached_path = root.join(old_path).canonicalize().ok();
         let new_full_path = root.join(new_path);
-        self.asset_browser.rename_asset(old_path, new_path)?;
+        let source_move = std::path::Path::new(old_path)
+            .extension()
+            .is_some_and(|e| e == "ks")
+            || std::path::Path::new(new_path)
+                .extension()
+                .is_some_and(|e| e == "ks");
+        if source_move {
+            self.shell.script_editor.require_saved()?;
+        }
+        let loaded_source = self.shell.script_editor.loaded_path().to_owned();
+        let source_updates =
+            crate::source_move::move_asset(&mut self.asset_browser, old_path, new_path)?;
+        if source_move && !loaded_source.is_empty() {
+            let path = if loaded_source == old_path {
+                new_path
+            } else {
+                &loaded_source
+            };
+            if let Err(error) = self.shell.script_editor.open(&root, path) {
+                self.console_log.push(format!(
+                    "[WARN] Source moved, but open script could not reload: {error}"
+                ));
+            }
+        }
         let mut cache = kiln_assets::AssetCache::new(root.join(".kiln-cache"));
         if let Err(error) = cache.load() {
             self.console_log.push(format!(
@@ -1911,7 +1934,7 @@ impl EditorApp {
             self.upload_scene_textures();
         }
         self.console_log.push(format!(
-            "[INFO] Moved asset {old_path} to {new_path} and updated {updated} references"
+            "[INFO] Moved asset {old_path} to {new_path} and updated {updated} references and {source_updates} source files"
         ));
         Ok(())
     }
@@ -5719,7 +5742,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             }
             Tab::Assets => {
                 ui.vertical(|ui| {
-                    let rename_source = self.asset_browser.preview_source().map(str::to_owned);
+                    let rename_source = self.asset_browser.selected_source().map(str::to_owned);
                     ui.horizontal(|ui| {
                         ui.weak("Assets");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -5773,8 +5796,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         Some(crate::asset_shelf::ShelfAction::OpenScript(path)) => {
                             self.project_requests.push(ProjectRequest::OpenScript(path));
                         }
-                        Some(crate::asset_shelf::ShelfAction::SelectImage(path)) => {
-                            if let Err(error) = self.asset_browser.select(&path) { self.console_log.push(format!("[ERROR] {error}")); }
+                        Some(crate::asset_shelf::ShelfAction::SelectAsset(path)) => {
+                            if let Err(error) = self.asset_browser.select_source(&path) { self.console_log.push(format!("[ERROR] {error}")); }
                         }
                         Some(crate::asset_shelf::ShelfAction::OpenScene(id)) => {
                             self.project_requests.push(ProjectRequest::Scene(SceneAction::Open(id)));
