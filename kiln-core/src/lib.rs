@@ -49,3 +49,5 @@ pub use transform::*;
 
 pub mod vfx;
 pub mod visual;
+
+pub mod atlas;

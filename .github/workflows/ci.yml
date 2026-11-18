@@ -264,6 +264,10 @@ jobs:
         run: python3 tests/native/asset_import_workflow_smoke.py
       - name: Move source modules and preserve imports and open buffers
         run: python3 tests/native/source_move_smoke.py
+      - name: Build, rename, rebuild and reopen saved atlas recipes
+        run: python3 tests/native/atlas_recipe_smoke.py
+      - name: Play the relocated native atlas export
+        run: python3 tests/native/atlas_player_smoke.py
       - name: Verify external art refresh and structured gameplay authoring
         run: python3 tests/native/asset_script_workflow_smoke.py
       - name: Pack the saved UI game
@@ -376,6 +380,14 @@ jobs:
             target/a04-source-tools/editor/*.png
             target/a04-source-tools/editor/*.log
             target/a04-source-tools/reopened/*.png
+            target/a03-atlas-recipe/result.json
+            target/a03-atlas-recipe/failure.json
+            target/a03-atlas-recipe/editor/*.png
+            target/a03-atlas-recipe/editor/*.log
+            target/a03-atlas-recipe/reopened/*.png
+            target/a03-atlas-player/result.json
+            target/a03-atlas-player/*.log
+            target/a03-atlas-player/*.png
             target/a03-source-move/result.json
             target/a03-source-move/failure.json
             target/a03-source-move/editor/*.png
@@ -431,6 +443,10 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npx playwright install --with-deps chromium
+      - name: Author and rebuild atlas recipes through native widgets
+        run: python3 tests/native/atlas_recipe_smoke.py
+      - name: Render the relocated generated atlas in Chromium
+        run: node tests/web/atlas.cjs target/debug/web-runtime
       - name: Verify editor-authored counted loops and dictionaries in the browser
         run: python3 tests/native/asset_script_workflow_smoke.py --web-runtime target/debug/web-runtime
       - name: Verify editor-authored graph gameplay and browser save restoration
@@ -479,6 +495,15 @@ jobs:
             target/a04-graph-authoring/reopened/*.png
             target/task7-web-evidence/
             target/task8-browser-export-evidence/
+            target/a03-atlas-recipe/result.json
+            target/a03-atlas-recipe/failure.json
+            target/a03-atlas-recipe/editor/*.png
+            target/a03-atlas-recipe/editor/*.log
+            target/a03-atlas-recipe/reopened/*.png
+            target/a03-atlas-browser/result.json
+            target/a03-atlas-browser/*.log
+            target/a03-atlas-browser/*.png
+            target/a03-atlas-browser/failure.txt
             target/task8-browser-evidence/
             target/task8-portable-evidence/
             target/task8-clean-linux-evidence/

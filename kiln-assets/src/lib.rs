@@ -24,3 +24,8 @@ pub mod runtime_notices;
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod runtime_notices_tests;
+
+pub mod atlas_recipe;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod atlas_project;

@@ -19,6 +19,8 @@ The Kiln project manifest is a single TOML file (`kiln.toml`) at the project roo
 | `scenes` | `HashMap<String, Scene>` | `{}` | Scenes keyed by id |
 | `tilemaps` | `HashMap<String, TileMap>` | `{}` | Tilemaps keyed by id |
 | `tilesets` | `HashMap<String, TileSet>` | `{}` | Tilesets keyed by id |
+| `animation_clips` | `HashMap<String, Clip>` | `{}` | Named sheet animations and generated static clips |
+| `atlases` | `HashMap<String, AtlasRecipe>` | `{}` | Saved deterministic atlas recipes |
 
 ## `[window]` — WindowSettings
 
@@ -191,6 +193,45 @@ solid = [false, true, false, false]
 | `columns` | u32 | `1` | Tile columns in the atlas |
 | `rows` | u32 | `1` | Tile rows in the atlas |
 | `solid` | `Vec<bool>` | `[]` | Per-tile solid flags, indexed by tile id |
+
+## `[atlases.<id>]` — Saved texture atlas recipe
+
+Use **View → Sprite Editor → Atlas Builder** to add labeled PNG sources, build
+an atlas, then Save Project. The output folder must already exist. Load the saved
+recipe to rebuild it after reopening or moving its source art through Assets.
+Each source generates a static clip named `atlas:<id>:<label>`; select that clip
+and the output texture in the sprite Inspector. Existing sprites and prefabs keep
+their authored texture/clip references until explicitly edited.
+
+```toml
+[atlases.characters]
+output = "art/characters.png"
+size = 512
+padding = 2
+
+[atlases.characters.sources]
+hero = "art/hero.png"
+coin = "art/coin.png"
+```
+
+Labels determine packing order and keep clip identities/regions stable when only
+a source path changes. `built_hash` and `built_regions` are generated bookkeeping:
+the output PNG hash and label-to-`[x,y,width,height]` regions. Keep generated clips
+unchanged; duplicate a clip before making independent animation edits. Rebuild
+refuses externally edited output, unrelated file/clip collisions and removal of
+clips still used by scene entities, prefabs or clip transitions.
+
+Recipes allow 1–256 sources, sides up to 4096 pixels, padding up to 64 pixels,
+80 MiB per PNG and 256 MiB total decoded source pixels. Paths stay inside the
+project without symlinks, private directories or generated export trees. Inputs
+are original art rather than other generated atlases. Missing/invalid/oversized
+images or a failed fit leave the prior output and project intact.
+
+PNG publication uses a staged file replacement; Save Project persists the recipe
+and generated clips. Export rebuilds the atlas and normalizes its clips in its
+staging snapshot using current source art, without modifying the authoring project.
+The native and browser players render the ordinary PNG/clip data. Runtime frame
+budgets and cross-platform visual acceptance remain separate gates.
 
 ## `[mobile]` — MobileSettings
 

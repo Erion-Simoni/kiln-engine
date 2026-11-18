@@ -486,3 +486,112 @@ fn material_capabilities_and_bad_shader_diagnostics_preserve_output() {
     assert!(String::from_utf8_lossy(&invalid.stderr).contains("Material 'paint'"));
     assert_eq!(before, fs::read(output.join("export.json")).unwrap());
 }
+
+#[test]
+fn atlas_exports_rebuild_current_art_in_native_and_browser_staging_only() {
+    let f = Fixture::new();
+    let root = f.project.parent().unwrap();
+    let source = root.join("art/hero.png");
+    fs::write(
+        &source,
+        kiln_assets::encode_png_rgba(2, 2, &[255, 0, 0, 255].repeat(4)).unwrap(),
+    )
+    .unwrap();
+    let mut project = Project::from_toml(&fs::read_to_string(&f.project).unwrap()).unwrap();
+    let recipe = kiln_core::atlas::AtlasRecipe {
+        output: "art/atlas.png".into(),
+        size: 16,
+        padding: 1,
+        sources: [("hero".into(), "art/hero.png".into())].into(),
+        ..Default::default()
+    };
+    kiln_assets::atlas_project::build(&mut project, root, "game", &recipe).unwrap();
+    fs::write(&f.project, project.to_toml().unwrap()).unwrap();
+    let saved_manifest = fs::read(&f.project).unwrap();
+    let saved_atlas = fs::read(root.join("art/atlas.png")).unwrap();
+    fs::write(
+        &source,
+        kiln_assets::encode_png_rgba(2, 2, &[0, 0, 255, 255].repeat(4)).unwrap(),
+    )
+    .unwrap();
+    let bundle = f.root.join("atlas web runtime");
+    fs::create_dir(&bundle).unwrap();
+    fs::write(
+        bundle.join("kiln_web.js"),
+        "export function run(){}\nexport function prepare_game(){}\nexport function start_game(){}",
+    )
+    .unwrap();
+    let name = b"kiln.runtime.v1";
+    let text = format!(
+        "1\n{}\nfonts=1\nphysics=0\nmaterials=0\ncontract={}\n",
+        env!("CARGO_PKG_VERSION"),
+        export::RUNTIME_CONTRACT
+    );
+    let data = text.as_bytes();
+    let payload = 1 + name.len() + data.len();
+    let mut wasm = b"\0asm\x01\0\0\0".to_vec();
+    wasm.extend([0, payload as u8, name.len() as u8]);
+    wasm.extend(name);
+    wasm.extend(data);
+    fs::write(bundle.join("kiln_web_bg.wasm"), wasm).unwrap();
+    assert!(Command::new(env!("CARGO_BIN_EXE_kiln-cli"))
+        .args(["web-runtime", "--input"])
+        .arg(&bundle)
+        .output()
+        .unwrap()
+        .status
+        .success());
+    for web in [false, true] {
+        let output = f.root.join(if web { "web-atlas" } else { "native-atlas" });
+        let result = if web {
+            Command::new(env!("CARGO_BIN_EXE_kiln-cli"))
+                .args(["export", "--platform", "web", "--project"])
+                .arg(&f.project)
+                .arg("--web-runtime")
+                .arg(&bundle)
+                .arg("--output")
+                .arg(&output)
+                .arg("--job-id")
+                .arg("atlas-web")
+                .output()
+                .unwrap()
+        } else {
+            f.run(&output, "atlas-native")
+        };
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let (atlas, manifest) = if web {
+            (
+                fs::read(output.join("project/art/atlas.png")).unwrap(),
+                fs::read(output.join("project/kiln.toml")).unwrap(),
+            )
+        } else {
+            let archive = kiln_assets::Archive::load(&output.join("assets.kar")).unwrap();
+            (
+                archive.extract("art/atlas.png").unwrap(),
+                archive.extract("kiln.toml").unwrap(),
+            )
+        };
+        let baked = Project::from_toml(std::str::from_utf8(&manifest).unwrap()).unwrap();
+        let image = kiln_assets::decode_png(&atlas).unwrap();
+        let rect = baked.animation_clips["atlas:game:hero"].frames[0].rect;
+        assert_eq!(rect, [1, 1, 2, 2]);
+        for y in 1..3 {
+            for x in 1..3 {
+                let at = ((y * image.width + x) * 4) as usize;
+                assert_eq!(&image.pixels[at..at + 4], &[0, 0, 255, 255]);
+            }
+        }
+        assert_ne!(atlas, saved_atlas);
+        assert_eq!(
+            baked.atlases["game"].built_hash,
+            kiln_assets::atlas_recipe::image_hash(&atlas)
+        );
+        assert_eq!(baked.asset_ids, project.asset_ids);
+        assert_eq!(fs::read(&f.project).unwrap(), saved_manifest);
+        assert_eq!(fs::read(root.join("art/atlas.png")).unwrap(), saved_atlas);
+    }
+}

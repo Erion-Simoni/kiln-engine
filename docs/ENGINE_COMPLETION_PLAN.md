@@ -383,6 +383,16 @@ atomicity across source moves and manifest Save remains open. Nested/variant,
 atlas and combined visual acceptance remain open; A03 stays PARTIAL.
 [Evidence](evidence/A03_SOURCE_MODULE_MOVES.md).
 
+**Saved atlas checkpoint 2026-11-18:** recipes now build/rebuild ordinary PNGs and
+named static clips, survive source moves/reopen, and rebuild current art in native/
+browser export staging without changing authoring files. Actual widget art moves,
+rendered color changes, stable IDs/regions, portable editor exports and relocated
+native/Chromium pixels pass. Central asset allocation also avoids reused saved IDs
+and orphaned import presets after project load. Full workspace: 797 tests pass.
+Nested/variant and combined prefab/multiple-scene acceptance remain open; generated
+PNG/manifest crash atomicity is separate. A03 stays PARTIAL.
+[Evidence](evidence/A03_SAVED_ATLAS_RECIPES.md).
+
 ### A04 — General scripting, graphs and real debugging
 
 **Status:** PARTIAL. **Depends on:** A02.

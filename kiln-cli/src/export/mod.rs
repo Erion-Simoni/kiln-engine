@@ -97,7 +97,7 @@ pub fn run(options: Options) -> Result<()> {
         .canonicalize()
         .context("Project manifest is missing")?;
     let root = manifest.parent().context("Project has no directory")?;
-    let project = resources::read_project(&manifest)?;
+    let mut project = resources::read_project(&manifest)?;
     let output = std::path::absolute(options.output)?;
     if output.file_name().is_none() {
         bail!("Choose an output subdirectory");
@@ -156,9 +156,26 @@ pub fn run(options: Options) -> Result<()> {
     println!("Snapshotting saved project '{}'", project.name);
     let snapshot = stage.0.join("project");
     fs::create_dir(&snapshot)?;
-    let files = resources::snapshot(
+    let mut files = resources::snapshot(
         root, &manifest, &output, &stage.0, &snapshot, &marker, &project,
     )?;
+    let mut atlas_ids: Vec<_> = project.atlases.keys().cloned().collect();
+    atlas_ids.sort();
+    for id in atlas_ids {
+        cancelled(&marker)?;
+        let recipe = project.atlases[&id].clone();
+        kiln_assets::atlas_project::build(&mut project, &snapshot, &id, &recipe)
+            .map_err(anyhow::Error::msg)?;
+        let output = snapshot.join(&recipe.output);
+        if !files.contains(&output) {
+            files.push(output);
+        }
+    }
+    fs::write(
+        snapshot.join("kiln.toml"),
+        project.to_toml().map_err(anyhow::Error::msg)?,
+    )?;
+    files.sort();
     resources::validate(&project, &snapshot)?;
     cancelled(&marker)?;
     if browser {

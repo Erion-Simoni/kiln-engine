@@ -501,3 +501,13 @@ measure these existing goals on appropriate reference hardware:
 Record evidence and any performance/resource exceptions in STATE.md. File-count,
 input-size and archive validation bounds are technical resource protections, not
 release-size goals; they remain enforced.
+
+## Saved atlas recipe bounds — 2026-11-18
+
+Atlas authoring/export accepts 1–256 sources per recipe, 4096-pixel output sides,
+80 MiB encoded PNG files and 256 MiB decoded input pixels. The output RGBA buffer
+is at most 64 MiB, in addition to input/build/encoding buffers. Inputs are checked
+before decode/allocation and packing failure preserves prior output. Recipes bake
+ordinary textures/static clips; no new runtime draw path or budget exception.
+Linux software-rendered pixel evidence is functional, not physical memory/FPS
+certification. Source paths can move without changing stable labels or clip IDs.

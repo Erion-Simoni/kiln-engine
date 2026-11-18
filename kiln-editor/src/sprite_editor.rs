@@ -22,6 +22,7 @@ pub struct SpriteEditorState {
     pub grid_offset: (u32, u32),
     pub new_clip_name: String,
     images: PreviewImages,
+    pub(crate) atlas: crate::atlas_editor::AtlasEditor,
 }
 impl Default for SpriteEditorState {
     fn default() -> Self {
@@ -41,6 +42,7 @@ impl SpriteEditorState {
             grid_offset: (0, 0),
             new_clip_name: "walk".into(),
             images: Default::default(),
+            atlas: Default::default(),
         }
     }
     pub fn render(&mut self, ui: &mut egui::Ui, project: &mut Project) {
@@ -52,7 +54,13 @@ impl SpriteEditorState {
         p: &mut Project,
         root: Option<&std::path::Path>,
     ) {
-        ui.heading("Sprite Editor");
+        ui.horizontal(|ui| {
+            ui.heading("Sprite Editor");
+            if ui.button("Atlas Builder").clicked() {
+                self.atlas.open = true;
+            }
+        });
+        self.atlas.render(ui.ctx(), p, root, ui.is_enabled());
         let mut entities: Vec<_> = p
             .scenes
             .iter()

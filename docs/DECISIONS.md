@@ -2140,3 +2140,25 @@ checks remain separate Task 8 gates.
   Disable all composition controls during Play and project replacement/recovery.
 - Keep per-scene camera baselines alongside scene baselines so closing a dirty
   camera tab cannot silently discard the change. Track settings by scene ID.
+
+### ADR-0089 — Saved atlas recipes bake ordinary textures and clips (2026-11-18)
+
+Status: accepted. A03 requires reproducible atlas rebuilds across editor reopen
+and export. Store named recipes on Project: output PNG, size/padding and a stable
+label-to-source map. Packing order follows labels, so source-path renames retain
+clip identities and placement order. Each image produces a named single-frame
+clip using existing texture/animation rendering; existing scene/prefab texture
+references are never implicitly converted. Authors choose generated clips normally.
+No new runtime texture lookup/UV format or dependency is required.
+
+Build all pixels/regions before publication. Record output content hash and prior
+regions to distinguish generated output/clips from external edits. Refuse unrelated
+output/clip collisions and removal of generated clips still referenced by authored
+entities. Staged editor publication updates the PNG and in-memory recipe/clips;
+Save Project persists the document. Export rebuilds only its staging snapshot from
+current source art, preserving the source project. Generated static clips are owned
+by the recipe; duplicate a clip before making independent animation edits.
+
+Recipes are bounded to 256 PNGs, 4096-pixel output sides and 256 MiB total decoded
+source pixels; no resource-budget exception. This is atlas authoring/rebuilding,
+not an automatic conversion of every texture or certification of nested prefabs.

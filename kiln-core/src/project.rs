@@ -39,6 +39,9 @@ pub struct Project {
     /// Animation clips of the project, keyed by their id.
     #[serde(default)]
     pub animation_clips: HashMap<String, Clip>,
+    /// Reproducible generated sprite sheets and their static clip regions.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub atlases: HashMap<String, crate::atlas::AtlasRecipe>,
     /// Shader programs of the project, keyed by their id.
     #[serde(default)]
     pub shaders: HashMap<String, Shader>,
@@ -459,6 +462,7 @@ impl Default for Project {
             terrains: HashMap::new(),
             tilesets: HashMap::new(),
             animation_clips: HashMap::new(),
+            atlases: HashMap::new(),
             shaders: HashMap::new(),
             materials: HashMap::new(),
             audio_assets: vec![],

@@ -4727,16 +4727,16 @@ impl TabViewer<'_> {
             return;
         }
         let entries = self.asset_browser.entries().to_vec();
+        let Some(project) = self.current_project.as_mut() else {
+            return;
+        };
+        let identities = project.ensure_asset_ids(entries.iter().map(|entry| entry.path.as_str()));
         let mut results = Vec::new();
-        for entry in entries {
+        for (entry, asset_id) in entries.into_iter().zip(identities) {
             let Some(project) = self.current_project.as_mut() else {
                 return;
             };
-            let asset_id = project
-                .asset_ids
-                .entry(entry.path.clone())
-                .or_insert_with(|| kiln_core::next_id().to_string())
-                .clone();
+
             let path = dir.join(&entry.path);
             let settings = *project.asset_import_settings.entry(asset_id).or_default();
             let settings = kiln_assets::ImportSettings {
@@ -6821,7 +6821,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 }
                             }
                         }
+                        let atlas_built = self.sprite_editor.atlas.take_built();
                         if changed
+                            || atlas_built
                             || resources != serde_json::to_value(&project.animation_clips).ok()
                         {
                             self.project_requests.push(ProjectRequest::RefreshVisuals);
