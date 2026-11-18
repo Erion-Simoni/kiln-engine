@@ -334,6 +334,14 @@ failed/successful paste, one-step history, real-timer crash recovery and complet
 project restart; prefab disk/runtime checks pass. [Evidence](evidence/A02_COPIED_JOINT_REFERENCES.md).
 A02 remains PARTIAL; this does not complete nested prefab/variant production workflows.
 
+2026-11-18 replay checkpoint: complete floating-panel headers now distinguish a
+foreground animation panel from an exposed enlarged source header, settle both
+position and width, and use separate pointer/down events. A controlled previous-
+helper failure now passes; 49 Python checks and all three exact authoring/six
+export replays pass locally. CI includes the overlap widget regression. Matching
+hosted checks and broader acceptance remain open; A02 stays PARTIAL.
+[Evidence](evidence/A02_COMPLETE_PANEL_HEADERS.md).
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.

@@ -220,6 +220,8 @@ jobs:
         run: python3 tests/native/editor_smoke.py
       - name: Verify panel opening after delayed editor rendering
         run: python3 tests/native/editor_startup_smoke.py
+      - name: Verify foreground floating panels over enlarged source windows
+        run: python3 tests/native/panel_origin_smoke.py
       - name: Exercise saved menus and settings
         env:
           KILN_UI_EVIDENCE_DIR: target/native-ui-evidence
@@ -311,6 +313,10 @@ jobs:
             target/a02-local-axes/editor/*.png
             target/a02-local-axes/editor/*.log
             target/a02-local-axes/reopened/*.png
+            target/a02-panel-origin/result.json
+            target/a02-panel-origin/failure.json
+            target/a02-panel-origin/editor/*.png
+            target/a02-panel-origin/editor/*.log
             target/a02-copy-joint/result.json
             target/a02-copy-joint/failure.json
             target/a02-copy-joint/editor/*.png

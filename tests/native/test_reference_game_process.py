@@ -10,7 +10,29 @@ import tempfile
 from unittest.mock import Mock, patch
 import unittest
 
-from task9_editor_games import Editor, stop_process, record_failure, floating_title_start, menu_frame_ready, project_error_visible
+from task9_editor_games import Editor, stop_process, record_failure, floating_title_bar, menu_frame_ready, project_error_visible
+
+
+def panel_frame(panels=((15, 373),)):
+    """Render the observed dock-header geometry, including arrow/close glyphs."""
+    width, height = 1440, 900
+    pixels = bytearray(bytes((43, 43, 43))*width*height)
+    def pixel(x, y, color):
+        offset=(y*width+x)*3; pixels[offset:offset+3]=bytes(color)
+    for left, right in panels:
+        for y in range(82, 120):
+            offset=(y*width+left)*3
+            pixels[offset:offset+(right-left)*3]=bytes((35, 38, 44))*(right-left)
+            pixel(left,y,(20,20,20));pixel(right-1,y,(20,20,20))
+        arrow=left+15
+        for y, offsets in [(99,range(-2,4)),(100,range(-1,3)),(101,range(-1,3)),(102,range(0,2)),(103,range(0,2))]:
+            for x in offsets:pixel(arrow+x,y,(180,180,180))
+        for x in [-1,2]:pixel(arrow+x,102,(59,60,63))
+        close=right-16
+        for y,distance in [(99,3),(100,2),(101,1),(102,0),(103,1),(104,2),(105,3)]:
+            for x in {-distance,distance}:pixel(close+x,y,(180,180,180))
+        for x in [-1,1]:pixel(close+x,102,(59,60,63))
+    return width,height,pixels
 
 
 class ProcessCleanupTests(unittest.TestCase):
@@ -77,24 +99,39 @@ class FramebufferObservationTests(unittest.TestCase):
         self.assertFalse(menu_frame_ready(900, 1440, frame))
 
     def test_dithered_srgb_title_is_found_without_matching_canvas_gray(self):
-        row=bytes((43,43,43))*33
-        row+=b''.join(bytes((35+d,38+d,44+d)) for d in [-1,0,1]*101)
-        row+=bytes((43,43,43))*1104
-        self.assertEqual(floating_title_start(row),33)
+        width,height,pixels=panel_frame()
+        for x in range(33,356):
+            d=x%3-1;offset=(102*width+x)*3
+            pixels[offset:offset+3]=bytes((35+d,38+d,44+d))
+        self.assertEqual(floating_title_bar(width,height,pixels),(33,356))
 
-    def test_backgrounds_short_matches_and_wrong_colors_are_not_panels(self):
-        for row in [bytes((43,43,43))*1440,bytes((35,38,44))*200+bytes((20,20,20))*1240,bytes((35,44,38))*1440]:
-            self.assertIsNone(floating_title_start(row))
+    def test_blank_short_matches_and_wrong_colors_are_not_panels(self):
+        self.assertIsNone(floating_title_bar(*panel_frame(())))
+        width,height,pixels=panel_frame()
+        for color in [(43,43,43),(35,44,38)]:
+            copy=bytearray(pixels)
+            copy[102*width*3:103*width*3]=bytes(color)*width
+            self.assertIsNone(floating_title_bar(width,height,copy))
+        self.assertIsNone(floating_title_bar(1440,900,b''))
+
+    def test_partial_background_header_cannot_hide_foreground_on_either_side(self):
+        self.assertEqual(floating_title_bar(*panel_frame(((15,1101),(839,1197)))),(857,1180))
+        self.assertEqual(floating_title_bar(*panel_frame(((15,1101),(15,373)))),(33,356))
+
+    def test_hovered_header_triangle_keeps_the_same_origin(self):
+        width,height,pixels=panel_frame()
+        for x in (29,32):
+            offset=(102*width+x)*3;pixels[offset:offset+3]=bytes((142,142,142))
+        self.assertEqual(floating_title_bar(width,height,pixels),(33,356))
+
+    def test_two_disjoint_headers_are_ambiguous(self):
+        self.assertIsNone(floating_title_bar(*panel_frame(((15,373),(839,1197)))))
 
 
 class FloatingPanelSettlementTests(unittest.TestCase):
     @staticmethod
     def frame(start):
-        width, height = 1440, 900
-        pixels = bytearray(bytes((43, 43, 43))*width*height)
-        offset = (102*width+start)*3
-        pixels[offset:offset+900] = bytes((35, 38, 44))*300
-        return width, height, pixels
+        return panel_frame(((start-18,start+340),))
 
     def editor(self, starts):
         editor = Editor.__new__(Editor)
@@ -102,6 +139,7 @@ class FloatingPanelSettlementTests(unittest.TestCase):
         editor.held_click = Mock()
         editor.command = Mock()
         editor.window = 'test-window'
+        editor.actions = []
         editor.frame = Mock(side_effect=[self.frame(start) for start in starts])
         return editor
 
@@ -113,11 +151,26 @@ class FloatingPanelSettlementTests(unittest.TestCase):
         editor.command.assert_not_called()
         self.assertEqual(editor.frame.call_count, 4)
 
+    def test_width_must_settle_even_when_the_left_origin_is_unchanged(self):
+        editor=self.editor([])
+        editor.frame=Mock(side_effect=[panel_frame(((15,373),))]+[panel_frame(((15,435),))]*3)
+        editor.panel(80,214)
+        self.assertEqual(editor.frame.call_count,4)
+
+    def test_overlapping_panel_uses_its_complete_foreground_header(self):
+        editor = self.editor([])
+        editor.frame = Mock(side_effect=[panel_frame(((15,1101),(839,1197)))]*3 +
+                                       [panel_frame(((15,1101),(15,373)))]*3)
+        editor.panel(80,214)
+        editor.command.assert_any_call('mousemove','--window','test-window',887,102)
+        self.assertEqual(editor.command.call_args_list[1].args,('mousedown','1'))
+
     def test_shifted_panel_must_render_at_destination_before_widget_clicks(self):
         editor = self.editor([120, 120, 120, 120, 33, 33, 33])
         editor.panel(80, 214)
         self.assertEqual(editor.command.call_args_list[0].args,
-                         ('mousemove', '--window', 'test-window', 150, 102, 'mousedown', '1'))
+                         ('mousemove', '--window', 'test-window', 150, 102))
+        self.assertEqual(editor.command.call_args_list[1].args, ('mousedown', '1'))
         self.assertEqual(editor.frame.call_count, 7)
 
 

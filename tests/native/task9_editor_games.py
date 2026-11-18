@@ -57,15 +57,37 @@ def color_matches(actual, expected, tolerance=2):
     return len(actual)==len(expected) and all(abs(a-b)<=tolerance for a,b in zip(actual,expected))
 
 
-def floating_title_start(row):
-    """Locate a long title-bar run while retaining distinction from canvas gray."""
-    matches=[color_matches(row[x:x+3],(35,38,44)) for x in range(0,len(row),3)]
-    runs,start=[],0
-    for match,group in itertools.groupby(matches):
-        length=len(list(group))
-        if match and length>200:runs.append((length,start))
-        start+=length
-    return max(runs)[1] if runs else None
+def floating_title_bar(width, height, pixels):
+    """Find one complete dock header, excluding exposed headers behind it."""
+    if (width, height) != (1440, 900) or len(pixels) != width*height*3:
+        return None
+    row = pixels[102*width*3:103*width*3]
+    matches = [color_matches(row[x:x+3], (35, 38, 44)) for x in range(0, len(row), 3)]
+
+    def bright_columns(y, left, right):
+        return [x for x in range(left, right) if
+                min(pixels[(y*width+x)*3:(y*width+x)*3+3]) > 100 and
+                max(pixels[(y*width+x)*3:(y*width+x)*3+3]) -
+                min(pixels[(y*width+x)*3:(y*width+x)*3+3]) < 10]
+
+    candidates, start = [], 0
+    for match, group in itertools.groupby(matches):
+        length = len(list(group)); end = start+length
+        if match and length > 200 and start >= 8 and end+10 < width:
+            # Downward disclosure triangle: wide at the top, narrow below.
+            top = bright_columns(99, start-8, start+3)
+            middle = bright_columns(102, start-8, start+3)
+            bottom = bright_columns(105, start-8, start+3)
+            arrow = len(top) >= 4 and 0 < len(middle) < len(top) and not bottom
+            # Close X: matching spread at top/bottom and a narrow center.
+            top = bright_columns(99, end-4, end+10)
+            middle = bright_columns(102, end-4, end+10)
+            bottom = bright_columns(105, end-4, end+10)
+            close = len(top) == 2 and top == bottom and top[-1]-top[0] >= 4 and len(middle) == 1
+            if arrow and close: candidates.append((start, end))
+        start = end
+    # Disjoint complete headers do not identify which panel was requested.
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def menu_frame_ready(width, height, pixels):
@@ -205,28 +227,31 @@ class Editor:
         # title bar and drag to a consistent origin before using widget points.
         # This is screen observation and an ordinary title-bar drag, not an
         # application state hook or an assumed hidden window position.
-        previous_start, stable_frames = None, 0
+        previous_header, stable_frames = None, 0
 
         def title_bar():
-            nonlocal previous_start, stable_frames
-            width, height, pixels = self.frame()
-            assert (width, height) == (1440, 900)
-            start = floating_title_start(pixels[102*width*3:103*width*3])
-            stable_frames = stable_frames+1 if start == previous_start else 1
-            previous_start = start
-            return (start,) if start is not None and stable_frames >= 3 else None
+            nonlocal previous_header, stable_frames
+            header = floating_title_bar(*self.frame())
+            stable_frames = stable_frames+1 if header == previous_header else 1
+            previous_header = header
+            return header if header is not None and stable_frames >= 3 else None
 
-        # Reopened dock windows can resize over successive painted frames. A
-        # first-frame title segment is not a settled drag origin (notably after
-        # closing the enlarged source panel). Observe stability before dragging.
-        start, = self.wait(title_bar, description=f"Settle floating panel from menu {menu}, row {row}")
+        # A partial background title can be longer than the actual foreground
+        # header. Require both visible controls and settled position AND width.
+        header = self.wait(title_bar, description=f"Settle floating panel from menu {menu}, row {row}")
+        start, end = header
+        self.actions.append(['observe-floating-panel', str(menu), str(row), str(start), str(end)])
         if start != 33:
-            self.command('mousemove', '--window', self.window, start+30, 102, 'mousedown', '1')
+            self.command('mousemove', '--window', self.window, start+30, 102)
+            self.command('mousedown', '1')
             self.command('mousemove', '--window', self.window, 63, 102)
             self.command('mouseup', '1')
-            previous_start, stable_frames = None, 0
-            self.wait(lambda: title_bar() == (33,),
-                      description='Verify floating panel reached widget origin')
+            previous_header, stable_frames = None, 0
+            try:
+                self.wait(lambda: (observed := title_bar()) is not None and observed[0] == 33,
+                          description='Verify floating panel reached widget origin')
+            except RuntimeError as error:
+                raise RuntimeError(f"{error}; menu={menu}, row={row}, before={header}, observed={previous_header}") from error
 
     def enlarge(self):
         if self.large:
@@ -285,11 +310,11 @@ def author(tools, name, destination, evidence):
         editor.wait(lambda:(destination/'kiln.toml').exists())
         editor.project = destination
         editor.panel(118,42)
-        editor.text(191,221,expected['name']); editor.text(177,249,expected['id']); editor.click(101,132); editor.save()
+        editor.text(191,221,expected['name']); editor.text(177,249,expected['id']); editor.held_click(101,132); editor.save()
         editor.panel(118,68); editor.enlarge()
         for path in ('scripts/main.ks', 'scripts/hero.ks' if name=='skybridge' else 'scripts/ui.ks'):
             editor.source(path,canonical/path)
-        editor.shot('source_saved'); editor.click(125,132)
+        editor.shot('source_saved'); editor.held_click(125,132)
         if name=='skybridge':
             (destination/'art').mkdir(exist_ok=True)
             shutil.copyfile(canonical/'art/hero.png',destination/'art/hero.png')
@@ -304,15 +329,15 @@ def author(tools, name, destination, evidence):
                 time.sleep(.4)
             if count!=2:raise RuntimeError('Add Frame never produced the second saved frame')
             editor.value(52,373,16)
-            editor.shot('animation_authored'); editor.click(154,132)
+            editor.shot('animation_authored'); editor.held_click(154,132)
             editor.panel(80,690)
-            editor.text(240,224,'Lower Gantry'); editor.text(240,252,'scripts/main.ks'); editor.click(125,132)
+            editor.text(240,224,'Lower Gantry'); editor.text(240,252,'scripts/main.ks'); editor.held_click(125,132)
             editor.click(100,196); editor.click(1200,528)
             editor.text(1280,487,'art/hero.png'); editor.text(1280,627,'run')
             editor.command('mousemove','--window',editor.window,1320,610,'click','--repeat','2','--delay','70','5')
             editor.click(1180,521)
             editor.save(); editor.click(395,146)
-            editor.panel(80,690); editor.text(240,224,'Upper Gantry'); editor.click(125,132)
+            editor.panel(80,690); editor.text(240,224,'Upper Gantry'); editor.held_click(125,132)
             editor.click(100,196)
             editor.command('mousemove','--window',editor.window,1320,610,'click','--repeat','9','--delay','70','5')
             editor.text(1270,426,'stage'); editor.click(1199,455); editor.value(1230,426,2)
@@ -338,7 +363,7 @@ def author(tools, name, destination, evidence):
                 editor.wait(lambda: actions()[action_id]['bindings'] ==
                             expected['action_map']['actions'][action_id]['bindings'],
                             description=f"Bind input {action_id} to {key}")
-            editor.click(149,132); editor.click(480,146)
+            editor.held_click(149,132); editor.click(480,146)
         editor.save()
         actual=tomllib.loads((destination/'kiln.toml').read_text())
         if actual!=expected:
