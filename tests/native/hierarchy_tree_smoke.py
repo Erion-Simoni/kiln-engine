@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Author a real parent tree, search/fold/edit, detach, undo and recover two scenes."""
+from copy import deepcopy
 import json
 import math
 import os
@@ -93,6 +94,12 @@ def main():
         copied_parent = next(e for e in copied if e['id'] != copied_child['id'])
         assert component(copied_child['id'], 'Parent', other)['parent'] == copied_parent['id']
         assert component(copied_child['id'], 'Transform', other) == component(child, 'Transform')
+        saved_before_crash = saved()
+        expected = deepcopy(saved_before_crash)
+        expected_child = next(e for e in expected['scenes'][other]['entities']
+                              if e['id'] == copied_child['id'])
+        next(c for c in expected_child['components'] if c['type'] == 'Transform')['y'] = -15.0
+        source_bytes = {p.relative_to(project): p.read_bytes() for p in project.rglob('*.ks')}
         editor.held_click(100, 196); editor.value(1340, 202, '-15')
         def recovered():
             if not sidecar.exists(): return False
@@ -102,18 +109,21 @@ def main():
                        for c in child_data['components'])
         editor.wait(recovered, seconds=45, description='Real autosave of unsaved parented child property')
         expect_pose(copied_child['id'], 22, -20, -math.pi/2, 0.5, other)
+        assert saved() == saved_before_crash, 'Autosave changed the saved project'
         editor.process.kill(); editor.process.wait(timeout=10); editor.start()
         editor.held_click(590, 499); editor.save()
         expect_pose(copied_child['id'], 22, -15, -math.pi/2, 0.5, other)
         assert saved()['scenes']['main'] == main_scene
         assert component(copied_child['id'], 'Parent', other)['parent'] == copied_parent['id']
-        expected = saved(); editor.shot('recovered_parent_tree'); editor.close()
+        assert saved() == expected, 'Recovery changed a property outside the independently expected edit'
+        assert {p.relative_to(project): p.read_bytes() for p in project.rglob('*.ks')} == source_bytes
+        editor.shot('recovered_parent_tree'); editor.close()
         editor = Editor(REPO/'target/debug', project, output/'reopened', ':86')
         editor.start(); editor.save(); assert saved() == expected
         editor.shot('reopened')
         result = dict(passed=True, duplicate_reparent_properties=True, folded_search_context=True,
                       detach_preserves_world_pose=True, delete_undo_identity=True,
-                      two_scene_subtree_recovery=True, exact_restart=True,
+                      two_scene_subtree_recovery=True, complete_precrash_oracle=True, source_bytes_preserved=True, exact_restart=True,
                       scope='Linux Xvfb/software graphics; no cross-platform/device claim')
         (output/'result.json').write_text(json.dumps(result, indent=2)+'\n')
         print(json.dumps(result))

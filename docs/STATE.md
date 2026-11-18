@@ -1,52 +1,45 @@
 # Kiln Session Handoff
 
 Owner scope remains A02–A04 on `fix/a01-ci-baseline`.
-Current focus: A02 complete floating-panel replay observation (2026-11-18),
-following 892d7ff. A02–A04 remain PARTIAL. A01 accepted baseline stays 6de428b;
-full 3D remains behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
+Current focus: A02 combined property/recovery oracle (2026-11-18), following 7f7c60e.
+A02–A04 remain PARTIAL; A01 accepted baseline stays 6de428b; full 3D behind G2D.
+MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
 
-- Reproduced the old observer accepting an exposed enlarged Source Editor header
-  instead of the smaller foreground Animation Editor. Complete disclosure/close
-  controls now identify the header; three equal position/width observations settle
-  it. Hover antialiasing is covered; pointer/down are separate drag commands.
-- Authoring tab closes use held clicks. No production engine changes, dependencies,
-  retry budget increases or weakened exact project checks.
-- Added real-widget overlap CI regression and evidence:
-  docs/evidence/A02_COMPLETE_PANEL_HEADERS.md.
-- Prior copied-joint validation/recovery work remains in 892d7ff; its detailed
-  evidence is docs/evidence/A02_COPIED_JOINT_REFERENCES.md.
+- Hierarchy recovery now compares the complete project to an independent expected
+  document prepared before the crash; autosave preserves the saved project and
+  script bytes survive. Duplicate/reparent/detach/delete/history/two-scene copy,
+  actual autosave timer, forced close, Restore/Save and exact restart pass.
+- New headless combined acceptance preserves all 12 component variants, camera
+  settings and references across both scene projections, independent duplicate
+  oracle, delete/Undo/Redo, recovery and disk restart. No production code changes.
+- Evidence and limits: docs/evidence/A02_COMBINED_PROPERTY_ORACLE.md.
 
 ## Executed validation
 
-- just check PASSED; 49 Python tests PASSED; py_compile/diff checks pass.
-- Same final widget scenario fails with the previous helper and passes now: actual
-  animation clip saved over enlarged Source Editor, script bytes unchanged.
-  Screenshots inspected. Explicit File / Save Project avoids Source Ctrl+S routing.
-- Installed portable editor: all three Emberwatch/Switchyard/Skybridge authoring
-  replays match checked-in projects exactly; all six native/browser exports pass,
-  including notices/runtime bytes, unchanged templates and overwrite preservation.
-- Linux Xvfb/software graphics only; no new gameplay or physical-device claims.
-  No Rust production edits; prior 781 Rust tests passed on 892d7ff.
-- Raw evidence: target/a02-panel-origin-logs, target/a02-panel-origin-baseline,
-  target/a02-panel-origin and target/a02-panel-origin-replay.
+- Both two-scene Rust tests PASS; just check PASS; Python compilation/diff PASS.
+- Strengthened hierarchy widgets PASS, screenshots inspected. Linux Xvfb/software
+  graphics; no every-field inspector, gameplay or physical-device certification.
+- Logs: target/a02-combined-test.log, target/a02-combined-check.log,
+  target/a02-combined-hierarchy.log; images/result target/a02-combined-hierarchy.
+- 7f7c60e hosted reference games 44370197155, CI 44370197413 and Linux candidate
+  44370197855 all PASS, confirming the earlier panel-header replay repair remotely.
+  Its 49 Python checks and all three authoring/six exports previously passed locally.
 
 ## Next / known issues
 
-892d7ff Windows 44083869158 and Linux candidate 44083869194 PASSED. Its reference
-run 44083869121 FAILED at Skybridge panel-origin verification. CI 44083869329
-FAILED native UI with a generic exit status; precise cause remains unestablished.
-Obtain matching checks after this repair; do not claim hosted acceptance from
-local replay results or prior-source passes.
+Obtain matching checks for this revision. A02 every-inspector-property combined
+widget acceptance and cross-platform GUI coverage remain open. Headless fixture
+paths are preservation data, not resource-resolution/export certification.
+Scoped/repeated nested identities need a deliberate runtime/script contract;
+ambiguous links are refused and authored data preserved. Joint form requires
+Apply before save/recovery; inspector edits remain primary-entity scoped. Save As
+rescue needs source resources and explicit Save/Revert of dirty scripts. Source
+Editor can consume Ctrl+S; explicit File / Save Project remains available.
 
-Continue A02 combined every-property/reference acceptance and cross-platform GUI
-coverage. Scoped/repeated nested identities need a deliberate runtime/script
-contract; ambiguous links are refused and existing authored data preserved. Joint
-form input requires Apply before becoming a saved/recoverable project edit.
-Inspector edits remain primary-entity scoped. Save As rescue needs source resources
-and explicit Save/Revert of dirty scripts. Source Editor may consume Ctrl+S while
-open; this replay repair does not change shortcut routing. A03/A04 remain PARTIAL.
+Next requested work: A03 source-module move/import refactoring. User requested
+finishing A02–A04; proceed through focused, separately validated checkpoints.
 
 A03: 3daaa1c adds typed dependencies/reference-safe moves, per-target import rules,
 worker diagnostics and fixed GPU preview lifetime. Full nested prefab/variants,

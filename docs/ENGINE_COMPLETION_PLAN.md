@@ -342,6 +342,13 @@ export replays pass locally. CI includes the overlap widget regression. Matching
 hosted checks and broader acceptance remain open; A02 stays PARTIAL.
 [Evidence](evidence/A02_COMPLETE_PANEL_HEADERS.md).
 
+2026-11-18 combined-oracle checkpoint: recovery now compares the complete project
+against a precrash expected document and preserves script bytes in the two-scene
+hierarchy widget flow. Headless acceptance preserves all 12 component variants,
+cameras and references through projection/history/recovery/restart. Both layers
+pass locally; every-field widget and cross-platform acceptance remain open.
+[Evidence](evidence/A02_COMBINED_PROPERTY_ORACLE.md). A02 stays PARTIAL.
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.
