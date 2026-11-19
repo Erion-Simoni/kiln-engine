@@ -354,3 +354,15 @@ list authored dependents, duplicated stable IDs are named, and equal file conten
 is reported without deleting either asset. Content hashes stream from disk instead
 of allocating whole source files. Diagnostics cover manifest references, not code
 imports or arbitrary paths constructed dynamically by scripts.
+
+### Prefab texture override persistence
+
+A `PrefabInstance` Sprite override distinguishes three states: omit `texture` to
+inherit the definition; use `texture = "art/hero.png"` to set a path; use
+`texture = false` to clear the inherited texture. JSON recovery uses the same
+string/false/omitted convention. Legacy string overrides are accepted, and legacy
+JSON null retains its previous inherit meaning. True and other value types are
+invalid. Sparse transform/color override fields are omitted when inherited.
+Explicit clears survive Save, recovery Restore and cross-scene prefab propagation;
+resource moves rewrite explicit paths while leaving clears unchanged. Old snapshots
+that already lost a clear cannot reconstruct that intent automatically.

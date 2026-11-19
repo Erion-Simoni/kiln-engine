@@ -25,17 +25,62 @@ pub struct PrefabOverride {
 #[serde(tag = "type")]
 pub enum ComponentOverride {
     Transform {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         x: Option<f32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         y: Option<f32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         rotation: Option<f32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         scale: Option<f32>,
     },
     Sprite {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         color: Option<[f32; 4]>,
-        /// Asset path of the sprite texture to override.
-        #[serde(default)]
+        /// Inherit when absent, set a path, or explicitly clear (`false` in saved data).
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "texture_value"
+        )]
         texture: Option<Option<String>>,
     },
+}
+
+// TOML has no null: false is an explicit clear, omitted means inherit.
+mod texture_value {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(
+        value: &Option<Option<String>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        match value {
+            Some(Some(path)) => serializer.serialize_str(path),
+            Some(None) => serializer.serialize_bool(false),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<Option<String>>, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Value {
+            Path(String),
+            Clear(bool),
+            Inherit(()),
+        }
+        match Value::deserialize(deserializer)? {
+            Value::Path(path) => Ok(Some(Some(path))),
+            Value::Clear(false) => Ok(Some(None)),
+            Value::Clear(true) => Err(serde::de::Error::custom(
+                "Texture override must be a path or false to clear",
+            )),
+            Value::Inherit(()) => Ok(None),
+        }
+    }
 }
 
 /// Tracks which prefab an entity instance came from
@@ -361,5 +406,54 @@ mod tests {
         let loaded: Prefab = ron::from_str(&ron_str).expect("deserialize from RON");
         assert_eq!(loaded.name, prefab.name);
         assert_eq!(loaded.root_entity.name, prefab.root_entity.name);
+    }
+}
+
+#[cfg(test)]
+mod texture_persistence_tests {
+    use super::*;
+
+    #[test]
+    fn texture_override_preserves_inherit_set_and_clear_in_project_and_recovery_formats() {
+        for texture in [Some(None), Some(Some("art/hero.png".into())), None] {
+            let value = ComponentOverride::Sprite {
+                color: None,
+                texture: texture.clone(),
+            };
+            for format in ["json", "toml"] {
+                let decoded = if format == "json" {
+                    serde_json::from_str::<ComponentOverride>(
+                        &serde_json::to_string(&value).unwrap(),
+                    )
+                    .unwrap()
+                } else {
+                    toml::from_str::<ComponentOverride>(&toml::to_string(&value).unwrap()).unwrap()
+                };
+                let ComponentOverride::Sprite {
+                    texture: actual, ..
+                } = decoded
+                else {
+                    unreachable!()
+                };
+                assert_eq!(
+                    actual, texture,
+                    "Texture inherit, set and clear must remain distinct after persistence"
+                );
+            }
+        }
+    }
+    #[test]
+    fn legacy_null_inherits_and_invalid_texture_override_types_are_rejected() {
+        let legacy: ComponentOverride =
+            serde_json::from_str(r#"{"type":"Sprite","color":null,"texture":null}"#).unwrap();
+        assert!(matches!(
+            legacy,
+            ComponentOverride::Sprite { texture: None, .. }
+        ));
+        for value in ["true", "42", "[]", "{}"] {
+            let source = format!(r#"{{"type":"Sprite","texture":{value}}}"#);
+            assert!(serde_json::from_str::<ComponentOverride>(&source).is_err());
+        }
+        assert!(toml::from_str::<ComponentOverride>("type = 'Sprite'\ntexture = true").is_err());
     }
 }

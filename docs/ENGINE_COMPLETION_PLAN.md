@@ -403,6 +403,13 @@ This supersedes the atlas interruption limitation above. General source/multi-fi
 crash transactions, nested/variant prefabs and combined acceptance remain open.
 A03 stays PARTIAL. [Evidence](evidence/A03_ATLAS_CRASH_RECOVERY.md).
 
+**Prefab texture persistence 2026-11-19:** explicit texture clears now remain
+separate from inheritance through TOML project saves and JSON recovery. Legacy
+path/null input remains supported; invalid values are rejected. Headless two-scene
+capture/save/recovery/move/propagation/Apply/reopen proves the clear survives while
+inherited paths update. Nested/variant and combined visual acceptance remain open.
+A03 stays PARTIAL. [Evidence](evidence/A03_PREFAB_TEXTURE_PERSISTENCE.md).
+
 ### A04 — General scripting, graphs and real debugging
 
 **Status:** PARTIAL. **Depends on:** A02.

@@ -1,11 +1,22 @@
 # Kiln Session Handoff
 
 Owner scope: A02–A04 on `fix/a01-ci-baseline`.
-Current checkpoint: A03 interrupted generated-atlas recovery (2026-11-19),
-following 5bc6e0a. A02–A04 remain PARTIAL. A01 accepted baseline stays 6de428b;
+Current checkpoint: A03 explicit prefab texture-clear persistence (2026-11-19),
+following c58b5ef. A02–A04 remain PARTIAL. A01 accepted baseline stays 6de428b;
 full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
+
+- ADR-0091 fixes a reproduced explicit prefab texture clear being lost in JSON
+  recovery and unsupported in sparse TOML overrides. Omitted texture inherits,
+  a string sets the path, and false clears it. Legacy string/null behavior is
+  preserved; true/invalid types are rejected. Optional inherited override fields
+  are omitted. No new dependency or runtime component format.
+- Headless editor integration captures a cleared instance against its textured
+  definition, saves/reopens the complete project, writes/reads actual atomic
+  recovery, moves typed resource paths, propagates across two scenes and applies
+  another instance. The clear persists while inherited paths update. Final saved
+  projects compare completely. No new GUI or native/browser visual claims.
 
 - ADR-0090: bounded generated-atlas provenance allows explicit Open to reconstruct
   the saved recipe and Restore to reconstruct its selected autosave draft. Multiple
@@ -29,7 +40,13 @@ full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Executed validation
 
-- Locked Rust workspace: 804 PASS, zero failures including docs. just check PASS.
+- Explicit-clear controlled regression fails on previous serializer (None differs
+  from Some(None)), passes now for all three states through TOML/JSON. Legacy null
+  and malformed-type coverage passes. Raw logs:
+  target/a03-prefab-texture-{before,core,integration,workspace,quality,wasm,wasm-optout}.log.
+  Evidence: docs/evidence/A03_PREFAB_TEXTURE_PERSISTENCE.md.
+
+- Current locked Rust workspace: 807 PASS, zero failures including docs. just check PASS.
   Default/opt-out WASM strict Clippy PASS. Python helper suite 49 PASS;
   script compilation and diff checks PASS.
 - Real native widgets PASS: force a crash before autosave, reconstruct saved atlas,
@@ -54,11 +71,14 @@ full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Next / known issues
 
-Obtain matching hosted checks for the new commit. Earlier 7f7c60e reference
+Obtain matching hosted checks for the new commit. GitHub Actions lookup in this
+environment returned Forbidden; local checks passed. Earlier 7f7c60e reference
 44370197155, CI 44370197413 and Linux candidate 44370197855 passed; those checks
-accept earlier source, not this checkpoint. Native CI now includes atlas crashes.
+accept earlier source, not this checkpoint. Native CI now includes atlas crashes;
+ordinary workspace tests include the prefab persistence integration.
 
-A03: nested/variant prefab runtime/override contracts and combined renamed-art,
+A03: older snapshots that already lost an explicit clear cannot recover its intent.
+Nested/variant prefab runtime/override contracts and combined renamed-art,
 multiple-scene/prefab/atlas/export production acceptance remain open. Recipes own
 whole-image static clips; independent animation edits need separate clip assets.
 Derived-atlas reconstruction uses current source art, not historical source backups.

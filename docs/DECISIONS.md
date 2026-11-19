@@ -2183,3 +2183,15 @@ Recovery is explicit on project Open and recovery-draft Restore. Ordinary projec
 reads, including Save's external-manifest conflict check, remain read-only so they
 cannot overwrite a draft's generated PNG. Save As repairs only its copied staging
 project. A successful manual Save restarts the autosave interval.
+
+### ADR-0091 — Persist explicit prefab texture clears (2026-11-19)
+
+Status: accepted. A prefab texture override has three states: inherit, set a path,
+and clear. Nested Option serialization conflates inherit/clear in JSON and cannot
+represent a clear in TOML. Keep the existing Rust API and legacy string overrides;
+serialize absent override as an omitted field, a set override as its string, and an
+explicit clear as `texture = false`. Reject true and other invalid types. Legacy
+JSON null retains its prior inherit meaning. Optional override fields are omitted
+rather than serialized as null, allowing TOML to persist sparse overrides. No new
+dependency or runtime component format. The same contract applies to project files,
+recovery snapshots and export manifests, preserving typed resource-path rewrites.
