@@ -123,7 +123,7 @@ fn cleared_texture_survives_capture_save_recovery_asset_move_and_cross_scene_app
             *color = [0.0, 1.0, 0.0, 1.0];
         }
         assert_eq!(
-            editing::propagate_prefab_in_scenes(&mut persisted, &updated),
+            editing::propagate_prefab_in_scenes(&mut persisted, &updated).unwrap(),
             2
         );
         assert_eq!(sprite(&persisted.scenes["main"].entities[0]), &None);

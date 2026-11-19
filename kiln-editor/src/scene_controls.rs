@@ -329,7 +329,7 @@ mod tests {
         .execute(&mut scene, &project, &mut history)
         .unwrap();
         project.scenes.insert("main".into(), scene.clone());
-        crate::editing::propagate_prefab_in_scenes(&mut project, &prefab);
+        crate::editing::propagate_prefab_in_scenes(&mut project, &prefab).unwrap();
         scene = project.scenes["main"].clone();
         assert!(own_flags(&scene, &instance).hidden);
         command(EntityEdit::RevertPrefabOverrides {

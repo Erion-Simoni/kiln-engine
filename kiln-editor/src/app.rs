@@ -1783,8 +1783,11 @@ impl EditorApp {
         let mut before = self.prefab_apply_snapshot()?;
         before.scenes.insert(scene_id.clone(), scene);
         let project = self.current_project.as_mut().ok_or("No project loaded")?;
+        let mut staged = project.clone();
+        staged.scenes = before.scenes.clone();
         let updated_prefab =
-            crate::editing::apply_prefab_instance_to_definition(project, &scene_id, entity_id)?;
+            crate::editing::apply_prefab_instance_to_definition(&mut staged, &scene_id, entity_id)?;
+        *project = staged;
         self.prefab_apply_redo.clear();
         self.prefab_editor
             .state
@@ -6151,30 +6154,38 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     // Returns true if overrides were applied, in which case we
                     // update all ECS instances to match the edited prefab.
                     let applied = self.prefab_editor.render(ui);
-                    if let Some(project) = self.current_project.as_mut() {
-                        project.prefabs = self.prefab_editor.state.prefabs().clone();
-                    }
                     if applied {
-                        let prefabs: Vec<_> = self
-                            .prefab_editor
-                            .state
-                            .prefab_list()
-                            .into_iter()
-                            .cloned()
-                            .collect();
-                        for prefab in prefabs {
-                            let updated =
-                                crate::editing::update_prefab_instances(self.world, &prefab);
-                            let saved = self.current_project.as_mut().map_or(0, |project| {
-                                crate::editing::propagate_prefab_in_scenes(project, &prefab)
+                        let prefabs = self.prefab_editor.state.prefabs().clone();
+                        let result = self.current_project.as_ref().ok_or("No project loaded".to_owned())
+                            .and_then(|project| {
+                                let mut staged = project.clone();
+                                staged.prefabs = prefabs.clone();
+                                let mut counts = Vec::new();
+                                for prefab in prefabs.values() {
+                                    let count = crate::editing::propagate_prefab_in_scenes(&mut staged, prefab)?;
+                                    counts.push((prefab.clone(), count));
+                                }
+                                Ok((staged, counts))
                             });
-                            if updated > 0 || saved > 0 {
-                                self.log(&format!(
-                                    "[INFO] Updated {} live and {} saved instances of prefab '{}'",
-                                    updated, saved, prefab.name
-                                ));
+                        match result {
+                            Ok((staged, counts)) => {
+                                *self.current_project = Some(staged);
+                                for (prefab, saved) in counts {
+                                    let updated = crate::editing::update_prefab_instances(self.world, &prefab);
+                                    if updated > 0 || saved > 0 {
+                                        self.log(&format!("[INFO] Updated {} live and {} saved instances of prefab '{}'", updated, saved, prefab.name));
+                                    }
+                                }
+                            }
+                            Err(error) => {
+                                if let Some(project) = self.current_project.as_ref() {
+                                    self.prefab_editor.state.replace_prefabs(project.prefabs.clone());
+                                }
+                                self.log(&format!("[ERROR] Prefab propagation refused: {error}"));
                             }
                         }
+                    } else if let Some(project) = self.current_project.as_mut() {
+                        project.prefabs = self.prefab_editor.state.prefabs().clone();
                     }
                 });
             }

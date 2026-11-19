@@ -1,11 +1,21 @@
 # Kiln Session Handoff
 
 Owner scope: A02–A04 on `fix/a01-ci-baseline`.
-Current checkpoint: A03 explicit prefab texture-clear persistence (2026-11-19),
-following c58b5ef. A02–A04 remain PARTIAL. A01 accepted baseline stays 6de428b;
+Current checkpoint: A03 reference-safe prefab joint propagation (2026-11-19),
+following 0431883. A02–A04 remain PARTIAL. A01 accepted baseline stays 6de428b;
 full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
+
+- ADR-0092: prefab Apply remaps instance-owner joint endpoints to the template;
+  propagation remaps them to each destination owner. Changed external endpoints
+  must resolve uniquely in the fully staged scene composition. Missing/ambiguous
+  targets reject atomically; valid nested targets work and unchanged legacy joints
+  do not block unrelated edits. No serialized format/dependency change.
+- Apply now stages current captured unsaved scene edits before applying rather
+  than reading an older scene document. The prefab panel stages its entire batch
+  before publishing definitions/live updates and restores displayed definitions
+  after rejection. History records only successful Apply operations.
 
 - ADR-0091 fixes a reproduced explicit prefab texture clear being lost in JSON
   recovery and unsupported in sparse TOML overrides. Omitted texture inherits,
@@ -40,14 +50,22 @@ full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Executed validation
 
+- Three prefab-joint before regressions fail, all six final regressions pass:
+  Apply/propagation owner remapping, whole-project atomic missing/ambiguous target
+  refusal, unique nested target, exact save/reopen/runtime spawn, legacy tolerance.
+  Raw target/a03-prefab-joints-{before,after,integration,workspace,quality-final}.log.
+  Evidence: docs/evidence/A03_PREFAB_JOINT_PROPAGATION.md. This checkpoint is
+  headless model/runtime-spawn proof; no new GUI/export/physics visual claim.
+
 - Explicit-clear controlled regression fails on previous serializer (None differs
   from Some(None)), passes now for all three states through TOML/JSON. Legacy null
   and malformed-type coverage passes. Raw logs:
   target/a03-prefab-texture-{before,core,integration,workspace,quality,wasm,wasm-optout}.log.
   Evidence: docs/evidence/A03_PREFAB_TEXTURE_PERSISTENCE.md.
 
-- Current locked Rust workspace: 807 PASS, zero failures including docs. just check PASS.
-  Default/opt-out WASM strict Clippy PASS. Python helper suite 49 PASS;
+- Current locked Rust workspace: 813 PASS, zero failures including docs. just check PASS.
+  Previous shared-core checkpoint: default/opt-out WASM strict Clippy PASS.
+  Previous Python helper suite 49 PASS;
   script compilation and diff checks PASS.
 - Real native widgets PASS: force a crash before autosave, reconstruct saved atlas,
   republish, wait for actual timer snapshot, crash/Restore/Save/restart. Entire

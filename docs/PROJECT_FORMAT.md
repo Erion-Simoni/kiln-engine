@@ -366,3 +366,10 @@ invalid. Sparse transform/color override fields are omitted when inherited.
 Explicit clears survive Save, recovery Restore and cross-scene prefab propagation;
 resource moves rewrite explicit paths while leaving clears unchanged. Old snapshots
 that already lost a clear cannot reconstruct that intent automatically.
+
+Prefab Apply converts self-referential joint endpoints from instance ID to template
+ID; propagation converts template ID to each destination instance ID. Other joint
+endpoints remain literal scene IDs and must resolve uniquely within each destination
+scene and its nested scenes. Apply/propagation reject invalid changed endpoints
+without publishing staged definitions or scenes. This does not introduce scoped
+nested prefab identities or automatic cross-scene target lookup.

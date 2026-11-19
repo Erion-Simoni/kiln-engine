@@ -410,6 +410,14 @@ capture/save/recovery/move/propagation/Apply/reopen proves the clear survives wh
 inherited paths update. Nested/variant and combined visual acceptance remain open.
 A03 stays PARTIAL. [Evidence](evidence/A03_PREFAB_TEXTURE_PERSISTENCE.md).
 
+**Prefab joint propagation 2026-11-19:** Apply and definition propagation now remap
+joint owner references between template and each instance and validate changed
+endpoints in the staged destination compositions. Missing/ambiguous targets reject
+atomically; unique nested targets and unchanged legacy joints remain supported.
+Apply uses current captured edits. Six headless regressions cover saved/reopened
+and runtime-spawned identities; broader GUI/nested-variant acceptance remains open.
+A03 stays PARTIAL. [Evidence](evidence/A03_PREFAB_JOINT_PROPAGATION.md).
+
 ### A04 — General scripting, graphs and real debugging
 
 **Status:** PARTIAL. **Depends on:** A02.

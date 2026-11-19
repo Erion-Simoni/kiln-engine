@@ -536,7 +536,10 @@ fn prefab_definition_changes_propagate_to_saved_instances_and_keep_overrides() {
     if let Component::Transform { y, .. } = &mut changed.root_entity.components[0] {
         *y = 12.0;
     }
-    assert_eq!(propagate_prefab_in_scenes(&mut project, &changed), 1);
+    assert_eq!(
+        propagate_prefab_in_scenes(&mut project, &changed).unwrap(),
+        1
+    );
     let instance = project.scenes["main"]
         .entities
         .iter()

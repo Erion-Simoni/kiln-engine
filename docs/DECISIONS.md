@@ -2195,3 +2195,16 @@ JSON null retains its prior inherit meaning. Optional override fields are omitte
 rather than serialized as null, allowing TOML to persist sparse overrides. No new
 dependency or runtime component format. The same contract applies to project files,
 recovery snapshots and export manifests, preserving typed resource-path rewrites.
+
+### ADR-0092 — Stage prefab propagation and remap joint owners (2026-11-19)
+
+Status: accepted. Prefab Apply and definition propagation stage the complete project
+before publishing. Convert a source instance's self-referential joint endpoints to
+the template ID, then remap that ID to each destination owner. External endpoints
+remain literal scene identities and must resolve uniquely in the destination's
+composition. Validate newly changed joints against the fully staged project and
+reject the operation without changing definitions/scenes if any destination fails.
+Unchanged legacy joints remain repairable; unrelated edits do not reject them.
+The live Apply path stages the currently captured scene before applying, so unsaved
+instance edits are the source. Publish runtime/editor state only after validation.
+No dependency or serialized format change; this extends existing reference guards.
