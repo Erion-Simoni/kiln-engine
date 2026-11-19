@@ -24,6 +24,15 @@ pub struct PrefabOverride {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ComponentOverride {
+    /// Per-instance dimensions and draw layer; missing values inherit.
+    SpriteGeometry {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        width: Option<f32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        height: Option<f32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        layer: Option<f32>,
+    },
     Transform {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         x: Option<f32>,
@@ -130,6 +139,29 @@ impl Prefab {
                         }
                         if let Some(val) = oscale {
                             *scale = *val;
+                        }
+                    }
+                    (
+                        Component::Sprite {
+                            width,
+                            height,
+                            layer,
+                            ..
+                        },
+                        ComponentOverride::SpriteGeometry {
+                            width: ow,
+                            height: oh,
+                            layer: ol,
+                        },
+                    ) => {
+                        if let Some(value) = ow {
+                            *width = *value;
+                        }
+                        if let Some(value) = oh {
+                            *height = *value;
+                        }
+                        if let Some(value) = ol {
+                            *layer = *value;
                         }
                     }
                     (

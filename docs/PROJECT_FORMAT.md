@@ -373,3 +373,13 @@ endpoints remain literal scene IDs and must resolve uniquely within each destina
 scene and its nested scenes. Apply/propagation reject invalid changed endpoints
 without publishing staged definitions or scenes. This does not introduce scoped
 nested prefab identities or automatic cross-scene target lookup.
+
+### Prefab sprite geometry overrides
+
+`SpriteGeometry` overrides hold optional `width`, `height` and `layer` numbers;
+absent values inherit the definition independently. Captured instance edits use
+the `sprite_geometry` override entry. Returning all three properties to their
+current definition values removes that entry. Apply/propagation preserves deltas;
+Revert clears them. Existing Sprite color/texture override data is unchanged.
+Matching native/browser tools must advertise runtime contract `kiln-authoring-v3`;
+older parsers do not support the new tag and are rejected before export.

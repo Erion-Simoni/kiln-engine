@@ -418,6 +418,14 @@ Apply uses current captured edits. Six headless regressions cover saved/reopened
 and runtime-spawned identities; broader GUI/nested-variant acceptance remains open.
 A03 stays PARTIAL. [Evidence](evidence/A03_PREFAB_JOINT_PROPAGATION.md).
 
+**Sprite geometry overrides 2026-11-19:** width, height and draw layer now capture
+as sparse per-instance overrides and survive project/recovery persistence, cross-
+scene Apply and live refresh. Per-property inheritance and one-command Revert with
+exact Undo/Redo pass headless. Runtime contract `kiln-authoring-v3` rejects stale
+native/browser parsers. Material/clip and arbitrary component overrides, nested/
+variant semantics and combined visual acceptance remain open. A03 stays PARTIAL.
+[Evidence](evidence/A03_PREFAB_SPRITE_GEOMETRY.md).
+
 ### A04 — General scripting, graphs and real debugging
 
 **Status:** PARTIAL. **Depends on:** A02.

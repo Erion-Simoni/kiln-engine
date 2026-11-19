@@ -398,6 +398,24 @@ pub fn update_prefab_instances(world: &mut GameWorld, prefab: &kiln_core::Prefab
                             }
                         }
                     }
+                    "sprite_geometry" | "SpriteGeometry" => {
+                        if let kiln_core::ComponentOverride::SpriteGeometry {
+                            width,
+                            height,
+                            layer,
+                        } = comp_override
+                        {
+                            if let Some(value) = width {
+                                sprite.size[0] = *value;
+                            }
+                            if let Some(value) = height {
+                                sprite.size[1] = *value;
+                            }
+                            if let Some(value) = layer {
+                                sprite.layer = *value;
+                            }
+                        }
+                    }
                     "sprite" | "Sprite" => {
                         if let kiln_core::prefab::ComponentOverride::Sprite { color, texture } =
                             comp_override

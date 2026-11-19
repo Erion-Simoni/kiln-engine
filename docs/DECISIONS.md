@@ -2208,3 +2208,20 @@ Unchanged legacy joints remain repairable; unrelated edits do not reject them.
 The live Apply path stages the currently captured scene before applying, so unsaved
 instance edits are the source. Publish runtime/editor state only after validation.
 No dependency or serialized format change; this extends existing reference guards.
+
+### ADR-0093 — Preserve sprite geometry prefab overrides (2026-11-19)
+
+Status: accepted. Add an optional `SpriteGeometry` override variant for width,
+height and draw layer, with sparse inherited fields. Existing Sprite color/texture
+and Transform overrides retain their format. Capture per-property differences from
+the definition under `sprite_geometry`; remove the entry when all values inherit.
+Apply/Revert/propagation use the ordinary override path, and live instance refresh
+uses the same properties. No resource path or runtime component format changes and
+no new dependency. Material/clip, arbitrary component and nested/variant prefab
+contracts remain separate; this extends the supported Sprite property subset.
+
+Bump the shared runtime contract to `kiln-authoring-v3`: older same-version players
+cannot deserialize the new override tag (or explicit texture-clear booleans).
+Existing native/web identity guards reject those stale tools before publication;
+matching player/browser tools must be rebuilt together. The previous contract is
+an explicit negative control in the compatibility test.

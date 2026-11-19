@@ -1,11 +1,20 @@
 # Kiln Session Handoff
 
 Owner scope: A02–A04 on `fix/a01-ci-baseline`.
-Current checkpoint: A03 reference-safe prefab joint propagation (2026-11-19),
-following 0431883. A02–A04 remain PARTIAL. A01 accepted baseline stays 6de428b;
+Current checkpoint: A03 sprite geometry prefab overrides (2026-11-19),
+following cc3c971. A02–A04 remain PARTIAL. A01 accepted baseline stays 6de428b;
 full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
+
+- ADR-0093: per-instance Sprite width/height/layer now capture as sparse geometry
+  deltas, persist through TOML/JSON and apply through ordinary prefab propagation/
+  Apply/Revert. Live linked-instance refresh and existing-delta panel edits support
+  these values. Matching definition values remove the delta. No new dependency.
+- Shared runtime contract bumped to kiln-authoring-v3 so native/browser exporters
+  reject parsers lacking the new enum tag or explicit texture-clear booleans.
+  Previous kiln-a04-v2 is an explicit compatibility negative control. Rebuild
+  matching player/browser tools with updated editors.
 
 - ADR-0092: prefab Apply remaps instance-owner joint endpoints to the template;
   propagation remaps them to each destination owner. Changed external endpoints
@@ -50,6 +59,14 @@ full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Executed validation
 
+- Geometry regression reproduces prior 48/20/7 instance values being overwritten
+  by definition 64/80/2. Three final headless cases cover project Save/reopen and
+  actual atomic JSON recovery, cross-scene Apply/runtime projection, sparse field
+  inheritance, Revert with exact Undo/Redo, live refresh and delta removal.
+  Raw target/a03-prefab-geometry-{before,integration,workspace-final,quality-final,wasm-final,wasm-optout-final}.log.
+  Evidence: docs/evidence/A03_PREFAB_SPRITE_GEOMETRY.md. No new GUI/physical/export
+  visual claim; broader prefab acceptance remains open.
+
 - Three prefab-joint before regressions fail, all six final regressions pass:
   Apply/propagation owner remapping, whole-project atomic missing/ambiguous target
   refusal, unique nested target, exact save/reopen/runtime spawn, legacy tolerance.
@@ -63,8 +80,8 @@ full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
   target/a03-prefab-texture-{before,core,integration,workspace,quality,wasm,wasm-optout}.log.
   Evidence: docs/evidence/A03_PREFAB_TEXTURE_PERSISTENCE.md.
 
-- Current locked Rust workspace: 813 PASS, zero failures including docs. just check PASS.
-  Previous shared-core checkpoint: default/opt-out WASM strict Clippy PASS.
+- Current locked Rust workspace: 816 PASS, zero failures including docs. just check PASS.
+  Current default/opt-out WASM strict Clippy PASS.
   Previous Python helper suite 49 PASS;
   script compilation and diff checks PASS.
 - Real native widgets PASS: force a crash before autosave, reconstruct saved atlas,
@@ -96,7 +113,7 @@ accept earlier source, not this checkpoint. Native CI now includes atlas crashes
 ordinary workspace tests include the prefab persistence integration.
 
 A03: older snapshots that already lost an explicit clear cannot recover its intent.
-Nested/variant prefab runtime/override contracts and combined renamed-art,
+Material/clip and arbitrary component overrides, nested/variant prefab contracts and combined renamed-art,
 multiple-scene/prefab/atlas/export production acceptance remain open. Recipes own
 whole-image static clips; independent animation edits need separate clip assets.
 Derived-atlas reconstruction uses current source art, not historical source backups.
