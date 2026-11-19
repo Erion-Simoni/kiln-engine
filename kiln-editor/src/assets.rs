@@ -417,8 +417,9 @@ fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
         } else if path.is_file() {
             let name = entry.file_name();
             let name = name.to_string_lossy();
-            if name.starts_with('.')
-                && (name.ends_with(".recovery.json") || name.ends_with(".recovery.tmp"))
+            if kiln_assets::atlas_project::private_name(&name)
+                || name.starts_with('.')
+                    && (name.ends_with(".recovery.json") || name.ends_with(".recovery.tmp"))
             {
                 continue;
             }
@@ -551,6 +552,13 @@ mod reimport_tests {
     fn private_recovery_and_export_outputs_are_not_imported_and_preview_cannot_escape() {
         let root = tempfile::tempdir().unwrap();
         std::fs::write(root.path().join(".kiln.toml.recovery.json"), "private").unwrap();
+        for name in [
+            ".kiln-atlas-generations.json",
+            ".kiln-atlas.lock",
+            ".kiln-atlas-1.tmp",
+        ] {
+            std::fs::write(root.path().join(name), "private").unwrap();
+        }
         std::fs::create_dir(root.path().join("export")).unwrap();
         std::fs::write(root.path().join("export/game.exe"), "binary").unwrap();
         let mut browser = AssetBrowser::new();

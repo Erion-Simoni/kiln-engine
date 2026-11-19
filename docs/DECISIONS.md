@@ -2162,3 +2162,24 @@ by the recipe; duplicate a clip before making independent animation edits.
 Recipes are bounded to 256 PNGs, 4096-pixel output sides and 256 MiB total decoded
 source pixels; no resource-budget exception. This is atlas authoring/rebuilding,
 not an automatic conversion of every texture or certification of nested prefabs.
+
+### ADR-0090 — Recover generated atlases from bounded provenance (2026-11-19)
+
+Status: accepted. A PNG and its later manifest Save cannot be replaced atomically
+as one file. Before publishing an atlas PNG, persist its project/recipe/output/hash
+provenance. Reopening a saved project or restoring its recovery draft may rebuild
+an interrupted, known-generated output using that selected recipe and current source
+art. Original art is authoritative and never rewritten. Unknown output edits remain
+protected. Multiple interrupted builds retain provenance until manifest Save commits
+the matching generation. The ledger is bounded to 512 KiB/4096 generations.
+
+Use a standard-library advisory file lock for cooperating publishers/cleanup. It
+releases on process exit/crash. Publication checks output bytes again after recording
+provenance. Export copies the ledger into its staging snapshot, never repairs source
+files, and strips private transaction metadata before publishing. This recovery
+contract concerns derived atlas data; source-module/file moves remain separate.
+
+Recovery is explicit on project Open and recovery-draft Restore. Ordinary project
+reads, including Save's external-manifest conflict check, remain read-only so they
+cannot overwrite a draft's generated PNG. Save As repairs only its copied staging
+project. A successful manual Save restarts the autosave interval.

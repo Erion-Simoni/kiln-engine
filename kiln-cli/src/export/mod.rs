@@ -176,6 +176,7 @@ pub fn run(options: Options) -> Result<()> {
         project.to_toml().map_err(anyhow::Error::msg)?,
     )?;
     files.sort();
+    kiln_assets::atlas_project::strip_export_provenance(&snapshot).map_err(anyhow::Error::msg)?;
     resources::validate(&project, &snapshot)?;
     cancelled(&marker)?;
     if browser {

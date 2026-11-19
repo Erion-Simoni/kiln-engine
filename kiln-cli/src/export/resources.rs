@@ -66,6 +66,7 @@ pub fn snapshot(
         fs::copy(entry.path(), &target)?;
         files.push(target);
     }
+    kiln_assets::atlas_project::copy_provenance(root, snapshot).map_err(anyhow::Error::msg)?;
     let manifest = snapshot.join("kiln.toml");
     fs::write(&manifest, project.to_toml().map_err(anyhow::Error::msg)?)?;
     files.push(manifest);

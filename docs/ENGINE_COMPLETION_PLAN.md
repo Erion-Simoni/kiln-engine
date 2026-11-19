@@ -393,6 +393,16 @@ Nested/variant and combined prefab/multiple-scene acceptance remain open; genera
 PNG/manifest crash atomicity is separate. A03 stays PARTIAL.
 [Evidence](evidence/A03_SAVED_ATLAS_RECIPES.md).
 
+**Interrupted atlas checkpoint 2026-11-19:** bounded provenance allows explicit
+Open and autosave Restore to reconstruct the selected known-generated PNG without
+changing original art or the saved manifest. Save's disk-conflict check remains
+read-only; Save As and native/browser export normalize isolated copies. Real
+pre-autosave crash and timer-snapshot Restore/Save/restart widgets pass, including
+whole-project/PNG equality and rendered pixels. Full workspace: 804 tests pass.
+This supersedes the atlas interruption limitation above. General source/multi-file
+crash transactions, nested/variant prefabs and combined acceptance remain open.
+A03 stays PARTIAL. [Evidence](evidence/A03_ATLAS_CRASH_RECOVERY.md).
+
 ### A04 — General scripting, graphs and real debugging
 
 **Status:** PARTIAL. **Depends on:** A02.

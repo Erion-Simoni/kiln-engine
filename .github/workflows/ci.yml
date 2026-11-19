@@ -266,6 +266,8 @@ jobs:
         run: python3 tests/native/source_move_smoke.py
       - name: Build, rename, rebuild and reopen saved atlas recipes
         run: python3 tests/native/atlas_recipe_smoke.py
+      - name: Recover atlas publication before autosave and restore a real recovery draft
+        run: python3 tests/native/atlas_recovery_smoke.py
       - name: Play the relocated native atlas export
         run: python3 tests/native/atlas_player_smoke.py
       - name: Verify external art refresh and structured gameplay authoring
@@ -385,6 +387,13 @@ jobs:
             target/a03-atlas-recipe/editor/*.png
             target/a03-atlas-recipe/editor/*.log
             target/a03-atlas-recipe/reopened/*.png
+            target/a03-atlas-recovery/result.json
+            target/a03-atlas-recovery/failure.json
+            target/a03-atlas-recovery/*-crash.json
+            target/a03-atlas-recovery/*-restore.json
+            target/a03-atlas-recovery/editor/*.png
+            target/a03-atlas-recovery/editor/*.log
+            target/a03-atlas-recovery/reopened/*.png
             target/a03-atlas-player/result.json
             target/a03-atlas-player/*.log
             target/a03-atlas-player/*.png

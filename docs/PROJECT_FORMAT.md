@@ -230,6 +230,15 @@ images or a failed fit leave the prior output and project intact.
 PNG publication uses a staged file replacement; Save Project persists the recipe
 and generated clips. Export rebuilds the atlas and normalizes its clips in its
 staging snapshot using current source art, without modifying the authoring project.
+Before PNG publication, `.kiln-atlas-generations.json` records bounded provenance
+(512 KiB, 4096 generated versions); `.kiln-atlas.lock` serializes cooperating atlas
+publishers. Open reconstructs interrupted known-generated output for the saved
+recipe; Restore reconstructs the selected autosave recipe. Reconstruction uses
+current source art, preserves the manifest and refuses unknown output edits.
+Save removes matching committed provenance. Save As normalizes only its copy;
+export copies validated provenance into staging and strips private metadata before
+publication. Read-only project checks never reconstruct resources. This does not
+provide atomic transactions for source moves or arbitrary multi-file changes.
 The native and browser players render the ordinary PNG/clip data. Runtime frame
 budgets and cross-platform visual acceptance remain separate gates.
 

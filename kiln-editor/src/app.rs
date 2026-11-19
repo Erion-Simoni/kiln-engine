@@ -748,6 +748,7 @@ impl EditorApp {
         self.scenes.mark_saved(&project);
         self.lifecycle.mark_saved(&project);
         self.current_project = Some(project);
+        self.last_autosave = Instant::now();
         self.project_error = None;
         Ok(())
     }
@@ -776,6 +777,11 @@ impl EditorApp {
         }
         let project = self.project_to_save()?;
         let path = crate::project_files::save_as(&project, source, &path)?;
+        let loaded = crate::project_files::load(&path)?;
+        for message in loaded.messages {
+            self.console_log.push(format!("[WARN] {message}"));
+        }
+        let project = loaded.project;
         self.shell.script_editor.reset();
         self.shell.entity_clipboard = None;
         self.shell.selection_origin = None;
@@ -803,6 +809,7 @@ impl EditorApp {
         }
         self.selected_entity = None;
         self.upload_scene_textures();
+        self.last_autosave = Instant::now();
         self.project_error = None;
         Ok(())
     }
@@ -810,7 +817,10 @@ impl EditorApp {
     /// Load a project from a file path.
     pub fn load_project(&mut self, path: PathBuf) -> Result<(), String> {
         self.shell.script_editor.require_saved()?;
-        let loaded = crate::project_files::load(&path)?;
+        let loaded = crate::project_files::load_recovering(&path)?;
+        for message in &loaded.messages {
+            self.console_log.push(format!("[WARN] {message}"));
+        }
         self.shell.script_editor.reset();
         self.shell.entity_clipboard = None;
         self.shell.selection_origin = None;
@@ -2156,7 +2166,15 @@ impl EditorApp {
             return Ok(());
         }
         let snapshot = prompt.snapshot.as_ref().map_err(Clone::clone)?;
-        let recovered_project = snapshot.project.clone();
+        let mut recovered_project = snapshot.project.clone();
+        let root = prompt
+            .project_path
+            .parent()
+            .ok_or("Missing project directory")?;
+        for message in kiln_assets::atlas_project::recover(&mut recovered_project, root) {
+            log::warn!("{message}");
+            self.console_log.push(format!("[WARN] {message}"));
+        }
         let saved_project = self.current_project.clone().ok_or("No project loaded")?;
         let recovered_script = snapshot
             .script
@@ -2177,6 +2195,7 @@ impl EditorApp {
             self.scenes = SceneWorkspace::open(&recovered_project);
             self.scenes.set_saved_baselines(&saved_project);
             self.lifecycle.mark_saved(&saved_project);
+            self.upload_scene_textures();
             self.reset_scene_view();
             if let Some(editor) = recovered_script {
                 self.shell.script_editor = editor;

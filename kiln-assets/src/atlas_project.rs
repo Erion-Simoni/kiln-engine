@@ -1,9 +1,12 @@
 //! Publish atlas recipes using guarded single-file replacement.
-use crate::atlas_recipe::{self, BakedAtlas};
+use crate::{
+    atlas_provenance as provenance,
+    atlas_recipe::{self, BakedAtlas},
+};
 use kiln_core::{atlas::AtlasRecipe, Project};
 use std::{
     fs,
-    io::{Read, Write},
+    io::Read,
     path::{Path, PathBuf},
 };
 
@@ -77,6 +80,14 @@ fn prepare(
         let owned = project.atlases.get(id).is_some_and(|old| {
             old.output == recipe.output && old.built_hash == atlas_recipe::image_hash(&bytes)
         });
+        let owned = owned
+            || provenance::owns(
+                root,
+                &project.id,
+                id,
+                &recipe.output,
+                &atlas_recipe::image_hash(&bytes),
+            )?;
         if !owned {
             return Err("Atlas output already exists or changed externally; choose a new path or restore the generated file".into());
         }
@@ -88,13 +99,6 @@ fn prepare(
     Ok((baked, output, original))
 }
 
-struct Temporary(PathBuf);
-impl Drop for Temporary {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
-    }
-}
-
 /// Stage and atomically replace one generated PNG, then publish the recipe/clips
 /// in memory. Caller saves the project document after success.
 pub fn build(
@@ -104,30 +108,26 @@ pub fn build(
     recipe: &AtlasRecipe,
 ) -> Result<(), String> {
     let root = root.canonicalize().map_err(|e| e.to_string())?;
+    let _lock = provenance::lock(&root)?;
     let (baked, output, original) = prepare(project, &root, id, recipe)?;
-    let temporary = Temporary(
-        output
-            .parent()
-            .ok_or("Missing output directory")?
-            .join(format!(".kiln-atlas-{}.tmp", kiln_core::next_id())),
-    );
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temporary.0)
-        .map_err(|e| e.to_string())?;
-    file.write_all(&baked.png).map_err(|e| e.to_string())?;
-    file.sync_all().map_err(|e| e.to_string())?;
-    drop(file);
-    let current = if output.exists() {
-        Some(read(&root, &recipe.output)?)
-    } else {
-        None
-    };
-    if current != original {
-        return Err("Atlas output changed while building; no files were replaced".into());
+    if original.as_deref() != Some(baked.png.as_slice()) {
+        provenance::record(
+            &root,
+            &project.id,
+            id,
+            &recipe.output,
+            &baked.recipe.built_hash,
+        )?;
+        let current = if output.exists() {
+            Some(read(&root, &recipe.output)?)
+        } else {
+            None
+        };
+        if current != original {
+            return Err("Atlas output changed while building; no files were replaced".into());
+        }
+        provenance::replace(&output, &baked.png)?;
     }
-    fs::rename(&temporary.0, &output).map_err(|e| e.to_string())?;
     atlas_recipe::apply(project, id, &baked);
     let asset_id = project.ensure_asset_ids([recipe.output.as_str()])[0].clone();
     project.asset_import_settings.entry(asset_id).or_insert(
@@ -138,6 +138,209 @@ pub fn build(
         },
     );
     Ok(())
+}
+
+/// Reconstruct interrupted, known-generated outputs for the selected saved or
+/// recovered project. Original art and independently edited outputs are preserved.
+/// Reports per-recipe failures so a missing source does not hide a recovery draft.
+pub fn recover(project: &mut Project, root: &Path) -> Vec<String> {
+    if !root.join(provenance::FILE).exists() {
+        return Vec::new();
+    }
+    let generations = match provenance::read(root) {
+        Ok(generations) => generations,
+        Err(error) => return vec![error],
+    };
+    let mut ids: Vec<_> = project.atlases.keys().cloned().collect();
+    ids.sort();
+    let mut messages = Vec::new();
+    for id in ids {
+        let recipe = project.atlases[&id].clone();
+        if !generations
+            .iter()
+            .any(|g| g.project == project.id && g.atlas == id && g.output == recipe.output)
+        {
+            continue;
+        }
+        let current = read(root, &recipe.output)
+            .ok()
+            .map(|bytes| atlas_recipe::image_hash(&bytes));
+        if current.as_deref() == Some(recipe.built_hash.as_str()) {
+            continue;
+        }
+        match build(project, root, &id, &recipe) {
+            Ok(()) => messages.push(format!(
+                "Reconstructed interrupted atlas {id}; Save Project to commit generated metadata"
+            )),
+            Err(error) => messages.push(format!("Interrupted atlas {id} needs attention: {error}")),
+        }
+    }
+    messages
+}
+
+/// Forget provenance only for outputs consistent with a successfully saved manifest.
+/// Cleanup failure is nonfatal after the manifest's atomic replacement succeeded.
+pub fn finish_saved(project: &Project, root: &Path) -> Result<(), String> {
+    if !root.join(provenance::FILE).exists() {
+        return Ok(());
+    }
+    let _lock = provenance::lock(root)?;
+    let mut generations = provenance::read(root)?;
+    let mut committed = Vec::new();
+    for (id, recipe) in &project.atlases {
+        if let Ok(bytes) = read(root, &recipe.output) {
+            if atlas_recipe::image_hash(&bytes) == recipe.built_hash {
+                committed.push((id.as_str(), recipe.output.as_str()));
+            }
+        }
+    }
+    generations.retain(|g| {
+        g.project != project.id
+            || !committed
+                .iter()
+                .any(|(id, path)| *id == g.atlas && *path == g.output)
+    });
+    if generations.is_empty() {
+        fs::remove_file(root.join(provenance::FILE)).map_err(|e| e.to_string())?;
+    } else {
+        provenance::write(root, generations)?;
+    }
+    Ok(())
+}
+
+/// Copy only validated provenance into an isolated Save As/export snapshot.
+/// Source metadata is read atomically and never modified or locked for writing.
+pub fn copy_provenance(source: &Path, destination: &Path) -> Result<(), String> {
+    if !source.join(provenance::FILE).exists() {
+        return Ok(());
+    }
+    provenance::write(destination, provenance::read(source)?)
+}
+
+/// Remove private bookkeeping from an owned export staging directory.
+pub fn strip_export_provenance(root: &Path) -> Result<(), String> {
+    for file in [provenance::FILE, provenance::LOCK] {
+        match fs::remove_file(root.join(file)) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    Ok(())
+}
+
+/// Private atlas bookkeeping excluded from copied authoring resources.
+pub fn private_name(name: &str) -> bool {
+    name == provenance::FILE
+        || name == provenance::LOCK
+        || name.starts_with(".kiln-atlas-") && name.ends_with(".tmp")
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    use super::*;
+    fn fixture() -> (tempfile::TempDir, Project, AtlasRecipe) {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(
+            root.path().join("hero.png"),
+            crate::encode_png_rgba(2, 2, &[255, 0, 0, 255].repeat(4)).unwrap(),
+        )
+        .unwrap();
+        let recipe = AtlasRecipe {
+            output: "atlas.png".into(),
+            size: 16,
+            padding: 1,
+            sources: [("hero".into(), "hero.png".into())].into(),
+            ..Default::default()
+        };
+        let mut project = Project::default();
+        build(&mut project, root.path(), "game", &recipe).unwrap();
+        finish_saved(&project, root.path()).unwrap();
+        (root, project, recipe)
+    }
+    fn json(project: &Project) -> serde_json::Value {
+        serde_json::to_value(project).unwrap()
+    }
+    #[test]
+    fn saved_and_older_recovery_recipes_reconstruct_after_multiple_uncommitted_builds() {
+        let (root, saved, mut recipe) = fixture();
+        let source = fs::read(root.path().join("hero.png")).unwrap();
+        let saved_png = fs::read(root.path().join("atlas.png")).unwrap();
+        let mut draft = saved.clone();
+        recipe.size = 32;
+        build(&mut draft, root.path(), "game", &recipe).unwrap();
+        let recovered_32 = draft.clone();
+        let png_32 = fs::read(root.path().join("atlas.png")).unwrap();
+        recipe.size = 64;
+        build(&mut draft, root.path(), "game", &recipe).unwrap();
+        assert_eq!(
+            crate::decode_png(&fs::read(root.path().join("atlas.png")).unwrap())
+                .unwrap()
+                .width,
+            64
+        );
+        let mut reopened = saved.clone();
+        assert!(recover(&mut reopened, root.path())
+            .iter()
+            .any(|m| m.starts_with("Reconstructed")));
+        assert_eq!(json(&reopened), json(&saved));
+        assert_eq!(fs::read(root.path().join("atlas.png")).unwrap(), saved_png);
+        let mut restored: Project =
+            serde_json::from_slice(&serde_json::to_vec(&recovered_32).unwrap()).unwrap();
+        recover(&mut restored, root.path());
+        assert_eq!(json(&restored), json(&recovered_32));
+        assert_eq!(fs::read(root.path().join("atlas.png")).unwrap(), png_32);
+        finish_saved(&restored, root.path()).unwrap();
+        assert!(!root.path().join(provenance::FILE).exists());
+        assert_eq!(fs::read(root.path().join("hero.png")).unwrap(), source);
+    }
+    #[test]
+    fn recovery_preserves_independent_output_edits_and_foreign_project_outputs() {
+        let (root, saved, mut recipe) = fixture();
+        let mut draft = saved.clone();
+        recipe.size = 32;
+        build(&mut draft, root.path(), "game", &recipe).unwrap();
+        let foreign = Project {
+            id: "different-project".into(),
+            ..saved.clone()
+        };
+        let mut foreign_loaded = foreign.clone();
+        let before = fs::read(root.path().join("atlas.png")).unwrap();
+        assert!(recover(&mut foreign_loaded, root.path()).is_empty());
+        assert_eq!(fs::read(root.path().join("atlas.png")).unwrap(), before);
+        fs::write(
+            root.path().join("atlas.png"),
+            crate::encode_png_rgba(3, 3, &[0, 255, 0, 255].repeat(9)).unwrap(),
+        )
+        .unwrap();
+        let external = fs::read(root.path().join("atlas.png")).unwrap();
+        let mut reopened = saved.clone();
+        assert!(recover(&mut reopened, root.path())
+            .iter()
+            .any(|m| m.contains("needs attention")));
+        assert_eq!(json(&reopened), json(&saved));
+        assert_eq!(fs::read(root.path().join("atlas.png")).unwrap(), external);
+    }
+    #[test]
+    fn invalid_provenance_and_active_publisher_refuse_before_replacing_output() {
+        let (root, mut project, mut recipe) = fixture();
+        let before = fs::read(root.path().join("atlas.png")).unwrap();
+        let original = json(&project);
+        recipe.size = 32;
+        let lock = provenance::lock(root.path()).unwrap();
+        assert!(build(&mut project, root.path(), "game", &recipe)
+            .unwrap_err()
+            .contains("lock"));
+        drop(lock);
+        fs::write(root.path().join(provenance::FILE), b"{invalid}").unwrap();
+        assert!(build(&mut project, root.path(), "game", &recipe).is_err());
+        assert_eq!(json(&project), original);
+        assert_eq!(fs::read(root.path().join("atlas.png")).unwrap(), before);
+        assert_eq!(
+            fs::read(root.path().join(provenance::FILE)).unwrap(),
+            b"{invalid}"
+        );
+    }
 }
 
 #[cfg(test)]

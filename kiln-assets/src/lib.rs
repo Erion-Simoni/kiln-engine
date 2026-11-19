@@ -29,3 +29,6 @@ pub mod atlas_recipe;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod atlas_project;
+
+#[cfg(not(target_arch = "wasm32"))]
+mod atlas_provenance;

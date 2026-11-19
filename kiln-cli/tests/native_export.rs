@@ -508,12 +508,18 @@ fn atlas_exports_rebuild_current_art_in_native_and_browser_staging_only() {
     kiln_assets::atlas_project::build(&mut project, root, "game", &recipe).unwrap();
     fs::write(&f.project, project.to_toml().unwrap()).unwrap();
     let saved_manifest = fs::read(&f.project).unwrap();
-    let saved_atlas = fs::read(root.join("art/atlas.png")).unwrap();
     fs::write(
         &source,
         kiln_assets::encode_png_rgba(2, 2, &[0, 0, 255, 255].repeat(4)).unwrap(),
     )
     .unwrap();
+    // Simulate a crash: publish a different atlas size without saving its recipe.
+    let mut unsaved = project.clone();
+    let mut unsaved_recipe = recipe.clone();
+    unsaved_recipe.size = 32;
+    kiln_assets::atlas_project::build(&mut unsaved, root, "game", &unsaved_recipe).unwrap();
+    let saved_atlas = fs::read(root.join("art/atlas.png")).unwrap();
+    let saved_provenance = fs::read(root.join(".kiln-atlas-generations.json")).unwrap();
     let bundle = f.root.join("atlas web runtime");
     fs::create_dir(&bundle).unwrap();
     fs::write(
@@ -570,6 +576,10 @@ fn atlas_exports_rebuild_current_art_in_native_and_browser_staging_only() {
             )
         } else {
             let archive = kiln_assets::Archive::load(&output.join("assets.kar")).unwrap();
+            assert!(!archive
+                .list()
+                .iter()
+                .any(|path| path.contains(".kiln-atlas")));
             (
                 archive.extract("art/atlas.png").unwrap(),
                 archive.extract("kiln.toml").unwrap(),
@@ -577,6 +587,12 @@ fn atlas_exports_rebuild_current_art_in_native_and_browser_staging_only() {
         };
         let baked = Project::from_toml(std::str::from_utf8(&manifest).unwrap()).unwrap();
         let image = kiln_assets::decode_png(&atlas).unwrap();
+        assert_eq!(
+            image.width, 16,
+            "Export uses the saved recipe, not the interrupted 32px build"
+        );
+        assert!(!output.join("project/.kiln-atlas-generations.json").exists());
+        assert!(!output.join("project/.kiln-atlas.lock").exists());
         let rect = baked.animation_clips["atlas:game:hero"].frames[0].rect;
         assert_eq!(rect, [1, 1, 2, 2]);
         for y in 1..3 {
@@ -592,6 +608,10 @@ fn atlas_exports_rebuild_current_art_in_native_and_browser_staging_only() {
         );
         assert_eq!(baked.asset_ids, project.asset_ids);
         assert_eq!(fs::read(&f.project).unwrap(), saved_manifest);
+        assert_eq!(
+            fs::read(root.join(".kiln-atlas-generations.json")).unwrap(),
+            saved_provenance
+        );
         assert_eq!(fs::read(root.join("art/atlas.png")).unwrap(), saved_atlas);
     }
 }
