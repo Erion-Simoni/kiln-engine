@@ -426,6 +426,14 @@ native/browser parsers. Material/clip and arbitrary component overrides, nested/
 variant semantics and combined visual acceptance remain open. A03 stays PARTIAL.
 [Evidence](evidence/A03_PREFAB_SPRITE_GEOMETRY.md).
 
+**Sprite resource overrides 2026-11-20:** material and animation-clip assignments
+and explicit clears now persist independently through capture, TOML/JSON recovery,
+cross-scene Apply and live refresh. Revert/Undo/Redo and inherited-value refresh
+have headless coverage. Atlas clip removal guards include dormant override links.
+Runtime contract v4 rejects older parsers. Arbitrary component overrides, nested/
+variant semantics and combined visual acceptance remain open. A03 stays PARTIAL.
+[Evidence](evidence/A03_PREFAB_SPRITE_RESOURCES.md).
+
 ### A04 — General scripting, graphs and real debugging
 
 **Status:** PARTIAL. **Depends on:** A02.

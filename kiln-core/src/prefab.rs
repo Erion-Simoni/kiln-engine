@@ -24,6 +24,21 @@ pub struct PrefabOverride {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ComponentOverride {
+    /// Per-instance material and animation clip: absent inherits, false clears.
+    SpriteResources {
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "texture_value"
+        )]
+        material: Option<Option<String>>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "texture_value"
+        )]
+        animation_clip: Option<Option<String>>,
+    },
     /// Per-instance dimensions and draw layer; missing values inherit.
     SpriteGeometry {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -85,7 +100,7 @@ mod texture_value {
             Value::Path(path) => Ok(Some(Some(path))),
             Value::Clear(false) => Ok(Some(None)),
             Value::Clear(true) => Err(serde::de::Error::custom(
-                "Texture override must be a path or false to clear",
+                "Resource override must be a string or false to clear",
             )),
             Value::Inherit(()) => Ok(None),
         }
@@ -162,6 +177,24 @@ impl Prefab {
                         }
                         if let Some(value) = ol {
                             *layer = *value;
+                        }
+                    }
+                    (
+                        Component::Sprite {
+                            material,
+                            animation_clip,
+                            ..
+                        },
+                        ComponentOverride::SpriteResources {
+                            material: om,
+                            animation_clip: oc,
+                        },
+                    ) => {
+                        if let Some(value) = om {
+                            *material = value.clone();
+                        }
+                        if let Some(value) = oc {
+                            *animation_clip = value.clone();
                         }
                     }
                     (
@@ -487,5 +520,37 @@ mod texture_persistence_tests {
             assert!(serde_json::from_str::<ComponentOverride>(&source).is_err());
         }
         assert!(toml::from_str::<ComponentOverride>("type = 'Sprite'\ntexture = true").is_err());
+    }
+    #[test]
+    fn sprite_resources_preserve_all_three_states_and_reject_invalid_values() {
+        for value in [None, Some(None), Some(Some("named-resource".into()))] {
+            let original = ComponentOverride::SpriteResources {
+                material: value.clone(),
+                animation_clip: value.clone(),
+            };
+            for decoded in [
+                serde_json::from_str::<ComponentOverride>(
+                    &serde_json::to_string(&original).unwrap(),
+                )
+                .unwrap(),
+                toml::from_str::<ComponentOverride>(&toml::to_string(&original).unwrap()).unwrap(),
+            ] {
+                let ComponentOverride::SpriteResources {
+                    material,
+                    animation_clip,
+                } = decoded
+                else {
+                    unreachable!()
+                };
+                assert_eq!(material, value);
+                assert_eq!(animation_clip, value);
+            }
+        }
+        for field in ["material", "animation_clip"] {
+            for value in ["true", "42", "[]", "{}"] {
+                let source = format!(r#"{{"type":"SpriteResources","{field}":{value}}}"#);
+                assert!(serde_json::from_str::<ComponentOverride>(&source).is_err());
+            }
+        }
     }
 }

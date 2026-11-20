@@ -383,3 +383,13 @@ current definition values removes that entry. Apply/propagation preserves deltas
 Revert clears them. Existing Sprite color/texture override data is unchanged.
 Matching native/browser tools must advertise runtime contract `kiln-authoring-v3`;
 older parsers do not support the new tag and are rejected before export.
+
+### Prefab material and clip overrides
+
+`SpriteResources` overrides hold optional `material` and `animation_clip` IDs.
+An absent field inherits; a string assigns its ID; false clears it. Capture stores
+per-property deltas under `sprite_resources` and removes the entry when both
+properties inherit. Resource IDs are not file paths. Generated atlas clips remain
+protected while any scene/prefab override references them, even without a current
+Sprite component. Matching runtime contract is `kiln-authoring-v4`; rebuild native
+and browser tools with updated editors. Older tools cannot parse this override tag.

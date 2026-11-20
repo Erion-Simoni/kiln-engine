@@ -2225,3 +2225,14 @@ cannot deserialize the new override tag (or explicit texture-clear booleans).
 Existing native/web identity guards reject those stale tools before publication;
 matching player/browser tools must be rebuilt together. The previous contract is
 an explicit negative control in the compatibility test.
+
+### ADR-0094 — Preserve prefab material and clip overrides (2026-11-20)
+
+Status: accepted. Add sparse `SpriteResources` material/animation_clip overrides.
+Use the existing nullable-string representation: omitted inherits, string assigns,
+false explicitly clears. Capture per-property differences; core/live propagation
+and Revert share the existing override path. Atlas generated-clip removal also
+checks override references, including dormant overrides on prefab templates.
+No filesystem resource paths or new dependency. Runtime contract advances to
+kiln-authoring-v4 because older parsers cannot deserialize the new override tag.
+Nested/variant and arbitrary component override contracts remain separate.

@@ -114,9 +114,20 @@ pub fn bake(
 }
 
 fn used_clip(project: &Project, name: &str) -> bool {
-    project.scenes.values().flat_map(|s| &s.entities).chain(project.prefabs.values().map(|p| &p.root_entity))
-        .any(|e| e.components.iter().any(|c| matches!(c, Component::Sprite { animation_clip: Some(clip), .. } if clip == name)))
-        || project.animation_clips.values().any(|clip| clip.next.as_deref() == Some(name))
+    let referenced = project.scenes.values().flat_map(|s| &s.entities)
+        .chain(project.prefabs.values().map(|p| &p.root_entity)).any(|entity| {
+            entity.components.iter().any(|component| match component {
+                Component::Sprite { animation_clip: Some(clip), .. } => clip == name,
+                Component::PrefabInstance { overrides, .. } => overrides.overrides.values().any(|value| matches!(value,
+                    kiln_core::ComponentOverride::SpriteResources { animation_clip: Some(Some(clip)), .. } if clip == name)),
+                _ => false,
+            })
+        });
+    referenced
+        || project
+            .animation_clips
+            .values()
+            .any(|clip| clip.next.as_deref() == Some(name))
 }
 
 /// Check generated clip ownership without changing project state. Independent

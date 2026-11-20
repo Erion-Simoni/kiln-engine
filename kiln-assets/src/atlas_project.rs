@@ -458,6 +458,48 @@ mod tests {
         assert_eq!(fs::read(root.path().join("sheet.png")).unwrap(), before);
     }
     #[test]
+    fn dormant_prefab_clip_override_prevents_generated_clip_removal() {
+        let (root, mut project, recipe) = fixture();
+        build(&mut project, root.path(), "game", &recipe).unwrap();
+        let mut overrides = kiln_core::PrefabOverride::new("template".into());
+        overrides.overrides.insert(
+            "sprite_resources".into(),
+            kiln_core::ComponentOverride::SpriteResources {
+                material: None,
+                animation_clip: Some(Some(atlas::clip_name("game", "hero"))),
+            },
+        );
+        project.prefabs.insert(
+            "variant".into(),
+            kiln_core::Prefab {
+                id: "variant".into(),
+                name: "Dormant link".into(),
+                root_entity: Entity {
+                    id: "template".into(),
+                    name: "Template".into(),
+                    components: vec![Component::PrefabInstance {
+                        prefab_id: "base".into(),
+                        overrides,
+                    }],
+                },
+            },
+        );
+        let before = json(&project);
+        let png = fs::read(root.path().join("sheet.png")).unwrap();
+        let mut changed = recipe.clone();
+        changed.sources.remove("hero");
+        assert!(build(&mut project, root.path(), "game", &changed)
+            .unwrap_err()
+            .contains("still referenced"));
+        assert_eq!(json(&project), before);
+        assert_eq!(fs::read(root.path().join("sheet.png")).unwrap(), png);
+        project.prefabs.clear();
+        build(&mut project, root.path(), "game", &changed).unwrap();
+        assert!(!project
+            .animation_clips
+            .contains_key(&atlas::clip_name("game", "hero")));
+    }
+    #[test]
     fn referenced_generated_clips_cannot_be_removed_by_recipe_edits() {
         let (root, mut project, recipe) = fixture();
         build(&mut project, root.path(), "game", &recipe).unwrap();

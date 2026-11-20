@@ -358,11 +358,15 @@ pub fn update_prefab_instances(world: &mut GameWorld, prefab: &kiln_core::Prefab
                     layer,
                     width,
                     height,
+                    material,
+                    animation_clip,
                     ..
                 } => {
                     sprite = Sprite::new(color[0], color[1], color[2], color[3])
                         .with_size(*width, *height)
                         .with_layer(*layer);
+                    sprite.material = material.clone();
+                    sprite.animation_clip = animation_clip.clone();
                     if let Some(path) = texture {
                         // Texture override would need asset loading; skip for now
                         let _ = path;
@@ -395,6 +399,20 @@ pub fn update_prefab_instances(world: &mut GameWorld, prefab: &kiln_core::Prefab
                             }
                             if let Some(v) = scale {
                                 transform.scale = kiln_core::Vec2::splat(*v);
+                            }
+                        }
+                    }
+                    "sprite_resources" | "SpriteResources" => {
+                        if let kiln_core::ComponentOverride::SpriteResources {
+                            material,
+                            animation_clip,
+                        } = comp_override
+                        {
+                            if let Some(value) = material {
+                                sprite.material = value.clone();
+                            }
+                            if let Some(value) = animation_clip {
+                                sprite.animation_clip = value.clone();
                             }
                         }
                     }

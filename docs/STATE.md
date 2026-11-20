@@ -1,11 +1,22 @@
 # Kiln Session Handoff
 
 Owner scope: A02–A04 on `fix/a01-ci-baseline`.
-Current checkpoint: A03 sprite geometry prefab overrides (2026-11-19),
-following cc3c971. A02–A04 remain PARTIAL. A01 accepted baseline stays 6de428b;
+Current checkpoint: A03 prefab material/clip overrides (2026-11-20),
+following cebb055. A02–A04 remain PARTIAL. A01 accepted baseline stays 6de428b;
 full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
+
+- ADR-0094: sparse SpriteResources overrides persist per-instance material/clip
+  assignments and clears. Omitted inherits, string assigns, false clears. Capture,
+  Apply/propagation/Revert and live refresh share the contract. Live refresh now
+  also copies inherited definition material/clip values. No new dependency.
+- Generated-atlas clip removal checks scene/prefab overrides, including dormant
+  references with no current Sprite. Rejection preserves full project/PNG bytes;
+  removing the reference permits rebuild. Named IDs are not filesystem paths.
+- Current shared runtime contract is kiln-authoring-v4. The prior v3 is an explicit
+  negative compatibility control. Rebuild matching player/browser tools with the
+  updated editor; stale parsers cannot read the new override tag.
 
 - ADR-0093: per-instance Sprite width/height/layer now capture as sparse geometry
   deltas, persist through TOML/JSON and apply through ordinary prefab propagation/
@@ -59,6 +70,14 @@ full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Executed validation
 
+- Resource regression reproduces cleared assignments being replaced during
+  cross-scene Apply. New tests cover three-state TOML/JSON, malformed values,
+  actual atomic recovery, exact saved reopen, independent inheritance, live
+  refresh, one-command Revert/Undo/Redo and dormant atlas clip reference safety.
+  Raw target/a03-prefab-resources-{before,after,integration,atlas,workspace,quality,wasm,wasm-optout}.log.
+  Evidence: docs/evidence/A03_PREFAB_SPRITE_RESOURCES.md. No new GUI/material/
+  animation-playback/export visual claim; full prefab acceptance remains open.
+
 - Geometry regression reproduces prior 48/20/7 instance values being overwritten
   by definition 64/80/2. Three final headless cases cover project Save/reopen and
   actual atomic JSON recovery, cross-scene Apply/runtime projection, sparse field
@@ -80,7 +99,7 @@ full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
   target/a03-prefab-texture-{before,core,integration,workspace,quality,wasm,wasm-optout}.log.
   Evidence: docs/evidence/A03_PREFAB_TEXTURE_PERSISTENCE.md.
 
-- Current locked Rust workspace: 816 PASS, zero failures including docs. just check PASS.
+- Current locked Rust workspace: 820 PASS, zero failures including docs. just check PASS.
   Current default/opt-out WASM strict Clippy PASS.
   Previous Python helper suite 49 PASS;
   script compilation and diff checks PASS.
@@ -113,7 +132,7 @@ accept earlier source, not this checkpoint. Native CI now includes atlas crashes
 ordinary workspace tests include the prefab persistence integration.
 
 A03: older snapshots that already lost an explicit clear cannot recover its intent.
-Material/clip and arbitrary component overrides, nested/variant prefab contracts and combined renamed-art,
+Arbitrary component overrides, nested/variant prefab contracts and combined renamed-art,
 multiple-scene/prefab/atlas/export production acceptance remain open. Recipes own
 whole-image static clips; independent animation edits need separate clip assets.
 Derived-atlas reconstruction uses current source art, not historical source backups.
