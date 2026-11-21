@@ -2236,3 +2236,16 @@ checks override references, including dormant overrides on prefab templates.
 No filesystem resource paths or new dependency. Runtime contract advances to
 kiln-authoring-v4 because older parsers cannot deserialize the new override tag.
 Nested/variant and arbitrary component override contracts remain separate.
+
+### ADR-0095 — Stage saved-source Play restart (2026-11-21)
+
+Status: accepted. User deferred remaining A03 acceptance and requested the next
+milestone. Continue A04 with explicit restart semantics, not in-place VM patching.
+Restart requires the editor source buffer saved/reverted, then reads current saved
+scene/import/attached sources and prepares a fresh session/world/camera before
+stopping the current run. Compile/read/camera failure preserves the old VM/world,
+pause/error/clock state and authored project. Success invokes old Stop, replaces
+runtime state with authored initial state, clears transient progress/tasks/timers
+and starts an unpaused clock. Persistent save files are not erased or implicitly
+loaded. Existing Stop callbacks retain their documented effects. No new dependency,
+serialized format, or automatic reload while a game is running.

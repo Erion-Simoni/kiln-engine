@@ -597,3 +597,24 @@ programs; use ordinary function modules for reusable text libraries.
 
 This workflow does not complete A04's live source breakpoints, statement stepping,
 imported function frames/watches or the required new enemy/projectile/trigger game.
+
+### Editor restart and saved-source changes
+
+A running editor game executes the source compiled when that run began. Editing
+saved scene scripts, imports or attached scripts does not patch its VM in place.
+Use Play → Restart to prepare a fresh run from the current saved source files.
+Save or Revert a dirty editor source buffer first; Restart does not save it silently.
+
+Restart prepares the replacement program/world/camera before stopping the current
+run. Missing/invalid source or camera settings reject the replacement and leave
+the current runtime state, pause and error status intact. The diagnostic identifies
+the failing source location when supplied by the compiler. Correct the saved file
+and retry. Preparation validates loading/compilation, not all future runtime behavior.
+
+On success, the old Stop callback runs and the replacement starts unpaused from
+the authored scene. Transient variables, score/progress, spawned entities, timers,
+tasks, clock and error status reset. Authored scene data stays unchanged; persistent
+save files are neither erased nor automatically loaded by Restart. Authored Stop/
+Start/gameplay callbacks can still explicitly access persistence. Runtime errors
+after replacement use ordinary Play error handling. Live stack-preserving reload,
+source breakpoints and imported-frame inspection remain separate features.

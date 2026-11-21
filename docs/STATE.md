@@ -1,11 +1,22 @@
 # Kiln Session Handoff
 
 Owner scope: A02–A04 on `fix/a01-ci-baseline`.
-Current checkpoint: A03 prefab material/clip overrides (2026-11-20),
-following cebb055. A02–A04 remain PARTIAL. A01 accepted baseline stays 6de428b;
+Current checkpoint: A04 staged saved-source restart (2026-11-21),
+following 653f5ad. User deferred remaining A03 acceptance and requested the next
+item; do not resume A03 completion without new steering. A02–A04 remain PARTIAL. A01 accepted baseline stays 6de428b;
 full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
+
+- User chose finish or skip the current item and continue. A03 acceptance is
+  explicitly deferred, not marked complete; current implementation focus is A04.
+- ADR-0095: Restart requires the source buffer saved/reverted, compiles current
+  saved imports/attached/scene scripts and stages world/camera before stopping the
+  old run. Load/compile/camera rejection retains its VM/world/pause/error/clock.
+  Success uses authored initial runtime state and an unpaused clock. Persistent
+  files are not implicitly erased/loaded; authored callbacks retain their effects.
+- KILNSCRIPT specifies restart/reset/persistence and error boundaries; Restart
+  tooltips explain saved-source behavior. No new dependency/serialized format.
 
 - ADR-0094: sparse SpriteResources overrides persist per-instance material/clip
   assignments and clears. Omitted inherits, string assigns, false clears. Capture,
@@ -70,6 +81,14 @@ full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Executed validation
 
+- Restart headless tests: invalid imported source rejects with the module name;
+  old compiled VM keeps executing despite the invalid disk file. Corrected saved
+  imported code starts in a fresh unpaused/error-free session. Authored project
+  and existing save bytes remain exact. Missing source/invalid camera reject.
+  Initial import-line fixture syntax corrected, no production assertion relaxed.
+  Raw target/a04-restart-{initial,tests,tests-final,workspace-final,quality-final}.log.
+  Evidence: docs/evidence/A04_SAFE_RESTART.md. No new actual widget/audio replay.
+
 - Resource regression reproduces cleared assignments being replaced during
   cross-scene Apply. New tests cover three-state TOML/JSON, malformed values,
   actual atomic recovery, exact saved reopen, independent inheritance, live
@@ -99,8 +118,8 @@ full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
   target/a03-prefab-texture-{before,core,integration,workspace,quality,wasm,wasm-optout}.log.
   Evidence: docs/evidence/A03_PREFAB_TEXTURE_PERSISTENCE.md.
 
-- Current locked Rust workspace: 820 PASS, zero failures including docs. just check PASS.
-  Current default/opt-out WASM strict Clippy PASS.
+- Current locked Rust workspace: 822 PASS, zero failures including docs. just check PASS.
+  Previous shared-core checkpoint: default/opt-out WASM strict Clippy PASS.
   Previous Python helper suite 49 PASS;
   script compilation and diff checks PASS.
 - Real native widgets PASS: force a crash before autosave, reconstruct saved atlas,
@@ -131,7 +150,7 @@ environment returned Forbidden; local checks passed. Earlier 7f7c60e reference
 accept earlier source, not this checkpoint. Native CI now includes atlas crashes;
 ordinary workspace tests include the prefab persistence integration.
 
-A03: older snapshots that already lost an explicit clear cannot recover its intent.
+A03 (deferred by user): older snapshots that already lost an explicit clear cannot recover its intent.
 Arbitrary component overrides, nested/variant prefab contracts and combined renamed-art,
 multiple-scene/prefab/atlas/export production acceptance remain open. Recipes own
 whole-image static clips; independent animation edits need separate clip assets.
@@ -149,7 +168,7 @@ explicit File / Save Project is available. Source moves require clean saved buff
 and bounded portable .ks paths; all-file crash atomicity remains separate.
 
 A04: live gameplay source breakpoints, statement stepping, imported function frames/
-locals/watches, safe reload specification and the enemy/projectile/trigger game
+locals/watches, stack-preserving live reload and the enemy/projectile/trigger game
 with equivalent graph and complete exports remain open. Cooperative task payloads
 are explicit state machines, not suspended function stacks/yield syntax. The
 separate bytecode debugger is not the live gameplay source debugger.

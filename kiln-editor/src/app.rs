@@ -513,6 +513,36 @@ fn start_play_session(
     Ok((slice, scene_id.to_owned(), world))
 }
 
+/// Prepare a restart without mutating the running session or authored document.
+fn prepare_play_restart(
+    project: &Project,
+    scene_id: &str,
+    root: &Path,
+    textures: &SceneTextures,
+) -> Result<(PlaySession, GameWorld), String> {
+    let (slice, scene_id, world) = start_play_session(project, scene_id, root, textures)?;
+    let mut camera_controller = kiln_runtime::camera::CameraController::default();
+    let settings = project.cameras.get(&scene_id).cloned().unwrap_or_default();
+    let game_camera = camera_controller.update(
+        &settings,
+        &world,
+        [project.window.width as f32, project.window.height as f32],
+        0.0,
+    )?;
+    Ok((
+        PlaySession {
+            slice,
+            scene_id,
+            error: None,
+            clock: kiln_runtime::play_clock::PlayClock::default(),
+            last_tick: Instant::now(),
+            camera_controller,
+            game_camera,
+        },
+        world,
+    ))
+}
+
 /// Build the scene data of a world.
 ///
 /// The source id keeps the entity's identity, so the roles and textures of
@@ -1108,6 +1138,47 @@ impl EditorApp {
         });
         self.is_playing = true;
 
+        Ok(())
+    }
+
+    /// Restart from saved source only after the replacement has fully prepared.
+    fn restart_play(&mut self) -> Result<(), String> {
+        let Some(scene_id) = self.play.as_ref().map(|play| play.scene_id.clone()) else {
+            return Ok(());
+        };
+        self.shell.script_editor.require_saved()?;
+        let project = self.current_project.as_ref().ok_or("No project loaded")?;
+        let root = self
+            .project_root
+            .as_ref()
+            .ok_or("The project has no directory")?;
+        let textures = self
+            .gpu
+            .as_ref()
+            .map(|gpu| gpu.scene_textures.clone())
+            .unwrap_or_default();
+        let (mut replacement, world) = prepare_play_restart(project, &scene_id, root, &textures)?;
+        self.stop_play();
+        #[cfg(feature = "audio")]
+        if self
+            .current_project
+            .as_ref()
+            .is_some_and(|p| !p.audio_assets.is_empty())
+        {
+            if let Err(error) = replacement.slice.host_mut().open_audio_output() {
+                self.console_log
+                    .push(format!("[WARN] Audio output unavailable: {error}"));
+            }
+        }
+        replacement.last_tick = Instant::now();
+        self.world = world;
+        self.selected_entity = None;
+        self.hierarchy_panel.clear_selection();
+        self.gizmo = GizmoState::default();
+        self.play = Some(replacement);
+        self.is_playing = true;
+        self.console_log
+            .push("[INFO] Restarted from saved source; runtime state reset".into());
         Ok(())
     }
 
@@ -2471,14 +2542,7 @@ impl EditorApp {
                     }
                     Ok(())
                 }
-                ProjectRequest::RestartPlay => {
-                    if let Some(scene_id) = self.play.as_ref().map(|play| play.scene_id.clone()) {
-                        self.stop_play();
-                        self.start_play_scene(&scene_id)
-                    } else {
-                        Ok(())
-                    }
-                }
+                ProjectRequest::RestartPlay => self.restart_play(),
                 ProjectRequest::PlayProject => {
                     if self.play.is_some() {
                         self.stop_play();
@@ -4846,7 +4910,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     }
                     if *self.is_playing {
                         ui.menu_button("Play", |ui| {
-                            if ui.button("Restart").clicked() {
+                            if ui.button("Restart").on_hover_text("Restart from saved scripts. Save or revert source edits first; compile errors keep the current run.").clicked() {
                                 self.project_requests.push(ProjectRequest::RestartPlay);
                                 ui.close_menu();
                             }
@@ -6658,7 +6722,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             if ui.button("Step Frame").clicked() {
                                 self.project_requests.push(ProjectRequest::StepPlay);
                             }
-                            if ui.button("Restart").clicked() {
+                            if ui.button("Restart").on_hover_text("Restart from saved scripts. Save or revert source edits first; compile errors keep the current run.").clicked() {
                                 self.project_requests.push(ProjectRequest::RestartPlay);
                             }
                         });
@@ -7259,5 +7323,102 @@ mod play_tests {
             Err(error) => error,
         };
         assert!(error.contains("second.ks:2:1:"), "{error}");
+    }
+    #[test]
+    fn staged_restart_keeps_old_run_on_import_failure_and_uses_fresh_saved_source_on_success() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(
+            root.path().join("main.ks"),
+            "import \"logic.ks\";\nadd_score(points());",
+        )
+        .unwrap();
+        std::fs::write(root.path().join("logic.ks"), "fn points() { return 1; }").unwrap();
+        let mut project = Project::default();
+        project.scenes.insert(
+            "main".into(),
+            Scene {
+                id: "main".into(),
+                name: "Main".into(),
+                script: Some("main.ks".into()),
+                entities: vec![],
+                nested_scenes: vec![],
+            },
+        );
+        let authored = serde_json::to_value(&project).unwrap();
+        let textures = SceneTextures::default();
+        let (mut old, mut world) =
+            prepare_play_restart(&project, "main", root.path(), &textures).unwrap();
+        old.slice
+            .step(&mut world, (0.0, 0.0), kiln_runtime::play_clock::PLAY_STEP)
+            .unwrap();
+        old.clock.set_paused(true);
+        old.error = Some("retained error".into());
+        std::fs::create_dir_all(root.path().join(".kiln-save")).unwrap();
+        let slot = root.path().join(".kiln-save/keep.txt");
+        std::fs::write(&slot, "persistent slot").unwrap();
+        std::fs::write(
+            root.path().join("logic.ks"),
+            "fn points() { unknown_restart_call(); return 1; }",
+        )
+        .unwrap();
+        let error = match prepare_play_restart(&project, "main", root.path(), &textures) {
+            Ok(_) => panic!("Invalid imported source must reject replacement"),
+            Err(error) => error,
+        };
+        assert!(error.contains("logic.ks"), "{error}");
+        assert!(old.clock.paused());
+        assert_eq!(old.error.as_deref(), Some("retained error"));
+        old.slice
+            .step(&mut world, (0.0, 0.0), kiln_runtime::play_clock::PLAY_STEP)
+            .unwrap();
+        assert_eq!(old.slice.state().score, 2);
+        std::fs::write(root.path().join("logic.ks"), "fn points() { return 7; }").unwrap();
+        let (mut replacement, mut fresh_world) =
+            prepare_play_restart(&project, "main", root.path(), &textures).unwrap();
+        assert_eq!(replacement.slice.state().score, 0);
+        assert!(!replacement.clock.paused());
+        assert!(replacement.error.is_none());
+        replacement
+            .slice
+            .step(
+                &mut fresh_world,
+                (0.0, 0.0),
+                kiln_runtime::play_clock::PLAY_STEP,
+            )
+            .unwrap();
+        assert_eq!(replacement.slice.state().score, 7);
+        assert_eq!(old.slice.state().score, 2);
+        assert_eq!(serde_json::to_value(&project).unwrap(), authored);
+        assert_eq!(std::fs::read_to_string(slot).unwrap(), "persistent slot");
+    }
+
+    #[test]
+    fn restart_preparation_rejects_missing_source_and_invalid_camera() {
+        let root = tempfile::tempdir().unwrap();
+        let mut project = Project::default();
+        project.scenes.insert(
+            "main".into(),
+            Scene {
+                id: "main".into(),
+                name: "Main".into(),
+                script: Some("main.ks".into()),
+                entities: vec![],
+                nested_scenes: vec![],
+            },
+        );
+        assert!(
+            prepare_play_restart(&project, "main", root.path(), &SceneTextures::default()).is_err()
+        );
+        std::fs::write(root.path().join("main.ks"), "add_score(1);").unwrap();
+        project.cameras.insert(
+            "main".into(),
+            kiln_core::camera::CameraSettings {
+                zoom: 0.0,
+                ..Default::default()
+            },
+        );
+        assert!(
+            prepare_play_restart(&project, "main", root.path(), &SceneTextures::default()).is_err()
+        );
     }
 }

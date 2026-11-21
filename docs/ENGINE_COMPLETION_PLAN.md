@@ -469,6 +469,14 @@ save/restart, native gameplay and browser save/restore pass; graph/text movement
 logical-save parity pass. Source debugging and the required new equivalent game
 remain open; see [graph evidence](evidence/A04_GRAPH_WORKFLOW.md).
 
+**Safe restart checkpoint 2026-11-21:** user deferred remaining A03 acceptance and
+moved to A04. Saved-source Restart now prepares the replacement VM/world/camera
+before stopping the current run, requires dirty source saved/reverted, and preserves
+the current run on loading/compile/camera failure. Fresh reset/persistence behavior
+is specified. Headless imported-function failure/retry and camera/source guards
+pass; live source debugging and the equivalent-game acceptance remain open. A04
+stays PARTIAL. [Evidence](evidence/A04_SAFE_RESTART.md).
+
 ### A05 — Sprite rendering, cameras and large-scene behavior
 
 **Status:** PARTIAL. **Depends on:** A03.
