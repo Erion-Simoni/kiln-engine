@@ -6,7 +6,14 @@ use crate::{
 use serde::Serialize;
 use std::collections::BTreeMap;
 use uuid::Uuid;
-const HEADER: &str = "// kiln-graph-v1\n";
+const HEADER: &str = "// kiln-graph-v2\n";
+const LEGACY_HEADER: &str = "// kiln-graph-v1\n";
+
+/// Recognize supported visual headers without parsing metadata or generated source.
+/// This identifies the format only; use `decode` to validate its contents.
+pub fn has_visual_header(source: &str) -> bool {
+    source.starts_with(HEADER) || source.starts_with(LEGACY_HEADER)
+}
 
 /// Save both visual authoring data and executable text atomically as one .ks file.
 pub fn encode(graph: &Graph) -> Result<String, CompilerError> {
@@ -23,7 +30,7 @@ pub fn encode(graph: &Graph) -> Result<String, CompilerError> {
         connections,
     })
     .map_err(|error| CompilerError::Invalid(error.to_string()))?;
-    let body = draft_body(graph);
+    let body = draft_body(graph, false);
     if metadata.len() * 2 + metadata.len().div_ceil(60) * 4 + HEADER.len() + body.len() + 17
         > 1_048_576
     {
@@ -47,7 +54,11 @@ pub fn encode(graph: &Graph) -> Result<String, CompilerError> {
 
 /// Return None for ordinary text. Preserve manually edited generated bodies as text.
 pub fn decode(source: &str) -> Result<Option<Graph>, String> {
-    let Some(rest) = source.strip_prefix(HEADER) else {
+    let (rest, legacy) = if let Some(rest) = source.strip_prefix(HEADER) {
+        (rest, false)
+    } else if let Some(rest) = source.strip_prefix(LEGACY_HEADER) {
+        (rest, true)
+    } else {
         return Ok(None);
     };
     if source.len() > 1_048_576 {
@@ -77,17 +88,22 @@ pub fn decode(source: &str) -> Result<Option<Graph>, String> {
     let graph: Graph =
         ron::de::from_bytes(&bytes).map_err(|e| format!("Invalid visual graph: {e}"))?;
     document_bounds(&graph)?;
-    if draft_body(&graph).trim_end() != body.trim_end() {
+    if draft_body(&graph, legacy).trim_end() != body.trim_end() {
         return Err("Generated source was edited as text. Preserve/merge those edits before reopening it as a visual graph.".into());
     }
     Ok(Some(graph))
 }
 
-fn draft_body(graph: &Graph) -> String {
-    graph_source(graph).unwrap_or_else(|error| {
+fn draft_body(graph: &Graph, legacy: bool) -> String {
+    let result = if legacy {
+        crate::compiler::legacy::graph_source(graph).map_err(|error| error.to_string())
+    } else {
+        graph_source(graph).map_err(|error| error.to_string())
+    };
+    result.unwrap_or_else(|error| {
         format!(
             "// {}\n__kiln_graph_compile_error();\n",
-            error.to_string().replace(['\n', '\r'], " ")
+            error.replace(['\n', '\r'], " ")
         )
     })
 }
@@ -106,4 +122,56 @@ fn document_bounds(graph: &Graph) -> Result<(), String> {
         return Err("Visual document exceeds node/connection/pin/position bounds".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod migration_tests {
+    use super::*;
+    use crate::{ConstantValue, NodeType};
+
+    fn legacy_document(graph: &Graph) -> String {
+        let current = encode(graph).unwrap();
+        let (metadata, _) = current.split_once("// kiln-graph-end\n").unwrap();
+        format!(
+            "{}// kiln-graph-end\n{}",
+            metadata.replacen(HEADER, LEGACY_HEADER, 1),
+            draft_body(graph, true)
+        )
+    }
+
+    #[test]
+    fn legacy_documents_preserve_visual_identity_and_upgrade_on_encode() {
+        let mut graph = Graph::new();
+        graph.add_node(Node::new(
+            NodeType::Constant {
+                value: ConstantValue::Integer(7),
+            },
+            (12.0, 34.0),
+        ));
+        graph.add_node(Node::new(NodeType::Output, (150.0, 80.0)));
+        let legacy = legacy_document(&graph);
+        let loaded = decode(&legacy).unwrap().unwrap();
+        let upgraded = encode(&loaded).unwrap();
+        assert!(upgraded.starts_with(HEADER));
+        assert!(has_visual_header(&upgraded));
+        assert!(has_visual_header(&legacy));
+        assert!(!has_visual_header("return 0;"));
+        assert_eq!(upgraded, encode(&graph).unwrap());
+        assert!(legacy.starts_with(LEGACY_HEADER));
+        assert!(decode(&(legacy + "return 99;\n"))
+            .unwrap_err()
+            .contains("edited as text"));
+        assert!(decode(&(upgraded + "return 99;\n"))
+            .unwrap_err()
+            .contains("edited as text"));
+    }
+
+    #[test]
+    fn legacy_invalid_drafts_remain_recoverable() {
+        let graph = Graph::new();
+        let legacy = legacy_document(&graph);
+        assert!(legacy.contains("__kiln_graph_compile_error"));
+        let loaded = decode(&legacy).unwrap().unwrap();
+        assert_eq!(encode(&loaded).unwrap(), encode(&graph).unwrap());
+    }
 }

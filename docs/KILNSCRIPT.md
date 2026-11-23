@@ -574,7 +574,9 @@ resource. Save the script, then **Use for Active Scene** and Save Project to run
 Entity Script components can use the same saved visual `.ks` resource.
 
 Each invocation evaluates a node at most once, even when its value feeds multiple
-pins. Conditional branches evaluate only their selected upstream event chain.
+pins. Generated source contains one case per reachable node; shared dependencies
+do not duplicate upstream code. A bounded lazy dispatch loop preserves branch and
+trigger behavior without recursive function calls. Conditional branches evaluate only their selected upstream event chain.
 Independent host calls need explicit trigger connections to specify order. Lifecycle
 events map to the existing script phases; root On Start runs on its first tick.
 Unsupported specialized AI/dialogue/quest nodes are rejected when connected, rather
@@ -587,6 +589,9 @@ valid as text but must be preserved/merged before reopening as a graph. Incomple
 graphs remain recoverable drafts; their generated compile-error marker prevents
 Play/export or a normal validated Save until connections are repaired. Normal source
 save guards, project dirty prompts and script draft recovery apply to graph edits.
+New visual documents use the v2 header. Existing v1 documents load with their
+original visual identities and positions; opening does not rewrite them. Explicit
+visual save upgrades to v2 after checking the original generated body for edits.
 
 Limits: 256 nodes, 2048 connections, dependency depth 64, generated body 256 KiB and
 complete document 1 MiB. Out-of-budget editor edits are rejected as a transaction.

@@ -2316,3 +2316,22 @@ slot layouts before load commit. Straight-line programs keep their legacy memory
 signatures. Do not silently reinterpret saved locals. No new dependency; ordinary source, graph
 lowering and native/web all use the same compiler/VM. This does not add recursion,
 source breakpoints or statement-level scheduler continuation.
+
+### ADR-0100 — Bound graph generation by the dependency DAG (2026-11-23)
+
+Status: accepted. Recursive source expansion copies reused dependencies despite
+runtime computed flags, rejecting small valid DAGs. Emit one lazy node case per
+reachable node and dispatch through a balanced decision tree in an ordinary-source
+loop. Dependencies request their node via a cursor; completed nodes restart demand
+from Output. Runtime computed/value/event locals keep per-invocation memoization;
+false triggers and unselected branches never execute their data dependencies.
+Static memoized validation retains cycle/depth/pin/connection/signature guards.
+No recursive helper calls or increase to VM call depth is needed. Node/edge/depth,
+256 KiB generated source and 1 MiB visual-document bounds remain enforced.
+
+Encode new documents with v2 header. A frozen v1 generator verifies canonical old
+bodies during decode, then exposes the same graph model; explicit visual edits/save
+upgrade to v2. Opening alone does not rewrite files. Manual body edits still reject
+visual overwrite. Invalid draft bodies retain existing guarded compile-error text.
+The runtime executes ordinary existing source constructs, so no new language,
+project format or runtime contract is needed. No new dependency.

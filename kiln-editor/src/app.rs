@@ -5796,11 +5796,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 let ready = self.play.is_none()
                     && !self.project_blocked
                     && !self.shell.script_editor.is_dirty()
-                    && self
-                        .shell
-                        .script_editor
-                        .source
-                        .starts_with("// kiln-graph-v1\n");
+                    && kiln_graph::document::has_visual_header(&self.shell.script_editor.source);
                 if ui
                     .add_enabled(ready, egui::Button::new("Use for Active Scene"))
                     .clicked()

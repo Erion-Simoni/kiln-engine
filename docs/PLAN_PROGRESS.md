@@ -8,7 +8,7 @@ local feature checks into milestone acceptance. A01 accepted baseline is 6de428b
 | --- | --- | --- |
 | A02 authoring | Scene/hierarchy composition, reference guards, copy/paste/duplicate/history, property-preserving projection, project persistence/Save As rescue, whole-project/two-scene crash recovery and component coverage | Every-inspector-property combined widget acceptance and cross-platform GUI remain open. A02 PARTIAL. |
 | A03 assets/prefabs | Stable loaded IDs/presets, dependency-aware asset/source moves, source-import rewriting, art refresh, saved deterministic atlases/static clips, staging-only native/browser rebuilds, interrupted atlas recovery, prefab color/texture/geometry/material/clip overrides, reference-safe joint propagation | Nested/variant prefab identity/runtime contract, arbitrary component overrides, general multi-file crash transactions and combined prefab/multi-scene/atlas/export visual acceptance remain open. Deferred by user 2026-11-21. |
-| A04 scripting/graphs/debugging | Shared host registry; functions/modules, loops/dictionaries/enums, explicit tasks/timers; source tools; editable connected gameplay graph lowering through the same frontend; staged saved-source restart; actual VM named allocated-local inspection and read-only nested data watches; aggregate tick budgets across scene/entity/event/UI work; shared callable bodies and actual imported-function frames | Live source breakpoints, statement-level continuation, active lexical-block scopes and expression watches remain open. Required new enemy/projectile/trigger game with equivalent graph and complete export/debug acceptance remains open. A04 PARTIAL and active. |
+| A04 scripting/graphs/debugging | Shared host registry; functions/modules, loops/dictionaries/enums, explicit tasks/timers; source tools; editable connected gameplay graph lowering through the same frontend; staged saved-source restart; actual VM named allocated-local inspection and read-only nested data watches; aggregate tick budgets across scene/entity/event/UI work; shared callable bodies and actual imported-function frames; bounded shared-dependency graph generation with guarded v1 migration | Live source breakpoints, statement-level continuation, active lexical-block scopes and expression watches remain open. Required new enemy/projectile/trigger game with equivalent graph and complete export/debug acceptance remains open. A04 PARTIAL and active. |
 
 Recent checkpoint history:
 
@@ -40,3 +40,9 @@ widgets and relocated native/Chromium function-call exports (4096 green pixels i
 each). New native/browser CI steps retain these receipts. External hardware/device
 certification is outside the user's current request; it does not block continuing
 A04 software work.
+
+Current ADR-0100 checkpoint replaces exponential graph source expansion with one
+lazy case per reachable node. Depth/cycle/bounds validation and inactive branch
+semantics remain guarded. Canonical v1 documents and previously oversized drafts
+load without rewriting; explicit visual save upgrades to v2. See
+[evidence](evidence/A04_SHARED_GRAPH_DEPENDENCIES.md).

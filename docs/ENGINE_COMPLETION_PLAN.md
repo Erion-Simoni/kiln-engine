@@ -469,6 +469,14 @@ save/restart, native gameplay and browser save/restore pass; graph/text movement
 logical-save parity pass. Source debugging and the required new equivalent game
 remain open; see [graph evidence](evidence/A04_GRAPH_WORKFLOW.md).
 
+**Shared dependency checkpoint 2026-11-23:** graph code generation now emits one
+lazy case per reachable node, removing exponential source duplication on shared
+inputs. Existing side-effect order, trigger/branch laziness and inspection state
+remain covered. Maximum depth 64 executes; depth 65 rejects. Guarded v1 loading
+preserves existing visuals and oversized drafts; explicit visual save upgrades
+to v2. This is an A04 compiler fix, not completion of equivalent-game/debugger
+acceptance. [Evidence](evidence/A04_SHARED_GRAPH_DEPENDENCIES.md).
+
 **Safe restart checkpoint 2026-11-21:** user deferred remaining A03 acceptance and
 moved to A04. Saved-source Restart now prepares the replacement VM/world/camera
 before stopping the current run, requires dirty source saved/reverted, and preserves
