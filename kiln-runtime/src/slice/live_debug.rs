@@ -98,6 +98,102 @@ impl SliceSession {
     }
 }
 
+fn segment(value: &str) -> Result<String, String> {
+    let mut decoded = String::new();
+    let mut chars = value.chars();
+    while let Some(character) = chars.next() {
+        if character == '~' {
+            decoded.push(match chars.next() {
+                Some('0') => '~',
+                Some('1') => '/',
+                _ => return Err("Use ~0 for tilde and ~1 for slash in watch keys".into()),
+            });
+        } else {
+            decoded.push(character);
+        }
+    }
+    Ok(decoded)
+}
+
+impl SliceSession {
+    /// Read a bounded data selector from the executing VM without evaluation.
+    /// Owner is `scene` or `entity:ID`; roots are slot:N, local:NAME, state:KEY.
+    pub fn live_watch(&self, owner: &str, selector: &str) -> Result<String, String> {
+        if owner.len() > 256 || selector.len() > 512 || selector.split('/').count() > 16 {
+            return Err("Watch exceeds owner/selector/path limit".into());
+        }
+        let session = if owner == "scene" {
+            self
+        } else if let Some(id) = owner.strip_prefix("entity:") {
+            let mut matches = self
+                .attached
+                .iter()
+                .filter(|attached| attached.entity_id == id);
+            match (matches.next(), matches.next()) {
+                (Some(attached), None) => &attached.session,
+                (Some(_), Some(_)) => return Err("Entity VM owner is ambiguous".into()),
+                _ => return Err("Entity VM owner was not found".into()),
+            }
+        } else {
+            return Err("Owner must be scene or entity:ID".into());
+        };
+        let mut path = selector.split('/');
+        let (kind, key) = path
+            .next()
+            .unwrap_or_default()
+            .split_once(':')
+            .ok_or("Use slot:N, local:NAME or state:KEY")?;
+        let key = segment(key)?;
+        let mut value = match kind {
+            "slot" => session
+                .vm
+                .locals()
+                .get(
+                    key.parse::<usize>()
+                        .map_err(|_| "Slot must be an unsigned index")?,
+                )
+                .ok_or("Local slot was not found")?,
+            "local" => {
+                let mut matches = session.vm.locals().iter().enumerate().filter(|(slot, _)| {
+                    session.program.local_name(*slot as u16) == Some(key.as_str())
+                });
+                match (matches.next(), matches.next()) {
+                    (Some((_, value)), None) => value,
+                    (Some(_), Some(_)) => {
+                        return Err("Allocated local name is ambiguous; use slot:N".into())
+                    }
+                    _ => return Err("Allocated local name was not found".into()),
+                }
+            }
+            "state" => session
+                .vm
+                .host()
+                .script_state
+                .get(&key)
+                .ok_or("State key was not found")?,
+            _ => {
+                return Err(
+                    "Use slot:N, local:NAME or state:KEY; expressions are not evaluated".into(),
+                )
+            }
+        };
+        for key in path {
+            let key = segment(key)?;
+            value = match value {
+                Value::Array(values) => values
+                    .get(
+                        key.parse::<usize>()
+                            .map_err(|_| "Array index must be unsigned")?,
+                    )
+                    .ok_or("Array index is out of range")?,
+                Value::Map(values) => values.get(&key).ok_or("Dictionary key was not found")?,
+                _ => return Err("Watch path cannot descend into a scalar".into()),
+            };
+        }
+        Ok(preview(value))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

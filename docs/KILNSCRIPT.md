@@ -635,3 +635,23 @@ include at most 64 VMs and 128 locals per VM; omitted-local counts are shown.
 Strings are limited to 128 Unicode characters; arrays/dictionaries show counts.
 Source breakpoints, statement stepping, active-frame locals and expression watches
 remain separate work. Frame stepping remains the existing whole-game tick control.
+
+### Live data watches
+
+In the live Debugger, expand **Live data watches**. Choose owner `scene` or
+`entity:enemy-a` (the entity's stable ID), enter a selector and Add watch. Values
+update while paused or after errors; Remove deletes a watch. These are read-only
+data selectors, not script expressions:
+
+- `slot:12` reads an allocated local slot, including slots outside the local preview.
+- `local:health` reads a unique allocated name. Multiple inlined allocations with
+  that name report ambiguity; use the displayed slot instead.
+- `state:inventory` reads the VM's persistent script state without calling state_get.
+- Append `/0` for an array index or `/key` for a dictionary entry. Escape literal
+  tilde/slash in keys as `~0`/`~1`; `state:bag/a~1b/0` reads key `a/b`, then index 0.
+
+Invalid owners, missing/out-of-range entries and descent into scalars show errors.
+Calls and arithmetic are not evaluated. Container/string previews use the local
+inspection bounds. Limits are 32 editor watches, owner 256 bytes, selector 512 bytes
+and 16 path components including the root. Watches stay in editor memory rather
+than project/save files. Allocated names still do not imply active lexical frames.

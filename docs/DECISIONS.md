@@ -2262,3 +2262,17 @@ frames. Snapshot only on explicit paused/error inspection in editor UI. Bound to
 containers summarize length without cloning/traversing their contents. No new
 dependency, execution semantics or runtime compatibility revision. Source breakpoints,
 statement stepping, true imported frames and expression evaluation remain separate.
+
+### ADR-0097 — Read-only gameplay data watches (2026-11-23)
+
+Status: accepted. A04 watches query actual scene/entity VMs using bounded data
+selectors, never script-expression compilation or host execution. Owner is scene
+or entity:<stable-id>; duplicate entity owners reject as ambiguous. Roots are
+slot:<number>, local:<unique allocated-name>, or state:<key>. Slash-separated array
+indexes/map keys allow nested inspection; ~0/~1 escape tilde/slash. Duplicate local
+names require an explicit slot rather than guessing an active scope. Limit owner
+256 bytes, selector 512 bytes, 16 path components and editor list 32 watches. Reuse
+bounded value previews. Evaluate only while paused/errored in the editor. Watches
+are session/editor state, not project/save data. No new dependency, execution or
+serialized format change. Arbitrary expressions and active-frame watches remain
+separate from these data selectors.

@@ -485,6 +485,14 @@ headless. These are allocated slots, not active lexical frames; source breakpoin
 statement stepping, watches and equivalent-game acceptance remain open. A04 stays
 PARTIAL. [Evidence](evidence/A04_LIVE_VM_LOCALS.md).
 
+**Live data watches 2026-11-23:** actual scene/entity VMs support read-only slot,
+unique allocated-name and state selectors with bounded nested data lookup. Live
+Debugger adds/removes watches and inspects only while paused/errored. Ambiguity,
+invalid paths and bounds return errors without expression/host execution. Runtime
+regressions pass; arbitrary expressions, active frames, source breakpoints, statement
+stepping and equivalent-game acceptance remain open. A04 stays PARTIAL.
+[Evidence](evidence/A04_LIVE_DATA_WATCHES.md).
+
 ### A05 — Sprite rendering, cameras and large-scene behavior
 
 **Status:** PARTIAL. **Depends on:** A03.

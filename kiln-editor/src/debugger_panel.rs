@@ -20,6 +20,12 @@ pub struct DebuggerPanel {
     pub new_breakpoint_instr: String,
     /// New watch expression input.
     pub new_watch_expr: String,
+    /// Live VM target: scene or entity:ID.
+    pub live_watch_owner: String,
+    /// Bounded live data selector being authored.
+    pub live_watch_selector: String,
+    /// Session-only live data watches (owner, selector).
+    pub live_watches: Vec<(String, String)>,
 }
 
 impl DebuggerPanel {
@@ -32,7 +38,42 @@ impl DebuggerPanel {
             show_watches: true,
             new_breakpoint_instr: String::new(),
             new_watch_expr: String::new(),
+            live_watch_owner: "scene".into(),
+            live_watch_selector: String::new(),
+            live_watches: Vec::new(),
         }
+    }
+
+    /// Render data-only watches against actual gameplay VMs.
+    pub fn render_live_watches(
+        &mut self,
+        ui: &mut Ui,
+        session: &kiln_runtime::SliceSession,
+        inspect: bool,
+    ) {
+        ui.collapsing("Live data watches", |ui| {
+            ui.label("Owner: scene or entity:ID. Selector: slot:N, local:NAME or state:KEY, followed by /key or /index.");
+            ui.add(egui::TextEdit::singleline(&mut self.live_watch_owner).char_limit(256).hint_text("scene"));
+            ui.add(egui::TextEdit::singleline(&mut self.live_watch_selector).char_limit(512).hint_text("local:health"));
+            if ui.add_enabled(self.live_watches.len() < 32 && !self.live_watch_selector.is_empty(), egui::Button::new("Add watch")).clicked() {
+                self.live_watches.push((self.live_watch_owner.clone(), self.live_watch_selector.clone()));
+                self.live_watch_selector.clear();
+            }
+            let mut remove = None;
+            for (index, (owner, selector)) in self.live_watches.iter().enumerate() {
+                ui.horizontal_wrapped(|ui| {
+                    if ui.small_button("Remove").clicked() { remove = Some(index); }
+                    ui.monospace(format!("{owner} / {selector}"));
+                    if inspect {
+                        match session.live_watch(owner, selector) {
+                            Ok(value) => { ui.monospace(value); }
+                            Err(error) => { ui.colored_label(Color32::LIGHT_RED, error); }
+                        }
+                    } else { ui.label("Pause to inspect"); }
+                });
+            }
+            if let Some(index) = remove { self.live_watches.remove(index); }
+        });
     }
 
     /// Render the debugger panel.

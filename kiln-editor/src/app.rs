@@ -6729,6 +6729,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         if let Some(error) = &play.error {
                             ui.colored_label(egui::Color32::LIGHT_RED, error);
                         }
+                        self.debugger_panel.render_live_watches(ui, &play.slice, play.clock.paused() || play.error.is_some());
                         ui.checkbox(&mut self.debugger_panel.show_locals, "Inspect live state and locals");
                         if self.debugger_panel.show_locals {
                             if play.clock.paused() || play.error.is_some() {

@@ -1,12 +1,21 @@
 # Kiln Session Handoff
 
 Owner scope: A02–A04 on `fix/a01-ci-baseline`.
-Current checkpoint: A04 actual gameplay VM locals (2026-11-23),
-following b186177. User deferred remaining A03 acceptance and requested the next
+Current checkpoint: A04 read-only live data watches (2026-11-23),
+following 465328d. User deferred remaining A03 acceptance and requested the next
 item; do not resume A03 completion without new steering. A02–A04 remain PARTIAL. A01 accepted baseline stays 6de428b;
 full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
+
+- ADR-0097: live data watches target actual scene/entity VMs using slot, unique
+  allocated-name or state roots plus nested array/map paths. Literal tilde/slash
+  keys use ~0/~1. Ambiguous owners/names reject rather than guessing scopes.
+  No expressions, host calls, mutations or deep container traversal.
+- Live Debugger add/remove controls retain at most 32 watches in editor memory;
+  evaluation only while paused/errored. Owner/selector/path limits are 256 bytes,
+  512 bytes and 16 components. Slots beyond the snapshot preview are readable.
+  Existing bounded previews apply. No dependency/serialized/runtime contract change.
 
 - ADR-0096: live paused/error inspection now reads the executing scene/attachment
   VMs with compiler slot names, instruction/source origin and bounded previews.
@@ -90,6 +99,14 @@ full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Executed validation
 
+- Watch tests cover nested escaped map/array reads, slots beyond preview, distinct
+  actual entity VM values, duplicate inlined-name errors with exact slot access,
+  malformed/missing/out-of-range/scalar paths and limits. Host-call-like input
+  rejects; local/state values remain unchanged. Invalid redeclaration fixture was
+  replaced with valid repeated function parameter allocations, same assertions.
+  Raw target/a04-live-watches-{check,integration,integration-final,workspace-final,quality-final,wasm,wasm-optout}.log.
+  Evidence: docs/evidence/A04_LIVE_DATA_WATCHES.md. No actual GUI replay claimed.
+
 - Actual VM tests: imported function division failure exposes parameter/local
   values and logic.ks:4; budget exhaustion retains local state; 160 slots truncate
   to 128 with count 32; attached owners show distinct real values. Unicode/container
@@ -135,7 +152,7 @@ full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
   target/a03-prefab-texture-{before,core,integration,workspace,quality,wasm,wasm-optout}.log.
   Evidence: docs/evidence/A03_PREFAB_TEXTURE_PERSISTENCE.md.
 
-- Current locked Rust workspace: 826 PASS, zero failures including docs. just check PASS.
+- Current locked Rust workspace: 829 PASS, zero failures including docs. just check PASS.
   Current default/opt-out WASM strict Clippy PASS.
   Previous Python helper suite 49 PASS;
   script compilation and diff checks PASS.
@@ -185,7 +202,7 @@ explicit File / Save Project is available. Source moves require clean saved buff
 and bounded portable .ks paths; all-file crash atomicity remains separate.
 
 A04: live gameplay source breakpoints, statement stepping, imported function frames/
-active lexical locals/watches, stack-preserving live reload and the enemy/projectile/trigger game
+active lexical locals/expression watches, stack-preserving live reload and the enemy/projectile/trigger game
 with equivalent graph and complete exports remain open. Cooperative task payloads
 are explicit state machines, not suspended function stacks/yield syntax. The
 separate bytecode debugger is not the live gameplay source debugger.
