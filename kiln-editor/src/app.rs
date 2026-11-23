@@ -6729,8 +6729,23 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         if let Some(error) = &play.error {
                             ui.colored_label(egui::Color32::LIGHT_RED, error);
                         }
-                        ui.checkbox(&mut self.debugger_panel.show_locals, "Inspect entity state");
+                        ui.checkbox(&mut self.debugger_panel.show_locals, "Inspect live state and locals");
                         if self.debugger_panel.show_locals {
+                            if play.clock.paused() || play.error.is_some() {
+                                ui.label("Allocated VM locals (slots may be outside their lexical scope)");
+                                ui.label("Inspection limit: 64 VMs, 128 locals each; containers show counts.");
+                                for snapshot in play.slice.live_vm_debug() {
+                                    ui.collapsing(format!("{} — instruction {}", snapshot.owner, snapshot.instruction), |ui| {
+                                        if let Some(location) = snapshot.location { ui.monospace(location); }
+                                        for local in snapshot.locals {
+                                            ui.monospace(format!("[{}] {} = {}", local.slot, local.name, local.value));
+                                        }
+                                        if snapshot.omitted_locals > 0 { ui.label(format!("{} locals omitted", snapshot.omitted_locals)); }
+                                    });
+                                }
+                            } else {
+                                ui.label("Pause to inspect VM locals.");
+                            }
                             for entity in play.slice.entity_script_debug() {
                                 ui.collapsing(
                                     format!(

@@ -618,3 +618,20 @@ save files are neither erased nor automatically loaded by Restart. Authored Stop
 Start/gameplay callbacks can still explicitly access persistence. Runtime errors
 after replacement use ordinary Play error handling. Live stack-preserving reload,
 source breakpoints and imported-frame inspection remain separate features.
+
+### Inspecting live VM locals
+
+During editor Play, open Debugger, enable **Inspect live state and locals**, and
+pause the game (or inspect after a runtime error). Allocated locals are read from
+the actual scene and attached-instance VMs. Rows show slot, compiler name and value
+preview, with the current instruction/source origin when mapped. Repeated/shadowed
+names have distinct slot numbers. Inspection does not execute expressions or host
+calls and does not advance the game.
+
+These are allocated slots, not an active lexical-scope view or call stack: completed
+blocks/functions may leave values in their slots. Inlined function parameters and
+locals can therefore be inspected without implying imported call frames. Views
+include at most 64 VMs and 128 locals per VM; omitted-local counts are shown.
+Strings are limited to 128 Unicode characters; arrays/dictionaries show counts.
+Source breakpoints, statement stepping, active-frame locals and expression watches
+remain separate work. Frame stepping remains the existing whole-game tick control.

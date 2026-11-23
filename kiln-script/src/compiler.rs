@@ -69,6 +69,7 @@ impl Compiler {
     fn allocate_slot(&mut self, name: &str) -> u16 {
         let slot = self.next_slot;
         self.next_slot += 1;
+        self.program.record_local_name(slot, name);
         if let Some(scope) = self.scopes.last_mut() {
             scope.insert(name.to_string(), slot);
         }

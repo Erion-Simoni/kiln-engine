@@ -2249,3 +2249,16 @@ runtime state with authored initial state, clears transient progress/tasks/timer
 and starts an unpaused clock. Persistent save files are not erased or implicitly
 loaded. Existing Stop callbacks retain their documented effects. No new dependency,
 serialized format, or automatic reload while a game is running.
+
+### ADR-0096 — Inspect real gameplay VM locals (2026-11-23)
+
+Status: accepted. A04 live debugger inspection reads executing scene/attachment VMs,
+not the separate bytecode debugger. Compiler records allocated local slot names in
+nonserialized Program metadata. Snapshots expose slot/name, bounded value previews,
+current instruction and available source origin. Slot numbers disambiguate shadowed/
+inlined locals; allocated slots are not claimed to be active lexical scopes or call
+frames. Snapshot only on explicit paused/error inspection in editor UI. Bound to
+64 sessions/128 locals per session; strings truncate at 128 Unicode scalars and
+containers summarize length without cloning/traversing their contents. No new
+dependency, execution semantics or runtime compatibility revision. Source breakpoints,
+statement stepping, true imported frames and expression evaluation remain separate.

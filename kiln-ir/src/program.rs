@@ -115,9 +115,20 @@ pub struct Program {
     /// Number of local variable slots the program uses.
     local_slots: u16,
     source_offsets: HashMap<usize, usize>,
+    local_names: HashMap<u16, String>,
 }
 
 impl Program {
+    /// Record a compiler-allocated local name for read-only live inspection.
+    pub fn record_local_name(&mut self, slot: u16, name: &str) {
+        self.local_names.insert(slot, name.to_owned());
+    }
+
+    /// Name associated with an allocated slot; scope lifetime is not implied.
+    pub fn local_name(&self, slot: u16) -> Option<&str> {
+        self.local_names.get(&slot).map(String::as_str)
+    }
+
     /// Associate an instruction with its source byte offset, retaining a more
     /// precise mapping already recorded by a nested expression.
     pub fn record_source_offset(&mut self, instruction: usize, offset: usize) {

@@ -11,10 +11,12 @@
 
 mod authored_ui;
 mod game_save;
+mod live_debug;
 mod tasks;
 pub use game_save::{
     GameProgress, GameSave, SaveRequest, SaveValue, GAME_SAVE_VERSION, MAX_GAME_SAVE_BYTES,
 };
+pub use live_debug::{LiveVmDebug, LiveVmLocal};
 
 use std::collections::HashMap;
 use std::path::Path;

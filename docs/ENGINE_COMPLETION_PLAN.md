@@ -477,6 +477,14 @@ is specified. Headless imported-function failure/retry and camera/source guards
 pass; live source debugging and the equivalent-game acceptance remain open. A04
 stays PARTIAL. [Evidence](evidence/A04_SAFE_RESTART.md).
 
+**Live local inspection 2026-11-23:** paused/error Debugger inspection now reads
+actual scene and attached VMs, including named allocated locals, instruction and
+mapped source origin. Bounded previews avoid container traversal. Imported-function
+failure, runaway-loop budget, per-instance values and truncation regressions pass
+headless. These are allocated slots, not active lexical frames; source breakpoints,
+statement stepping, watches and equivalent-game acceptance remain open. A04 stays
+PARTIAL. [Evidence](evidence/A04_LIVE_VM_LOCALS.md).
+
 ### A05 — Sprite rendering, cameras and large-scene behavior
 
 **Status:** PARTIAL. **Depends on:** A03.

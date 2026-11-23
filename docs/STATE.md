@@ -1,12 +1,21 @@
 # Kiln Session Handoff
 
 Owner scope: A02–A04 on `fix/a01-ci-baseline`.
-Current checkpoint: A04 staged saved-source restart (2026-11-21),
-following 653f5ad. User deferred remaining A03 acceptance and requested the next
+Current checkpoint: A04 actual gameplay VM locals (2026-11-23),
+following b186177. User deferred remaining A03 acceptance and requested the next
 item; do not resume A03 completion without new steering. A02–A04 remain PARTIAL. A01 accepted baseline stays 6de428b;
 full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
+
+- ADR-0096: live paused/error inspection now reads the executing scene/attachment
+  VMs with compiler slot names, instruction/source origin and bounded previews.
+  Slots disambiguate inlined/shadowed names; they do not imply active scopes or
+  call frames. Editor Debugger exposes this alongside persistent entity state.
+- Inspection bounds: 64 sessions, 128 locals each with omitted counts, strings
+  limited to 128 Unicode characters, container counts without deep cloning/walking.
+  No expression/host execution or runtime mutation. No dependency, serialized
+  project/save format, execution semantics or runtime compatibility change.
 
 - User chose finish or skip the current item and continue. A03 acceptance is
   explicitly deferred, not marked complete; current implementation focus is A04.
@@ -81,6 +90,14 @@ full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Executed validation
 
+- Actual VM tests: imported function division failure exposes parameter/local
+  values and logic.ks:4; budget exhaustion retains local state; 160 slots truncate
+  to 128 with count 32; attached owners show distinct real values. Unicode/container
+  preview tests pass. An initially missing ECS-owner fixture was corrected without
+  changing assertions. Repeated inspection leaves values unchanged.
+  Raw target/a04-live-locals-{preview,integration,integration-final,workspace,quality,wasm,wasm-optout}.log.
+  Evidence: docs/evidence/A04_LIVE_VM_LOCALS.md. No actual GUI replay claimed.
+
 - Restart headless tests: invalid imported source rejects with the module name;
   old compiled VM keeps executing despite the invalid disk file. Corrected saved
   imported code starts in a fresh unpaused/error-free session. Authored project
@@ -118,8 +135,8 @@ full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
   target/a03-prefab-texture-{before,core,integration,workspace,quality,wasm,wasm-optout}.log.
   Evidence: docs/evidence/A03_PREFAB_TEXTURE_PERSISTENCE.md.
 
-- Current locked Rust workspace: 822 PASS, zero failures including docs. just check PASS.
-  Previous shared-core checkpoint: default/opt-out WASM strict Clippy PASS.
+- Current locked Rust workspace: 826 PASS, zero failures including docs. just check PASS.
+  Current default/opt-out WASM strict Clippy PASS.
   Previous Python helper suite 49 PASS;
   script compilation and diff checks PASS.
 - Real native widgets PASS: force a crash before autosave, reconstruct saved atlas,
@@ -168,7 +185,7 @@ explicit File / Save Project is available. Source moves require clean saved buff
 and bounded portable .ks paths; all-file crash atomicity remains separate.
 
 A04: live gameplay source breakpoints, statement stepping, imported function frames/
-locals/watches, stack-preserving live reload and the enemy/projectile/trigger game
+active lexical locals/watches, stack-preserving live reload and the enemy/projectile/trigger game
 with equivalent graph and complete exports remain open. Cooperative task payloads
 are explicit state machines, not suspended function stacks/yield syntax. The
 separate bytecode debugger is not the live gameplay source debugger.
