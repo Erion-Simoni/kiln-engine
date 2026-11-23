@@ -655,3 +655,27 @@ Calls and arithmetic are not evaluated. Container/string previews use the local
 inspection bounds. Limits are 32 editor watches, owner 256 bytes, selector 512 bytes
 and 16 path components including the root. Watches stay in editor memory rather
 than project/save files. Allocated names still do not imply active lexical frames.
+
+### Aggregate gameplay work budget
+
+Project root `script_instruction_budget` bounds all executed bytecode across one
+fixed gameplay tick, including scene code, entity Start/Update, signal/collision/
+animation events and saved-UI callbacks—even while a menu pauses gameplay. The
+shared allowance defaults to 1,000,000 instructions. Configure 1 through 10,000,000
+in kiln.toml; missing values retain the default. Invalid values reject Play/export
+before script source loading. Each VM also retains its one-million-instruction
+invocation limit, so increasing the shared allowance does not remove loop protection.
+
+The live Debugger displays used/limit for the latest tick. Exhaustion reports the
+shared limit plus available source/entity/lifecycle context; locals and watches
+remain inspectable through existing error handling. A new tick replenishes once,
+not for each callback. Explicit Stop gets a separate fresh but bounded cleanup
+allowance. Restart/new sessions and saved-game restoration at tick boundaries start
+with fresh counters; instruction counters are not saved gameplay state.
+
+This counts bytecode instructions, not elapsed CPU/GPU time or the internal cost
+of a host call. It does not roll back world/state changes from earlier completed
+callbacks in a failed tick. Rendering, physics and host-resource limits remain
+separate budgets. Matching native/browser tools must advertise runtime contract
+`kiln-authoring-v5`; older tools cannot enforce this shared policy and are rejected
+before export.

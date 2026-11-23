@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 pub const EXPORT_PROTOCOL: u32 = 1;
 /// Shared language/project/runtime compatibility revision; bump for semantic additions.
-pub const RUNTIME_CONTRACT: &str = "kiln-authoring-v4";
+pub const RUNTIME_CONTRACT: &str = "kiln-authoring-v5";
 pub const MAX_RECEIPT_BYTES: u64 = 16 * 1024 * 1024;
 pub const RECEIPT_FILE: &str = "export.json";
 /// Inventory binding runtime notice bytes to the exported runtime payload.
@@ -203,7 +203,7 @@ mod capability_tests {
         };
         current.validate("web").unwrap();
         let mut stale = current.clone();
-        stale.contract = "kiln-authoring-v3".into();
+        stale.contract = "kiln-authoring-v4".into();
         assert!(stale.validate("web").unwrap_err().contains("incompatible"));
         let encoded = serde_json::to_string(&current).unwrap();
         assert!(

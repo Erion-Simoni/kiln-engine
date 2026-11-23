@@ -393,3 +393,12 @@ properties inherit. Resource IDs are not file paths. Generated atlas clips remai
 protected while any scene/prefab override references them, even without a current
 Sprite component. Matching runtime contract is `kiln-authoring-v4`; rebuild native
 and browser tools with updated editors. Older tools cannot parse this override tag.
+
+### Aggregate script instruction limit
+
+Project root `script_instruction_budget` is an unsigned integer from 1 through
+10,000,000, default 1,000,000. Default values are omitted on save. It applies across
+scene/entity/lifecycle/UI bytecode invocations within each gameplay tick. It does
+not replace the individual VM invocation limit or measure host/render/physics time.
+Runtime construction/export validates the range. Runtime contract v5 requires
+matching rebuilt player/browser tools; older tools are refused before publication.

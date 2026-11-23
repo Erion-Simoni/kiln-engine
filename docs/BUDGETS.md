@@ -511,3 +511,17 @@ before decode/allocation and packing failure preserves prior output. Recipes bak
 ordinary textures/static clips; no new runtime draw path or budget exception.
 Linux software-rendered pixel evidence is functional, not physical memory/FPS
 certification. Source paths can move without changing stable labels or clip IDs.
+
+## Shared script work per gameplay tick (2026-11-23)
+
+ADR-0098 adds an aggregate instruction pool to actual scene/entity/lifecycle/UI
+execution. Project script_instruction_budget defaults to 1,000,000; authored range
+1..10,000,000. Each VM keeps its individual 1,000,000 instruction limit. Public
+step resets once; all callbacks share the same pool. Explicit Stop gets its own
+fresh bounded cleanup pool. Reserve/refund occurs per execution, not per opcode.
+Debugger counters show used/limit. Exhaustion retains source/entity/phase context.
+
+This closes repeated-callback allowance multiplication; it is not a wall-clock
+frame-time certification, host-call cost meter or rollback mechanism. Existing
+world/state effects from completed callbacks remain committed. Physical reference-
+hardware CPU/GPU measurements and other resource budgets remain separate gates.

@@ -6708,6 +6708,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     if let Some(play) = &mut self.play {
                         ui.heading("Live Gameplay Debugger");
                         ui.label(format!("Scene: {}", play.scene_id));
+                        let (used, limit) = play.slice.script_instruction_usage();
+                        ui.label(format!("Script work this tick: {used} / {limit} instructions"));
                         ui.horizontal(|ui| {
                             if ui
                                 .button(if play.clock.paused() {

@@ -2276,3 +2276,24 @@ bounded value previews. Evaluate only while paused/errored in the editor. Watche
 are session/editor state, not project/save data. No new dependency, execution or
 serialized format change. Arbitrary expressions and active-frame watches remain
 separate from these data selectors.
+
+### ADR-0098 — Share script work across a gameplay tick (2026-11-23)
+
+Status: accepted. Per-invocation VM limits permit scene/attachment/lifecycle/UI
+work to multiply a frame's allowance. Introduce one shared instruction pool for
+all actual gameplay VMs/callbacks in a SliceSession tick. Project root
+script_instruction_budget defaults to 1,000,000 and accepts 1..10,000,000; retain
+the individual VM invocation limit. Reserve unused shared allowance once per VM
+execution and refund unused instructions, avoiding atomic operations per opcode.
+Reset once at public step; standalone Stop gets a fresh bounded cleanup allowance.
+Report aggregate exhaustion through existing source/entity/phase diagnostics and
+expose used/limit to the live debugger. Completed prior callbacks are not rolled
+back; this is work bounding, not transactional frame state or a wall-clock deadline.
+Validate configuration before loading project sources. Native/web runtime contract
+advances to kiln-authoring-v5 so old tools cannot silently ignore the aggregate cap.
+No new dependency. Physical host-call/render/physics costs remain separate budgets.
+
+An opt-in native widget replay uses the already available tesseract OCR utility
+alongside Xvfb/xdotool/ImageMagick. This is a test-tool prerequisite, not an added
+application dependency or default CI installation. OCR observes usage/error/watch
+values; normalized field coordinates avoid faint-placeholder text ambiguity.

@@ -233,13 +233,29 @@ impl<H: HostContext> Vm<H> {
     /// decremented on each instruction. If the budget is exhausted, an
     /// `VmError::InstructionBudgetExceeded` error is returned.
     pub fn execute(&mut self, program: &Program) -> Result<(), VmError> {
+        self.execute_with_allowance(program, u64::MAX).0
+    }
+
+    /// Execute within both the configured per-invocation limit and an outer
+    /// allowance. Return actual instructions consumed, including on failure.
+    /// The configured limit remains unchanged for subsequent executions.
+    pub fn execute_with_allowance(
+        &mut self,
+        program: &Program,
+        allowance: u64,
+    ) -> (Result<(), VmError>, u64) {
         self.begin_execution(program);
-        while self.ip < program.len() {
-            if !self.step(program)? {
-                break;
+        self.instruction_budget = self.instruction_budget.min(allowance);
+        let initial = self.instruction_budget;
+        let result = (|| {
+            while self.ip < program.len() {
+                if !self.step(program)? {
+                    break;
+                }
             }
-        }
-        Ok(())
+            Ok(())
+        })();
+        (result, initial - self.instruction_budget)
     }
 
     /// Start a bounded execution while retaining completed-tick locals.
@@ -811,5 +827,58 @@ mod tests {
         let err = vm.execute(&program).unwrap_err();
         eprintln!("Actual error: {:?}", err);
         assert!(matches!(err, VmError::InstructionBudgetExceeded));
+    }
+}
+
+#[cfg(test)]
+mod outer_allowance_tests {
+    use super::*;
+    struct Counter(u32);
+    impl HostContext for Counter {
+        fn call_host(&mut self, _: u32, _: &[Value]) -> Result<Value, VmError> {
+            self.0 += 1;
+            Ok(Value::I64(0))
+        }
+    }
+    #[test]
+    fn outer_allowance_counts_failures_without_changing_future_invocation_limit() {
+        let mut program = Program::new();
+        program.add_instruction(Instruction::HostCall { id: 0, argc: 0 });
+        program.add_instruction(Instruction::Return);
+        let mut vm = Vm::new(Counter(0));
+        vm.set_instruction_budget(10);
+        let (result, used) = vm.execute_with_allowance(&program, 0);
+        assert!(result.is_err());
+        assert_eq!(used, 0);
+        assert_eq!(vm.host().0, 0);
+        let (result, used) = vm.execute_with_allowance(&program, 1);
+        assert!(result.is_err());
+        assert_eq!(used, 1);
+        assert_eq!(vm.host().0, 1);
+        let (result, used) = vm.execute_with_allowance(&program, 100);
+        result.unwrap();
+        assert_eq!(used, 2);
+        assert_eq!(vm.host().0, 2);
+        vm.set_instruction_budget(1);
+        let (result, used) = vm.execute_with_allowance(&program, 100);
+        assert!(result.is_err());
+        assert_eq!(used, 1);
+    }
+    #[test]
+    fn instruction_charges_are_returned_for_non_budget_runtime_errors() {
+        let mut program = Program::new();
+        for instruction in [
+            Instruction::PushConst(Value::I64(7)),
+            Instruction::PushConst(Value::I64(0)),
+            Instruction::Div,
+            Instruction::Return,
+        ] {
+            program.add_instruction(instruction);
+        }
+        let mut vm = Vm::new(Counter(0));
+        let (result, used) = vm.execute_with_allowance(&program, 20);
+        assert!(matches!(result, Err(VmError::DivisionByZero)));
+        assert_eq!(used, 3);
+        assert_eq!(vm.instruction_pointer(), 2);
     }
 }

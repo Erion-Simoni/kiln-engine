@@ -493,6 +493,16 @@ regressions pass; arbitrary expressions, active frames, source breakpoints, stat
 stepping and equivalent-game acceptance remain open. A04 stays PARTIAL.
 [Evidence](evidence/A04_LIVE_DATA_WATCHES.md).
 
+**Shared gameplay budget 2026-11-23:** fixed per-invocation allowance multiplication
+across scene/entity/lifecycle/UI callbacks. One configurable aggregate pool resets
+per tick; individual loop guards remain. Tests cover root/entities, signals,
+collisions, paused UI, reset, cleanup, accounting and persistence; Debugger shows
+usage. Actual Linux widgets verify budget failure, real local watches and corrected-
+source Restart with unchanged manifest. Runtime contract v5 rejects older enforcement
+policy. This is not a physical frame-time claim or state rollback. A04 stays PARTIAL; source continuation/debug and
+full equivalent-game acceptance remain open. [Evidence](evidence/A04_SHARED_SCRIPT_BUDGET.md).
+[Consolidated A02–A04 progress](PLAN_PROGRESS.md).
+
 ### A05 — Sprite rendering, cameras and large-scene behavior
 
 **Status:** PARTIAL. **Depends on:** A03.

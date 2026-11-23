@@ -13,6 +13,7 @@ mod authored_ui;
 mod game_save;
 mod live_debug;
 mod tasks;
+mod work_budget;
 pub use game_save::{
     GameProgress, GameSave, SaveRequest, SaveValue, GAME_SAVE_VERSION, MAX_GAME_SAVE_BYTES,
 };
@@ -1570,6 +1571,7 @@ fn describe(value: &Value) -> String {
 
 /// A running slice: the compiled script plus its state.
 pub struct SliceSession {
+    work_budget: work_budget::ScriptWorkBudget,
     source: Option<crate::script_source::ExpandedSource>,
     save_identity: Option<(String, String, Option<String>)>,
     save_project: Option<std::sync::Arc<kiln_core::Project>>,
@@ -1780,6 +1782,14 @@ impl SliceSession {
             stack.pop();
             Ok(())
         }
+        if !(1..=kiln_core::project::MAX_SCRIPT_INSTRUCTION_BUDGET)
+            .contains(&project.script_instruction_budget)
+        {
+            return Err(
+                "script_instruction_budget must be between 1 and 10000000 instructions per tick"
+                    .into(),
+            );
+        }
         let scene = project.scenes.get(scene_id).ok_or("Scene is missing")?;
         let mut session = if let Some(path) = &scene.script {
             compile_resource(path, project, &read)?
@@ -1787,6 +1797,7 @@ impl SliceSession {
             Self::with_action_map("return 0;", project.action_map.clone())
                 .map_err(|errors| format!("{errors:?}"))?
         };
+        session.work_budget = work_budget::ScriptWorkBudget::new(project.script_instruction_budget);
         #[cfg(feature = "physics")]
         {
             session.vm.host_mut().physics = Some(PhysicsWorld::new());
@@ -1815,6 +1826,7 @@ impl SliceSession {
                     return Err(format!("Non-finite script property for '{}'", entity.id));
                 }
                 let mut child = compile_resource(path, project, &read)?;
+                child.work_budget = session.work_budget.clone();
                 child.vm.host_mut().self_entity = entity.id.clone();
                 child.vm.host_mut().properties = properties.clone();
                 session.attached.push(AttachedScript {
@@ -1838,6 +1850,7 @@ impl SliceSession {
 
     /// Invoke stop callbacks for started attachments before discarding a world.
     pub fn stop(&mut self, world: &mut GameWorld) -> Result<(), VmError> {
+        self.work_budget.reset();
         for attached in &mut self.attached {
             if attached.started {
                 attached.run(self.vm.host_mut(), "stop", world, (0.0, 0.0), 0.0, &[])?;
@@ -1871,6 +1884,9 @@ impl SliceSession {
         };
         let debugger = Debugger::new(program.clone(), host);
         Ok(Self {
+            work_budget: work_budget::ScriptWorkBudget::new(
+                kiln_core::project::DEFAULT_SCRIPT_INSTRUCTION_BUDGET,
+            ),
             source: None,
             save_identity: None,
             save_project: None,
@@ -1946,6 +1962,7 @@ impl SliceSession {
         input: (f64, f64),
         dt: f64,
     ) -> Result<(), VmError> {
+        self.work_budget.reset();
         #[cfg(feature = "audio")]
         if let Some(audio) = &mut self.vm.host_mut().audio {
             audio.advance_silent(dt);
@@ -2135,7 +2152,7 @@ impl SliceSession {
             host.take_commands();
         }
 
-        if let Err(error) = self.vm.execute(&self.program) {
+        if let Err(error) = self.work_budget.execute(&mut self.vm, &self.program) {
             if let Some(source) = &self.source {
                 let offset = self
                     .program

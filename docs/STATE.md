@@ -1,219 +1,79 @@
 # Kiln Session Handoff
 
-Owner scope: A02–A04 on `fix/a01-ci-baseline`.
-Current checkpoint: A04 read-only live data watches (2026-11-23),
-following 465328d. User deferred remaining A03 acceptance and requested the next
-item; do not resume A03 completion without new steering. A02–A04 remain PARTIAL. A01 accepted baseline stays 6de428b;
-full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
+Branch: fix/a01-ci-baseline. Current checkpoint: A04 shared gameplay instruction
+budget, following bb337cb (2026-11-23). User requested larger fixes and a cumulative
+plan report. A03 acceptance remains explicitly deferred by the user (2026-11-21).
+A02/A03/A04 remain PARTIAL; A04 is active. A01 accepted baseline stays 6de428b.
+Full 3D stays behind G2D. MIT OR Apache-2.0 settled; no package-size ceiling.
 
 ## Done
 
-- ADR-0097: live data watches target actual scene/entity VMs using slot, unique
-  allocated-name or state roots plus nested array/map paths. Literal tilde/slash
-  keys use ~0/~1. Ambiguous owners/names reject rather than guessing scopes.
-  No expressions, host calls, mutations or deep container traversal.
-- Live Debugger add/remove controls retain at most 32 watches in editor memory;
-  evaluation only while paused/errored. Owner/selector/path limits are 256 bytes,
-  512 bytes and 16 components. Slots beyond the snapshot preview are readable.
-  Existing bounded previews apply. No dependency/serialized/runtime contract change.
-
-- ADR-0096: live paused/error inspection now reads the executing scene/attachment
-  VMs with compiler slot names, instruction/source origin and bounded previews.
-  Slots disambiguate inlined/shadowed names; they do not imply active scopes or
-  call frames. Editor Debugger exposes this alongside persistent entity state.
-- Inspection bounds: 64 sessions, 128 locals each with omitted counts, strings
-  limited to 128 Unicode characters, container counts without deep cloning/walking.
-  No expression/host execution or runtime mutation. No dependency, serialized
-  project/save format, execution semantics or runtime compatibility change.
-
-- User chose finish or skip the current item and continue. A03 acceptance is
-  explicitly deferred, not marked complete; current implementation focus is A04.
-- ADR-0095: Restart requires the source buffer saved/reverted, compiles current
-  saved imports/attached/scene scripts and stages world/camera before stopping the
-  old run. Load/compile/camera rejection retains its VM/world/pause/error/clock.
-  Success uses authored initial runtime state and an unpaused clock. Persistent
-  files are not implicitly erased/loaded; authored callbacks retain their effects.
-- KILNSCRIPT specifies restart/reset/persistence and error boundaries; Restart
-  tooltips explain saved-source behavior. No new dependency/serialized format.
-
-- ADR-0094: sparse SpriteResources overrides persist per-instance material/clip
-  assignments and clears. Omitted inherits, string assigns, false clears. Capture,
-  Apply/propagation/Revert and live refresh share the contract. Live refresh now
-  also copies inherited definition material/clip values. No new dependency.
-- Generated-atlas clip removal checks scene/prefab overrides, including dormant
-  references with no current Sprite. Rejection preserves full project/PNG bytes;
-  removing the reference permits rebuild. Named IDs are not filesystem paths.
-- Current shared runtime contract is kiln-authoring-v4. The prior v3 is an explicit
-  negative compatibility control. Rebuild matching player/browser tools with the
-  updated editor; stale parsers cannot read the new override tag.
-
-- ADR-0093: per-instance Sprite width/height/layer now capture as sparse geometry
-  deltas, persist through TOML/JSON and apply through ordinary prefab propagation/
-  Apply/Revert. Live linked-instance refresh and existing-delta panel edits support
-  these values. Matching definition values remove the delta. No new dependency.
-- Shared runtime contract bumped to kiln-authoring-v3 so native/browser exporters
-  reject parsers lacking the new enum tag or explicit texture-clear booleans.
-  Previous kiln-a04-v2 is an explicit compatibility negative control. Rebuild
-  matching player/browser tools with updated editors.
-
-- ADR-0092: prefab Apply remaps instance-owner joint endpoints to the template;
-  propagation remaps them to each destination owner. Changed external endpoints
-  must resolve uniquely in the fully staged scene composition. Missing/ambiguous
-  targets reject atomically; valid nested targets work and unchanged legacy joints
-  do not block unrelated edits. No serialized format/dependency change.
-- Apply now stages current captured unsaved scene edits before applying rather
-  than reading an older scene document. The prefab panel stages its entire batch
-  before publishing definitions/live updates and restores displayed definitions
-  after rejection. History records only successful Apply operations.
-
-- ADR-0091 fixes a reproduced explicit prefab texture clear being lost in JSON
-  recovery and unsupported in sparse TOML overrides. Omitted texture inherits,
-  a string sets the path, and false clears it. Legacy string/null behavior is
-  preserved; true/invalid types are rejected. Optional inherited override fields
-  are omitted. No new dependency or runtime component format.
-- Headless editor integration captures a cleared instance against its textured
-  definition, saves/reopens the complete project, writes/reads actual atomic
-  recovery, moves typed resource paths, propagates across two scenes and applies
-  another instance. The clear persists while inherited paths update. Final saved
-  projects compare completely. No new GUI or native/browser visual claims.
-
-- ADR-0090: bounded generated-atlas provenance allows explicit Open to reconstruct
-  the saved recipe and Restore to reconstruct its selected autosave draft. Multiple
-  interrupted builds/older drafts are supported. Source art and manifest stay intact;
-  unknown output edits remain protected. Save compacts matching committed provenance.
-- Save As reconstructs only its staged copy and reloads its normalized saved project.
-  Native/browser export use copied validated provenance, rebuild only in staging,
-  preserve source files/provenance, and strip private metadata before publication.
-- Standard-library advisory publication locks release after crashes. Create-new
-  temporary names skip orphan files without deleting them. Private bookkeeping is
-  hidden from asset browsing/copying. No dependency added; ledger 512 KiB/4096 rows.
-- Actual crash widgets exposed a Save regression during development: disk conflict
-  checks used a loader with Open recovery side effects, reverting restored PNGs.
-  Read-only load and explicit load_recovering now have separate contracts. Regression
-  verifies pending atlas survives conflict checking and Save. Recovery refreshes
-  scene textures; manual Save/Save As restarts the autosave interval.
-- Previous 5bc6e0a: saved deterministic atlas recipes/static clips, stable asset IDs,
-  source-move/rebuild/reopen, current-art exports and loaded-ID collision fix.
-  836a2d8: source-module moves preserve imports/paths/IDs/clean open buffers.
-  6ddcc44: whole-project/two-scene recovery oracle and all-12-component coverage.
+- ADR-0098 closes multiplication of per-invocation instruction allowances across
+  scene/entity/lifecycle/saved-UI callbacks. One shared pool resets per public tick;
+  explicit Stop gets a fresh bounded cleanup allowance. Existing individual VM
+  one-million limit remains. Reserve/refund is per execution, not per opcode.
+- Project script_instruction_budget defaults to 1,000,000 (omitted on save), accepts
+  1..10,000,000 and validates before source reads. TOML/JSON persistence covered.
+  Debugger shows used/limit and source/entity/phase errors identify exhaustion.
+- Runtime contract is kiln-authoring-v5; stale v4 tools reject before export.
+  Rebuild matching player/browser tools. No new crate or application dependency.
+- Actual editor replay exercises failure/Pause, a real VM local watch and corrected
+  saved-source Restart/Pause. The optional replay uses existing tesseract plus
+  Xvfb/xdotool/ImageMagick; it is not wired as a new default CI dependency.
+- Cumulative implemented work, checkpoint history and open gates are consolidated
+  in docs/PLAN_PROGRESS.md. Earlier A04 work includes safe Restart, real allocated
+  VM locals/data watches, shared scripting semantics and editable gameplay graphs.
+  Earlier A03 includes atlas build/export/crash recovery, loaded IDs/source moves,
+  prefab sprite overrides and reference-safe joint propagation. A02 authoring/
+  recovery/property/reference work remains in its dated evidence and the plan.
 
 ## Executed validation
 
-- Watch tests cover nested escaped map/array reads, slots beyond preview, distinct
-  actual entity VM values, duplicate inlined-name errors with exact slot access,
-  malformed/missing/out-of-range/scalar paths and limits. Host-call-like input
-  rejects; local/state values remain unchanged. Invalid redeclaration fixture was
-  replaced with valid repeated function parameter allocations, same assertions.
-  Raw target/a04-live-watches-{check,integration,integration-final,workspace-final,quality-final,wasm,wasm-optout}.log.
-  Evidence: docs/evidence/A04_LIVE_DATA_WATCHES.md. No actual GUI replay claimed.
-
-- Actual VM tests: imported function division failure exposes parameter/local
-  values and logic.ks:4; budget exhaustion retains local state; 160 slots truncate
-  to 128 with count 32; attached owners show distinct real values. Unicode/container
-  preview tests pass. An initially missing ECS-owner fixture was corrected without
-  changing assertions. Repeated inspection leaves values unchanged.
-  Raw target/a04-live-locals-{preview,integration,integration-final,workspace,quality,wasm,wasm-optout}.log.
-  Evidence: docs/evidence/A04_LIVE_VM_LOCALS.md. No actual GUI replay claimed.
-
-- Restart headless tests: invalid imported source rejects with the module name;
-  old compiled VM keeps executing despite the invalid disk file. Corrected saved
-  imported code starts in a fresh unpaused/error-free session. Authored project
-  and existing save bytes remain exact. Missing source/invalid camera reject.
-  Initial import-line fixture syntax corrected, no production assertion relaxed.
-  Raw target/a04-restart-{initial,tests,tests-final,workspace-final,quality-final}.log.
-  Evidence: docs/evidence/A04_SAFE_RESTART.md. No new actual widget/audio replay.
-
-- Resource regression reproduces cleared assignments being replaced during
-  cross-scene Apply. New tests cover three-state TOML/JSON, malformed values,
-  actual atomic recovery, exact saved reopen, independent inheritance, live
-  refresh, one-command Revert/Undo/Redo and dormant atlas clip reference safety.
-  Raw target/a03-prefab-resources-{before,after,integration,atlas,workspace,quality,wasm,wasm-optout}.log.
-  Evidence: docs/evidence/A03_PREFAB_SPRITE_RESOURCES.md. No new GUI/material/
-  animation-playback/export visual claim; full prefab acceptance remains open.
-
-- Geometry regression reproduces prior 48/20/7 instance values being overwritten
-  by definition 64/80/2. Three final headless cases cover project Save/reopen and
-  actual atomic JSON recovery, cross-scene Apply/runtime projection, sparse field
-  inheritance, Revert with exact Undo/Redo, live refresh and delta removal.
-  Raw target/a03-prefab-geometry-{before,integration,workspace-final,quality-final,wasm-final,wasm-optout-final}.log.
-  Evidence: docs/evidence/A03_PREFAB_SPRITE_GEOMETRY.md. No new GUI/physical/export
-  visual claim; broader prefab acceptance remains open.
-
-- Three prefab-joint before regressions fail, all six final regressions pass:
-  Apply/propagation owner remapping, whole-project atomic missing/ambiguous target
-  refusal, unique nested target, exact save/reopen/runtime spawn, legacy tolerance.
-  Raw target/a03-prefab-joints-{before,after,integration,workspace,quality-final}.log.
-  Evidence: docs/evidence/A03_PREFAB_JOINT_PROPAGATION.md. This checkpoint is
-  headless model/runtime-spawn proof; no new GUI/export/physics visual claim.
-
-- Explicit-clear controlled regression fails on previous serializer (None differs
-  from Some(None)), passes now for all three states through TOML/JSON. Legacy null
-  and malformed-type coverage passes. Raw logs:
-  target/a03-prefab-texture-{before,core,integration,workspace,quality,wasm,wasm-optout}.log.
-  Evidence: docs/evidence/A03_PREFAB_TEXTURE_PERSISTENCE.md.
-
-- Current locked Rust workspace: 829 PASS, zero failures including docs. just check PASS.
-  Current default/opt-out WASM strict Clippy PASS.
-  Previous Python helper suite 49 PASS;
-  script compilation and diff checks PASS.
-- Real native widgets PASS: force a crash before autosave, reconstruct saved atlas,
-  republish, wait for actual timer snapshot, crash/Restore/Save/restart. Entire
-  recovered project matches snapshot (typed f32 duration representation normalized),
-  exact PNG bytes and rendered green pixels match, original source art/scripts
-  remain unchanged, committed provenance is removed. Screenshots inspected.
-- Unit/integration tests cover older JSON draft reconstruction, external/foreign
-  output preservation, invalid ledger/active lock, orphan temp preservation, Open
-  exact saved PNG, Save As source isolation, and read-only disk conflict checks.
-- Native KAR/browser staging regression PASS after interrupted 32px generation:
-  export uses saved 16px recipe/current blue art, preserves authoring files/ledger,
-  and excludes private metadata. Final asset-browser exclusion regression PASS.
-- Raw artifacts: target/a03-atlas-recovery-workspace.log,
-  target/a03-atlas-recovery-{quality-final,export-final,private,python,integration}.log,
-  target/a03-atlas-recovery-final-widget.log, target/a03-atlas-recovery-final/.
-  Detailed evidence: docs/evidence/A03_ATLAS_CRASH_RECOVERY.md.
-- Previous checkpoint: 797 Rust tests, default/opt-out WASM Clippy, saved-atlas widget
-  workflow, relocated native/Chromium 1024 green pixels, and portable editor exports
-  passed. See docs/evidence/A03_SAVED_ATLAS_RECIPES.md. Visual scope remains Linux
-  Xvfb/software graphics; no physical GPU or other-OS certification.
+- Locked Rust workspace: 837 PASS, zero failures including docs. just check PASS.
+  Default/opt-out WASM strict Clippy PASS. Python helper suite: 49 PASS; new native
+  replay py_compile and git diff checks PASS.
+- Controlled old-behavior test fails: four finite scripts exceed the intended tick
+  allowance without stopping. Six final runtime cases PASS across root/entities,
+  signal fan-out, collision callbacks, paused UI, reset over 20 ticks, bounded Stop,
+  configurable work, persistence and rejection before source reads. Two VM tests
+  verify exact zero/partial/error accounting and retained per-call limits.
+- Actual Linux Xvfb/software editor replay PASS: 1000/1000 error/Pause, live watch
+  I64(9), corrected saved-source Restart/Pause, I64(7) and usage 5/1000. Manifest
+  bytes unchanged; screenshots inspected. Two initial OCR target observer failures
+  were fixed using observed normalized field positions, unchanged value assertions.
+- Raw: target/a04-shared-budget-{before,after,vm,integration,workspace,quality-final,
+  wasm,wasm-optout,python,editor-build}.log and
+  target/a04-shared-budget-widgets-verified/{result.json,ocr-latest.txt,editor/}.
+  Evidence: docs/evidence/A04_SHARED_SCRIPT_BUDGET.md.
+- Hosted checks for new source remain pending. Earlier hosted references accept
+  earlier source only; do not substitute those for current acceptance.
 
 ## Next / known issues
 
-Obtain matching hosted checks for the new commit. GitHub Actions lookup in this
-environment returned Forbidden; local checks passed. Earlier 7f7c60e reference
-44370197155, CI 44370197413 and Linux candidate 44370197855 passed; those checks
-accept earlier source, not this checkpoint. Native CI now includes atlas crashes;
-ordinary workspace tests include the prefab persistence integration.
-
-A03 (deferred by user): older snapshots that already lost an explicit clear cannot recover its intent.
-Arbitrary component overrides, nested/variant prefab contracts and combined renamed-art,
-multiple-scene/prefab/atlas/export production acceptance remain open. Recipes own
-whole-image static clips; independent animation edits need separate clip assets.
-Derived-atlas reconstruction uses current source art, not historical source backups.
-It is not a general multi-file transaction or power-loss durability guarantee.
-General asset/source-module move crash atomicity remains open. Bounds are in
-PROJECT_FORMAT/BUDGETS. Physical GPU/FPS/memory and cross-platform visuals remain.
-
-A02: every-inspector-property combined widgets and cross-platform GUI remain open.
-Scoped/repeated nested identities need a deliberate runtime/script contract;
-ambiguous links are refused and authored data preserved. Joint form requires Apply;
-inspector edits remain primary-entity scoped. Save As rescue requires source
-resources and explicit Save/Revert of dirty scripts. Source can consume Ctrl+S;
-explicit File / Save Project is available. Source moves require clean saved buffers
-and bounded portable .ks paths; all-file crash atomicity remains separate.
-
-A04: live gameplay source breakpoints, statement stepping, imported function frames/
-active lexical locals/expression watches, stack-preserving live reload and the enemy/projectile/trigger game
-with equivalent graph and complete exports remain open. Cooperative task payloads
-are explicit state machines, not suspended function stacks/yield syntax. The
-separate bytecode debugger is not the live gameplay source debugger.
-
-User requested finishing A02–A04; continue with validated checkpoints. The current
-checkpoint is complete; the full three-milestone acceptance is still open.
+- Continue A04: actual source breakpoints, statement-level continuation, active
+  imported frames/scopes and expression watches; required enemy/projectile/trigger
+  game with equivalent graph and full native/browser/export/debug acceptance.
+  Current locals are allocated slots, not active lexical frames. Watches are
+  bounded data selectors, not arbitrary expression evaluation. Cooperative tasks
+  are explicit state machines, not suspended function stacks.
+- Shared work is bytecode counting, not host-call/render/physics wall time. Prior
+  completed callbacks may already have changed world/state; a failed tick is not
+  rolled back. Physical frame-time/GPU/device certification remains separate.
+- A03 stays deferred: nested/variant prefab identity/runtime contracts, arbitrary
+  component overrides, general multi-file source/asset crash transactions, and
+  combined prefab/multi-scene/atlas/export visual production acceptance remain open.
+  Atlas recovery regenerates from current art, not historical art backups. Old
+  snapshots that already lost an explicit texture clear cannot recover that intent.
+- A02: combined every-inspector-property widget and cross-platform GUI acceptance
+  remain open. Scoped/repeated identities require deliberate contracts; ambiguous
+  links are refused while preserving data. Save As needs resources and saved/reverted
+  script drafts. Explicit File / Save Project avoids source-editor Ctrl+S focus.
 
 ## Tools / boundaries
 
-Source /workspace/.kiln-tools/activate.sh (Rust 1.99.1, rootless libraries/software
-Vulkan, CHROMIUM_PATH Debian Chromium 156). Run timed UI/gameplay checks serially;
-concurrent build/export load previously exposed timing issues. Generated target
-artifacts stay out of Git. Do not kill unrelated editor/Xvfb. just check before
-every commit. No physical-GPU/audio/controller claims.
+Source /workspace/.kiln-tools/activate.sh for Rust 1.99.1, rootless libraries/software
+Vulkan and Debian Chromium. Run timed UI/gameplay checks serially, without concurrent
+build/export load. Optional actual budget replay:
+python3 tests/native/shared_script_budget_smoke.py.
+Generated target artifacts stay out of Git. Do not kill unrelated editor/Xvfb.
+just check before every commit. No physical GPU/audio/controller claims.

@@ -8,6 +8,17 @@ use crate::tilemap::{TileMap, TileSet};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Default total script instructions across one gameplay tick.
+pub const DEFAULT_SCRIPT_INSTRUCTION_BUDGET: u64 = 1_000_000;
+/// Largest accepted authored aggregate script budget.
+pub const MAX_SCRIPT_INSTRUCTION_BUDGET: u64 = 10_000_000;
+fn default_script_instruction_budget() -> u64 {
+    DEFAULT_SCRIPT_INSTRUCTION_BUDGET
+}
+fn is_default_script_instruction_budget(value: &u64) -> bool {
+    *value == DEFAULT_SCRIPT_INSTRUCTION_BUDGET
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     pub id: String,
@@ -18,6 +29,12 @@ pub struct Project {
     #[serde(default)]
     pub icon: String,
     pub features: Vec<String>,
+    /// Aggregate script instructions per gameplay tick, shared across callbacks.
+    #[serde(
+        default = "default_script_instruction_budget",
+        skip_serializing_if = "is_default_script_instruction_budget"
+    )]
+    pub script_instruction_budget: u64,
     #[serde(default)]
     pub window: WindowSettings,
     #[serde(default)]
@@ -454,6 +471,7 @@ impl Default for Project {
             publisher: String::new(),
             icon: String::new(),
             features: vec![],
+            script_instruction_budget: DEFAULT_SCRIPT_INSTRUCTION_BUDGET,
             window: WindowSettings::default(),
             mobile: MobileSettings::default(),
             scenes: HashMap::new(),
