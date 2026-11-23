@@ -23,7 +23,13 @@ def main():
     manifest=project/'kiln.toml'
     manifest.write_text('script_instruction_budget = 1000\n'+manifest.read_text())
     data=tomllib.loads(manifest.read_text());script=project/data['scenes']['main']['script']
-    script.write_text('let debug_counter = 9;\nwhile true { continue; }\n')
+    inspect_frames=os.environ.get('KILN_DEBUG_FUNCTION_FRAMES')=='1'
+    if inspect_frames:
+        script.write_text('import "outer.ks";\nouter(9);\n')
+        (script.parent/'outer.ks').write_text('import "inner.ks";\nfn outer(value) { return inner(value); }\n')
+        (script.parent/'inner.ks').write_text('fn inner(value) {\nlet debug_counter = value;\nwhile true { continue; }\n}\n')
+    else:
+        script.write_text('let debug_counter = 9;\nwhile true { continue; }\n')
     editor=Editor(REPO/'target/debug',project,output/'editor',':89')
 
     def observe():
@@ -65,6 +71,11 @@ def main():
         editor.held_click(80,366)
         expect(r'[I1l]64\s*\(\s*9\s*\)','Read real halted VM local through live watch')
         editor.shot('halted_vm_watch')
+        if inspect_frames:
+            click_word('<scene>')
+            expect(r'outer\s*@','Read the real imported caller frame')
+            expect(r'inner\s*@','Read the real imported current function frame')
+            editor.shot('imported_call_frames')
         assert manifest.read_bytes()==baseline
         script.write_text('let debug_counter = 7;\nadd_score(7);\n')
         click_word('Restart')
@@ -76,7 +87,7 @@ def main():
         editor.shot('restarted_and_paused')
         assert manifest.read_bytes()==baseline
         result=dict(passed=True,actual_budget_failure=True,real_vm_watch=True,saved_source_restart=True,
-                    replacement_watch_value=True,manifest_unchanged=True,scope='Linux Xvfb/software graphics; OCR-observed widgets')
+                    replacement_watch_value=True,manifest_unchanged=True,real_imported_frames=inspect_frames,scope='Linux Xvfb/software graphics; OCR-observed widgets')
         (output/'result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
     except Exception as error:
         record_failure(output,'shared-script-budget','widgets',error)

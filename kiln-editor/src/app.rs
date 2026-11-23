@@ -6740,8 +6740,12 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 for snapshot in play.slice.live_vm_debug() {
                                     ui.collapsing(format!("{} — instruction {}", snapshot.owner, snapshot.instruction), |ui| {
                                         if let Some(location) = snapshot.location { ui.monospace(location); }
+                                        ui.label("Call frames: entry to current function");
+                                        for frame in snapshot.frames {
+                                            ui.monospace(format!("{} @ {}", frame.function, frame.location.unwrap_or_else(|| format!("instruction {}", frame.instruction))));
+                                        }
                                         for local in snapshot.locals {
-                                            ui.monospace(format!("[{}] {} = {}", local.slot, local.name, local.value));
+                                            ui.monospace(format!("[{}] {}::{} = {}", local.slot, local.function.as_deref().unwrap_or("<entry>"), local.name, local.value));
                                         }
                                         if snapshot.omitted_locals > 0 { ui.label(format!("{} locals omitted", snapshot.omitted_locals)); }
                                     });

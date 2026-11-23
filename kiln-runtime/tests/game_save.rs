@@ -468,3 +468,40 @@ fn normal_scene_changes_carry_typed_progress_written_by_stop_callbacks() {
         next.host_mut().game_value("quest")
     );
 }
+
+#[test]
+fn legacy_calling_convention_memory_is_rejected_even_when_slot_count_matches() {
+    let temp = Temp::new();
+    let (project, mut scripts) = fixture();
+    scripts.insert("root.ks".into(), "fn advance(value) { return value+1; } state_set(\"ticks\", advance(state_get(\"ticks\",0)));".into());
+    let (mut session, mut world) = launch(&project, &scripts, "a", &temp);
+    session.step(&mut world, (0.0, 0.0), 0.016).unwrap();
+    let mut saved = session.snapshot(&world).unwrap();
+    let current = saved.root.signature.clone();
+    assert!(current.starts_with("shared-calls-v1:"));
+    saved.root.signature = current.split_once(':').unwrap().1.to_owned();
+    assert!(saved
+        .restore(
+            &project,
+            |path| scripts.get(path).cloned().ok_or(path.into()),
+            |_| None
+        )
+        .is_err());
+}
+
+#[test]
+fn unchanged_straight_line_programs_retain_legacy_memory_signatures() {
+    let temp = Temp::new();
+    let (project, scripts) = fixture();
+    let (mut session, mut world) = launch(&project, &scripts, "a", &temp);
+    session.step(&mut world, (0.0, 0.0), 0.016).unwrap();
+    let saved = session.snapshot(&world).unwrap();
+    assert_eq!(saved.root.signature.split(':').count(), 2);
+    assert!(saved
+        .restore(
+            &project,
+            |path| scripts.get(path).cloned().ok_or(path.into()),
+            |_| None
+        )
+        .is_ok());
+}

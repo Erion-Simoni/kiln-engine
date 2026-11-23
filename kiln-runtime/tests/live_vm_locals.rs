@@ -119,3 +119,50 @@ fn attachment_snapshots_read_distinct_executing_instances() {
         );
     }
 }
+
+#[test]
+fn imported_nested_functions_expose_real_frames_and_owned_locals() {
+    let sources=HashMap::from([
+        ("main.ks","import \"outer.ks\";\nouter(3);"),
+        ("outer.ks","import \"inner.ks\";\nfn outer(value) { let adjusted=value+1; return inner(adjusted); }"),
+        ("inner.ks","fn inner(dividend) {\nlet zero=0;\nreturn dividend / zero;\n}"),
+    ]);
+    let mut session =
+        SliceSession::with_scene_sources(&project(Some("main.ks"), vec![]), "main", |path| {
+            sources.get(path).map(|s| s.to_string()).ok_or(path.into())
+        })
+        .unwrap();
+    assert!(session
+        .step(&mut GameWorld::new(), (0.0, 0.0), 0.016)
+        .is_err());
+    let snapshots = session.live_vm_debug();
+    let root = &snapshots[0];
+    assert_eq!(
+        root.frames
+            .iter()
+            .map(|f| f.function.as_str())
+            .collect::<Vec<_>>(),
+        vec!["<entry>", "outer", "inner"]
+    );
+    assert!(root.frames[0]
+        .location
+        .as_ref()
+        .unwrap()
+        .contains("main.ks:2:"));
+    assert!(root.frames[1]
+        .location
+        .as_ref()
+        .unwrap()
+        .contains("outer.ks:2:"));
+    assert!(root.frames[2]
+        .location
+        .as_ref()
+        .unwrap()
+        .contains("inner.ks:3:"));
+    assert!(root.locals.iter().any(|v| v.name == "adjusted"
+        && v.function.as_deref() == Some("outer")
+        && v.value == "I64(4)"));
+    assert!(root.locals.iter().any(|v| v.name == "dividend"
+        && v.function.as_deref() == Some("inner")
+        && v.value == "I64(4)"));
+}

@@ -2297,3 +2297,22 @@ An opt-in native widget replay uses the already available tesseract OCR utility
 alongside Xvfb/xdotool/ImageMagick. This is a test-tool prerequisite, not an added
 application dependency or default CI installation. OCR observes usage/error/watch
 values; normalized field coordinates avoid faint-placeholder text ambiguity.
+
+### ADR-0099 — Compile shared callable bodies and expose real frames (2026-11-23)
+
+Status: accepted. Replace per-call-site function expansion with one emitted body
+per reachable function, using existing IR Call/Return. A jump skips each embedded
+body during ordinary caller flow. Function slots allocate once; static acyclic
+call graphs permit fixed per-function slots without recursive activation records.
+Retain recursion rejection and enforce maximum transitive call depth 32, including
+cached callees. VM raw bytecode also rejects call stacks deeper than 32. Shared
+function metadata records instruction ranges/local ownership without cloning a
+function name per instruction. Runtime inspection shows real call frames and
+function-owned allocated locals; active lexical block scopes remain separate.
+
+Runtime contract advances to kiln-authoring-v6. Add a shared-calls-v1 VM-memory
+signature prefix only to programs with calls, rejecting incompatible old function
+slot layouts before load commit. Straight-line programs keep their legacy memory
+signatures. Do not silently reinterpret saved locals. No new dependency; ordinary source, graph
+lowering and native/web all use the same compiler/VM. This does not add recursion,
+source breakpoints or statement-level scheduler continuation.

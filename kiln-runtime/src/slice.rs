@@ -17,7 +17,7 @@ mod work_budget;
 pub use game_save::{
     GameProgress, GameSave, SaveRequest, SaveValue, GAME_SAVE_VERSION, MAX_GAME_SAVE_BYTES,
 };
-pub use live_debug::{LiveVmDebug, LiveVmLocal};
+pub use live_debug::{LiveVmDebug, LiveVmFrame, LiveVmLocal};
 
 use std::collections::HashMap;
 use std::path::Path;

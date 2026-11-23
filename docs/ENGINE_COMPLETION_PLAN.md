@@ -503,6 +503,16 @@ policy. This is not a physical frame-time claim or state rollback. A04 stays PAR
 full equivalent-game acceptance remain open. [Evidence](evidence/A04_SHARED_SCRIPT_BUDGET.md).
 [Consolidated A02–A04 progress](PLAN_PROGRESS.md).
 
+**Callable bodies/imported frames 2026-11-23:** fixed per-call-site body/local
+expansion; valid reuse-heavy source now compiles compactly. Source functions use
+actual Call/Return, with static recursion/transitive depth guards and raw VM depth
+protection. Live debugger shows real imported call sites/current function and local
+ownership. Old function-layout snapshots reject safely while unchanged straight-
+line signatures remain compatible. Actual imported-frame/watch/Restart widgets
+and relocated native/Chromium green-pixel exports pass. Source breakpoints,
+statement continuation, lexical-block inspection and equivalent-game acceptance
+remain open. A04 stays PARTIAL. [Evidence](evidence/A04_SHARED_CALLS_AND_FRAMES.md).
+
 ### A05 — Sprite rendering, cameras and large-scene behavior
 
 **Status:** PARTIAL. **Depends on:** A03.

@@ -116,9 +116,38 @@ pub struct Program {
     local_slots: u16,
     source_offsets: HashMap<usize, usize>,
     local_names: HashMap<u16, String>,
+    local_functions: HashMap<u16, Label>,
+    function_ranges: Vec<(usize, usize, String)>,
 }
 
 impl Program {
+    /// Associate a compiled body range with its function; nested bodies retain
+    /// their more specific ownership without per-instruction name copies.
+    pub fn record_function(&mut self, start: usize, end: usize, name: &str) {
+        self.function_ranges.push((start, end, name.to_owned()));
+    }
+
+    /// Function owning an instruction, or None for the entry program.
+    pub fn function_name(&self, instruction: usize) -> Option<&str> {
+        self.function_ranges
+            .iter()
+            .filter(|(start, end, _)| *start <= instruction && instruction < *end)
+            .min_by_key(|(start, end, _)| end - start)
+            .map(|(_, _, name)| name.as_str())
+    }
+
+    /// Record a function-local slot's entry label.
+    pub fn record_local_function(&mut self, slot: u16, entry: Label) {
+        self.local_functions.insert(slot, entry);
+    }
+
+    /// Function owning a local slot; None denotes entry-program locals.
+    pub fn local_function(&self, slot: u16) -> Option<&str> {
+        self.local_functions
+            .get(&slot)
+            .and_then(|entry| self.function_name(entry.0))
+    }
+
     /// Record a compiler-allocated local name for read-only live inspection.
     pub fn record_local_name(&mut self, slot: u16, name: &str) {
         self.local_names.insert(slot, name.to_owned());

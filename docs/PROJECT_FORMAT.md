@@ -381,7 +381,7 @@ absent values inherit the definition independently. Captured instance edits use
 the `sprite_geometry` override entry. Returning all three properties to their
 current definition values removes that entry. Apply/propagation preserves deltas;
 Revert clears them. Existing Sprite color/texture override data is unchanged.
-Matching native/browser tools must advertise runtime contract `kiln-authoring-v3`;
+Matching native/browser tools must advertise runtime contract `kiln-authoring-v6`;
 older parsers do not support the new tag and are rejected before export.
 
 ### Prefab material and clip overrides
@@ -391,7 +391,7 @@ An absent field inherits; a string assigns its ID; false clears it. Capture stor
 per-property deltas under `sprite_resources` and removes the entry when both
 properties inherit. Resource IDs are not file paths. Generated atlas clips remain
 protected while any scene/prefab override references them, even without a current
-Sprite component. Matching runtime contract is `kiln-authoring-v4`; rebuild native
+Sprite component. Matching runtime contract is `kiln-authoring-v6`; rebuild native
 and browser tools with updated editors. Older tools cannot parse this override tag.
 
 ### Aggregate script instruction limit
@@ -400,5 +400,12 @@ Project root `script_instruction_budget` is an unsigned integer from 1 through
 10,000,000, default 1,000,000. Default values are omitted on save. It applies across
 scene/entity/lifecycle/UI bytecode invocations within each gameplay tick. It does
 not replace the individual VM invocation limit or measure host/render/physics time.
-Runtime construction/export validates the range. Runtime contract v5 requires
+Runtime construction/export validates the range. Runtime contract v6 requires
 matching rebuilt player/browser tools; older tools are refused before publication.
+
+
+Function-calling programs now compile bodies once and store a `shared-calls-v1`
+VM-memory signature. Older function slot layouts are rejected before a saved-game
+load commits; straight-line program memory signatures remain compatible. Actual
+call depth is capped at 32 and recursive source functions are rejected. Current
+matching runtime contract is kiln-authoring-v6.

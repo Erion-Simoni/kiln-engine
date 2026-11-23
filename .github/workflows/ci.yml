@@ -270,6 +270,12 @@ jobs:
         run: python3 tests/native/atlas_recovery_smoke.py
       - name: Play the relocated native atlas export
         run: python3 tests/native/atlas_player_smoke.py
+      - name: Verify imported function calls in a relocated native export
+        env:
+          KILN_ATLAS_PROJECT: samples/function_calls
+          KILN_PIXEL_SCENARIO: function-calls
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a04-functions-native
+        run: python3 tests/native/atlas_player_smoke.py
       - name: Verify external art refresh and structured gameplay authoring
         run: python3 tests/native/asset_script_workflow_smoke.py
       - name: Pack the saved UI game
@@ -394,6 +400,9 @@ jobs:
             target/a03-atlas-recovery/editor/*.png
             target/a03-atlas-recovery/editor/*.log
             target/a03-atlas-recovery/reopened/*.png
+            target/a04-functions-native/result.json
+            target/a04-functions-native/*.log
+            target/a04-functions-native/*.png
             target/a03-atlas-player/result.json
             target/a03-atlas-player/*.log
             target/a03-atlas-player/*.png
@@ -456,6 +465,12 @@ jobs:
         run: python3 tests/native/atlas_recipe_smoke.py
       - name: Render the relocated generated atlas in Chromium
         run: node tests/web/atlas.cjs target/debug/web-runtime
+      - name: Verify imported function calls in a relocated browser export
+        env:
+          KILN_ATLAS_PROJECT: samples/function_calls
+          KILN_PIXEL_SCENARIO: function-calls
+          WEB_ATLAS_EVIDENCE: target/a04-functions-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
       - name: Verify editor-authored counted loops and dictionaries in the browser
         run: python3 tests/native/asset_script_workflow_smoke.py --web-runtime target/debug/web-runtime
       - name: Verify editor-authored graph gameplay and browser save restoration
@@ -509,6 +524,10 @@ jobs:
             target/a03-atlas-recipe/editor/*.png
             target/a03-atlas-recipe/editor/*.log
             target/a03-atlas-recipe/reopened/*.png
+            target/a04-functions-browser/result.json
+            target/a04-functions-browser/*.log
+            target/a04-functions-browser/*.png
+            target/a04-functions-browser/failure.txt
             target/a03-atlas-browser/result.json
             target/a03-atlas-browser/*.log
             target/a03-atlas-browser/*.png

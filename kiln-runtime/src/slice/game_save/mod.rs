@@ -321,7 +321,17 @@ impl SliceSession {
         for byte in source.as_bytes() {
             hash = (hash ^ *byte as u64).wrapping_mul(0x100000001b3);
         }
-        format!("{hash:016x}:{}", self.program.local_slots())
+        let signature = format!("{hash:016x}:{}", self.program.local_slots());
+        if self
+            .program
+            .instructions()
+            .iter()
+            .any(|instruction| matches!(instruction, kiln_ir::Instruction::Call(_)))
+        {
+            format!("shared-calls-v1:{signature}")
+        } else {
+            signature
+        }
     }
     fn memory(&self) -> Result<ScriptSnapshot, String> {
         let host = self.vm.host();

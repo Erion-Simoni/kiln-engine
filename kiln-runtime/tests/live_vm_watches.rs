@@ -45,7 +45,7 @@ fn watches_read_nested_locals_state_and_slots_beyond_snapshot_limit() {
 #[test]
 fn invalid_or_ambiguous_watches_report_errors_without_mutating_vm() {
     let (session, _) =
-        session("fn identity(repeated) { return repeated; } identity(1); identity(2); state_set(\"kept\", 9);");
+        session("fn first(repeated) { return repeated; } fn second(repeated) { return repeated; } first(1); second(2); state_set(\"kept\", 9);");
     assert!(session
         .live_watch("scene", "local:repeated")
         .unwrap_err()

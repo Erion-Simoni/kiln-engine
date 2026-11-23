@@ -366,7 +366,9 @@ fn advance(x, speed) {
 ```
 
 Functions can call other named functions and builtins, receive evaluated
-arguments, and have isolated locals. Recursive/nested functions and closures
+arguments left-to-right, and have isolated locals. Reachable function bodies compile
+once and execute using real Call/Return frames, with at most 32 active calls.
+Recursive/nested functions and closures
 are rejected; no explicit return yields integer zero. `array_new()`,
 `array_push(array, value)`, `array_length(array)`, and `array_get(array, index)`
 provide collections for entity queries and persistent state. Arrays contain
@@ -485,10 +487,10 @@ reported, exposes local slots and follows actual bytecode call depth for Step
 Over/Out. Restart clears bytecode locals and stacks while retaining host state.
 Conditional bytecode breakpoints return an explicit unsupported diagnostic.
 
-The live gameplay panel currently pauses/steps whole frames and inspects entity
-state. Source breakpoints, statement stepping, imported-function call frames,
-expression watches and a debugger attached to the actual gameplay VM remain
-required before A04 is accepted. Bytecode repairs do not establish those workflows.
+The live gameplay panel pauses/steps whole frames and inspects actual VM state,
+allocated locals, data watches and real imported-function call frames on failure.
+Source breakpoints, statement-level continuation and active-block expression watches
+remain required before A04 is accepted.
 
 ## Enums, tasks and source tools (A04)
 
@@ -596,7 +598,7 @@ These values survive logical save/restore. Graphs are executable scene/entity
 programs; use ordinary function modules for reusable text libraries.
 
 This workflow does not complete A04's live source breakpoints, statement stepping,
-imported function frames/watches or the required new enemy/projectile/trigger game.
+active-block expression watches or the required new enemy/projectile/trigger game.
 
 ### Editor restart and saved-source changes
 
@@ -628,12 +630,13 @@ preview, with the current instruction/source origin when mapped. Repeated/shadow
 names have distinct slot numbers. Inspection does not execute expressions or host
 calls and does not advance the game.
 
-These are allocated slots, not an active lexical-scope view or call stack: completed
-blocks/functions may leave values in their slots. Inlined function parameters and
-locals can therefore be inspected without implying imported call frames. Views
+These are allocated slots, not an active lexical-block view: completed blocks or
+functions may leave values in their slots. Function ownership is shown beside each
+local. A separate frame list shows actual caller call sites and the current function,
+including imported source origins. Views
 include at most 64 VMs and 128 locals per VM; omitted-local counts are shown.
 Strings are limited to 128 Unicode characters; arrays/dictionaries show counts.
-Source breakpoints, statement stepping, active-frame locals and expression watches
+Source breakpoints, statement stepping, active-block locals and expression watches
 remain separate work. Frame stepping remains the existing whole-game tick control.
 
 ### Live data watches
@@ -644,8 +647,9 @@ update while paused or after errors; Remove deletes a watch. These are read-only
 data selectors, not script expressions:
 
 - `slot:12` reads an allocated local slot, including slots outside the local preview.
-- `local:health` reads a unique allocated name. Multiple inlined allocations with
-  that name report ambiguity; use the displayed slot instead.
+- `local:health` reads a unique allocated name. Multiple functions with that local
+  name report ambiguity; use the displayed slot instead. Calls to the same function
+  reuse its own slots, whose values reflect its most recent/current invocation.
 - `state:inventory` reads the VM's persistent script state without calling state_get.
 - Append `/0` for an array index or `/key` for a dictionary entry. Escape literal
   tilde/slash in keys as `~0`/`~1`; `state:bag/a~1b/0` reads key `a/b`, then index 0.
@@ -677,5 +681,26 @@ This counts bytecode instructions, not elapsed CPU/GPU time or the internal cost
 of a host call. It does not roll back world/state changes from earlier completed
 callbacks in a failed tick. Rendering, physics and host-resource limits remain
 separate budgets. Matching native/browser tools must advertise runtime contract
-`kiln-authoring-v5`; older tools cannot enforce this shared policy and are rejected
+`kiln-authoring-v6`; older tools cannot enforce this shared policy and are rejected
 before export.
+
+
+### Shared function bodies and saved VM layouts
+
+Repeated calls no longer clone function bodies and slots. Calls within skipped
+branches remain lazy, arguments evaluate left-to-right, early returns unwind the
+actual call frame, and falling through returns integer zero. Recursion remains
+unsupported; transitive depth checking includes previously compiled callees, and
+raw bytecode also has a 32-call runtime depth guard.
+
+Debugger frame rows show entry/call-site/current-function source locations and
+function-owned allocated locals. A frame is not a complete lexical-block lifetime
+view. To exercise imported frames, watches and Restart in the optional widget replay:
+`KILN_DEBUG_FUNCTION_FRAMES=1 python3 tests/native/shared_script_budget_smoke.py`.
+
+Runtime tools now use contract `kiln-authoring-v6`. Function-using VM snapshots
+include `shared-calls-v1` in their memory signature, so older incompatible function
+slot layouts reject before a load commits. Straight-line program signatures remain
+unchanged. Save files are not deleted. Matching native/browser development tools
+have been rebuilt with this convention. `samples/function_calls` is a source-only
+native/browser check: imported repeated and nested calls turn its square green.

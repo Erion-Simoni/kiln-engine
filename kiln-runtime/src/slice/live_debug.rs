@@ -8,8 +8,21 @@ pub struct LiveVmLocal {
     pub slot: u16,
     /// Compiler name, or a temporary-slot label when unavailable.
     pub name: String,
+    /// Owning compiled function, or None for entry-program locals.
+    pub function: Option<String>,
     /// Bounded preview; containers show size rather than recursively copying.
     pub value: String,
+}
+
+/// One actual runtime call frame, ordered from entry toward current execution.
+#[derive(Debug, Clone)]
+pub struct LiveVmFrame {
+    /// Compiled function name, or <entry> for scene/attachment entry code.
+    pub function: String,
+    /// Current instruction or caller call-site instruction.
+    pub instruction: usize,
+    /// Mapped source origin where available.
+    pub location: Option<String>,
 }
 
 /// Read-only snapshot of a scene or attached gameplay VM.
@@ -21,10 +34,26 @@ pub struct LiveVmDebug {
     pub instruction: usize,
     /// Source origin where available; absent at an unmapped/completed position.
     pub location: Option<String>,
+    /// Actual call frames (VM call depth is bounded to 32).
+    pub frames: Vec<LiveVmFrame>,
     /// First 128 allocated locals, ordered by slot.
     pub locals: Vec<LiveVmLocal>,
     /// Allocated locals omitted by the bound.
     pub omitted_locals: usize,
+}
+
+fn source_location(session: &SliceSession, instruction: usize) -> Option<String> {
+    session
+        .program
+        .source_offset(instruction)
+        .and_then(|offset| {
+            session.source.as_ref().map(|source| {
+                source.diagnostic(&kiln_script::Diagnostic::new(
+                    kiln_script::Span::new(offset, offset),
+                    "VM position",
+                ))
+            })
+        })
 }
 
 fn preview(value: &Value) -> String {
@@ -57,17 +86,25 @@ impl SliceSession {
             .take(64)
             .map(|(owner, session)| {
                 let instruction = session.vm.instruction_pointer();
-                let location = session
-                    .program
-                    .source_offset(instruction)
-                    .and_then(|offset| {
-                        session.source.as_ref().map(|source| {
-                            source.diagnostic(&kiln_script::Diagnostic::new(
-                                kiln_script::Span::new(offset, offset),
-                                "VM position",
-                            ))
-                        })
-                    });
+                let location = source_location(session, instruction);
+                let frames = session
+                    .vm
+                    .call_stack()
+                    .iter()
+                    .map(|return_ip| return_ip.saturating_sub(1))
+                    .chain(std::iter::once(instruction))
+                    .map(|ip| LiveVmFrame {
+                        function: session
+                            .program
+                            .function_name(ip)
+                            .unwrap_or("<entry>")
+                            .chars()
+                            .take(128)
+                            .collect(),
+                        instruction: ip,
+                        location: source_location(session, ip),
+                    })
+                    .collect();
                 let locals = session
                     .vm
                     .locals()
@@ -76,6 +113,10 @@ impl SliceSession {
                     .enumerate()
                     .map(|(slot, value)| LiveVmLocal {
                         slot: slot as u16,
+                        function: session
+                            .program
+                            .local_function(slot as u16)
+                            .map(|name| name.chars().take(128).collect()),
                         name: session
                             .program
                             .local_name(slot as u16)
@@ -90,6 +131,7 @@ impl SliceSession {
                     owner: owner.chars().take(128).collect(),
                     instruction,
                     location,
+                    frames,
                     locals,
                     omitted_locals: session.vm.locals().len().saturating_sub(128),
                 }
