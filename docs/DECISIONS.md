@@ -2335,3 +2335,24 @@ upgrade to v2. Opening alone does not rewrite files. Manual body edits still rej
 visual overwrite. Invalid draft bodies retain existing guarded compile-error text.
 The runtime executes ordinary existing source constructs, so no new language,
 project format or runtime contract is needed. No new dependency.
+
+### ADR-0101 — Script/graph projectile range acceptance fixture (2026-11-24)
+
+Status: accepted. Add source-only script and editable graph variants of a small
+projectile range: moving enemy, input-controlled projectile, sensor hit/despawn,
+score and downstream victory trigger. Both use existing host calls and physics;
+compare real gameplay and save/restore before export checks. Generate checked-in
+graph documents with deterministic identities using an example, not a separate
+interpreter. Comparison pins accept ordinary VM Value inputs, matching the existing
+comparison instruction's string/boolean/numeric semantics; arithmetic remains
+numeric. Existing comparison pin identities survive signature refresh. No new
+dependency or runtime contract. Debugger continuation/breakpoints remain open.
+Honor the user's maximum three focused attempts per blocked step, retain failure
+evidence and continue independent work; skipped acceptance stays incomplete.
+
+The real sensor replay exposed same-tick update dispatch after collision-time
+self-despawn. Check entity liveness before every non-stop attached callback; keep
+one stop dispatch under the existing started flag. This prevents later signal,
+animation, collision or update callbacks from reading a removed entity. Preserve
+other instances and existing bounded stop cleanup. A queued-collision before
+control and real-physics game replay cover the lifecycle correction.

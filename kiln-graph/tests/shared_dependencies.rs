@@ -102,3 +102,51 @@ fn legacy_shared_dependency_draft_upgrades_to_executable_source() {
         .unwrap();
     assert_eq!(vm.stack(), &[Value::I64(1 << 20)]);
 }
+
+#[test]
+fn equality_accepts_text_and_boolean_values_and_refresh_retains_pin_ids() {
+    for (left, right, expected) in [
+        (
+            ConstantValue::String("update".into()),
+            ConstantValue::String("update".into()),
+            true,
+        ),
+        (
+            ConstantValue::Boolean(true),
+            ConstantValue::Boolean(false),
+            false,
+        ),
+    ] {
+        let mut graph = Graph::new();
+        let a = graph.add_node(Node::new(NodeType::Constant { value: left }, (0.0, 0.0)));
+        let b = graph.add_node(Node::new(NodeType::Constant { value: right }, (0.0, 0.0)));
+        let mut comparison = Node::new(
+            NodeType::Comparison {
+                op: kiln_graph::ComparisonOp::Equal,
+            },
+            (0.0, 0.0),
+        );
+        for pin in comparison
+            .pins
+            .iter_mut()
+            .filter(|p| p.direction == kiln_graph::PinDirection::Input)
+        {
+            pin.pin_type = kiln_graph::PinType::Integer;
+        }
+        let ids = comparison.pins.iter().map(|p| p.id).collect::<Vec<_>>();
+        comparison.refresh_pins();
+        assert_eq!(
+            ids,
+            comparison.pins.iter().map(|p| p.id).collect::<Vec<_>>()
+        );
+        let compare = graph.add_node(comparison);
+        let output = graph.add_node(Node::new(NodeType::Output, (0.0, 0.0)));
+        connect(&mut graph, a, "value", compare, "a");
+        connect(&mut graph, b, "value", compare, "b");
+        connect(&mut graph, compare, "result", output, "in");
+        let mut vm = Vm::new(Host::default());
+        vm.execute(&kiln_graph::compile_graph(&graph).unwrap())
+            .unwrap();
+        assert_eq!(vm.stack(), &[Value::Bool(expected)]);
+    }
+}

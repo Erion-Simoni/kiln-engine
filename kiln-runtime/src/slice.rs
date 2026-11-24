@@ -1617,6 +1617,17 @@ impl AttachedScript {
         dt: f64,
         collisions: &[(String, String, bool)],
     ) -> Result<(), VmError> {
+        // Earlier lifecycle callbacks may despawn this entity in the same tick.
+        // Stop still runs once through the outer scheduler's started guard.
+        if phase != "stop"
+            && !world
+                .world_ref()
+                .query::<&SourceId>()
+                .iter()
+                .any(|id| id.0 == self.entity_id)
+        {
+            return Ok(());
+        }
         self.session.vm.host_mut().swap_game_services(_parent);
         self.session.vm.host_mut().phase = phase.into();
         self.session.vm.host_mut().frame_count = self.frame.saturating_sub(1);

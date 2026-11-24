@@ -143,8 +143,8 @@ impl Node {
             }
             NodeType::Comparison { .. } => {
                 vec![
-                    Pin::new(PinDirection::Input, PinType::Integer, "a"),
-                    Pin::new(PinDirection::Input, PinType::Integer, "b"),
+                    Pin::new(PinDirection::Input, PinType::Value, "a"),
+                    Pin::new(PinDirection::Input, PinType::Value, "b"),
                     Pin::new(PinDirection::Output, PinType::Boolean, "result"),
                 ]
             }

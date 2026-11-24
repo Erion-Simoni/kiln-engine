@@ -1,0 +1,54 @@
+id = "projectile-range-graph"
+name = "Projectile Range Graph"
+version = "0.1.0"
+features = ["physics"]
+
+[window]
+width = 320
+height = 240
+vsync = true
+resizable = true
+
+[scenes.main]
+id = "main"
+name = "Enemy and victory sensor"
+script = "scripts/hud.ks"
+nested_scenes = []
+
+[[scenes.main.entities]]
+id = "actor"
+name = "actor"
+components = [
+  { type = "Transform", x = 160.0, y = 170.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [1, 0, 0, 1], width = 64.0, height = 64.0, layer = 0.0 },
+]
+
+[[scenes.main.entities]]
+id = "projectile"
+name = "projectile"
+components = [
+  { type = "Transform", x = 40.0, y = 80.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [0, 0.6, 1, 1], width = 10.0, height = 10.0, layer = 0.0 },
+  { type = "Physics", body = { body_type = "Kinematic", linear_velocity = [0.0, 0.0], angular_velocity = 0.0, gravity_scale = 0.0, can_sleep = false }, collider = { shape = { Rectangle = { half_width = 5.0, half_height = 5.0 } }, is_sensor = true, friction = 0.0, restitution = 0.0, density = 1.0, layer = 4, mask = 3 } },
+  { type = "Script", path = "scripts/projectile.ks", properties = {} },
+]
+
+[[scenes.main.entities]]
+id = "enemy"
+name = "enemy"
+components = [
+  { type = "Transform", x = 160.0, y = 80.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [1, 0.25, 0, 1], width = 24.0, height = 24.0, layer = 0.0 },
+  { type = "Physics", body = { body_type = "Kinematic", linear_velocity = [0.0, 0.0], angular_velocity = 0.0, gravity_scale = 0.0, can_sleep = false }, collider = { shape = { Rectangle = { half_width = 12.0, half_height = 12.0 } }, is_sensor = true, friction = 0.0, restitution = 0.0, density = 1.0, layer = 1, mask = 4 } },
+  { type = "Script", path = "scripts/enemy.ks", properties = {} },
+]
+
+[[scenes.main.entities]]
+id = "trigger"
+name = "trigger"
+components = [
+  { type = "Transform", x = 260.0, y = 80.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [0.7, 0.3, 1, 1], width = 16.0, height = 48.0, layer = 0.0 },
+  { type = "Physics", body = { body_type = "Static", linear_velocity = [0.0, 0.0], angular_velocity = 0.0, gravity_scale = 0.0, can_sleep = false }, collider = { shape = { Rectangle = { half_width = 8.0, half_height = 24.0 } }, is_sensor = true, friction = 0.0, restitution = 0.0, density = 1.0, layer = 2, mask = 4 } },
+  { type = "Script", path = "scripts/trigger.ks", properties = {} },
+]

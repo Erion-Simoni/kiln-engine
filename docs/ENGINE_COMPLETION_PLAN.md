@@ -438,6 +438,11 @@ variant semantics and combined visual acceptance remain open. A03 stays PARTIAL.
 
 **Status:** PARTIAL. **Depends on:** A02.
 
+Execution policy (user-directed 2026-11-24): make at most three focused attempts
+on a blocked step/check, record its failure and move to the next feasible step.
+Skipped checks remain incomplete; do not repeat an unavailable acceptance gate
+indefinitely or label a deferred milestone complete.
+
 - [ ] Retain shared host registry, lifecycle/events/signals, functions/modules/collections and runtime entity APIs. Complete for/while loops, dictionaries, enums/structured values, documented global-state rules, timers/delayed execution and bounded coroutine scheduling; extend existing language constructs rather than duplicate them. Add highlighting, completion/docs, project search, formatter and source navigation; source breakpoints, statement stepping, stack/locals/watches. Wire editable graph pins/connections, compile diagnostics and runtime value inspection to the same semantics. Specify safe reload/restart and script budgets.
 - [ ] **Acceptance:** Build a new enemy/projectile/trigger game using scripts and an equivalent graph; debug an imported function, stop infinite work with a useful diagnostic, and reproduce source/export behavior without engine edits.
 
@@ -476,6 +481,15 @@ remain covered. Maximum depth 64 executes; depth 65 rejects. Guarded v1 loading
 preserves existing visuals and oversized drafts; explicit visual save upgrades
 to v2. This is an A04 compiler fix, not completion of equivalent-game/debugger
 acceptance. [Evidence](evidence/A04_SHARED_GRAPH_DEPENDENCIES.md).
+
+**Equivalent-game checkpoint 2026-11-24:** source-only script and editable graph
+projectile range now cover a moving enemy, input-controlled projectile, actual
+sensor hit/despawn and downstream victory trigger. Text/graph fixed-tick gameplay
+and logical-save victory outcomes pass. This exposed and fixed same-tick update
+after collision-time self-despawn and graph equality's numeric-only pin mismatch.
+Exact resumed physics poses diverge; that check is recorded blocked and work
+continues under the user's skip policy. Full debugger/production acceptance remains
+open. [Evidence](evidence/A04_PROJECTILE_RANGE.md).
 
 **Safe restart checkpoint 2026-11-21:** user deferred remaining A03 acceptance and
 moved to A04. Saved-source Restart now prepares the replacement VM/world/camera
