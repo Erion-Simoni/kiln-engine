@@ -498,6 +498,13 @@ container reads. Mutations/statements reject and gameplay state/allowance remain
 unchanged. Active lexical scopes, source breakpoints and statement continuation
 remain open. [Evidence](evidence/A04_EXPRESSION_WATCHES.md).
 
+**Lexical inspection checkpoint 2026-11-24:** compiler metadata tracks initialized
+binding lifetimes through blocks, loops and functions. The live debugger filters
+to the current frame before preview bounds; active:NAME and scope(name) watches
+resolve strict lexical bindings, including loop shadowing. Allocated inspection
+remains available after completion. Source breakpoints and scheduler statement
+continuation remain open. [Evidence](evidence/A04_LEXICAL_SCOPES.md).
+
 **Safe restart checkpoint 2026-11-21:** user deferred remaining A03 acceptance and
 moved to A04. Saved-source Restart now prepares the replacement VM/world/camera
 before stopping the current run, requires dirty source saved/reverted, and preserves

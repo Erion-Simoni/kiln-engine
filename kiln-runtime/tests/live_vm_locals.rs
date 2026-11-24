@@ -166,3 +166,102 @@ fn imported_nested_functions_expose_real_frames_and_owned_locals() {
         && v.function.as_deref() == Some("inner")
         && v.value == "I64(4)"));
 }
+
+fn halted(source: &str) -> SliceSession {
+    let mut session =
+        SliceSession::with_scene_sources(&project(Some("main.ks"), vec![]), "main", |_| {
+            Ok(source.into())
+        })
+        .unwrap();
+    session
+        .step(&mut GameWorld::new(), (0.0, 0.0), 0.016)
+        .unwrap_err();
+    session
+}
+#[test]
+fn active_current_frame_excludes_returned_blocks_callers_and_uninitialized_bindings() {
+    let session=halted("fn inner(value){if true {let expired=99;} let current=value+2; let not_initialized=current/0;} fn outer(value){let caller=1; return inner(value);} let entry=5; outer(entry);");
+    let snapshot = session.live_vm_debug_scoped(true);
+    let names = snapshot[0]
+        .locals
+        .iter()
+        .map(|v| v.name.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(names, vec!["value", "current"]);
+    assert!(snapshot[0]
+        .locals
+        .iter()
+        .all(|v| v.in_scope && v.function.as_deref() == Some("inner")));
+    assert_eq!(
+        session.live_watch("scene", "active:value").unwrap(),
+        "I64(5)"
+    );
+    assert_eq!(
+        session
+            .live_watch("scene", "expr:scope(\"current\")+1")
+            .unwrap(),
+        "I64(8)"
+    );
+    assert!(session
+        .live_watch("scene", "local:value")
+        .unwrap_err()
+        .contains("ambiguous"));
+    for name in ["expired", "caller", "entry", "not_initialized"] {
+        assert!(
+            session
+                .live_watch("scene", &format!("active:{name}"))
+                .is_err(),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        session.live_watch("scene", "local:expired").unwrap(),
+        "I64(99)"
+    );
+}
+#[test]
+fn loop_shadowing_resolves_innermost_and_continue_closes_body_bindings() {
+    let session = halted("let i=99; for(let i=0;i<2;i+=1){let fail=1/0;}");
+    assert_eq!(session.live_watch("scene", "active:i").unwrap(), "I64(0)");
+    assert!(session.live_watch("scene", "active:fail").is_err());
+    let session = halted("for(let i=0;i<1;i+=1/0){let body=4;continue;}");
+    assert_eq!(session.live_watch("scene", "active:i").unwrap(), "I64(0)");
+    assert!(session.live_watch("scene", "active:body").is_err());
+}
+#[test]
+fn active_preview_filters_before_the_allocated_slot_bound() {
+    let unused = (0..160)
+        .map(|n| format!("let expired{n}={n};"))
+        .collect::<String>();
+    let session = halted(&format!(
+        "if true {{{unused}}} fn fail(value){{let current=value+1;return current/0;}} fail(7);"
+    ));
+    assert_eq!(session.live_vm_debug()[0].locals.len(), 128);
+    let active = session.live_vm_debug_scoped(true);
+    assert_eq!(active[0].locals.len(), 2);
+    assert!(active[0].locals.iter().all(|v| v.slot >= 160));
+    assert_eq!(active[0].omitted_locals, 0);
+    assert_eq!(
+        session.live_watch("scene", "active:current").unwrap(),
+        "I64(8)"
+    );
+}
+#[test]
+fn completed_scripts_have_no_active_bindings_but_allocated_values_remain() {
+    let mut session =
+        SliceSession::with_scene_sources(&project(Some("main.ks"), vec![]), "main", |_| {
+            Ok("for(let i=0;i<3;i+=1){let value=i;break;} let retained=7;".into())
+        })
+        .unwrap();
+    session
+        .step(&mut GameWorld::new(), (0.0, 0.0), 0.016)
+        .unwrap();
+    assert!(session.live_vm_debug_scoped(true)[0].locals.is_empty());
+    assert_eq!(
+        session.live_watch("scene", "local:retained").unwrap(),
+        "I64(7)"
+    );
+    assert!(session
+        .live_watch("scene", "expr:scope(\"retained\")")
+        .is_err());
+}

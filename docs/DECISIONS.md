@@ -2375,3 +2375,20 @@ Names still refer to allocated locals and reject ambiguity, not active lexical
 scopes. Missing/skipped reads follow ordinary lazy semantics. This does not implement
 source breakpoints or suspended scheduler continuations. No dependency or runtime
 contract change; purely debugger-side evaluation with existing language operators.
+
+### ADR-0103 — Active lexical bindings alongside allocated VM slots (2026-11-24)
+
+Status: accepted. Record per-slot lexical instruction ranges and function ownership
+as compiler metadata. A binding becomes visible after its initializer/parameter
+store, closes at block/loop/function exit, and is active only in the current
+function frame. Jumps for break/continue/return naturally leave these ranges;
+function ownership excludes stale values from other calls. Metadata does not
+change instructions, VM-memory signatures or runtime ABI.
+
+Keep allocated-slot inspection/default expression names for post-completion
+compatibility. Add an active-only live-local view, active:NAME selector and
+scope(name) expression read for strict current-frame resolution. Filter before
+applying preview limits so later active slots are not hidden by inactive ones.
+Completed executions have no active lexical bindings; explicit allocated slots
+remain available. This does not add source breakpoints or scheduler continuation.
+No new dependency. Preserve the user's bounded-attempt skip policy.

@@ -117,6 +117,7 @@ pub struct Program {
     source_offsets: HashMap<usize, usize>,
     local_names: HashMap<u16, String>,
     local_functions: HashMap<u16, Label>,
+    local_scopes: HashMap<u16, (usize, usize)>,
     function_ranges: Vec<(usize, usize, String)>,
 }
 
@@ -146,6 +147,40 @@ impl Program {
         self.local_functions
             .get(&slot)
             .and_then(|entry| self.function_name(entry.0))
+    }
+
+    /// Mark a binding initialized and visible at the next instruction.
+    pub fn record_local_scope_start(&mut self, slot: u16, instruction: usize) {
+        self.local_scopes.insert(slot, (instruction, usize::MAX));
+    }
+
+    /// Close the lexical instruction range of an allocated binding.
+    pub fn record_local_scope_end(&mut self, slot: u16, instruction: usize) {
+        if let Some(range) = self.local_scopes.get_mut(&slot) {
+            range.1 = instruction;
+        }
+    }
+
+    /// Whether a binding is initialized and in the current function's lexical scope.
+    /// Completed positions and programs without scope metadata report false.
+    pub fn local_in_scope(&self, slot: u16, instruction: usize) -> bool {
+        instruction < self.len()
+            && self.local_function(slot) == self.function_name(instruction)
+            && self
+                .local_scopes
+                .get(&slot)
+                .is_some_and(|(start, end)| *start <= instruction && instruction < *end)
+    }
+
+    /// Resolve a current-frame lexical name, choosing the innermost shadowing binding.
+    pub fn scoped_local(&self, name: &str, instruction: usize) -> Option<u16> {
+        self.local_names
+            .iter()
+            .filter(|(slot, local)| {
+                local.as_str() == name && self.local_in_scope(**slot, instruction)
+            })
+            .max_by_key(|(slot, _)| self.local_scopes[slot].0)
+            .map(|(slot, _)| *slot)
     }
 
     /// Record a compiler-allocated local name for read-only live inspection.

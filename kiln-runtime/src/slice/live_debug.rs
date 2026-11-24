@@ -6,6 +6,8 @@ use super::{SliceSession, Value};
 pub struct LiveVmLocal {
     /// Stable allocated slot; disambiguates shadowed/inlined names.
     pub slot: u16,
+    /// Initialized and inside the current function frame's lexical scope.
+    pub in_scope: bool,
     /// Compiler name, or a temporary-slot label when unavailable.
     pub name: String,
     /// Owning compiled function, or None for entry-program locals.
@@ -77,6 +79,11 @@ impl SliceSession {
     /// Inspect actual executing VMs without executing instructions or host calls.
     /// At most 64 sessions and 128 locals per session are materialized.
     pub fn live_vm_debug(&self) -> Vec<LiveVmDebug> {
+        self.live_vm_debug_scoped(false)
+    }
+
+    /// Optionally filter to active current-frame bindings before preview bounds.
+    pub fn live_vm_debug_scoped(&self, active_only: bool) -> Vec<LiveVmDebug> {
         std::iter::once(("<scene>", self))
             .chain(
                 self.attached
@@ -105,14 +112,15 @@ impl SliceSession {
                         location: source_location(session, ip),
                     })
                     .collect();
-                let locals = session
-                    .vm
-                    .locals()
-                    .iter()
+                let visible = session.vm.locals().iter().enumerate().filter(|(slot, _)| {
+                    !active_only || session.program.local_in_scope(*slot as u16, instruction)
+                });
+                let count = visible.clone().count();
+                let locals = visible
                     .take(128)
-                    .enumerate()
                     .map(|(slot, value)| LiveVmLocal {
                         slot: slot as u16,
+                        in_scope: session.program.local_in_scope(slot as u16, instruction),
                         function: session
                             .program
                             .local_function(slot as u16)
@@ -133,7 +141,7 @@ impl SliceSession {
                     location,
                     frames,
                     locals,
-                    omitted_locals: session.vm.locals().len().saturating_sub(128),
+                    omitted_locals: count.saturating_sub(128),
                 }
             })
             .collect()
@@ -191,7 +199,7 @@ impl SliceSession {
             .next()
             .unwrap_or_default()
             .split_once(':')
-            .ok_or("Use slot:N, local:NAME, state:KEY or expr:expression")?;
+            .ok_or("Use slot:N, local:NAME, state:KEY, active:NAME or expr:expression")?;
         let key = segment(key)?;
         let mut value = match kind {
             "slot" => session
@@ -202,6 +210,13 @@ impl SliceSession {
                         .map_err(|_| "Slot must be an unsigned index")?,
                 )
                 .ok_or("Local slot was not found")?,
+            "active" => {
+                let slot = session
+                    .program
+                    .scoped_local(&key, session.vm.instruction_pointer())
+                    .ok_or("Active lexical binding was not found")?;
+                &session.vm.locals()[slot as usize]
+            }
             "local" => {
                 let mut matches = session.vm.locals().iter().enumerate().filter(|(slot, _)| {
                     session.program.local_name(*slot as u16) == Some(key.as_str())
@@ -220,7 +235,11 @@ impl SliceSession {
                 .script_state
                 .get(&key)
                 .ok_or("State key was not found")?,
-            _ => return Err("Use slot:N, local:NAME, state:KEY or expr:expression".into()),
+            _ => {
+                return Err(
+                    "Use slot:N, local:NAME, state:KEY, active:NAME or expr:expression".into(),
+                )
+            }
         };
         for key in path {
             let key = segment(key)?;

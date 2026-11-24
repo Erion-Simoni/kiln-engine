@@ -14,6 +14,8 @@ pub struct DebuggerPanel {
     pub show_call_stack: bool,
     /// Show local variables.
     pub show_locals: bool,
+    /// Filter the live local view to current-frame lexical bindings.
+    pub active_locals_only: bool,
     /// Show watch expressions.
     pub show_watches: bool,
     /// New breakpoint instruction input.
@@ -35,6 +37,7 @@ impl DebuggerPanel {
             show_breakpoints: true,
             show_call_stack: true,
             show_locals: true,
+            active_locals_only: false,
             show_watches: true,
             new_breakpoint_instr: String::new(),
             new_watch_expr: String::new(),

@@ -635,14 +635,15 @@ preview, with the current instruction/source origin when mapped. Repeated/shadow
 names have distinct slot numbers. Inspection does not execute expressions or host
 calls and does not advance the game.
 
-These are allocated slots, not an active lexical-block view: completed blocks or
-functions may leave values in their slots. Function ownership is shown beside each
+The default view shows allocated slots; completed blocks/functions may leave values
+there. Enable **Active lexical locals only** to inspect initialized bindings in the
+current function frame. Expired blocks, caller locals, not-yet-initialized declarations
+and completed executions are excluded. Function ownership is shown beside each
 local. A separate frame list shows actual caller call sites and the current function,
-including imported source origins. Views
-include at most 64 VMs and 128 locals per VM; omitted-local counts are shown.
-Strings are limited to 128 Unicode characters; arrays/dictionaries show counts.
-Source breakpoints, statement stepping and active-block locals remain separate
-work. Bounded allocated-local expression watches are available below. Frame stepping remains the existing whole-game tick control.
+including imported source origins. Views include at most 64 VMs and 128 matching
+locals per VM; active filtering happens before this bound. Strings are limited to
+128 Unicode characters; arrays/dictionaries show counts. Source breakpoints and
+statement stepping remain open. Frame stepping still controls whole-game ticks.
 
 ### Live data watches
 
@@ -655,6 +656,8 @@ selectors, with an optional isolated expression mode:
 - `local:health` reads a unique allocated name. Multiple functions with that local
   name report ambiguity; use the displayed slot instead. Calls to the same function
   reuse its own slots, whose values reflect its most recent/current invocation.
+- `active:health` resolves an initialized current-frame lexical binding, choosing
+  the innermost loop binding when a name is shadowed. Missing/expired bindings error.
 - `state:inventory` reads the VM's persistent script state without calling state_get.
 - Append `/0` for an array index or `/key` for a dictionary entry. Escape literal
   tilde/slash in keys as `~0`/`~1`; `state:bag/a~1b/0` reads key `a/b`, then index 0.
@@ -687,7 +690,10 @@ calls in skipped branches. Missing reads in short-circuited expressions stay ski
 Evaluation leaves actual game locals, state, call frames, instruction position and
 gameplay instruction allowance untouched. Names are still allocated locals;
 completed scopes/functions may leave values and ambiguous names require slot reads.
-Active lexical scopes and source-level stepping remain open.
+Use `scope("health")` for strict current-frame lexical resolution instead of allocated
+name lookup. Scope reads choose the innermost shadowing binding and reject expired
+or uninitialized bindings. Completed scripts have no active scope; use allocated
+reads for retained post-completion values. Source-level stepping remains open.
 
 The full selector is limited to 512 bytes. Expression limits are 128 AST nodes,
 depth 32 and 4096 bytecode instructions per evaluation. Cumulative copied values
@@ -734,7 +740,8 @@ function-owned allocated locals. A frame is not a complete lexical-block lifetim
 view. To exercise imported frames, watches and Restart in the optional widget replay:
 `KILN_DEBUG_FUNCTION_FRAMES=1 python3 tests/native/shared_script_budget_smoke.py`.
 Add `KILN_DEBUG_EXPRESSION_WATCHES=1` to verify computed watch values before and
-after corrected-source Restart.
+after corrected-source Restart. `KILN_DEBUG_ACTIVE_SCOPES=1` additionally verifies
+strict scope reads, the active-only view and completed-scope rejection.
 
 Runtime tools now use contract `kiln-authoring-v6`. Function-using VM snapshots
 include `shared-calls-v1` in their memory signature, so older incompatible function

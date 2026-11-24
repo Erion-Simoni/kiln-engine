@@ -6731,9 +6731,10 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.checkbox(&mut self.debugger_panel.show_locals, "Inspect live state and locals");
                         if self.debugger_panel.show_locals {
                             if play.clock.paused() || play.error.is_some() {
-                                ui.label("Allocated VM locals (slots may be outside their lexical scope)");
+                                ui.checkbox(&mut self.debugger_panel.active_locals_only, "Active lexical locals only");
+                                ui.label(if self.debugger_panel.active_locals_only { "Current function frame: initialized lexical bindings" } else { "Allocated VM locals (slots may be outside their lexical scope)" });
                                 ui.label("Inspection limit: 64 VMs, 128 locals each; containers show counts.");
-                                for snapshot in play.slice.live_vm_debug() {
+                                for snapshot in play.slice.live_vm_debug_scoped(self.debugger_panel.active_locals_only) {
                                     ui.collapsing(format!("{} — instruction {}", snapshot.owner, snapshot.instruction), |ui| {
                                         if let Some(location) = snapshot.location { ui.monospace(location); }
                                         ui.label("Call frames: entry to current function");

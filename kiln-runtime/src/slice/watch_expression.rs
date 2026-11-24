@@ -8,6 +8,7 @@ const READS: &[(&str, u32, u32)] = &[
     ("local", 1001, 1),
     ("state", 1002, 1),
     ("game", 1003, 1),
+    ("scope", 1004, 1),
     ("array_length", 61, 1),
     ("array_get", 62, 2),
     ("dict_get", 111, 3),
@@ -107,6 +108,14 @@ impl HostContext for ReadHost<'_> {
             }
             let name = args[0].as_str().ok_or("Watch read expects a string name")?;
             match id {
+                1004 => {
+                    let slot = self
+                        .session
+                        .program
+                        .scoped_local(name, self.session.vm.instruction_pointer())
+                        .ok_or("Active lexical binding was not found")?;
+                    Ok(&self.session.vm.locals()[slot as usize])
+                }
                 1001 => {
                     let mut found =
                         self.session
@@ -142,7 +151,7 @@ impl HostContext for ReadHost<'_> {
                 _ => Err("Unknown watch read".into()),
             }
         };
-        let result = if (1000..=1003).contains(&id) {
+        let result = if (1000..=1004).contains(&id) {
             read().and_then(|v| self.budget.copy(v, 0))
         } else {
             value_reads::call(id, args)

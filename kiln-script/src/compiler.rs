@@ -83,6 +83,21 @@ impl Compiler {
         slot
     }
 
+    fn close_scope(&mut self) {
+        if let Some(scope) = self.scopes.pop() {
+            for slot in scope.values() {
+                self.program
+                    .record_local_scope_end(*slot, self.program.len());
+            }
+        }
+    }
+
+    fn initialize_slot(&mut self, slot: u16) {
+        self.program.add_instruction(Instruction::SetLocal(slot));
+        self.program
+            .record_local_scope_start(slot, self.program.len());
+    }
+
     /// Find the local slot of `name`, searching scopes innermost first.
     fn find_slot(&self, name: &str) -> Option<u16> {
         self.scopes
@@ -142,6 +157,10 @@ impl Compiler {
             if !matches!(stmt, Stmt::Function { .. } | Stmt::Enum { .. }) {
                 self.compile_stmt(stmt)?;
             }
+        }
+        for slot in self.scopes[0].values() {
+            self.program
+                .record_local_scope_end(*slot, self.program.len());
         }
         self.program.set_local_slots(self.next_slot);
         self.program.validate_jump_targets()?;
@@ -216,7 +235,7 @@ impl Compiler {
             .map(|param| self.allocate_slot(param))
             .collect();
         for slot in slots.into_iter().rev() {
-            self.program.add_instruction(Instruction::SetLocal(slot));
+            self.initialize_slot(slot);
         }
         for statement in &body {
             self.compile_stmt(statement)?;
@@ -225,6 +244,7 @@ impl Compiler {
             .add_instruction(Instruction::PushConst(Value::I64(0)));
         self.program.add_instruction(Instruction::Return);
         let end = self.program.len();
+        self.close_scope();
         self.program.record_function(entry.0, end, name);
         self.program
             .set_instruction(skip, Instruction::Jump(Label(end)));
@@ -262,7 +282,7 @@ impl Compiler {
                 }
                 self.compile_expr(value)?;
                 let slot = self.allocate_slot(name);
-                self.program.add_instruction(Instruction::SetLocal(slot));
+                self.initialize_slot(slot);
             }
             Stmt::Assign { name, value, span } => {
                 let slot = self
@@ -286,7 +306,7 @@ impl Compiler {
                 for stmt in body {
                     self.compile_stmt(stmt)?;
                 }
-                self.scopes.pop();
+                self.close_scope();
                 self.program
                     .add_instruction(Instruction::Jump(Label(start)));
                 let end = self.program.len();
@@ -311,7 +331,7 @@ impl Compiler {
                 };
                 self.compile_expr(value)?;
                 let slot = self.allocate_slot(name);
-                self.program.add_instruction(Instruction::SetLocal(slot));
+                self.initialize_slot(slot);
                 let start = self.program.len();
                 self.compile_expr(condition)?;
                 let exit = self.program.len();
@@ -326,7 +346,7 @@ impl Compiler {
                 for statement in body {
                     self.compile_stmt(statement)?;
                 }
-                self.scopes.pop();
+                self.close_scope();
                 let increment = self.program.len();
                 self.compile_stmt(step)?;
                 self.program
@@ -343,7 +363,7 @@ impl Compiler {
                     self.program
                         .set_instruction(index, Instruction::Jump(Label(increment)));
                 }
-                self.scopes.pop();
+                self.close_scope();
             }
             Stmt::Break(span) | Stmt::Continue(span) => {
                 let is_break = matches!(stmt, Stmt::Break(_));
@@ -384,7 +404,7 @@ impl Compiler {
                 for stmt in then_block {
                     self.compile_stmt(stmt)?;
                 }
-                self.scopes.pop();
+                self.close_scope();
 
                 // After then block, if there's an else block, jump over it
                 let jump_end_idx = if else_block.is_some() {
@@ -404,7 +424,7 @@ impl Compiler {
                     for stmt in else_block {
                         self.compile_stmt(stmt)?;
                     }
-                    self.scopes.pop();
+                    self.close_scope();
                 }
                 // End of if statement
                 let end_idx = self.program.len();
