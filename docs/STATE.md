@@ -1,74 +1,70 @@
 # Kiln Session Handoff
 
-Branch fix/a01-ci-baseline. Current checkpoint: A04 projectile range and despawn
-lifecycle (2026-11-24), following 7d5c861. User directs at most three focused
-attempts per blocked step/check, record the failure and continue to independent
-feasible work. Skipped acceptance stays incomplete. A03 remains deferred.
-A02/A03/A04 remain PARTIAL; A04 is active. A01 accepted baseline 6de428b unchanged.
-Full 3D remains gated behind G2D. MIT OR Apache-2.0.
+Branch fix/a01-ci-baseline. Current checkpoint: A04 bounded live expression
+watches (2026-11-24), following 74db617. User directs at most three focused attempts
+per blocked step/check, retain failure evidence and continue independent feasible
+work. Skipped acceptance stays incomplete. A03 remains deferred. A02/A03/A04 are
+PARTIAL; A04 active. A01 accepted baseline 6de428b unchanged. Full 3D behind G2D.
+MIT OR Apache-2.0.
 
 ## Done
 
-- ADR-0101: source-only script and editable graph projectile range samples. Moving
-  enemy, stop/boost input, projectile sensor hit, enemy removal, shared hits data,
-  downstream victory sensor and actual green indicator. Root HUD mirrors shared
-  hit count. Text motion uses imported functions; graph versions use existing
-  host calls, explicit trigger chains, branch routing and the same frontend/VM.
-- Deterministic kiln-graph example regenerates guarded v2 graph documents with
-  stable node/pin/connection identities. Graph comparisons accept ordinary values
-  matching text/boolean/numeric equality; arithmetic remains numeric. Refresh
-  preserves compatible prior pin identities. No new dependency or runtime ABI.
-- Real gameplay exposed same-tick update after collision-time self-despawn.
-  AttachedScript checks liveness before every non-stop callback. Stop still runs
-  once through started guards; other instances continue. Focused before control
-  fails; corrected regression passes.
-- Rebuilt matching editor/CLI/player and default-feature browser runtime. Contract
-  remains v6. Prior browser bundle retained in target/a04-range-prior-web-runtime.
-- CI exercises both samples through relocated native/browser green-pixel observers
-  and retains screenshots/receipts. Hosted execution is not claimed locally.
-- Prior work includes bounded shared graph lowering/v1 migration, shared callable
-  bodies, imported frames/locals, nested watches, shared tick budgets and safe
-  staged Restart. See docs/PLAN_PROGRESS.md and evidence/A04_PROJECTILE_RANGE.md.
+- ADR-0102: actual live watch field accepts expr: arithmetic, comparisons and pure
+  container reads over allocated locals, explicit slot(index), local(name),
+  instance state(key) and shared game(key), including distinct entity owners.
+- Parse/validate a single expression; rewrite bare names to local reads; compile
+  and execute with normal compiler/VM semantics in an isolated read-only host.
+  Pure array_length/array_get/dict_get/dict_has are shared with gameplay. No actual
+  gameplay host callback can be invoked by this evaluator.
+- Mutations, statements, user functions, imports, loops and I/O reject, even in
+  skipped branches. Legitimate missing reads stay lazy under short-circuiting.
+  Bounds: selector 512 bytes, AST 128 nodes/depth 32, 4096 evaluation instructions,
+  copied values 4096 nodes/depth 16/64 KiB including keys/overhead. Existing direct
+  data selectors remain available for bounded previews of larger values.
+- Watch UI retains existing fields and session-only watch storage. Added help and
+  optional expression mode to the existing imported-frame/Restart widget replay.
+  Rebuilt editor. Runtime ABI remains v6; CLI/player/prepared browser bundle remain
+  the prior 74db617 checkpoint. No new dependency or save-format change.
+- Prior A04 work includes script/graph projectile range and actual exports,
+  same-tick despawn lifecycle fix, bounded graph generation/v1 migration, shared
+  callable bodies, imported frames/locals, shared tick budgets and safe Restart.
+  See docs/PLAN_PROGRESS.md and evidence/A04_EXPRESSION_WATCHES.md.
 
 ## Executed validation
 
-- Locked Rust workspace: 855 tests PASS. just check PASS. Default and opt-out WASM
-  strict Clippy PASS. Python helper suite 49 PASS. Focused lifecycle/parity checks
-  rerun after adding equivalent HUD resources. Whitespace checks PASS.
-- Text/graph actual physics comparison on 240 ticks passes: stop/boost/release,
-  positions, sensor events, removal, shared hit data, trigger state and indicator.
-  No collision events are injected into this game test.
-- Logical pre-impact snapshots restore both games and reach the same victory,
-  enemy removal, hit data and green indicator. Exact physics continuation does
-  NOT pass; it remains explicitly blocked below, not silently weakened.
-- Both source and graph games pass actual relocated native and Chromium exports,
-  with 3932 green pixels each, source copies hidden and no developer tools in
-  native player PATH. Final HUD replay logs/receipts are under
-  target/a04-range-{native,browser}-final-*. Screenshots inspected.
-- Raw before failure: target/a04-range-despawn-before.log. Corrected tests:
-  target/a04-range-lifecycle-parity.log. Other logs: a04-range-{workspace,quality,
-  wasm-check,wasm-optout,python,tools-build,web-build,precommit}.log.
+- Full locked Rust workspace: 859 tests PASS. just check PASS. Default and opt-out
+  WASM strict Clippy PASS. Python helper suite 49 PASS; py_compile/whitespace PASS.
+- Precision, arithmetic, comparison, nested state, shared game data, owner/slot
+  selection, ambiguity, lazy missing reads, mutation/statement/type/arity/overflow
+  rejection and AST/value limits PASS. Gameplay snapshots, VM instruction position
+  and shared gameplay budget usage remain exactly unchanged after evaluation.
+- Actual Linux editor widgets PASS on first run: imported failure/shared budget,
+  computed watch I64(19), actual outer/inner frames, corrected source Restart,
+  Pause, computed watch I64(15), manifest unchanged. Screenshots inspected.
+- Raw logs target/a04-expression-{focused,final-focused,workspace,quality,wasm,
+  wasm-optout,editor-build,widgets,python,precommit}.log. Actual widget receipt,
+  OCR and screenshots: target/a04-expression-widgets/. Hosted CI and new browser
+  pixel replay for this editor-only feature are not claimed.
 
-## Blocked / skipped checks
+## Blocked / skipped
 
-- Exact resumed physics poses diverge immediately after pre-impact load:
-  projectile x=140.00006 versus uninterrupted x=138.33339 at tick 46. Logical
-  saves do not preserve kinematic warm-start/history. Failure retained in
-  target/a04-range-exact-physics-continuation-blocked.log. Stop retrying this
-  acceptance check; continue other plan work. Restored final outcomes pass and
-  are explicitly narrower than exact continuation. No general physics-save
-  determinism fix is claimed in this A04 checkpoint.
-- External hardware/device/cross-platform certification is outside this request.
+- Exact physics continuation remains blocked; do NOT retry to delay plan progress.
+  Prior pre-impact restore diverged at tick 46 (x=140.00006 versus 138.33339).
+  Evidence: target/a04-range-exact-physics-continuation-blocked.log. Restored final
+  victory outcomes pass, with explicit narrower scope. No general physics-save
+  determinism fix is claimed. Existing script/graph exports passed in 74db617.
+- External cross-platform/hardware/device certification is outside this request.
 
 ## Next
 
-- Continue feasible A04 source breakpoints, statement-level continuation and
-  active lexical scopes/expression watches, applying the user's bounded-attempt
-  skip policy. Imported frames already work. Equivalent game implementation now
-  exists, but full editor-authoring/debugger/production acceptance remains open.
-- Advance past genuinely blocked steps with recorded evidence; keep milestone
-  status PARTIAL when acceptance was skipped. Do not rerun a blocked check merely
-  to delay moving forward. A05 has not been started in this checkpoint.
+- Continue feasible A04 source breakpoints and scheduler statement continuation;
+  apply the user's bounded-attempt skip policy. Read-only expression watches now
+  exist, but names still refer to allocated slots and reject ambiguity. Active
+  lexical scopes remain open. Imported actual function frames already work.
+- Equivalent enemy/projectile/trigger game exists; full editor-authoring/debugger
+  production acceptance remains open. Advance past genuinely blocked steps with
+  evidence, keeping incomplete milestone acceptance marked PARTIAL. A05 has not
+  started in this checkpoint.
 - A03 deferred: nested/variant identities, arbitrary component overrides, general
   multi-file crash transactions and combined production acceptance. A02 combined
   every-inspector-property widget acceptance remains open.

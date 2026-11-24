@@ -2356,3 +2356,22 @@ one stop dispatch under the existing started flag. This prevents later signal,
 animation, collision or update callbacks from reading a removed entity. Preserve
 other instances and existing bounded stop cleanup. A queued-collision before
 control and real-physics game replay cover the lifecycle correction.
+
+### ADR-0102 — Bounded read-only live expression watches (2026-11-24)
+
+Status: accepted. Extend live selectors with expr: expressions over actual allocated
+locals, explicit slot(index), state(key) and game(key) reads. Parse a single return
+expression with the existing parser; reject statements and every call outside a
+small read-only allowlist before compiling. Rewrite bare identifiers as local reads.
+Use the existing compiler/VM for arithmetic, comparison and short-circuit semantics,
+with an isolated host that never calls the gameplay host. Share pure array/dictionary
+read implementations with normal gameplay. No assignment, user functions, host
+mutation, imports, tasks, loops or I/O. Bound source/AST depth/node count, cloned
+value depth/nodes/bytes and evaluation instructions. Actual VM state, bytecode
+position, commands, signals and instruction allowance remain untouched.
+
+Keep existing selector syntax and UI field positions; expr: is a new selector mode.
+Names still refer to allocated locals and reject ambiguity, not active lexical
+scopes. Missing/skipped reads follow ordinary lazy semantics. This does not implement
+source breakpoints or suspended scheduler continuations. No dependency or runtime
+contract change; purely debugger-side evaluation with existing language operators.

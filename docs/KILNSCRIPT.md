@@ -399,8 +399,8 @@ and generated `target`, `export` and `dist` trees are excluded.
 
 The native editor and player both use `SliceSession::with_scene_sources`.
 The live debugger controls real gameplay at frame granularity and displays
-actual instance state; instruction breakpoints/watch expressions are not part
-of this debugger surface.
+actual instance state. Bounded read-only expression watches are available below;
+source breakpoints and statement-level continuation remain open.
 
 ## See Also
 
@@ -641,15 +641,15 @@ local. A separate frame list shows actual caller call sites and the current func
 including imported source origins. Views
 include at most 64 VMs and 128 locals per VM; omitted-local counts are shown.
 Strings are limited to 128 Unicode characters; arrays/dictionaries show counts.
-Source breakpoints, statement stepping, active-block locals and expression watches
-remain separate work. Frame stepping remains the existing whole-game tick control.
+Source breakpoints, statement stepping and active-block locals remain separate
+work. Bounded allocated-local expression watches are available below. Frame stepping remains the existing whole-game tick control.
 
 ### Live data watches
 
 In the live Debugger, expand **Live data watches**. Choose owner `scene` or
 `entity:enemy-a` (the entity's stable ID), enter a selector and Add watch. Values
 update while paused or after errors; Remove deletes a watch. These are read-only
-data selectors, not script expressions:
+selectors, with an optional isolated expression mode:
 
 - `slot:12` reads an allocated local slot, including slots outside the local preview.
 - `local:health` reads a unique allocated name. Multiple functions with that local
@@ -660,10 +660,41 @@ data selectors, not script expressions:
   tilde/slash in keys as `~0`/`~1`; `state:bag/a~1b/0` reads key `a/b`, then index 0.
 
 Invalid owners, missing/out-of-range entries and descent into scalars show errors.
-Calls and arithmetic are not evaluated. Container/string previews use the local
-inspection bounds. Limits are 32 editor watches, owner 256 bytes, selector 512 bytes
+Use an `expr:` prefix to evaluate bounded read-only expressions. Container/string
+previews use the local inspection bounds. Limits are 32 editor watches, owner 256 bytes, selector 512 bytes
 and 16 path components including the root. Watches stay in editor memory rather
 than project/save files. Allocated names still do not imply active lexical frames.
+
+### Read-only expression watches
+
+Enter `expr: health * 2 + 1` in the same watch field. Bare names read uniquely named
+allocated locals in the selected VM. `local("health")` is equivalent; `slot(12)`
+disambiguates repeated names. `state("inventory")` reads that VM's persistent state;
+`game("hits")` reads shared game data, including when the owner is an entity.
+
+Arithmetic, integer precision/overflow, comparison and lazy `&&`/`||` use the normal
+compiler and VM. Pure `array_length`, `array_get`, `dict_get`, and `dict_has` calls
+use the same value-read implementations as gameplay. For example:
+
+```text
+expr: health > 0 && array_get(dict_get(state("bag"), "items", false), 0) == 7
+expr: slot(12) * 2 + game("bonus")
+```
+
+Evaluation uses a separate VM and a read-only host. Mutating calls, user functions,
+statements, assignments, imports, loops and I/O reject before execution, including
+calls in skipped branches. Missing reads in short-circuited expressions stay skipped.
+Evaluation leaves actual game locals, state, call frames, instruction position and
+gameplay instruction allowance untouched. Names are still allocated locals;
+completed scopes/functions may leave values and ambiguous names require slot reads.
+Active lexical scopes and source-level stepping remain open.
+
+The full selector is limited to 512 bytes. Expression limits are 128 AST nodes,
+depth 32 and 4096 bytecode instructions per evaluation. Cumulative copied values
+are bounded to 4096 nodes, depth 16 and 64 KiB including keys/overhead. Large reads
+can fail even when a subsequent operation would return a small scalar; a direct
+selector remains available for bounded previews. Watch definitions stay in editor
+memory and values update only while paused or after an error.
 
 ### Aggregate gameplay work budget
 
@@ -702,6 +733,8 @@ Debugger frame rows show entry/call-site/current-function source locations and
 function-owned allocated locals. A frame is not a complete lexical-block lifetime
 view. To exercise imported frames, watches and Restart in the optional widget replay:
 `KILN_DEBUG_FUNCTION_FRAMES=1 python3 tests/native/shared_script_budget_smoke.py`.
+Add `KILN_DEBUG_EXPRESSION_WATCHES=1` to verify computed watch values before and
+after corrected-source Restart.
 
 Runtime tools now use contract `kiln-authoring-v6`. Function-using VM snapshots
 include `shared-calls-v1` in their memory signature, so older incompatible function

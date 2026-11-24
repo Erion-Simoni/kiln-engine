@@ -1,4 +1,4 @@
-//! Watches read actual VM data without compiling/evaluating user expressions.
+//! Selectors and bounded isolated expressions inspect actual VM data.
 use kiln_core::{Component, Entity, Project, Scene, Transform};
 use kiln_runtime::{GameWorld, SliceSession, SourceId};
 use std::collections::HashMap;
@@ -114,4 +114,123 @@ fn watches_select_distinct_entity_vms() {
         session.live_watch("entity:second", "state:speed").unwrap(),
         "F64(3.0)"
     );
+    session
+        .host_mut()
+        .set_game_value("bonus", kiln_ir::Value::I64(2))
+        .unwrap();
+    assert_eq!(
+        session
+            .live_watch("entity:first", "expr:speed+game(\"bonus\")")
+            .unwrap(),
+        "F64(3.0)"
+    );
+    assert_eq!(
+        session
+            .live_watch("entity:second", "expr:state(\"speed\")*2")
+            .unwrap(),
+        "F64(6.0)"
+    );
+}
+
+#[test]
+fn expression_watches_share_arithmetic_and_read_nested_values_without_mutation() {
+    let (session, world) = session(
+        r#"
+let health=9;
+let exact=9007199254740993;
+let bag=dict_set(dict_new(),"items",array_push(array_new(),7));
+state_set("bag",bag);
+game_set("bonus",3);
+"#,
+    );
+    let before = session.snapshot(&world).unwrap().to_json().unwrap();
+    let position = session.live_vm_debug()[0].instruction;
+    let usage = session.script_instruction_usage();
+    for (expression, expected) in [
+        ("health * 2 + game(\"bonus\")", "I64(21)"),
+        ("exact == 9007199254740993", "Bool(true)"),
+        (
+            "array_get(dict_get(state(\"bag\"),\"items\",false),0) / 2",
+            "I64(3)",
+        ),
+        (
+            "array_length(dict_get(bag,\"items\",false)) == 1 && dict_has(bag,\"items\")",
+            "Bool(true)",
+        ),
+        ("false && missing > 0", "Bool(false)"),
+        ("true || state(\"missing\")", "Bool(true)"),
+        ("local(\"health\") + slot(0)", "I64(18)"),
+        ("\"alpha\" < \"beta\"", "Bool(true)"),
+    ] {
+        assert_eq!(
+            session
+                .live_watch("scene", &format!("expr:{expression}"))
+                .unwrap(),
+            expected,
+            "{expression}"
+        );
+    }
+    assert_eq!(session.snapshot(&world).unwrap().to_json().unwrap(), before);
+    assert_eq!(session.live_vm_debug()[0].instruction, position);
+    assert_eq!(session.script_instruction_usage(), usage);
+}
+
+#[test]
+fn expressions_reject_mutations_statements_ambiguity_and_excessive_work() {
+    let (session,world)=session("fn first(repeated) {return repeated;} fn second(repeated) {return repeated;} first(1);second(2);state_set(\"kept\",9);");
+    let before = session.snapshot(&world).unwrap().to_json().unwrap();
+    for expression in [
+        "state_set(\"kept\",0)",
+        "false && game_set(\"bad\",1)",
+        "print(1)",
+        "task_schedule(\"bad\",0,1)",
+        "get_score()",
+        "first(2)",
+        "1; state_set(\"kept\",0)",
+        "1; return 2",
+        "repeated",
+        "slot(-1)",
+        "slot(0.0)",
+        "state(1)",
+        "state(\"missing\")",
+        "game(\"missing\")",
+        "1/0",
+        "9223372036854775807+1",
+        "array_get(1,0)",
+        "dict_get(1,\"key\",0)",
+        "array_get(1)",
+        "local(\"missing\")",
+    ] {
+        assert!(
+            session
+                .live_watch("scene", &format!("expr:{expression}"))
+                .is_err(),
+            "{expression}"
+        );
+    }
+    assert!(session
+        .live_watch("scene", &format!("expr:{}true", "!".repeat(40)))
+        .unwrap_err()
+        .contains("depth"));
+    assert!(session
+        .live_watch("scene", &format!("expr:{}1", "1+".repeat(70)))
+        .is_err());
+    assert_eq!(
+        session.live_watch("scene", "expr:slot(0)+slot(1)").unwrap(),
+        "I64(3)"
+    );
+    assert_eq!(session.snapshot(&world).unwrap().to_json().unwrap(), before);
+}
+
+#[test]
+fn expression_value_copy_budget_is_enforced_without_affecting_direct_selectors() {
+    let (session, _) = session(&format!(
+        "let large=\"{}\"; state_set(\"large\",large);",
+        "x".repeat(65536)
+    ));
+    assert!(session
+        .live_watch("scene", "expr:state(\"large\")")
+        .unwrap_err()
+        .contains("byte limit"));
+    assert!(session.live_watch("scene", "state:large").unwrap().len() < 200);
 }

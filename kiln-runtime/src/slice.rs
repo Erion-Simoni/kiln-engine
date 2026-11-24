@@ -13,6 +13,8 @@ mod authored_ui;
 mod game_save;
 mod live_debug;
 mod tasks;
+mod value_reads;
+mod watch_expression;
 mod work_budget;
 pub use game_save::{
     GameProgress, GameSave, SaveRequest, SaveValue, GAME_SAVE_VERSION, MAX_GAME_SAVE_BYTES,
@@ -1363,7 +1365,8 @@ impl SliceHost {
             )),
             116..=123 => self.call_task(func_id, args),
             110 => Ok(Value::Map(Default::default())),
-            111..=114 => {
+            61 | 62 | 111 | 113 => value_reads::call(func_id, args),
+            112 | 114 => {
                 let Value::Map(values) = &args[0] else {
                     return Err(VmError::HostCallError("Expected dictionary".into()));
                 };
@@ -1375,26 +1378,20 @@ impl SliceHost {
                             "Dictionary key must be a string of at most 256 bytes".into(),
                         )
                     })?;
-                match func_id {
-                    111 => Ok(values.get(key).cloned().unwrap_or_else(|| args[2].clone())),
-                    113 => Ok(Value::Bool(values.contains_key(key))),
-                    _ => {
-                        let mut changed = values.clone();
-                        if func_id == 112 {
-                            if changed.len() >= 4096 && !changed.contains_key(key) {
-                                return Err(VmError::HostCallError(
-                                    "Dictionary item limit reached".into(),
-                                ));
-                            }
-                            changed.insert(key.into(), args[2].clone());
-                        } else {
-                            changed.remove(key);
-                        }
-                        let value = Value::Map(changed);
-                        game_save::SaveValue::capture(&value).map_err(VmError::HostCallError)?;
-                        Ok(value)
+                let mut changed = values.clone();
+                if func_id == 112 {
+                    if changed.len() >= 4096 && !changed.contains_key(key) {
+                        return Err(VmError::HostCallError(
+                            "Dictionary item limit reached".into(),
+                        ));
                     }
+                    changed.insert(key.into(), args[2].clone());
+                } else {
+                    changed.remove(key);
                 }
+                let value = Value::Map(changed);
+                game_save::SaveValue::capture(&value).map_err(VmError::HostCallError)?;
+                Ok(value)
             }
             115 => match &args[0] {
                 Value::Map(values) => Ok(Value::Array(
@@ -1402,21 +1399,6 @@ impl SliceHost {
                 )),
                 _ => Err(VmError::HostCallError(
                     "dict_keys expects a dictionary".into(),
-                )),
-            },
-            61 => match &args[0] {
-                Value::Array(values) => Ok(Value::I64(values.len() as i64)),
-                _ => Err(VmError::HostCallError(
-                    "array_length expects an array".into(),
-                )),
-            },
-            62 => match (&args[0], args[1].as_i64()) {
-                (Value::Array(values), Some(index)) if index >= 0 => values
-                    .get(index as usize)
-                    .cloned()
-                    .ok_or_else(|| VmError::HostCallError("array index is out of range".into())),
-                _ => Err(VmError::HostCallError(
-                    "array_get expects an array and nonnegative integer".into(),
                 )),
             },
             63 => match &args[0] {

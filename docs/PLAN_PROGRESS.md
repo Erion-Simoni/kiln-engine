@@ -8,7 +8,7 @@ local feature checks into milestone acceptance. A01 accepted baseline is 6de428b
 | --- | --- | --- |
 | A02 authoring | Scene/hierarchy composition, reference guards, copy/paste/duplicate/history, property-preserving projection, project persistence/Save As rescue, whole-project/two-scene crash recovery and component coverage | Every-inspector-property combined widget acceptance and cross-platform GUI remain open. A02 PARTIAL. |
 | A03 assets/prefabs | Stable loaded IDs/presets, dependency-aware asset/source moves, source-import rewriting, art refresh, saved deterministic atlases/static clips, staging-only native/browser rebuilds, interrupted atlas recovery, prefab color/texture/geometry/material/clip overrides, reference-safe joint propagation | Nested/variant prefab identity/runtime contract, arbitrary component overrides, general multi-file crash transactions and combined prefab/multi-scene/atlas/export visual acceptance remain open. Deferred by user 2026-11-21. |
-| A04 scripting/graphs/debugging | Shared host registry; functions/modules, loops/dictionaries/enums, explicit tasks/timers; source tools; editable connected gameplay graph lowering through the same frontend; staged saved-source restart; actual VM named allocated-local inspection and read-only nested data watches; aggregate tick budgets across scene/entity/event/UI work; shared callable bodies and actual imported-function frames; bounded shared-dependency graph generation with guarded v1 migration; text/graph projectile range and same-tick despawn lifecycle correction | Live source breakpoints, statement-level continuation, active lexical-block scopes and expression watches remain open. Equivalent enemy/projectile/trigger game is implemented; full export/debug production acceptance and exact physics-save continuation remain open. A04 PARTIAL and active. |
+| A04 scripting/graphs/debugging | Shared host registry; functions/modules, loops/dictionaries/enums, explicit tasks/timers; source tools; editable connected gameplay graph lowering through the same frontend; staged saved-source restart; actual VM named allocated-local inspection and read-only nested data and bounded read-only expression watches; aggregate tick budgets across scene/entity/event/UI work; shared callable bodies and actual imported-function frames; bounded shared-dependency graph generation with guarded v1 migration; text/graph projectile range and same-tick despawn lifecycle correction | Live source breakpoints, statement-level continuation, active lexical-block scopes remain open. Allocated-local read-only expression watches are implemented. Equivalent enemy/projectile/trigger game is implemented; full export/debug production acceptance and exact physics-save continuation remain open. A04 PARTIAL and active. |
 
 Recent checkpoint history:
 
@@ -53,3 +53,10 @@ pins; prevent non-stop callbacks after same-tick self-despawn. Exact resumed phy
 poses diverge and remain blocked rather than retried. User policy: maximum three
 focused attempts per blocked step, retain evidence and continue independent work.
 See [range evidence](evidence/A04_PROJECTILE_RANGE.md).
+
+2026-11-24 ADR-0102 checkpoint: isolated bounded expression watches over allocated
+locals, explicit slots, instance state and shared game data. Normal compiler/VM
+operator semantics and shared pure container reads; mutation/statement rejection,
+copy/AST/instruction limits, and unchanged gameplay state/allowance regressions.
+Active lexical scopes and scheduler/source stepping remain open. See
+[expression evidence](evidence/A04_EXPRESSION_WATCHES.md).

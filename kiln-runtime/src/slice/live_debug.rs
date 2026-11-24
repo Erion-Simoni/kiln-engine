@@ -158,10 +158,10 @@ fn segment(value: &str) -> Result<String, String> {
 }
 
 impl SliceSession {
-    /// Read a bounded data selector from the executing VM without evaluation.
-    /// Owner is `scene` or `entity:ID`; roots are slot:N, local:NAME, state:KEY.
+    /// Read a bounded data selector or isolated read-only expr: expression.
+    /// Owner is `scene` or `entity:ID`; roots are slot:N, local:NAME, state:KEY, expr:.
     pub fn live_watch(&self, owner: &str, selector: &str) -> Result<String, String> {
-        if owner.len() > 256 || selector.len() > 512 || selector.split('/').count() > 16 {
+        if owner.len() > 256 || selector.len() > 512 {
             return Err("Watch exceeds owner/selector/path limit".into());
         }
         let session = if owner == "scene" {
@@ -179,12 +179,19 @@ impl SliceSession {
         } else {
             return Err("Owner must be scene or entity:ID".into());
         };
+        if let Some(expression) = selector.strip_prefix("expr:") {
+            return super::watch_expression::evaluate(session, self, expression)
+                .map(|value| preview(&value));
+        }
+        if selector.split('/').count() > 16 {
+            return Err("Watch exceeds owner/selector/path limit".into());
+        }
         let mut path = selector.split('/');
         let (kind, key) = path
             .next()
             .unwrap_or_default()
             .split_once(':')
-            .ok_or("Use slot:N, local:NAME or state:KEY")?;
+            .ok_or("Use slot:N, local:NAME, state:KEY or expr:expression")?;
         let key = segment(key)?;
         let mut value = match kind {
             "slot" => session
@@ -213,11 +220,7 @@ impl SliceSession {
                 .script_state
                 .get(&key)
                 .ok_or("State key was not found")?,
-            _ => {
-                return Err(
-                    "Use slot:N, local:NAME or state:KEY; expressions are not evaluated".into(),
-                )
-            }
+            _ => return Err("Use slot:N, local:NAME, state:KEY or expr:expression".into()),
         };
         for key in path {
             let key = segment(key)?;

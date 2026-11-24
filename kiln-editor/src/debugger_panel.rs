@@ -22,7 +22,7 @@ pub struct DebuggerPanel {
     pub new_watch_expr: String,
     /// Live VM target: scene or entity:ID.
     pub live_watch_owner: String,
-    /// Bounded live data selector being authored.
+    /// Bounded live data selector or read-only expression being authored.
     pub live_watch_selector: String,
     /// Session-only live data watches (owner, selector).
     pub live_watches: Vec<(String, String)>,
@@ -44,7 +44,7 @@ impl DebuggerPanel {
         }
     }
 
-    /// Render data-only watches against actual gameplay VMs.
+    /// Render bounded selectors and isolated expressions against actual gameplay VMs.
     pub fn render_live_watches(
         &mut self,
         ui: &mut Ui,
@@ -73,6 +73,7 @@ impl DebuggerPanel {
                 });
             }
             if let Some(index) = remove { self.live_watches.remove(index); }
+            ui.label("Expression: expr: health * 2. Reads: slot(0), state(\"key\"), game(\"key\"). Pure calls: array_get, array_length, dict_get, dict_has. Names use allocated locals; mutations are rejected.");
         });
     }
 

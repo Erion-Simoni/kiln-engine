@@ -491,6 +491,13 @@ Exact resumed physics poses diverge; that check is recorded blocked and work
 continues under the user's skip policy. Full debugger/production acceptance remains
 open. [Evidence](evidence/A04_PROJECTILE_RANGE.md).
 
+**Expression-watch checkpoint 2026-11-24:** live watches accept bounded read-only
+expressions over allocated locals, explicit slots, instance state and shared game
+data. An isolated host/VM uses normal compiler/operator semantics and shared pure
+container reads. Mutations/statements reject and gameplay state/allowance remain
+unchanged. Active lexical scopes, source breakpoints and statement continuation
+remain open. [Evidence](evidence/A04_EXPRESSION_WATCHES.md).
+
 **Safe restart checkpoint 2026-11-21:** user deferred remaining A03 acceptance and
 moved to A04. Saved-source Restart now prepares the replacement VM/world/camera
 before stopping the current run, requires dirty source saved/reverted, and preserves
