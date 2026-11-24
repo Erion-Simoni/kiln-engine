@@ -1158,6 +1158,19 @@ impl EditorApp {
             .map(|gpu| gpu.scene_textures.clone())
             .unwrap_or_default();
         let (mut replacement, world) = prepare_play_restart(project, &scene_id, root, &textures)?;
+        if let Some(old) = self.play.as_ref() {
+            for point in old.slice.source_breakpoints() {
+                if let Err(error) = replacement
+                    .slice
+                    .add_source_breakpoint(&point.path, point.line)
+                {
+                    self.console_log.push(format!(
+                        "[WARN] Unbound breakpoint {}:{}: {error}",
+                        point.path, point.line
+                    ));
+                }
+            }
+        }
         self.stop_play();
         #[cfg(feature = "audio")]
         if self
@@ -1500,7 +1513,11 @@ impl EditorApp {
                 .slice
                 .step(world, axis, kiln_runtime::play_clock::PLAY_STEP)
             {
-                play.error = Some(format!("Scene '{}': {error}", play.scene_id));
+                play.error = if matches!(error, kiln_ir::VmError::DebugSuspended) {
+                    None
+                } else {
+                    Some(format!("Scene '{}': {error}", play.scene_id))
+                };
                 play.clock.set_paused(true);
                 break;
             }
@@ -2531,6 +2548,9 @@ impl EditorApp {
                 }
                 ProjectRequest::PausePlay => {
                     if let Some(play) = self.play.as_mut() {
+                        if play.clock.paused() {
+                            play.slice.debug_continue();
+                        }
                         play.clock.set_paused(!play.clock.paused());
                         play.last_tick = Instant::now();
                     }
@@ -2538,6 +2558,7 @@ impl EditorApp {
                 }
                 ProjectRequest::StepPlay => {
                     if let Some(play) = self.play.as_mut() {
+                        play.slice.debug_continue();
                         play.clock.request_step();
                     }
                     Ok(())
@@ -6720,6 +6741,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             if ui.button("Step Frame").clicked() {
                                 self.project_requests.push(ProjectRequest::StepPlay);
                             }
+                            if ui.button("Step Statement").clicked() {
+                                play.slice.debug_step_statement();play.clock.request_step();
+                            }
                             if ui.button("Restart").on_hover_text("Restart from saved scripts. Save or revert source edits first; compile errors keep the current run.").clicked() {
                                 self.project_requests.push(ProjectRequest::RestartPlay);
                             }
@@ -6727,7 +6751,11 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         if let Some(error) = &play.error {
                             ui.colored_label(egui::Color32::LIGHT_RED, error);
                         }
+                        if let Some(stop)=play.slice.source_stop() {
+                            ui.colored_label(egui::Color32::LIGHT_BLUE,format!("Source stop: {}:{} ({})",stop.source.path,stop.source.line,stop.owner));
+                        }
                         self.debugger_panel.render_live_watches(ui, &play.slice, play.clock.paused() || play.error.is_some());
+                        if self.debugger_panel.render_source_breakpoints(ui,&mut play.slice) {play.clock.set_paused(true);}
                         ui.checkbox(&mut self.debugger_panel.show_locals, "Inspect live state and locals");
                         if self.debugger_panel.show_locals {
                             if play.clock.paused() || play.error.is_some() {

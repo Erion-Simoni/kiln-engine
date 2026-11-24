@@ -8,6 +8,8 @@ use thiserror::Error;
 pub enum VmError {
     #[error("Stack underflow")]
     StackUnderflow,
+    #[error("Gameplay suspended at a source statement")]
+    DebugSuspended,
     #[error("Stack overflow")]
     StackOverflow,
     #[error("Division by zero")]
@@ -259,6 +261,34 @@ impl<H: HostContext> Vm<H> {
                 }
             }
             Ok(())
+        })();
+        (result, initial - self.instruction_budget)
+    }
+
+    /// Execute or resume until a debugger probe stops before an instruction.
+    /// Returns true on completion, false on suspension, plus consumed instructions.
+    pub fn execute_until(
+        &mut self,
+        program: &Program,
+        allowance: u64,
+        restart: bool,
+        mut stop: impl FnMut(usize, usize) -> bool,
+    ) -> (Result<bool, VmError>, u64) {
+        if restart {
+            self.begin_execution(program);
+        }
+        self.instruction_budget = self.instruction_budget.min(allowance);
+        let initial = self.instruction_budget;
+        let result = (|| {
+            while self.ip < program.len() {
+                if stop(self.ip, self.call_stack.len()) {
+                    return Ok(false);
+                }
+                if !self.step(program)? {
+                    break;
+                }
+            }
+            Ok(true)
         })();
         (result, initial - self.instruction_budget)
     }

@@ -21,6 +21,23 @@ impl ScriptWorkBudget {
     pub(super) fn reset(&self) {
         self.remaining.store(self.limit, Ordering::Relaxed);
     }
+    pub(super) fn execute_debug<H: HostContext>(
+        &self,
+        vm: &mut Vm<H>,
+        program: &Program,
+        restart: bool,
+        stop: impl FnMut(usize, usize) -> bool,
+    ) -> Result<(), VmError> {
+        let allowance = self.remaining.swap(0, Ordering::Relaxed);
+        let (result, used) = vm.execute_until(program, allowance, restart, stop);
+        self.remaining
+            .fetch_add(allowance - used, Ordering::Relaxed);
+        match result {
+            Ok(true)=>Ok(()), Ok(false)=>Err(VmError::DebugSuspended),
+            Err(VmError::InstructionBudgetExceeded) if self.remaining.load(Ordering::Relaxed)==0=>Err(VmError::HostCallError(format!("Instruction budget exceeded: shared gameplay tick limit {} (scene, entity and event callbacks)",self.limit))),
+            Err(error)=>Err(error),
+        }
+    }
     pub(super) fn execute<H: HostContext>(
         &self,
         vm: &mut Vm<H>,

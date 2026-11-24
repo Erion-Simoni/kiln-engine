@@ -1,68 +1,78 @@
 # Kiln Session Handoff
 
-Branch fix/a01-ci-baseline. Current checkpoint: A04 active lexical inspection
-(2026-11-24), following 026a19d. User directs at most three focused attempts per
-blocked step/check, retain failure evidence and continue independent feasible work.
-Skipped acceptance stays incomplete. A03 remains deferred. A02/A03/A04 PARTIAL;
-A04 active. A01 accepted baseline 6de428b unchanged. Full 3D behind G2D.
-MIT OR Apache-2.0.
+Branch fix/a01-ci-baseline. Current checkpoint: A04 source statement suspension
+and continuation (2026-11-24), following 0c73b3d. User directs at most three focused
+attempts per blocked step/check, retain failures and move to the next feasible plan
+step. A03 remains deferred. A04 remains PARTIAL; its remaining acceptance is deferred
+under this policy. NEXT WORK: independent A05 rendering/camera/large-scene fixes.
+Do not retry blocked A04 gates to delay A05. A01 baseline 6de428b unchanged;
+A02/A03 remain PARTIAL. Full 3D behind G2D. MIT OR Apache-2.0.
 
 ## Done
 
-- ADR-0103: compiler metadata records initialized per-slot lexical instruction
-  ranges and function ownership. Bindings start after parameter/local stores,
-  close on block/loop/function exit, and apply only to the current function frame.
-  Break/continue/return leave the relevant ranges; completed VMs have no active
-  bindings. Bytecode, local slot layout and VM-memory ABI remain unchanged.
-- Active lexical locals only checkbox in actual live debugger. Filter before the
-  128-local preview bound, retaining later active slots. Snapshot locals expose
-  in_scope. active:NAME selectors and scope(name) expression reads resolve strict
-  current-frame names, choosing the innermost shadowing loop binding.
-- Allocated locals/default expression names remain compatible for post-completion
-  and post-error retained values. Strict scope reads reject expired, uninitialized
-  and non-current-frame bindings. Caller frames stay visible, but there is no
-  caller-frame scope selection in this checkpoint.
-- Editor rebuilt. Runtime contract v6 and save signatures unchanged; CLI/player/
-  prepared browser bundle remain prior 74db617 runtime checkpoint. No dependency.
-- Prior A04 work includes isolated read-only expressions, script/graph projectile
-  range and exports, same-tick despawn fix, bounded graphs/v1 migration, shared
-  callable bodies, imported frames, shared tick budgets and safe saved Restart.
-  See docs/PLAN_PROGRESS.md and evidence/A04_LEXICAL_SCOPES.md.
+- ADR-0104: statement metadata mapped to exact imported source lines. Up to 128
+  unconditional breakpoints affect the actual scene/attachment VMs. Source stops
+  retain operand/local/call stacks, queued commands and remaining instruction
+  allowance. Resume skips the stopped boundary once. Step Statement enters calls
+  and crosses callback boundaries without a new tick or refreshed allowance.
+- Resumable tick captures input/time/events plus attachment callback cursor.
+  Systems advance once; completed callbacks are not replayed. Signal/animation
+  callbacks reference a captured payload pool. Commands commit on callback finish;
+  previously executed direct state writes remain visible, without rollback.
+- Live editor source controls/status/statement stepping; staged Restart rebinds
+  lines against saved sources and logs stale/unbound lines. Saved-screen UI
+  input/start/event dispatch stays atomic. Breakpoints are session-only and may
+  need reinstalling after scene transitions/logical loads. No step-over/out or
+  caller-frame scope selection is added.
+- Unfinished logical saves reject. Stop abandons pending commands and runs bounded
+  cleanup with probes disabled. Final review caught/repaired resumed attachment
+  frame_count reset; failing before control retained.
+- Rebuilt matching editor/CLI/player/prepared browser runtime. Runtime ABI stays
+  v6; previous browser bundle is target/a04-source-prior-web-runtime. No dependency.
+- Prior A04 features: active lexical inspection/scoped and isolated expressions,
+  shared function bodies/real imported frames, budgets, Restart, bounded graphs,
+  script/graph projectile game and source/export parity. PLAN_PROGRESS.md and
+  evidence/A04_SOURCE_CONTINUATION.md contain details.
 
 ## Executed validation
 
-- Full locked Rust workspace: 863 tests PASS. just check PASS. Default/opt-out WASM
-  strict Clippy PASS. Python helper suite 49 PASS; py_compile/whitespace PASS.
-- Current-frame/parameter lifetimes, expired blocks/callers, uninitialized locals,
-  loop shadowing/continue, completed scopes, allocated compatibility and active
-  slots beyond 160 inactive allocations PASS. Existing watches/saves/budgets and
-  graph/runtime tests remain passing.
-- Actual editor widget replay PASS on first run: imported failure/shared budget,
-  scoped expression I64(19), active-only inner::value and inner::debug_counter,
-  actual outer/inner frames; corrected-source Restart/Pause, allocated expression
-  I64(15), strict scope reports no active binding after completion. Manifest bytes
-  unchanged. Screenshots inspected.
-- Raw target/a04-scopes-{initial,focused,workspace,quality,wasm,wasm-optout,
-  editor-build,widgets,python,precommit}.log. Actual receipt, OCR, screenshots and
-  editor log: target/a04-scopes-widgets/. No new hosted/browser pixel claim.
+- Locked full Rust workspace: 870 PASS. just check PASS. Default/opt-out WASM strict
+  Clippy PASS. Python helper suite 49 PASS; py_compile/whitespace PASS.
+- Seven focused source tests PASS, including final frame-count guard: imported
+  return/caller continuation, operand-stack reuse, callback/signal/event ordering,
+  frozen input/time/frame, one physics step, no budget refill, incomplete saves,
+  abandoned commands and cleanup. Existing entity/shared-budget tests also pass.
+- Script and graph games each PASS relocated native and Chromium exports: 3932
+  green pixels, source copy hidden, native PATH without developer tools. Receipts
+  under target/a04-source-{native,browser}-projectile_range{,_graph}/.
+- Raw target/a04-source-{workspace-final,quality-final,wasm-final,wasm-optout-final,
+  final-focused,frame-before,python,precommit,tools-final,web-final}.log.
 
-## Blocked / skipped
+## Blocked / skipped gates — do not loop on these
 
-- Exact physics continuation remains blocked; do NOT retry to delay plan progress.
-  Prior pre-impact restore diverged at tick 46 (x=140.00006 versus 138.33339).
-  Evidence: target/a04-range-exact-physics-continuation-blocked.log. Restored final
-  victory outcomes pass with explicit narrower scope. Existing script/graph native
-  and browser exports passed in 74db617. No general physics-save fix is claimed.
-- External cross-platform/hardware/device certification is outside this request.
+- Source widget replay overall INCOMPLETE after three attempts. First two had OCR
+  selection failures. Third observed real imported breakpoint, Restart rebinding,
+  scoped value 4, caller statement/result 8 and completed pending tick; screenshots
+  inspected. It failed manifest comparison because setup Save normalized TOML
+  after the baseline capture. Baseline placement is corrected for future use but
+  no fourth replay was performed. Do not claim overall widget/manifest PASS.
+  Evidence: target/a04-source-widgets{,-replay,-final}/ and sibling logs; final
+  partial-result.json records scope. Continue to A05 under the user's skip policy.
+- Exact saved-physics continuation remains blocked from the prior checkpoint:
+  tick 46 x=140.00006 versus 138.33339. Raw
+  target/a04-range-exact-physics-continuation-blocked.log. Restored final victory
+  outcomes pass with narrower scope; no general physics-save fix is claimed.
+- Saved-screen UI source suspension and full combined A04 production acceptance
+  remain open/deferred. External cross-platform/device certification is outside
+  the request. A04 is not accepted/complete.
 
 ## Next
 
-- Continue A04 source breakpoints and scheduler statement continuation using the
-  user's bounded-attempt skip policy. Current-frame lexical inspection and strict
-  lexical expression reads now exist. Whole-game frame stepping remains separate.
-- Equivalent enemy/projectile/trigger game exists; full editor-authoring/debugger
-  production acceptance remains open. Advance past genuinely blocked steps with
-  evidence, keeping skipped milestone acceptance PARTIAL. A05 has not started.
-- A03 deferred: nested/variant identities, arbitrary component overrides, general
-  multi-file crash transactions and combined production acceptance. A02 combined
-  every-inspector-property widget acceptance remains open.
+- Start A05: sprite rendering, cameras and large-scene behavior. Inspect its plan
+  and choose substantial agent-executable fixes/checks (sorting/culling/capacity
+  diagnostics/camera mapping). A03 dependencies remain deferred; choose independent
+  software work and record any genuinely blocked dependency. Apply the same maximum
+  three focused attempts per blocked step, retaining incomplete acceptance.
+- A03: nested/variant identities, arbitrary overrides, multi-file crash transactions
+  and combined acceptance deferred. A02 every-inspector-property combined widget
+  acceptance remains open. Preserve these statuses; no release/3D approval implied.

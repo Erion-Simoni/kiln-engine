@@ -394,6 +394,9 @@ impl SliceSession {
         self.save_identity.as_ref().map(|(_, id, _)| id.as_str())
     }
     pub fn snapshot(&self, world: &GameWorld) -> Result<GameSave, String> {
+        if self.pending_tick.is_some() || self.program_pending {
+            return Err("Finish or abandon the suspended gameplay tick before saving".into());
+        }
         let (project_id, scene_id, script) = self
             .save_identity
             .as_ref()

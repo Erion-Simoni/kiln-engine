@@ -505,6 +505,17 @@ resolve strict lexical bindings, including loop shadowing. Allocated inspection
 remains available after completion. Source breakpoints and scheduler statement
 continuation remain open. [Evidence](evidence/A04_LEXICAL_SCOPES.md).
 
+**Source continuation checkpoint 2026-11-24:** actual scene/attachment VMs now
+suspend at mapped imported source statements and resume the same tick/callback,
+preserving stacks, locals, events, input, time and remaining budgets. Source-line
+breakpoints, statement-enter stepping and Restart rebinding are wired to the live
+editor. Unfinished logical saves reject; Stop abandons pending commands. Saved-screen
+UI dispatch remains atomic. The widget replay observed functional stops/stepping
+but failed its setup-baseline assertion after the third attempt; that gate is
+recorded incomplete and not retried. Under the user's skip policy, proceed next
+to independent A05 work with A04 still PARTIAL and its remaining acceptance deferred.
+[Evidence](evidence/A04_SOURCE_CONTINUATION.md).
+
 **Safe restart checkpoint 2026-11-21:** user deferred remaining A03 acceptance and
 moved to A04. Saved-source Restart now prepares the replacement VM/world/camera
 before stopping the current run, requires dirty source saved/reverted, and preserves

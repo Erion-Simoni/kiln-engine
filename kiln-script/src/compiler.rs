@@ -22,6 +22,19 @@ pub enum CompileError {
     InvalidLoopControl(String, Span),
 }
 
+fn expression_offset(expr: &Expr) -> usize {
+    match expr {
+        Expr::Number(_, span)
+        | Expr::Boolean(_, span)
+        | Expr::Float(_, span)
+        | Expr::String(_, span)
+        | Expr::Identifier(_, span)
+        | Expr::Call { span, .. } => span.start,
+        Expr::BinaryOp { left, .. } | Expr::Logical { left, .. } => expression_offset(left),
+        Expr::Not(_, span) => span.start,
+    }
+}
+
 struct LoopContext {
     condition: usize,
     breaks: Vec<usize>,
@@ -262,6 +275,24 @@ impl Compiler {
         if self.next_slot >= 32000 {
             return Err(CompileError::Custom("Too many script locals".into()));
         }
+        let offset = match stmt {
+            Stmt::Expr(expr) | Stmt::Return(expr) => Some(expression_offset(expr)),
+            Stmt::Let { span, .. }
+            | Stmt::Assign { span, .. }
+            | Stmt::Break(span)
+            | Stmt::Continue(span) => Some(span.start),
+            Stmt::While { condition, .. } | Stmt::If { condition, .. } => {
+                Some(expression_offset(condition))
+            }
+            Stmt::For { init, .. } => match init.as_ref() {
+                Stmt::Let { span, .. } => Some(span.start),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(offset) = offset {
+            self.program.record_statement(self.program.len(), offset);
+        }
         match stmt {
             Stmt::Function { .. } | Stmt::Enum { .. } => {
                 return Err(CompileError::Custom(
@@ -293,6 +324,8 @@ impl Compiler {
             }
             Stmt::While { condition, body } => {
                 let start = self.program.len();
+                self.program
+                    .record_statement(start, expression_offset(condition));
                 self.compile_expr(condition)?;
                 let exit = self.program.len();
                 self.program
@@ -333,6 +366,8 @@ impl Compiler {
                 let slot = self.allocate_slot(name);
                 self.initialize_slot(slot);
                 let start = self.program.len();
+                self.program
+                    .record_statement(start, expression_offset(condition));
                 self.compile_expr(condition)?;
                 let exit = self.program.len();
                 self.program
@@ -445,20 +480,8 @@ impl Compiler {
     }
 
     fn compile_expr(&mut self, expr: &Expr) -> Result<(), CompileError> {
-        fn offset(expr: &Expr) -> usize {
-            match expr {
-                Expr::Number(_, span)
-                | Expr::Boolean(_, span)
-                | Expr::Float(_, span)
-                | Expr::String(_, span)
-                | Expr::Identifier(_, span)
-                | Expr::Call { span, .. } => span.start,
-                Expr::BinaryOp { left, .. } | Expr::Logical { left, .. } => offset(left),
-                Expr::Not(_, span) => span.start,
-            }
-        }
         let begin = self.program.instructions().len();
-        let source_offset = offset(expr);
+        let source_offset = expression_offset(expr);
         match expr {
             Expr::Number(n, _span) => {
                 self.program

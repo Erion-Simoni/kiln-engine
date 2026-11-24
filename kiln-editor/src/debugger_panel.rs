@@ -28,6 +28,10 @@ pub struct DebuggerPanel {
     pub live_watch_selector: String,
     /// Session-only live data watches (owner, selector).
     pub live_watches: Vec<(String, String)>,
+    /// Exact project-relative executable source breakpoint being authored.
+    pub source_path: String,
+    pub source_line: String,
+    pub source_message: String,
 }
 
 impl DebuggerPanel {
@@ -44,6 +48,9 @@ impl DebuggerPanel {
             live_watch_owner: "scene".into(),
             live_watch_selector: String::new(),
             live_watches: Vec::new(),
+            source_path: String::new(),
+            source_line: "1".into(),
+            source_message: String::new(),
         }
     }
 
@@ -78,6 +85,33 @@ impl DebuggerPanel {
             if let Some(index) = remove { self.live_watches.remove(index); }
             ui.label("Expression: expr: health * 2. Reads: slot(0), state(\"key\"), game(\"key\"). Pure calls: array_get, array_length, dict_get, dict_has. Names use allocated locals; mutations are rejected.");
         });
+    }
+
+    /// Configure executable source lines on the actual gameplay scheduler.
+    pub fn render_source_breakpoints(
+        &mut self,
+        ui: &mut Ui,
+        session: &mut kiln_runtime::SliceSession,
+    ) -> bool {
+        let mut added = false;
+        ui.collapsing("Source breakpoints",|ui| {
+            ui.label("Exact project-relative path and executable line. Saved-screen UI callbacks remain atomic.");
+            ui.add(egui::TextEdit::singleline(&mut self.source_path).char_limit(256).hint_text("scripts/main.ks"));
+            ui.add(egui::TextEdit::singleline(&mut self.source_line).char_limit(10).hint_text("line"));
+            if ui.button("Add source breakpoint").clicked() {
+                self.source_message=match self.source_line.parse::<usize>().map_err(|_|"Line must be a positive integer".to_owned()).and_then(|line|session.add_source_breakpoint(&self.source_path,line)) {
+                    Ok(())=>{added=true;"Source breakpoint added".into()},Err(error)=>error,
+                };
+            }
+            ui.label(&self.source_message);
+            for point in session.source_breakpoints() {
+                ui.horizontal(|ui| {
+                    ui.monospace(format!("{}:{}",point.path,point.line));
+                    if ui.small_button("Remove source breakpoint").clicked() {session.remove_source_breakpoint(&point.path,point.line);}
+                });
+            }
+        });
+        added
     }
 
     /// Render the debugger panel.

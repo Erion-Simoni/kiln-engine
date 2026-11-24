@@ -115,6 +115,7 @@ pub struct Program {
     /// Number of local variable slots the program uses.
     local_slots: u16,
     source_offsets: HashMap<usize, usize>,
+    statement_offsets: std::collections::BTreeMap<usize, usize>,
     local_names: HashMap<u16, String>,
     local_functions: HashMap<u16, Label>,
     local_scopes: HashMap<u16, (usize, usize)>,
@@ -191,6 +192,18 @@ impl Program {
     /// Name associated with an allocated slot; scope lifetime is not implied.
     pub fn local_name(&self, slot: u16) -> Option<&str> {
         self.local_names.get(&slot).map(String::as_str)
+    }
+
+    /// Mark an executable source statement boundary without changing bytecode.
+    pub fn record_statement(&mut self, instruction: usize, offset: usize) {
+        self.statement_offsets.entry(instruction).or_insert(offset);
+    }
+
+    /// Statement instruction indices and source offsets in execution-layout order.
+    pub fn statements(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
+        self.statement_offsets
+            .iter()
+            .map(|(ip, offset)| (*ip, *offset))
     }
 
     /// Associate an instruction with its source byte offset, retaining a more

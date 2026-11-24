@@ -400,7 +400,7 @@ and generated `target`, `export` and `dist` trees are excluded.
 The native editor and player both use `SliceSession::with_scene_sources`.
 The live debugger controls real gameplay at frame granularity and displays
 actual instance state. Bounded read-only expression watches are available below;
-source breakpoints and statement-level continuation remain open.
+source statement stops are described below, with saved-screen UI dispatch still atomic.
 
 ## See Also
 
@@ -642,8 +642,8 @@ and completed executions are excluded. Function ownership is shown beside each
 local. A separate frame list shows actual caller call sites and the current function,
 including imported source origins. Views include at most 64 VMs and 128 matching
 locals per VM; active filtering happens before this bound. Strings are limited to
-128 Unicode characters; arrays/dictionaries show counts. Source breakpoints and
-statement stepping remain open. Frame stepping still controls whole-game ticks.
+128 Unicode characters; arrays/dictionaries show counts. Source breakpoints and statement continuation are described below. Frame stepping
+controls whole-game ticks.
 
 ### Live data watches
 
@@ -693,7 +693,7 @@ completed scopes/functions may leave values and ambiguous names require slot rea
 Use `scope("health")` for strict current-frame lexical resolution instead of allocated
 name lookup. Scope reads choose the innermost shadowing binding and reject expired
 or uninitialized bindings. Completed scripts have no active scope; use allocated
-reads for retained post-completion values. Source-level stepping remains open.
+reads for retained post-completion values. Source statement stepping is described below.
 
 The full selector is limited to 512 bytes. Expression limits are 128 AST nodes,
 depth 32 and 4096 bytecode instructions per evaluation. Cumulative copied values
@@ -701,6 +701,36 @@ are bounded to 4096 nodes, depth 16 and 64 KiB including keys/overhead. Large re
 can fail even when a subsequent operation would return a small scalar; a direct
 selector remains available for bounded previews. Watch definitions stay in editor
 memory and values update only while paused or after an error.
+
+### Source breakpoints and statement continuation
+
+During Play, pause and expand **Source breakpoints** in the live Debugger. Enter an
+exact project-relative `.ks` path and executable line, then Add source breakpoint.
+Imported modules are mapped back to their own source lines. A line without a
+compiled statement is rejected. Up to 128 unconditional lines apply across scene
+and attached instances. Remove source breakpoint changes the definition but does
+not resume an existing stop. Definitions stay in the current Play session; Restart
+rebinds them against saved source and logs lines that no longer bind. Add during
+Play then Restart to catch a first-tick/Start callback.
+
+A blue **Source stop** identifies the actual suspended VM and source line. Resume
+continues its pending tick. **Step Statement** enters calls and stops at the next
+executed statement, including imported functions and later attachment callbacks.
+**Step Frame** continues the pending tick while still honoring later breakpoints.
+It does not start that tick again. Locals, operand/call stacks, queued commands,
+input, time and the callback cursor persist. Physics/animation systems advance once
+per tick; shared/per-invocation instruction allowance is not renewed by stepping.
+World commands commit once when their callback finishes; direct state writes already
+executed remain visible. This is not rollback or reverse debugging.
+
+Finish or abandon a suspended tick before taking a logical save. Stop/Restart drop
+pending work and run bounded cleanup with source probes disabled. Saved-screen UI
+input/start/UI-event dispatch remains atomic and does not suspend in this version.
+Breakpoint definitions are not written into project/save files, and scene changes
+or logical loads may require reinstalling them. Source step-over/out and caller-frame
+selection are not added here; the existing separate bytecode debugger retains its
+own controls. The optional source_breakpoint_smoke.py replay has an incomplete
+manifest-comparison gate after three attempts; see checkpoint evidence.
 
 ### Aggregate gameplay work budget
 

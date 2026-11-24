@@ -2392,3 +2392,23 @@ applying preview limits so later active slots are not hidden by inactive ones.
 Completed executions have no active lexical bindings; explicit allocated slots
 remain available. This does not add source breakpoints or scheduler continuation.
 No new dependency. Preserve the user's bounded-attempt skip policy.
+
+### ADR-0104 — Resumable gameplay ticks and source statement stops (2026-11-24)
+
+Status: accepted. Add statement-boundary metadata without changing bytecode, and
+map executable boundaries to imported project-relative source lines. A suspended
+callback keeps its real VM stack/locals/call frames, queued commands and remaining
+instruction allowance. A pending tick preserves input/time/collisions/signals and
+its attachment callback queue, so Resume never replays completed callbacks or
+advances systems twice. Share source-stop control across the scene and attachments;
+resume skips the stopped boundary once. Statement stepping stops at the next
+executed statement, including imported calls and later callbacks. Gameplay/shared
+budgets are not refreshed while suspended. Unconfigured execution keeps its fast
+run-to-completion VM path.
+
+Editor pauses its fixed clock on a dedicated suspension outcome, displays the
+source stop, and supplies source breakpoint/statement controls. Logical snapshots
+reject unfinished ticks; Stop/Restart abandon pending execution then run bounded
+cleanup with debug probes disabled. Existing staged Restart guards remain. Saved
+screen UI input/start/UI-event dispatch remains atomic in this implementation;
+those callbacks do not suspend. No new dependency, instructions or save ABI.

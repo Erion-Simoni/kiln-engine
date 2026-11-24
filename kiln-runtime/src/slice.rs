@@ -12,6 +12,9 @@
 mod authored_ui;
 mod game_save;
 mod live_debug;
+mod pending_tick;
+mod source_debug;
+pub use source_debug::{SourceBreakpoint, SourceStop};
 mod tasks;
 mod value_reads;
 mod watch_expression;
@@ -1553,6 +1556,10 @@ fn describe(value: &Value) -> String {
 
 /// A running slice: the compiled script plus its state.
 pub struct SliceSession {
+    source_debug: source_debug::SharedDebug,
+    debug_sites: HashMap<usize, SourceBreakpoint>,
+    program_pending: bool,
+    pending_tick: Option<pending_tick::PendingTick>,
     work_budget: work_budget::ScriptWorkBudget,
     source: Option<crate::script_source::ExpandedSource>,
     save_identity: Option<(String, String, Option<String>)>,
@@ -1612,7 +1619,9 @@ impl AttachedScript {
         }
         self.session.vm.host_mut().swap_game_services(_parent);
         self.session.vm.host_mut().phase = phase.into();
-        self.session.vm.host_mut().frame_count = self.frame.saturating_sub(1);
+        if !self.session.program_pending {
+            self.session.vm.host_mut().frame_count = self.frame.saturating_sub(1);
+        }
         #[cfg(feature = "physics")]
         std::mem::swap(
             &mut _parent.physics,
@@ -1663,6 +1672,9 @@ impl AttachedScript {
         );
         self.session.vm.host_mut().swap_game_services(_parent);
         result.map_err(|error| {
+            if matches!(error, VmError::DebugSuspended) {
+                return error;
+            }
             VmError::HostCallError(format!(
                 "{} (entity {}, {phase}): {error}",
                 self.path, self.entity_id
@@ -1751,6 +1763,11 @@ impl SliceSession {
                             .collect::<Vec<_>>()
                             .join("\n")
                     })?;
+            session.debug_sites = source_debug::sites(&session.program, &expanded.source, |row| {
+                expanded
+                    .origin(row)
+                    .map(|(path, line)| (path.to_owned(), line))
+            });
             session.source = Some(expanded);
             Ok(session)
         }
@@ -1820,6 +1837,7 @@ impl SliceSession {
                 }
                 let mut child = compile_resource(path, project, &read)?;
                 child.work_budget = session.work_budget.clone();
+                child.source_debug = session.source_debug.clone();
                 child.vm.host_mut().self_entity = entity.id.clone();
                 child.vm.host_mut().properties = properties.clone();
                 session.attached.push(AttachedScript {
@@ -1843,15 +1861,27 @@ impl SliceSession {
 
     /// Invoke stop callbacks for started attachments before discarding a world.
     pub fn stop(&mut self, world: &mut GameWorld) -> Result<(), VmError> {
-        self.work_budget.reset();
+        self.pending_tick = None;
+        self.program_pending = false;
+        self.source_debug.abandon();
+        self.source_debug.mute(true);
         for attached in &mut self.attached {
-            if attached.started {
-                attached.run(self.vm.host_mut(), "stop", world, (0.0, 0.0), 0.0, &[])?;
-                attached.started = false;
-            }
+            attached.session.program_pending = false;
         }
-        Ok(())
+        self.work_budget.reset();
+        let result = (|| {
+            for attached in &mut self.attached {
+                if attached.started {
+                    attached.run(self.vm.host_mut(), "stop", world, (0.0, 0.0), 0.0, &[])?;
+                    attached.started = false;
+                }
+            }
+            Ok(())
+        })();
+        self.source_debug.mute(false);
+        result
     }
+
     /// Compile a slice script with the default action map.
     pub fn new(source: &str) -> Result<Self, Vec<Diagnostic>> {
         Self::with_action_map(source, ActionMap::new())
@@ -1876,7 +1906,13 @@ impl SliceSession {
             ..Default::default()
         };
         let debugger = Debugger::new(program.clone(), host);
+        let debug_sites =
+            source_debug::sites(&program, source, |row| Some(("<script>".into(), row + 1)));
         Ok(Self {
+            source_debug: Default::default(),
+            debug_sites,
+            program_pending: false,
+            pending_tick: None,
             work_budget: work_budget::ScriptWorkBudget::new(
                 kiln_core::project::DEFAULT_SCRIPT_INSTRUCTION_BUDGET,
             ),
@@ -1949,144 +1985,16 @@ impl SliceSession {
     ///
     /// `input` is the (x, y) movement axis and `dt` the frame time in
     /// seconds. The commands the script emits are applied to `world`.
+    /// With source debugging enabled, DebugSuspended retains the unfinished tick.
+    /// Call debug_continue/debug_step_statement and step again to resume; new input
+    /// and time are ignored until that pending tick finishes.
     pub fn step(
         &mut self,
         world: &mut GameWorld,
         input: (f64, f64),
         dt: f64,
     ) -> Result<(), VmError> {
-        self.work_budget.reset();
-        #[cfg(feature = "audio")]
-        if let Some(audio) = &mut self.vm.host_mut().audio {
-            audio.advance_silent(dt);
-        }
-        self.dispatch_saved_ui(world)?;
-        let paused = self.vm.host().ui.pauses_game();
-        let input = if self.vm.host().ui.captures_input() {
-            (0.0, 0.0)
-        } else {
-            input
-        };
-        let captures = self.vm.host().ui.captures_input();
-        if !paused {
-            let keys = if captures {
-                Some(std::mem::take(&mut self.vm.host_mut().pressed_keys))
-            } else {
-                None
-            };
-            let result = self.step_program(world, input, dt, true, Vec::new());
-            if let Some(keys) = keys {
-                self.vm.host_mut().pressed_keys = keys;
-            }
-            result?;
-        }
-        let collisions = if paused {
-            Vec::new()
-        } else {
-            self.vm.host_mut().facts.collision_events.clone()
-        };
-        let animation_events: Vec<_> = world
-            .world_mut()
-            .query_mut::<(&SourceId, &mut crate::AnimationPlayer)>()
-            .into_iter()
-            .flat_map(|(source, animation)| {
-                animation
-                    .take_events()
-                    .into_iter()
-                    .map(|event| (source.0.clone(), event))
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-        let signals = std::mem::take(&mut self.signals);
-        let keys = if captures {
-            Default::default()
-        } else {
-            self.vm.host_mut().pressed_keys.clone()
-        };
-        let mouse_world = self.vm.host().mouse_world;
-        let save_dir = self.vm.host_mut().save_dir.clone();
-        let frame = self.vm.host().frame_count;
-        self.signals.append(&mut self.vm.host_mut().emitted_signals);
-        for attached in &mut self.attached {
-            attached.frame = frame;
-            if !world
-                .world_ref()
-                .query::<&SourceId>()
-                .iter()
-                .any(|id| id.0 == attached.entity_id)
-            {
-                if attached.started {
-                    attached.run(self.vm.host_mut(), "stop", world, input, 0.0, &collisions)?;
-                    attached.started = false;
-                    self.signals
-                        .append(&mut attached.session.vm.host_mut().emitted_signals);
-                }
-                continue;
-            }
-            attached.session.vm.host_mut().pressed_keys = keys.clone();
-            attached.session.vm.host_mut().mouse_world = mouse_world;
-            attached.session.vm.host_mut().save_dir = save_dir.clone();
-            if !attached.started {
-                attached.started = true;
-                attached.run(self.vm.host_mut(), "start", world, input, 0.0, &collisions)?;
-            }
-            for (id, event) in &animation_events {
-                if id != &attached.entity_id {
-                    continue;
-                }
-                attached.session.vm.host_mut().animation_event = (
-                    event.name.clone(),
-                    event.payload.clone().unwrap_or_default(),
-                );
-                attached.run(
-                    self.vm.host_mut(),
-                    "animation_event",
-                    world,
-                    input,
-                    0.0,
-                    &collisions,
-                )?;
-            }
-            for (name, value) in &signals {
-                attached.session.vm.host_mut().signal_name = name.clone();
-                attached.session.vm.host_mut().signal_value = Some(value.clone());
-                attached.run(self.vm.host_mut(), "signal", world, input, 0.0, &collisions)?;
-            }
-            for (a, b, started) in &collisions {
-                let other = if a == &attached.entity_id {
-                    b
-                } else if b == &attached.entity_id {
-                    a
-                } else {
-                    continue;
-                };
-                attached.session.vm.host_mut().event_entity = other.clone();
-                attached.run(
-                    self.vm.host_mut(),
-                    if *started {
-                        "collision_enter"
-                    } else {
-                        "collision_exit"
-                    },
-                    world,
-                    input,
-                    0.0,
-                    &collisions,
-                )?;
-            }
-            if !self.vm.host().ui.pauses_game() {
-                attached.run(self.vm.host_mut(), "update", world, input, dt, &collisions)?;
-            }
-            self.ui_commands.append(&mut attached.session.ui_commands);
-            self.signals
-                .append(&mut attached.session.vm.host_mut().emitted_signals);
-        }
-        if self.signals.len() > 256 {
-            return Err(VmError::HostCallError(
-                "scene signal queue limit reached".into(),
-            ));
-        }
-        Ok(())
+        self.step_resumable(world, input, dt)
     }
 
     fn step_program(
@@ -2097,55 +2005,59 @@ impl SliceSession {
         advance_systems: bool,
         inherited_collisions: Vec<(String, String, bool)>,
     ) -> Result<(), VmError> {
-        self.state.elapsed += dt;
+        if !self.program_pending {
+            self.state.elapsed += dt;
 
-        // Sync persistent state to host so save_game can access it.
-        self.vm.host_mut().state = self.state.clone();
+            // Sync persistent state to host so save_game can access it.
+            self.vm.host_mut().state = self.state.clone();
 
-        // Reset per-frame UI click state (clicks only last one frame).
-        self.host_mut().ui_widgets.clear();
+            // Reset per-frame UI click state (clicks only last one frame).
+            self.host_mut().ui_widgets.clear();
 
-        // Step physics and collect collision events (if physics feature enabled)
-        #[cfg(feature = "physics")]
-        let collision_events = {
-            use crate::physics::sync_physics_with_ecs;
-            let host = self.vm.host_mut();
-            if let Some(physics) = host.physics.as_mut().filter(|_| advance_systems) {
-                sync_physics_with_ecs(physics, world)
+            // Step physics and collect collision events (if physics feature enabled)
+            #[cfg(feature = "physics")]
+            let collision_events = {
+                use crate::physics::sync_physics_with_ecs;
+                let host = self.vm.host_mut();
+                if let Some(physics) = host.physics.as_mut().filter(|_| advance_systems) {
+                    sync_physics_with_ecs(physics, world)
+                } else {
+                    Vec::new()
+                }
+            };
+            #[cfg(feature = "physics")]
+            let collision_events: Vec<(String, String, bool)> = collision_events
+                .into_iter()
+                .map(|e| (e.entity_a, e.entity_b, e.started))
+                .collect();
+            #[cfg(not(feature = "physics"))]
+            let collision_events: Vec<(String, String, bool)> = Vec::new();
+
+            let mut collision_events = if advance_systems {
+                collision_events
             } else {
-                Vec::new()
+                inherited_collisions
+            };
+            collision_events.append(&mut self.external_collisions);
+
+            // Update animations (reads AnimationPlayer, writes Sprite uv_rect)
+            if advance_systems {
+                crate::sprite::update_animations_dt(world.world_mut(), dt as f32);
+                // Update particle systems
+                crate::sprite::update_particle_systems(world.world_mut(), dt as f32);
             }
-        };
-        #[cfg(feature = "physics")]
-        let collision_events: Vec<(String, String, bool)> = collision_events
-            .into_iter()
-            .map(|e| (e.entity_a, e.entity_b, e.started))
-            .collect();
-        #[cfg(not(feature = "physics"))]
-        let collision_events: Vec<(String, String, bool)> = Vec::new();
 
-        let mut collision_events = if advance_systems {
-            collision_events
-        } else {
-            inherited_collisions
-        };
-        collision_events.append(&mut self.external_collisions);
-
-        // Update animations (reads AnimationPlayer, writes Sprite uv_rect)
-        if advance_systems {
-            crate::sprite::update_animations_dt(world.world_mut(), dt as f32);
-            // Update particle systems
-            crate::sprite::update_particle_systems(world.world_mut(), dt as f32);
+            let facts = self.collect_facts(world, input, dt, collision_events);
+            {
+                let host = self.vm.host_mut();
+                host.facts = facts;
+                host.take_commands();
+            }
         }
-
-        let facts = self.collect_facts(world, input, dt, collision_events);
-        {
-            let host = self.vm.host_mut();
-            host.facts = facts;
-            host.take_commands();
-        }
-
-        if let Err(error) = self.work_budget.execute(&mut self.vm, &self.program) {
+        if let Err(error) = self.execute_gameplay_vm() {
+            if matches!(error, VmError::DebugSuspended) {
+                return Err(error);
+            }
             if let Some(source) = &self.source {
                 let offset = self
                     .program

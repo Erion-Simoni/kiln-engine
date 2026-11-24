@@ -9,6 +9,12 @@ pub(crate) struct ExpandedSource {
 }
 
 impl ExpandedSource {
+    pub(crate) fn origin(&self, line: usize) -> Option<(&str, usize)> {
+        self.lines
+            .get(line)
+            .map(|(path, line)| (path.as_str(), *line))
+    }
+
     pub fn diagnostic(&self, diagnostic: &kiln_script::Diagnostic) -> String {
         let mut offset = diagnostic.span.start.min(self.source.len());
         while !self.source.is_char_boundary(offset) {
