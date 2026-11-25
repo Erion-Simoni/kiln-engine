@@ -16,6 +16,7 @@ def main():
     supplied=os.environ.get('KILN_ATLAS_PROJECT')
     original=Path(supplied) if supplied else Path(json.loads((REPO/'target/a03-atlas-recipe/result.json').read_text())['project'])
     scenario=os.environ.get('KILN_PIXEL_SCENARIO')
+    expect_warning=os.environ.get('KILN_EXPECT_SPRITE_DROPS')=='1'
     run=Path(tempfile.mkdtemp(prefix='run-',dir=output));project=run/'project';shutil.copytree(original,project)
     env=os.environ.copy();env.update(DISPLAY=':86',XDG_RUNTIME_DIR=str(run/'runtime'),XDG_DATA_HOME=str(run/'data'),
         XDG_CONFIG_HOME=str(run/'config'),XDG_CACHE_HOME=str(run/'cache'),ALSA_CONFIG_PATH=str(run/'alsa.conf'),LIBGL_ALWAYS_SOFTWARE='1')
@@ -47,13 +48,13 @@ def main():
         def pixels():
             ppm=subprocess.check_output([executable('import'),'-display',':86','-window',handle,'-depth','8','ppm:-'],env=env)
             header,frame=ppm.split(b'\n255\n',1);width,height=map(int,header.splitlines()[-1].split())
-            green=sum(1 for at in range(0,len(frame),3) if frame[at+1]>220 and frame[at]<30 and frame[at+2]<30)
+            green=sum(1 for at in range(0,len(frame),3) if ((frame[at]>220 and 30<frame[at+1]<200 and frame[at+2]<180) if expect_warning else (frame[at+1]>220 and frame[at]<30 and frame[at+2]<30)))
             return (width,height,green) if green>200 else None
         width,height,green=wait_for(pixels,player,player_log)
         subprocess.run([executable('import'),'-display',':86','-window',handle,str(output/('rendered_scene.png' if scenario else 'generated_clip.png'))],env=env,check=True)
         result=dict(passed=True,relocated_native_export=True,authoring_copy_hidden=True,developer_tools_absent_from_player_path=True,
                     frame=[width,height],scope='Linux Xvfb/software graphics')
-        result['rendered_green_pixels' if scenario else 'generated_clip_green_pixels']=green
+        result['rendered_warning_pixels' if expect_warning else ('rendered_green_pixels' if scenario else 'generated_clip_green_pixels')]=green
         if scenario:result['scenario']=scenario
         (output/'result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
     finally:

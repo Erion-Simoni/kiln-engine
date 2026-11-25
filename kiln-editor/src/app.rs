@@ -3112,6 +3112,7 @@ impl EditorApp {
                 tier,
                 is_playing,
                 project_dirty || self.shell.script_editor.dirty(),
+                gpu.scene_view_sprite_renderer.frame_stats().warning(),
             );
         }
 
@@ -3994,6 +3995,7 @@ impl EditorApp {
             tier: kiln_render::RenderTier,
             is_playing: bool,
             project_dirty: bool,
+            render_warning: Option<String>,
         ) {
             egui::TopBottomPanel::bottom("status_bar")
                 .exact_height(22.0)
@@ -4012,6 +4014,9 @@ impl EditorApp {
                             ("All changes saved", egui::Color32::from_rgb(152, 166, 184))
                         };
                         ui.colored_label(color, status);
+                        if let Some(warning) = &render_warning {
+                            ui.colored_label(egui::Color32::LIGHT_RED, warning);
+                        }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.weak(format!(
                                 "{} · {} entities · {:?}",

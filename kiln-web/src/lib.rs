@@ -616,6 +616,13 @@ impl App {
                     }
                 }
             }
+            if let Some(warning) = self.sprite_renderer.frame_stats().warning() {
+                for instance in
+                    TextRenderer::new().render(&warning, 8.0, 64.0, 12.0, [1.0, 0.25, 0.1, 1.0])
+                {
+                    self.overlay_renderer.push(instance);
+                }
+            }
             let size = self.renderer.surface_config();
             let camera = Camera::new_top_left(size.width as f32, size.height as f32);
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

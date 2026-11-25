@@ -567,6 +567,15 @@ remain open. A04 stays PARTIAL. [Evidence](evidence/A04_SHARED_CALLS_AND_FRAMES.
 - [ ] Complete sorting/masks/outlines/blend modes, flipping, materials, pixel scale, atlas batching, filtering/compression and transparent order. Add camera shake/dead zones/transitions, parallax, multiple viewports/split-screen with correct input mapping. Implement suitable culling and report sprite/texture capacity overflow rather than silently dropping submissions.
 - [ ] **Acceptance:** Pixel/interaction regressions cover transforms, camera resize/DPI, split view input and sorting; dense/offscreen scenes remain correct at and beyond configured capacity with visible diagnostics.
 
+**Culling/capacity checkpoint 2026-11-25:** A05 is now active under the user's
+skip policy; A03/A04 acceptance remains deferred, not completed. Shared scene
+collection culls transformed sprite/particle/tile quads before sorting/submission.
+The 16384-sprite queue now exposes attempted/queued/dropped/missing-texture counts
+and visible world-rendering warnings in editor/player/browser. Real GPU queue tests
+and source-only stress export checks cover offscreen starvation and overflow;
+remaining camera/split-view/production acceptance stays open.
+[Evidence](evidence/A05_CULLING_AND_CAPACITY.md).
+
 ### A06 — Complete tilemap and level authoring
 
 **Status:** PARTIAL. **Depends on:** A03, A05.

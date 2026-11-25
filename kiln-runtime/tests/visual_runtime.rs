@@ -205,3 +205,63 @@ fn same_layer_painter_order_follows_authored_hierarchy_across_archetypes() {
             .collect();
     assert_eq!(colors, [[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0]]);
 }
+
+#[test]
+fn offscreen_sprites_do_not_starve_visible_submissions_and_order_is_preserved() {
+    let mut world = GameWorld::new();
+    for i in 0..kiln_render::MAX_SPRITES + 64 {
+        world.spawn((
+            SourceId::new(format!("off-{i}")),
+            GlobalTransform(Transform::new(10000.0, 10000.0)),
+            Sprite::default(),
+        ));
+    }
+    for (id, x, layer) in [("front", 40.0, 2.0), ("back", 20.0, -1.0)] {
+        let mut sprite = Sprite::default().with_size(10.0, 10.0);
+        sprite.layer = layer;
+        world.spawn((
+            SourceId::new(id),
+            GlobalTransform(Transform::new(x, 40.0)),
+            sprite,
+        ));
+    }
+    let draws = kiln_runtime::visual::collect_scene_draws(&world, [0.0, 0.0, 100.0, 100.0]);
+    assert_eq!(draws.len(), 2);
+    assert_eq!(
+        draws.iter().map(|(_, s)| s.position[0]).collect::<Vec<_>>(),
+        vec![20.0, 40.0]
+    );
+}
+#[test]
+fn culling_uses_actual_pivot_rotation_and_scale_and_keeps_edge_contact() {
+    let mut world = GameWorld::new();
+    let sprite = Sprite::default().with_size(20.0, 4.0).with_pivot(0.0, 0.5);
+    world.spawn((
+        SourceId::new("pivot"),
+        GlobalTransform(Transform::new(-10.0, 20.0)),
+        sprite,
+    ));
+    let pose = Transform::new(105.0, 50.0)
+        .with_rotation(std::f32::consts::FRAC_PI_2)
+        .with_scale(Vec2::new(-2.0, 3.0));
+    world.spawn((
+        SourceId::new("rotated"),
+        GlobalTransform(pose),
+        Sprite::default().with_size(10.0, 4.0),
+    ));
+    world.spawn((
+        SourceId::new("outside"),
+        GlobalTransform(Transform::new(500.0, 500.0)),
+        Sprite::default(),
+    ));
+    let draws = kiln_runtime::visual::collect_scene_draws(&world, [0.0, 0.0, 100.0, 100.0]);
+    assert_eq!(draws.len(), 2);
+    assert!(kiln_runtime::visual::collect_scene_draws(&world, [0.0, 0.0, 0.0, 100.0]).is_empty());
+    assert!(kiln_runtime::visual::collect_scene_draws_filtered(
+        &world,
+        [0.0, 0.0, f32::INFINITY, 100.0],
+        |_| None,
+        |_| panic!("invalid view must reject before scanning the world")
+    )
+    .is_empty());
+}

@@ -2412,3 +2412,20 @@ reject unfinished ticks; Stop/Restart abandon pending execution then run bounded
 cleanup with debug probes disabled. Existing staged Restart guards remain. Saved
 screen UI input/start/UI-event dispatch remains atomic in this implementation;
 those callbacks do not suspend. No new dependency, instructions or save ABI.
+
+### ADR-0105 — Cull transformed quads before bounded sprite submission (2026-11-25)
+
+Status: accepted. Shared scene collection rejects offscreen sprite/particle quads
+using conservative rotated AABBs of the actual pivoted/scaled draw instances.
+Touching view edges remain included. Non-finite/degenerate geometry or invalid
+views are excluded; use f64 bounds arithmetic to avoid finite f32 overflow. Fixed
+vertex/custom-fragment materials preserve these geometry bounds. Tilemaps retain
+chunk selection and receive the same final quad test. Cull before sorting and the
+existing 16384-sprite GPU queue so offscreen entities cannot consume visible slots.
+
+Keep the GPU queue bounded. Expose per-frame attempted/queued/dropped and missing
+texture counters, with visible editor/player/browser warnings. Reset counters with
+begin_frame and route all submission variants through one accounting path. Unknown
+textures retain the white fallback but become diagnosable. No new texture allocation
+cap, dependency, render pass or resource-budget increase. Capacity overflow remains
+reported rather than claimed fully rendered. A03/A04 acceptance stays deferred.

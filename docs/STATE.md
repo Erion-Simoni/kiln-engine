@@ -1,78 +1,74 @@
 # Kiln Session Handoff
 
-Branch fix/a01-ci-baseline. Current checkpoint: A04 source statement suspension
-and continuation (2026-11-24), following 0c73b3d. User directs at most three focused
-attempts per blocked step/check, retain failures and move to the next feasible plan
-step. A03 remains deferred. A04 remains PARTIAL; its remaining acceptance is deferred
-under this policy. NEXT WORK: independent A05 rendering/camera/large-scene fixes.
-Do not retry blocked A04 gates to delay A05. A01 baseline 6de428b unchanged;
-A02/A03 remain PARTIAL. Full 3D behind G2D. MIT OR Apache-2.0.
+Branch fix/a01-ci-baseline. Current checkpoint: A05 transformed culling and visible
+sprite queue diagnostics (2026-11-25), following d6ead03. A05 is active. A03/A04
+remaining acceptance stays deferred, not completed; do not retry those gates to
+delay plan progress. User policy: at most three focused attempts per blocked
+step/check, retain failures, continue the next feasible step. A01 accepted baseline
+6de428b unchanged. A02/A03/A04/A05 remain PARTIAL. Full 3D behind G2D.
+MIT OR Apache-2.0.
 
 ## Done
 
-- ADR-0104: statement metadata mapped to exact imported source lines. Up to 128
-  unconditional breakpoints affect the actual scene/attachment VMs. Source stops
-  retain operand/local/call stacks, queued commands and remaining instruction
-  allowance. Resume skips the stopped boundary once. Step Statement enters calls
-  and crosses callback boundaries without a new tick or refreshed allowance.
-- Resumable tick captures input/time/events plus attachment callback cursor.
-  Systems advance once; completed callbacks are not replayed. Signal/animation
-  callbacks reference a captured payload pool. Commands commit on callback finish;
-  previously executed direct state writes remain visible, without rollback.
-- Live editor source controls/status/statement stepping; staged Restart rebinds
-  lines against saved sources and logs stale/unbound lines. Saved-screen UI
-  input/start/event dispatch stays atomic. Breakpoints are session-only and may
-  need reinstalling after scene transitions/logical loads. No step-over/out or
-  caller-frame scope selection is added.
-- Unfinished logical saves reject. Stop abandons pending commands and runs bounded
-  cleanup with probes disabled. Final review caught/repaired resumed attachment
-  frame_count reset; failing before control retained.
-- Rebuilt matching editor/CLI/player/prepared browser runtime. Runtime ABI stays
-  v6; previous browser bundle is target/a04-source-prior-web-runtime. No dependency.
-- Prior A04 features: active lexical inspection/scoped and isolated expressions,
-  shared function bodies/real imported frames, budgets, Restart, bounded graphs,
-  script/graph projectile game and source/export parity. PLAN_PROGRESS.md and
-  evidence/A04_SOURCE_CONTINUATION.md contain details.
+- ADR-0105 fixes offscreen sprite queue starvation. Shared scene collection culls
+  actual pivoted/rotated/scaled sprite and particle quads and collected tile quads
+  before sorting/submission. Negative scale/edge contact are supported. Invalid
+  views reject before traversal; invalid/degenerate geometry is excluded. f64
+  bounds arithmetic avoids finite f32 overflow; retained painter order unchanged.
+- Keep GPU capacity 16384. All sprite submission APIs share attempted/queued/
+  dropped/missing-texture counters. Invalid accepted texture IDs retain white
+  fallback but become diagnosable. Reset counters on begin_frame/library reset;
+  flush retains diagnostics. No new dependency, pass or capacity increase.
+- Visible compact world-queue warnings in editor status bar, native HUD and browser
+  overlay. Editor counts include background/grid. This does not complete warnings
+  for every independent UI/overlay queue or add a texture allocation cap.
+- Source-only bounded stress generator; native/browser pixel observers support an
+  explicit orange-warning mode alongside existing green scenarios. CI includes
+  generated offscreen and overflow projects with narrow evidence uploads.
+- Matching editor/CLI/player/prepared browser tools rebuilt. Contract remains v6;
+  prior bundle target/a05-prior-web-runtime. See docs/SPRITE_CAPACITY.md,
+  docs/PLAN_PROGRESS.md and evidence/A05_CULLING_AND_CAPACITY.md.
 
 ## Executed validation
 
-- Locked full Rust workspace: 870 PASS. just check PASS. Default/opt-out WASM strict
-  Clippy PASS. Python helper suite 49 PASS; py_compile/whitespace PASS.
-- Seven focused source tests PASS, including final frame-count guard: imported
-  return/caller continuation, operand-stack reuse, callback/signal/event ordering,
-  frozen input/time/frame, one physics step, no budget refill, incomplete saves,
-  abandoned commands and cleanup. Existing entity/shared-budget tests also pass.
-- Script and graph games each PASS relocated native and Chromium exports: 3932
-  green pixels, source copy hidden, native PATH without developer tools. Receipts
-  under target/a04-source-{native,browser}-projectile_range{,_graph}/.
-- Raw target/a04-source-{workspace-final,quality-final,wasm-final,wasm-optout-final,
-  final-focused,frame-before,python,precommit,tools-final,web-final}.log.
+- Full locked Rust workspace: 874 PASS. just check PASS. Default/opt-out WASM strict
+  Clippy PASS. Python helper suite 49 PASS; py_compile/Node syntax/whitespace PASS.
+- Strict real-GPU queue test PASS on Mesa llvmpipe/Vulkan (not skipped): actual
+  Renderer, all push variants, 16384 queued/3 dropped/1 fallback and reset behavior.
+- Runtime culling/order tests PASS with 16448 offscreen sprites and transformed
+  bounds, including invalid-view rejection before world traversal.
+- Generated projects have 16449 entities. Offscreen case: actual relocated native
+  and Chromium each render 4096 green pixels from the final sprite. Visible case:
+  each shows 65 dropped and 1260 orange warning pixels. Authoring copies hidden;
+  native PATH has no developer tools. Screenshots inspected.
+- Actual editor status bar PASS: 85 dropped including grid/background; manifest
+  bytes unchanged. Read-only inspection, not full dense authoring/normal exit.
+- One overlapping browser/editor stress capture timed out; isolated unchanged
+  browser replay passes. First editor OCR clipped dropped; prefix-tolerant replay
+  passes. Keep failures; do not use them as a reason to retry A03/A04 gates.
+- Raw target/a05-{capacity-final,culling-final,workspace,quality,wasm,wasm-optout,
+  python,precommit,tools-final,web-final}.log. Final receipts/screenshots:
+  a05-offscreen-{native,browser}-final/, a05-overflow-native-final/,
+  a05-overflow-browser-isolated/, a05-overflow-editor-replay/.
 
-## Blocked / skipped gates — do not loop on these
+## Deferred / scope limits
 
-- Source widget replay overall INCOMPLETE after three attempts. First two had OCR
-  selection failures. Third observed real imported breakpoint, Restart rebinding,
-  scoped value 4, caller statement/result 8 and completed pending tick; screenshots
-  inspected. It failed manifest comparison because setup Save normalized TOML
-  after the baseline capture. Baseline placement is corrected for future use but
-  no fourth replay was performed. Do not claim overall widget/manifest PASS.
-  Evidence: target/a04-source-widgets{,-replay,-final}/ and sibling logs; final
-  partial-result.json records scope. Continue to A05 under the user's skip policy.
-- Exact saved-physics continuation remains blocked from the prior checkpoint:
-  tick 46 x=140.00006 versus 138.33339. Raw
-  target/a04-range-exact-physics-continuation-blocked.log. Restored final victory
-  outcomes pass with narrower scope; no general physics-save fix is claimed.
-- Saved-screen UI source suspension and full combined A04 production acceptance
-  remain open/deferred. External cross-platform/device certification is outside
-  the request. A04 is not accepted/complete.
+- A04 source widget gate incomplete after three attempts (setup-baseline assertion);
+  saved-screen UI source dispatch atomic. Actual source/statement core and Rust
+  continuation tests pass. Do not repeat the widget gate by default.
+- Exact saved-physics continuation remains blocked (prior tick 46 pose divergence).
+  Restored final outcomes pass with narrower scope; no general physics-save fix.
+- A03 nested/variant identities, arbitrary overrides, multi-file transactions and
+  combined production acceptance deferred. A02 every-inspector-property combined
+  widget acceptance remains open. External device certification is outside scope.
 
 ## Next
 
-- Start A05: sprite rendering, cameras and large-scene behavior. Inspect its plan
-  and choose substantial agent-executable fixes/checks (sorting/culling/capacity
-  diagnostics/camera mapping). A03 dependencies remain deferred; choose independent
-  software work and record any genuinely blocked dependency. Apply the same maximum
-  three focused attempts per blocked step, retaining incomplete acceptance.
-- A03: nested/variant identities, arbitrary overrides, multi-file crash transactions
-  and combined acceptance deferred. A02 every-inspector-property combined widget
-  acceptance remains open. Preserve these statuses; no release/3D approval implied.
+- Continue A05 camera/rendering work: camera dead zones/shake/transitions/parallax,
+  split viewport input mapping, remaining sorting/mask/outline/blend/material and
+  texture-capacity/large-scene acceptance. Inspect actual code before selecting
+  substantial feasible fixes; keep A03-dependent work deferred where necessary.
+- Culling is conservative quad AABB, not occlusion culling or a spatial index.
+  It avoids offscreen queue starvation but still visits ECS entities. Extremely
+  dense visible scenes still drop beyond the explicit bounded queue and report it.
+  No reference-hardware performance or release acceptance is implied.

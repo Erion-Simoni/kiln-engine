@@ -24,6 +24,9 @@ pub fn collect_scene_draws_filtered(
     resolve: impl Fn(&str) -> Option<u32>,
     include: impl Fn(Option<&str>) -> bool,
 ) -> Vec<(TextureId, SpriteInstance)> {
+    if !view.iter().all(|value| value.is_finite()) || view[0] >= view[2] || view[1] >= view[3] {
+        return Vec::new();
+    }
     let mut draws = Vec::new();
     for (entity, source, pose, sprite) in world
         .world_ref()
@@ -42,6 +45,9 @@ pub fn collect_scene_draws_filtered(
             .map(|id| id.0.clone())
             .unwrap_or_else(|| format!("{entity:?}"));
         let mut instance = sprite.draw_instance(pose.0);
+        if !instance.intersects_view(view) {
+            continue;
+        }
         if let Some(name) = &sprite.material {
             if let Some(id) = resolve(name) {
                 instance.material_id = id;
@@ -69,7 +75,9 @@ pub fn collect_scene_draws_filtered(
             .unwrap_or_else(|| format!("{entity:?}"));
         for (index, (layer, texture, instance)) in map.collect_layered(view).into_iter().enumerate()
         {
-            draws.push((layer, order, id.clone(), index, texture, instance));
+            if instance.intersects_view(view) {
+                draws.push((layer, order, id.clone(), index, texture, instance));
+            }
         }
     }
     for (entity, source, effect) in world
@@ -89,20 +97,24 @@ pub fn collect_scene_draws_filtered(
             .map(|id| id.0.clone())
             .unwrap_or_else(|| format!("{entity:?}"));
         for (index, particle) in effect.system().particles().iter().enumerate() {
+            let instance = SpriteInstance {
+                position: particle.position,
+                size: [particle.size; 2],
+                color: particle.color,
+                uv_rect: FULL_UV,
+                material_id: 0,
+                rotation: 0.0,
+            };
+            if !instance.intersects_view(view) {
+                continue;
+            }
             draws.push((
                 effect.layer,
                 order,
                 id.clone(),
                 index,
                 TextureId::WHITE,
-                SpriteInstance {
-                    position: particle.position,
-                    size: [particle.size; 2],
-                    color: particle.color,
-                    uv_rect: FULL_UV,
-                    material_id: 0,
-                    rotation: 0.0,
-                },
+                instance,
             ));
         }
     }

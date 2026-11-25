@@ -16,6 +16,28 @@ use crate::texture::{create_rgba8_texture_with_options, TextureId, FULL_UV};
 /// Maximum sprites per frame (prevents unbounded allocations).
 pub const MAX_SPRITES: usize = 16_384;
 
+/// Bounded queue diagnostics for the current frame, including rejected submissions.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SpriteFrameStats {
+    pub attempted: usize,
+    pub queued: usize,
+    pub dropped: usize,
+    pub missing_textures: usize,
+}
+impl SpriteFrameStats {
+    /// A visible warning when sprites are omitted or texture IDs fall back to white.
+    pub fn warning(&self) -> Option<String> {
+        if self.dropped == 0 && self.missing_textures == 0 {
+            None
+        } else {
+            Some(format!(
+                "SPRITES: {} dropped; {} missing",
+                self.dropped, self.missing_textures
+            ))
+        }
+    }
+}
+
 /// Per-sprite GPU data (matches `InstanceInput` in `sprite.wgsl`).
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
@@ -48,6 +70,36 @@ impl SpriteInstance {
             material_id: 0,
             rotation: 0.0,
         }
+    }
+
+    /// Conservative intersection of the transformed quad with [left,bottom,right,top].
+    /// Edge contact is retained; invalid/degenerate geometry is not submitted.
+    pub fn intersects_view(&self, view: [f32; 4]) -> bool {
+        if !self
+            .position
+            .iter()
+            .chain(self.size.iter())
+            .chain(view.iter())
+            .all(|v| v.is_finite())
+            || !self.rotation.is_finite()
+            || self.size.contains(&0.0)
+            || view[0] >= view[2]
+            || view[1] >= view[3]
+        {
+            return false;
+        }
+        let (sin, cos) = (self.rotation as f64).sin_cos();
+        let ex = (cos.abs() * (self.size[0] as f64).abs()
+            + sin.abs() * (self.size[1] as f64).abs())
+            * 0.5;
+        let ey = (sin.abs() * (self.size[0] as f64).abs()
+            + cos.abs() * (self.size[1] as f64).abs())
+            * 0.5;
+        let [x, y] = self.position.map(f64::from);
+        x + ex >= view[0] as f64
+            && x - ex <= view[2] as f64
+            && y + ey >= view[1] as f64
+            && y - ey <= view[3] as f64
     }
 
     /// Apply an entity transform to this sprite's local size and rotation.
@@ -121,6 +173,7 @@ pub struct SpriteRenderer {
     /// texture/material runs batch; material changes never reorder sprites.
     pending: Vec<(TextureId, u32, f32, SpriteInstance)>,
     last_draw_calls: u32,
+    frame_stats: SpriteFrameStats,
 }
 
 const QUAD_VERTS: &[QuadVertex] = &[
@@ -300,6 +353,7 @@ impl SpriteRenderer {
             instance_buffer,
             pending: Vec::with_capacity(MAX_SPRITES),
             last_draw_calls: 0,
+            frame_stats: Default::default(),
         };
 
         let white = this.create_texture_rgba(device, queue, "white", 1, 1, &[255, 255, 255, 255]);
@@ -389,6 +443,7 @@ impl SpriteRenderer {
     /// texture IDs are invalidated; call only when replacing the owning resource library.
     pub fn clear_asset_textures(&mut self) {
         self.pending.clear();
+        self.frame_stats = Default::default();
         self.material_key.clear();
         self.material_names.clear();
         self.material_pipelines.clear();
@@ -405,6 +460,7 @@ impl SpriteRenderer {
     /// Clear pending sprites. Call at the start of each frame.
     pub fn begin_frame(&mut self) {
         self.pending.clear();
+        self.frame_stats = Default::default();
         self.last_draw_calls = 0;
     }
 
@@ -415,15 +471,7 @@ impl SpriteRenderer {
 
     /// Queue a sprite sampled from `texture` on the default layer (0.0).
     pub fn push_textured(&mut self, texture: TextureId, instance: SpriteInstance) {
-        if self.pending.len() >= MAX_SPRITES {
-            return;
-        }
-        let id = if (texture.0 as usize) < self.textures.len() {
-            texture
-        } else {
-            TextureId::WHITE
-        };
-        self.pending.push((id, instance.material_id, 0.0, instance));
+        self.push_textured_with_material(texture, 0.0, instance.material_id, instance);
     }
 
     /// Queue a sprite sampled from `texture` on a specific `layer`.
@@ -434,16 +482,7 @@ impl SpriteRenderer {
         layer: f32,
         instance: SpriteInstance,
     ) {
-        if self.pending.len() >= MAX_SPRITES {
-            return;
-        }
-        let id = if (texture.0 as usize) < self.textures.len() {
-            texture
-        } else {
-            TextureId::WHITE
-        };
-        self.pending
-            .push((id, instance.material_id, layer, instance));
+        self.push_textured_with_material(texture, layer, instance.material_id, instance);
     }
 
     /// Queue a sprite sampled from `texture` on a specific `layer` with an explicit material ID.
@@ -454,15 +493,24 @@ impl SpriteRenderer {
         material_id: u32,
         instance: SpriteInstance,
     ) {
+        self.frame_stats.attempted = self.frame_stats.attempted.saturating_add(1);
         if self.pending.len() >= MAX_SPRITES {
+            self.frame_stats.dropped = self.frame_stats.dropped.saturating_add(1);
             return;
         }
         let id = if (texture.0 as usize) < self.textures.len() {
             texture
         } else {
+            self.frame_stats.missing_textures = self.frame_stats.missing_textures.saturating_add(1);
             TextureId::WHITE
         };
         self.pending.push((id, material_id, layer, instance));
+        self.frame_stats.queued = self.pending.len();
+    }
+
+    /// Queue diagnostics reset by begin_frame; flush does not hide rejected draws.
+    pub fn frame_stats(&self) -> SpriteFrameStats {
+        self.frame_stats
     }
 
     /// Current validated ID for an authored material name.
@@ -871,6 +919,84 @@ mod tests {
             bounds.push([min_x, min_y, max_x + 1, max_y + 1]);
         }
         Some(bounds)
+    }
+
+    #[test]
+    fn actual_gpu_queue_reports_all_submission_paths_and_resets() {
+        let gpu = wgpu::Instance::default();
+        let adapter =
+            pollster::block_on(gpu.request_adapter(&wgpu::RequestAdapterOptions::default()));
+        let Some(adapter) = adapter else {
+            assert!(
+                std::env::var_os("KILN_REQUIRE_GPU_TESTS").is_none(),
+                "GPU adapter required"
+            );
+            return;
+        };
+        eprintln!("capacity adapter: {:?}", adapter.get_info());
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
+                .unwrap();
+        let mut renderer =
+            SpriteRenderer::new(&device, &queue, wgpu::TextureFormat::Rgba8UnormSrgb);
+        renderer.upload_quad(&queue);
+        let sprite = SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]);
+        renderer.begin_frame();
+        renderer.push_textured(TextureId(u32::MAX), sprite);
+        for n in 1..MAX_SPRITES {
+            match n % 3 {
+                0 => renderer.push(sprite),
+                1 => renderer.push_textured_with_layer(TextureId::WHITE, 1.0, sprite),
+                _ => renderer.push_textured_with_material(TextureId::WHITE, 1.0, 0, sprite),
+            }
+        }
+        renderer.push(sprite);
+        renderer.push_textured_with_layer(TextureId::WHITE, 0.0, sprite);
+        renderer.push_textured_with_material(TextureId::WHITE, 0.0, 0, sprite);
+        assert_eq!(
+            renderer.frame_stats(),
+            SpriteFrameStats {
+                attempted: MAX_SPRITES + 3,
+                queued: MAX_SPRITES,
+                dropped: 3,
+                missing_textures: 1
+            }
+        );
+        assert!(renderer
+            .frame_stats()
+            .warning()
+            .unwrap()
+            .contains("3 dropped"));
+        renderer.begin_frame();
+        assert_eq!(renderer.frame_stats(), SpriteFrameStats::default());
+        assert!(renderer.frame_stats().warning().is_none());
+        renderer.push(sprite);
+        assert_eq!(renderer.frame_stats().queued, 1);
+        renderer.clear_asset_textures();
+        assert_eq!(renderer.frame_stats(), SpriteFrameStats::default());
+    }
+
+    #[test]
+    fn conservative_quad_culling_handles_rotation_edges_and_invalid_geometry() {
+        let quad = SpriteInstance::colored([-10.0, 50.0], [20.0, 4.0], [1.0; 4]);
+        assert!(quad.intersects_view([0.0, 0.0, 100.0, 100.0]));
+        assert!(!quad.intersects_view([0.1, 0.0, 100.0, 100.0]));
+        let rotated = SpriteInstance::colored([105.0, 50.0], [-40.0, 12.0], [1.0; 4])
+            .with_transform(std::f32::consts::FRAC_PI_2, [1.0, 1.0]);
+        assert!(rotated.intersects_view([0.0, 0.0, 100.0, 100.0]));
+        assert!(!quad.intersects_view([0.0, 0.0, f32::NAN, 100.0]));
+        assert!(!SpriteInstance {
+            rotation: f32::INFINITY,
+            ..quad
+        }
+        .intersects_view([0.0, 0.0, 100.0, 100.0]));
+        assert!(!SpriteInstance {
+            size: [0.0, 1.0],
+            ..quad
+        }
+        .intersects_view([0.0, 0.0, 100.0, 100.0]));
+        let huge = SpriteInstance::colored([0.0; 2], [f32::MAX; 2], [1.0; 4]);
+        assert!(huge.intersects_view([0.0, 0.0, 100.0, 100.0]));
     }
 
     #[test]

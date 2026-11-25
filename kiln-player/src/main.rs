@@ -1028,7 +1028,19 @@ impl PlayerApp {
 
         // The HUD is drawn in screen space (top-left origin) on top of the
         // scene, so it uses its own renderer and camera.
-        let hud_text = self.hud_text();
+        let warning = gpu.sprite_renderer.frame_stats().warning();
+        let mut hud_text = self.hud_text();
+        if let Some(warning) = warning {
+            hud_text
+                .get_or_insert_with(Vec::new)
+                .extend(TextRenderer::new().render(
+                    &warning,
+                    8.0,
+                    64.0,
+                    12.0,
+                    [1.0, 0.25, 0.1, 1.0],
+                ));
+        }
         let gpu = self.gpu.as_mut().unwrap();
         let mut encoder =
             gpu.renderer

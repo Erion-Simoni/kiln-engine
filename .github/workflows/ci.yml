@@ -281,6 +281,14 @@ jobs:
           for variant in projectile_range projectile_range_graph; do
             KILN_ATLAS_PROJECT="samples/$variant" KILN_PIXEL_SCENARIO="$variant" KILN_ATLAS_PLAYER_EVIDENCE="target/a04-range-native-$variant" python3 tests/native/atlas_player_smoke.py
           done
+      - name: Verify offscreen culling and visible native capacity warnings
+        run: |
+          python3 tools/make_sprite_stress.py target/a05-native-offscreen-project
+          python3 tools/make_sprite_stress.py target/a05-native-overflow-project --visible
+          for kind in offscreen overflow; do
+            if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
+            KILN_ATLAS_PROJECT="target/a05-native-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" KILN_ATLAS_PLAYER_EVIDENCE="target/a05-$kind-native" python3 tests/native/atlas_player_smoke.py
+          done
       - name: Verify external art refresh and structured gameplay authoring
         run: python3 tests/native/asset_script_workflow_smoke.py
       - name: Pack the saved UI game
@@ -408,6 +416,9 @@ jobs:
             target/a04-range-native-*/result.json
             target/a04-range-native-*/*.log
             target/a04-range-native-*/*.png
+            target/a05-*-native/result.json
+            target/a05-*-native/*.log
+            target/a05-*-native/*.png
             target/a04-functions-native/result.json
             target/a04-functions-native/*.log
             target/a04-functions-native/*.png
@@ -484,6 +495,14 @@ jobs:
           for variant in projectile_range projectile_range_graph; do
             KILN_ATLAS_PROJECT="samples/$variant" KILN_PIXEL_SCENARIO="$variant" WEB_ATLAS_EVIDENCE="target/a04-range-browser-$variant" node tests/web/atlas.cjs target/debug/web-runtime
           done
+      - name: Verify offscreen culling and visible browser capacity warnings
+        run: |
+          python3 tools/make_sprite_stress.py target/a05-browser-offscreen-project
+          python3 tools/make_sprite_stress.py target/a05-browser-overflow-project --visible
+          for kind in offscreen overflow; do
+            if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
+            KILN_ATLAS_PROJECT="target/a05-browser-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" WEB_ATLAS_EVIDENCE="target/a05-$kind-browser" node tests/web/atlas.cjs target/debug/web-runtime
+          done
       - name: Verify editor-authored counted loops and dictionaries in the browser
         run: python3 tests/native/asset_script_workflow_smoke.py --web-runtime target/debug/web-runtime
       - name: Verify editor-authored graph gameplay and browser save restoration
@@ -541,6 +560,10 @@ jobs:
             target/a04-range-browser-*/*.log
             target/a04-range-browser-*/*.png
             target/a04-range-browser-*/failure.txt
+            target/a05-*-browser/result.json
+            target/a05-*-browser/*.log
+            target/a05-*-browser/*.png
+            target/a05-*-browser/failure.txt
             target/a04-functions-browser/result.json
             target/a04-functions-browser/*.log
             target/a04-functions-browser/*.png
