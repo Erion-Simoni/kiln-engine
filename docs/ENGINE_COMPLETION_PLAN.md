@@ -576,6 +576,16 @@ and source-only stress export checks cover offscreen starvation and overflow;
 remaining camera/split-view/production acceptance stays open.
 [Evidence](evidence/A05_CULLING_AND_CAPACITY.md).
 
+**Camera checkpoint 2026-11-25:** authored world-unit dead zones now hold the
+camera inside the follow box and move the goal minimally outside it. Effective
+zone size follows zoomed viewport extent; existing smoothing/bounds/pixel snapping
+still apply. Camera updates validate before committing internal state, and
+projection/screen mapping avoids non-finite results from intermediate overflow.
+Native/browser pixel-position checks pass inside/outside the zone. Runtime tools
+advance to v7 to reject older bundles that would ignore the new setting. Shake,
+transitions/parallax/split views and full A05 acceptance remain open.
+[Evidence](evidence/A05_CAMERA_DEAD_ZONES.md).
+
 ### A06 — Complete tilemap and level authoring
 
 **Status:** PARTIAL. **Depends on:** A03, A05.

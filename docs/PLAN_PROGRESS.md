@@ -9,7 +9,7 @@ local feature checks into milestone acceptance. A01 accepted baseline is 6de428b
 | A02 authoring | Scene/hierarchy composition, reference guards, copy/paste/duplicate/history, property-preserving projection, project persistence/Save As rescue, whole-project/two-scene crash recovery and component coverage | Every-inspector-property combined widget acceptance and cross-platform GUI remain open. A02 PARTIAL. |
 | A03 assets/prefabs | Stable loaded IDs/presets, dependency-aware asset/source moves, source-import rewriting, art refresh, saved deterministic atlases/static clips, staging-only native/browser rebuilds, interrupted atlas recovery, prefab color/texture/geometry/material/clip overrides, reference-safe joint propagation | Nested/variant prefab identity/runtime contract, arbitrary component overrides, general multi-file crash transactions and combined prefab/multi-scene/atlas/export visual acceptance remain open. Deferred by user 2026-11-21. |
 | A04 scripting/graphs/debugging | Shared host registry; functions/modules, loops/dictionaries/enums, explicit tasks/timers; source tools; editable connected gameplay graph lowering through the same frontend; staged saved-source restart; actual VM named allocated-local inspection and read-only nested data and bounded read-only expression watches; aggregate tick budgets across scene/entity/event/UI work; shared callable bodies and actual imported-function frames; bounded shared-dependency graph generation with guarded v1 migration; text/graph projectile range and same-tick despawn lifecycle correction | Scene/attachment source breakpoints and resumable statement stepping are implemented; saved-screen UI callbacks remain atomic. Current-frame lexical inspection is implemented. Allocated and strict lexical read-only expression watches are implemented. Equivalent enemy/projectile/trigger game is implemented; full export/debug production acceptance and exact physics-save continuation remain open. A04 PARTIAL; remaining gates deferred under the bounded-attempt policy. |
-| A05 rendering/cameras | Shared transformed-quad culling before sprite submission; per-frame queue/drop/missing-texture diagnostics; visible editor/player/browser warnings; real GPU queue and dense export checks | Camera dead zones/shake/transitions/parallax, split view/input, remaining sorting/mask/outline/blend/material/capacity acceptance remain open. A05 PARTIAL and active; A03/A04 gates remain deferred. |
+| A05 rendering/cameras | Shared transformed-quad culling before sprite submission; per-frame queue/drop/missing-texture diagnostics; visible editor/player/browser warnings; real GPU queue and dense export checks; authored dead zones, recoverable finite camera updates and coordinate conversions | Camera shake/transitions/parallax, split view/input, remaining sorting/mask/outline/blend/material/capacity acceptance remain open. A05 PARTIAL and active; A03/A04 gates remain deferred. |
 
 Recent checkpoint history:
 
@@ -81,3 +81,9 @@ slots; conservative actual-quad bounds include pivot, scale and rotation. Invali
 views reject before world traversal. Renderer counters and world-capacity/fallback
 warnings are exposed in all three hosts. Stress fixtures are generated, not checked
 in as large TOMLs. See [A05 evidence](evidence/A05_CULLING_AND_CAPACITY.md).
+
+2026-11-25 ADR-0106 checkpoint: authored full-width/height world dead zones,
+minimal follow outside the box, validation before camera-state commit, finite
+projection/mapping arithmetic and v7 tool compatibility. Native/browser exact
+inside/outside pixel bounds plus default-game replays pass. See
+[camera evidence](evidence/A05_CAMERA_DEAD_ZONES.md).

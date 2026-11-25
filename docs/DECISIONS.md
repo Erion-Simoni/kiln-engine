@@ -2429,3 +2429,24 @@ begin_frame and route all submission variants through one accounting path. Unkno
 textures retain the white fallback but become diagnosable. No new texture allocation
 cap, dependency, render pass or resource-budget increase. Capacity overflow remains
 reported rather than claimed fully rendered. A03/A04 acceptance stays deferred.
+
+### ADR-0106 — Authored camera dead zones and atomic finite updates (2026-11-25)
+
+Status: accepted. Add per-scene dead_zone=[width,height] in world units, default
+zero for existing centered follow. After initial centering, move the camera goal
+only when the target plus follow offset leaves the centered zone. Cap the effective
+zone to the zoomed viewport extent, then apply existing smoothing, bounds and pixel
+snapping. Expose both dimensions in the existing camera inspector. No dependency.
+
+Compute candidate camera state locally using f64 intermediates; validate resulting
+view/projection before committing position/initialization. Invalid targets or
+unrepresentable coordinates cannot poison later valid updates. Screen/world mapping
+uses finite f64 intermediates and returns None for unrepresentable outputs, retaining
+existing outside-viewport extrapolation semantics. Orthographic translation avoids
+intermediate f32 sum overflow.
+
+Advance runtime compatibility to kiln-authoring-v7: older runtimes could silently
+ignore the new persisted camera field. Rebuild matching editor/CLI/player/browser
+runtime. This is a project behavior addition, not a VM-memory/save-slot-layout
+change. Shake/transitions/parallax/split views remain separate A05 work. Preserve
+the user's bounded-attempt policy and A03/A04 deferrals.

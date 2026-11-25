@@ -10,6 +10,25 @@ pub struct CameraController {
     initialized: bool,
 }
 
+fn coordinate(value: f64) -> Result<f32, String> {
+    if value.is_finite() && value.abs() <= f32::MAX as f64 {
+        Ok(value as f32)
+    } else {
+        Err("Camera position overflow".into())
+    }
+}
+fn clamp_position(position: &mut [f64; 2], extent: [f64; 2], bounds: Option<[f32; 4]>) {
+    if let Some(bounds) = bounds.map(|b| b.map(f64::from)) {
+        for axis in 0..2 {
+            position[axis] = if extent[axis] > bounds[axis + 2] - bounds[axis] {
+                (bounds[axis] + bounds[axis + 2] - extent[axis]) / 2.0
+            } else {
+                position[axis].clamp(bounds[axis], bounds[axis + 2] - extent[axis])
+            };
+        }
+    }
+}
+
 impl CameraController {
     /// Update a camera in world units using frame-rate independent smoothing.
     pub fn update(
@@ -33,7 +52,10 @@ impl CameraController {
         } else {
             settings.zoom
         };
-        let extent = [size[0] / camera.zoom, size[1] / camera.zoom];
+        let extent = [
+            size[0] as f64 / camera.zoom as f64,
+            size[1] as f64 / camera.zoom as f64,
+        ];
         if !extent.iter().all(|value| value.is_finite()) {
             return Err("Camera extent overflow".into());
         }
@@ -45,54 +67,60 @@ impl CameraController {
                 .find(|(source, _)| &source.0 == id)
                 .map(|(_, pose)| pose.position)
         });
-        let desired = target
-            .map(|target| {
+        if target.is_some_and(|point| !point.is_finite()) {
+            return Err("Camera target position must be finite".into());
+        }
+        let mut desired = target
+            .map(|point| {
                 [
-                    target.x - extent[0] / 2.0 + settings.position[0],
-                    target.y - extent[1] / 2.0 + settings.position[1],
+                    point.x as f64 - extent[0] / 2.0 + settings.position[0] as f64,
+                    point.y as f64 - extent[1] / 2.0 + settings.position[1] as f64,
                 ]
             })
             .unwrap_or(if settings.target.is_some() && self.initialized {
-                self.position
+                self.position.map(f64::from)
             } else {
-                settings.position
+                settings.position.map(f64::from)
             });
+        if self.initialized && target.is_some() {
+            for (axis, goal) in desired.iter_mut().enumerate() {
+                let half = (settings.dead_zone[axis] as f64).min(extent[axis]) * 0.5;
+                if half > 0.0 {
+                    let origin = self.position[axis] as f64;
+                    let delta = *goal - origin;
+                    *goal = origin + delta.signum() * (delta.abs() - half).max(0.0);
+                }
+            }
+        }
         let alpha = if !self.initialized || settings.smoothing == 0.0 {
             1.0
         } else {
-            1.0 - (-settings.smoothing * dt).exp()
+            1.0 - (-(settings.smoothing as f64) * dt as f64).exp()
         };
-        for (position, desired) in self.position.iter_mut().zip(desired) {
+        let mut candidate = self.position.map(f64::from);
+        for (position, desired) in candidate.iter_mut().zip(desired) {
             *position += (desired - *position) * alpha;
         }
-        if let Some(bounds) = settings.bounds {
-            for axis in 0..2 {
-                self.position[axis] = if extent[axis] > bounds[axis + 2] - bounds[axis] {
-                    (bounds[axis] + bounds[axis + 2] - extent[axis]) / 2.0
-                } else {
-                    self.position[axis].clamp(bounds[axis], bounds[axis + 2] - extent[axis])
-                };
-            }
-        }
-        self.initialized = true;
-        camera.position = self.position;
+        clamp_position(&mut candidate, extent, settings.bounds);
+        let base = [coordinate(candidate[0])?, coordinate(candidate[1])?];
         if settings.pixel_perfect {
-            for value in &mut camera.position {
-                *value = (*value * settings.pixels_per_unit).round() / settings.pixels_per_unit;
+            for position in &mut candidate {
+                *position = (*position * settings.pixels_per_unit as f64).round()
+                    / settings.pixels_per_unit as f64;
             }
         }
-        if let Some(bounds) = settings.bounds {
-            for axis in 0..2 {
-                camera.position[axis] = if extent[axis] > bounds[axis + 2] - bounds[axis] {
-                    (bounds[axis] + bounds[axis + 2] - extent[axis]) / 2.0
-                } else {
-                    camera.position[axis].clamp(bounds[axis], bounds[axis + 2] - extent[axis])
-                };
-            }
+        clamp_position(&mut candidate, extent, settings.bounds);
+        camera.position = [coordinate(candidate[0])?, coordinate(candidate[1])?];
+        let bounds = camera.view_bounds();
+        if !bounds.iter().all(|value| value.is_finite())
+            || bounds[0] >= bounds[2]
+            || bounds[1] >= bounds[3]
+            || !camera.projection_matrix().is_finite()
+        {
+            return Err("Camera projection is not representable at this position/extent".into());
         }
-        if !camera.position.iter().all(|value| value.is_finite()) {
-            return Err("Camera position overflow".into());
-        }
+        self.position = base;
+        self.initialized = true;
         Ok(camera)
     }
 }
@@ -198,5 +226,165 @@ mod tests {
             .screen_to_world(screen, [30.0, 40.0, 600.0, 400.0])
             .unwrap();
         assert!((back[0] - 13.0).abs() < 0.0001 && (back[1] - 9.0).abs() < 0.0001);
+    }
+}
+
+#[cfg(test)]
+mod dead_zone_tests {
+    use super::*;
+    use kiln_core::Transform;
+    #[test]
+    fn dead_zone_holds_inside_moves_minimally_outside_and_survives_bad_updates() {
+        let mut world = GameWorld::new();
+        let entity = world.world_mut().spawn((
+            SourceId::new("hero"),
+            GlobalTransform(Transform::new(50.0, 40.0)),
+        ));
+        let settings = CameraSettings {
+            target: Some("hero".into()),
+            dead_zone: [20.0, 10.0],
+            ..Default::default()
+        };
+        let mut controller = CameraController::default();
+        assert_eq!(
+            controller
+                .update(&settings, &world, [100.0, 80.0], 0.0)
+                .unwrap()
+                .position,
+            [0.0, 0.0]
+        );
+        let set = |world: &mut GameWorld, x, y| {
+            world
+                .world_mut()
+                .get::<&mut GlobalTransform>(entity)
+                .unwrap()
+                .0
+                .position = kiln_core::Vec2::new(x, y);
+        };
+        set(&mut world, 59.0, 44.0);
+        assert_eq!(
+            controller
+                .update(&settings, &world, [100.0, 80.0], 0.016)
+                .unwrap()
+                .position,
+            [0.0, 0.0]
+        );
+        set(&mut world, 75.0, 20.0);
+        assert_eq!(
+            controller
+                .update(&settings, &world, [100.0, 80.0], 0.016)
+                .unwrap()
+                .position,
+            [15.0, -15.0]
+        );
+        set(&mut world, f32::NAN, 20.0);
+        assert!(controller
+            .update(&settings, &world, [100.0, 80.0], 0.016)
+            .is_err());
+        set(&mut world, 75.0, 20.0);
+        assert_eq!(
+            controller
+                .update(&settings, &world, [100.0, 80.0], 0.0)
+                .unwrap()
+                .position,
+            [15.0, -15.0]
+        );
+        let bad = CameraSettings {
+            target: None,
+            position: [f32::MAX, f32::MAX],
+            ..settings.clone()
+        };
+        assert!(controller.update(&bad, &world, [100.0, 80.0], 0.1).is_err());
+        assert_eq!(
+            controller
+                .update(&settings, &world, [100.0, 80.0], 0.0)
+                .unwrap()
+                .position,
+            [15.0, -15.0]
+        );
+        set(&mut world, 200.3, 200.7);
+        let bounded = CameraSettings {
+            bounds: Some([0.1, 0.1, 120.3, 100.3]),
+            pixel_perfect: true,
+            pixels_per_unit: 2.0,
+            ..settings
+        };
+        let camera = controller
+            .update(&bounded, &world, [100.0, 80.0], 0.016)
+            .unwrap();
+        for axis in 0..2 {
+            assert!((camera.position[axis] - 20.3).abs() < 0.0001);
+        }
+    }
+    #[test]
+    fn camera_extreme_valid_values_remain_finite_and_failed_first_update_can_retry() {
+        let world = GameWorld::new();
+        let mut controller = CameraController::default();
+        let bad = CameraSettings {
+            position: [f32::MAX, f32::MAX],
+            ..Default::default()
+        };
+        assert!(controller.update(&bad, &world, [10.0, 10.0], 0.0).is_err());
+        let large = CameraSettings {
+            position: [2e38, 2e38],
+            ..Default::default()
+        };
+        let camera = controller
+            .update(&large, &world, [1e37, 1e37], 0.0)
+            .unwrap();
+        assert!(camera.projection_matrix().is_finite());
+        assert_eq!(
+            controller
+                .update(&CameraSettings::default(), &world, [100.0, 80.0], 0.0)
+                .unwrap()
+                .position,
+            [0.0, 0.0]
+        );
+    }
+    #[test]
+    fn dead_zone_caps_to_zoomed_extent_and_smoothing_remains_rate_independent() {
+        let mut world = GameWorld::new();
+        let entity = world.world_mut().spawn((
+            SourceId::new("hero"),
+            GlobalTransform(Transform::new(50.0, 40.0)),
+        ));
+        let mut settings = CameraSettings {
+            target: Some("hero".into()),
+            dead_zone: [20.0, 10.0],
+            smoothing: 4.0,
+            ..Default::default()
+        };
+        let mut a = CameraController::default();
+        let mut b = CameraController::default();
+        a.update(&settings, &world, [100.0, 80.0], 0.0).unwrap();
+        b.update(&settings, &world, [100.0, 80.0], 0.0).unwrap();
+        world
+            .world_mut()
+            .get::<&mut GlobalTransform>(entity)
+            .unwrap()
+            .0
+            .position
+            .x = 100.0;
+        for _ in 0..30 {
+            a.update(&settings, &world, [100.0, 80.0], 1.0 / 30.0)
+                .unwrap();
+        }
+        for _ in 0..120 {
+            b.update(&settings, &world, [100.0, 80.0], 1.0 / 120.0)
+                .unwrap();
+        }
+        assert!((a.position[0] - b.position[0]).abs() < 0.0001);
+        settings.smoothing = 0.0;
+        settings.zoom = 2.0;
+        settings.dead_zone = [1000.0; 2];
+        let camera = a.update(&settings, &world, [20.0, 20.0], 0.016).unwrap();
+        assert!(camera.position[0] >= 90.0 && camera.position[0] <= 100.0);
+        let point = camera
+            .world_to_screen([100.0, 40.0], [30.0, 40.0, 400.0, 400.0])
+            .unwrap();
+        let back = camera
+            .screen_to_world(point, [30.0, 40.0, 400.0, 400.0])
+            .unwrap();
+        assert!((back[0] - 100.0).abs() < 0.001 && (back[1] - 40.0).abs() < 0.001);
     }
 }

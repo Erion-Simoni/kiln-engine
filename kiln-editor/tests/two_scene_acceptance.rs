@@ -413,6 +413,7 @@ fn rich_project() -> Project {
                 position: [12.0, -8.0],
                 zoom: 2.0,
                 smoothing: 3.0,
+                dead_zone: [32.0, 16.0],
                 bounds: Some([-100.0, -80.0, 200.0, 160.0]),
                 pixel_perfect: true,
                 pixels_per_unit: 2.0,

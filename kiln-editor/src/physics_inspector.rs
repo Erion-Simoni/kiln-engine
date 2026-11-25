@@ -212,6 +212,16 @@ pub fn camera_ui(
             .speed(0.1)
             .range(0.0..=100.0),
     );
+    ui.horizontal(|ui| {
+        ui.label("Dead zone (world width / height)");
+        for value in &mut camera.dead_zone {
+            ui.add(
+                egui::DragValue::new(value)
+                    .speed(0.5)
+                    .range(0.0..=1_000_000.0),
+            );
+        }
+    });
     ui.checkbox(&mut camera.pixel_perfect, "Pixel-perfect (integer zoom)");
     ui.add(
         egui::DragValue::new(&mut camera.pixels_per_unit)

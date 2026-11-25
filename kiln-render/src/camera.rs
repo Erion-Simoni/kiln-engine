@@ -17,6 +17,14 @@ pub struct Camera {
     pub top_left_origin: bool,
 }
 
+fn finite_point(point: [f64; 2]) -> Option<[f32; 2]> {
+    let result = point.map(|value| value as f32);
+    result
+        .iter()
+        .all(|value| value.is_finite())
+        .then_some(result)
+}
+
 impl Camera {
     /// Center the reference aspect inside a physical [x,y,width,height] area.
     /// Small windows downscale to fit; pixel-perfect mode uses whole-number
@@ -66,13 +74,13 @@ impl Camera {
         {
             return None;
         }
-        let x = (point[0] - viewport[0]) / viewport[2];
-        let y = (point[1] - viewport[1]) / viewport[3];
-        Some([
-            self.position[0] + x * self.viewport_size[0] / self.zoom,
-            self.position[1]
-                + (if self.top_left_origin { y } else { 1.0 - y }) * self.viewport_size[1]
-                    / self.zoom,
+        let x = (point[0] as f64 - viewport[0] as f64) / viewport[2] as f64;
+        let y = (point[1] as f64 - viewport[1] as f64) / viewport[3] as f64;
+        finite_point([
+            self.position[0] as f64 + x * self.viewport_size[0] as f64 / self.zoom as f64,
+            self.position[1] as f64
+                + (if self.top_left_origin { y } else { 1.0 - y }) * self.viewport_size[1] as f64
+                    / self.zoom as f64,
         ])
     }
 
@@ -93,11 +101,14 @@ impl Camera {
         {
             return None;
         }
-        let x = (point[0] - self.position[0]) * self.zoom / self.viewport_size[0];
-        let y = (point[1] - self.position[1]) * self.zoom / self.viewport_size[1];
-        Some([
-            viewport[0] + x * viewport[2],
-            viewport[1] + (if self.top_left_origin { y } else { 1.0 - y }) * viewport[3],
+        let x = (point[0] as f64 - self.position[0] as f64) * self.zoom as f64
+            / self.viewport_size[0] as f64;
+        let y = (point[1] as f64 - self.position[1] as f64) * self.zoom as f64
+            / self.viewport_size[1] as f64;
+        finite_point([
+            viewport[0] as f64 + x * viewport[2] as f64,
+            viewport[1] as f64
+                + (if self.top_left_origin { y } else { 1.0 - y }) * viewport[3] as f64,
         ])
     }
     pub fn new(width: f32, height: f32) -> Self {
@@ -122,10 +133,10 @@ impl Camera {
     }
 
     pub fn projection_matrix(&self) -> Mat4 {
-        let left = self.position[0];
-        let right = self.position[0] + self.viewport_size[0] / self.zoom;
-        let bottom = self.position[1];
-        let top = self.position[1] + self.viewport_size[1] / self.zoom;
+        let left = self.position[0] as f64;
+        let right = left + self.viewport_size[0] as f64 / self.zoom as f64;
+        let bottom = self.position[1] as f64;
+        let top = bottom + self.viewport_size[1] as f64 / self.zoom as f64;
         let (bottom, top) = if self.top_left_origin {
             (top, bottom)
         } else {
@@ -137,20 +148,20 @@ impl Camera {
         let ty = -(top + bottom) / (top - bottom);
 
         Mat4::from_cols_array(&[
-            2.0 / (right - left),
+            (2.0 / (right - left)) as f32,
             0.0,
             0.0,
             0.0,
             0.0,
-            2.0 / (top - bottom),
+            (2.0 / (top - bottom)) as f32,
             0.0,
             0.0,
             0.0,
             0.0,
             -1.0,
             0.0,
-            tx,
-            ty,
+            tx as f32,
+            ty as f32,
             0.0,
             1.0,
         ])
@@ -266,5 +277,40 @@ mod tests {
             cam.zoom(0.01);
         }
         assert!(approx_eq(cam.zoom, 0.1));
+    }
+}
+
+#[cfg(test)]
+mod finite_mapping_tests {
+    use super::*;
+    #[test]
+    fn finite_intermediates_do_not_overflow_and_unrepresentable_outputs_reject() {
+        let camera = Camera::new(100.0, 100.0);
+        let point = camera
+            .screen_to_world([f32::MAX, 0.0], [-f32::MAX, 0.0, f32::MAX, 100.0])
+            .unwrap();
+        assert_eq!(point, [200.0, 100.0]);
+        assert!(camera
+            .world_to_screen([f32::MAX, 0.0], [0.0, 0.0, f32::MAX, 100.0])
+            .is_none());
+        let mut large = Camera::new(1e37, 1e37);
+        large.position = [2e38, 2e38];
+        assert!(large.projection_matrix().is_finite());
+        for top_left in [false, true] {
+            let mut c = Camera::new(320.0, 240.0);
+            c.position = [28.0, 10.0];
+            c.zoom = 2.0;
+            c.top_left_origin = top_left;
+            for viewport in [
+                [0.0, 0.0, 320.0, 240.0],
+                [80.0, 40.0, 640.0, 480.0],
+                [300.0, 20.0, 160.0, 120.0],
+            ] {
+                let point = [100.0, 80.0];
+                let screen = c.world_to_screen(point, viewport).unwrap();
+                let back = c.screen_to_world(screen, viewport).unwrap();
+                assert!((back[0] - point[0]).abs() < 0.0001 && (back[1] - point[1]).abs() < 0.0001);
+            }
+        }
     }
 }

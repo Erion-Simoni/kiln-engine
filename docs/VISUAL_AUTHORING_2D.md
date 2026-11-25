@@ -145,3 +145,6 @@ On a graphical machine, record the build revision, OS/GPU, results and screensho
    reopen; verify images, palette selection, collisions and offsets in Play.
 4. Author an effect with two emitters of different gravity/alpha. Compare preview
    and Play, then pack and launch the saved archive with the native player.
+
+Camera follow, dead zones, bounds and finite screen mapping are documented in
+[CAMERAS_2D.md](CAMERAS_2D.md).

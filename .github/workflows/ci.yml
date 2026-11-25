@@ -289,6 +289,14 @@ jobs:
             if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
             KILN_ATLAS_PROJECT="target/a05-native-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" KILN_ATLAS_PLAYER_EVIDENCE="target/a05-$kind-native" python3 tests/native/atlas_player_smoke.py
           done
+      - name: Verify camera dead-zone positions in native exports
+        run: |
+          cp -r samples/camera_dead_zone target/a05-camera-native-edge-project
+          python3 -c 'from pathlib import Path; p=Path("target/a05-camera-native-edge-project/scripts/main.ks"); p.write_text(p.read_text().replace("180.0","220.0"))'
+          for mode in inside edge; do
+            if [ "$mode" = inside ]; then project=samples/camera_dead_zone; bounds=128,88,192,152; else project=target/a05-camera-native-edge-project; bounds=100,88,164,152; fi
+            KILN_ATLAS_PROJECT="$project" KILN_PIXEL_SCENARIO="camera-$mode" KILN_PIXEL_EXPECT_GREEN_BOUNDS="$bounds" KILN_ATLAS_PLAYER_EVIDENCE="target/a05-camera-$mode-native" python3 tests/native/atlas_player_smoke.py
+          done
       - name: Verify external art refresh and structured gameplay authoring
         run: python3 tests/native/asset_script_workflow_smoke.py
       - name: Pack the saved UI game
@@ -502,6 +510,14 @@ jobs:
           for kind in offscreen overflow; do
             if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
             KILN_ATLAS_PROJECT="target/a05-browser-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" WEB_ATLAS_EVIDENCE="target/a05-$kind-browser" node tests/web/atlas.cjs target/debug/web-runtime
+          done
+      - name: Verify camera dead-zone positions in browser exports
+        run: |
+          cp -r samples/camera_dead_zone target/a05-camera-browser-edge-project
+          python3 -c 'from pathlib import Path; p=Path("target/a05-camera-browser-edge-project/scripts/main.ks"); p.write_text(p.read_text().replace("180.0","220.0"))'
+          for mode in inside edge; do
+            if [ "$mode" = inside ]; then project=samples/camera_dead_zone; bounds=128,88,192,152; else project=target/a05-camera-browser-edge-project; bounds=100,88,164,152; fi
+            KILN_ATLAS_PROJECT="$project" KILN_PIXEL_SCENARIO="camera-$mode" KILN_PIXEL_EXPECT_GREEN_BOUNDS="$bounds" WEB_ATLAS_EVIDENCE="target/a05-camera-$mode-browser" node tests/web/atlas.cjs target/debug/web-runtime
           done
       - name: Verify editor-authored counted loops and dictionaries in the browser
         run: python3 tests/native/asset_script_workflow_smoke.py --web-runtime target/debug/web-runtime
