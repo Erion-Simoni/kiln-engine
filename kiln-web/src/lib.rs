@@ -471,7 +471,8 @@ impl App {
                     ))),
                 }
                 transition = slice.take_scene_request();
-                if let Ok(camera) = self.camera_controller.update(
+                if let Ok(camera) = slice.update_camera(
+                    &mut self.camera_controller,
                     &self
                         .project
                         .cameras

@@ -87,3 +87,9 @@ minimal follow outside the box, validation before camera-state commit, finite
 projection/mapping arithmetic and v7 tool compatibility. Native/browser exact
 inside/outside pixel bounds plus default-game replays pass. See
 [camera evidence](evidence/A05_CAMERA_DEAD_ZONES.md).
+
+2026-11-25 ADR-0107 checkpoint: script-triggered deterministic bounded camera
+shake, cancellation and shared editor/native/browser delivery, without follow
+feedback. Runtime v8 tools rebuilt; v7 export rejected. Native/browser motion and
+exact-rest replays pass for expiry and cancellation. A05 remains PARTIAL; next
+transitions/parallax/split views. See [shake evidence](evidence/A05_CAMERA_SHAKE.md).

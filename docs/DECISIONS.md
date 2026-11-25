@@ -2450,3 +2450,23 @@ ignore the new persisted camera field. Rebuild matching editor/CLI/player/browse
 runtime. This is a project behavior addition, not a VM-memory/save-slot-layout
 change. Shake/transitions/parallax/split views remain separate A05 work. Preserve
 the user's bounded-attempt policy and A03/A04 deferrals.
+
+### ADR-0107 — Bounded deterministic gameplay camera shake (2026-11-25)
+
+Status: accepted. Add camera_shake(x,y,duration,frequency,seed) and
+camera_shake_stop() through the shared host registry. Validated effects are queued
+as ordinary callback commands and become visible only after callback completion;
+scene/attachments share a bounded 32-request pool. Full queues return false.
+Hosts consume effects only after completed ticks using one shared camera update
+adapter. Saved-screen pause holds effect time; source suspension does not consume
+requests or advance the camera.
+
+Use seeded bounded oscillators with quadratic decay, no platform RNG. At most 32
+active shakes; new requests replace the oldest at this active limit. Fresh effects
+sample time zero, pause holds the sample, expiry/cancel restores the unshaken base.
+Follow/dead-zone state never includes shake; offsets apply before pixel snapping
+and final bounds. Clone bounded effect state for candidate validation so failed
+camera updates do not advance its clock. Shake state/requests are transient and
+not persisted in logical saves; scene/controller reset clears them. No new pass or
+dependency. Runtime contract v8 rejects older tools lacking the new host calls.
+A05 transitions/parallax/split views and A03/A04 deferred gates remain separate.

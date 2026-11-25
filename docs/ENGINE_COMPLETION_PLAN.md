@@ -586,6 +586,16 @@ advance to v7 to reject older bundles that would ignore the new setting. Shake,
 transitions/parallax/split views and full A05 acceptance remain open.
 [Evidence](evidence/A05_CAMERA_DEAD_ZONES.md).
 
+**Shake checkpoint 2026-11-25:** ADR-0107 adds seeded, decaying script camera
+shake/cancel through the common editor/native/browser adapter. Committed commands
+share a bounded queue across scripts; failed/suspended callbacks cannot leak
+pending effects. Shake never feeds back into follow history, UI pause holds time,
+and invalid camera updates do not advance the mixer. Actual native/browser exports
+observe motion then exact rest after expiry and cancellation. Runtime contract v8
+rejects older bundles missing the calls. Transitions/parallax/split views and full
+A05 acceptance remain open. [Evidence](evidence/A05_CAMERA_SHAKE.md).
+
+
 ### A06 — Complete tilemap and level authoring
 
 **Status:** PARTIAL. **Depends on:** A03, A05.

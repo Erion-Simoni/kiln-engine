@@ -1,74 +1,70 @@
 # Kiln Session Handoff
 
-Branch fix/a01-ci-baseline. Current checkpoint: A05 authored dead zones and finite
-camera updates/mapping (2026-11-25), following c21915b. A05 active/PARTIAL. A03/A04
-remaining acceptance deferred, not completed; do not retry their gates to delay
-progress. User policy: at most three focused attempts per blocked step/check,
-retain failure evidence, continue the next feasible step. A01 baseline 6de428b;
-A02 remains PARTIAL. Full 3D behind G2D. MIT OR Apache-2.0.
+Branch fix/a01-ci-baseline. Current checkpoint: A05 deterministic camera shake
+(2026-11-25), following 1453c19. A05 active/PARTIAL. A03/A04 remaining acceptance
+is deferred, not completed. User policy: at most three focused attempts per blocked
+step, retain failure evidence and advance to feasible work. A01 baseline 6de428b;
+A02 PARTIAL. Full 3D behind G2D. MIT OR Apache-2.0.
 
 ## Done
 
-- ADR-0106 adds persisted per-scene dead_zone=[width,height] in world units,
-  default zero. Initial/reset centers on target plus follow offset; later goal
-  stays put inside the centered box and moves minimally outside. Effective zone
-  dimensions cap to zoomed viewport extent. Existing response/bounds/pixel snap
-  apply, with bounds taking priority. Inspector exposes both dimensions.
-- Controller computes/validates candidates before committing stored position or
-  initialization. Invalid targets/overflow cannot poison later valid updates.
-  f64 intermediates avoid coordinate/matrix sum overflow; invalid/unrepresentable
-  projections reject. Screen/world mapping returns finite points or None,
-  retaining outside-viewport extrapolation for tools.
-- Runtime compatibility is now kiln-authoring-v7; older bundles could ignore the
-  new persisted field. Matching editor/CLI/player/prepared browser rebuilt. Old
-  v6 bundle retained in target/a05-camera-prior-web-runtime; actual stale export
-  rejection verified. VM-memory/save-slot layout unchanged. No dependency.
-- Source-only camera_dead_zone sample plus native/browser exact pixel-bounds
-  observer mode and CI cases. Red marker becomes green only after 3 ticks to
-  avoid initial-frame false positives. Default observer modes stay compatible.
-- Prior A05 transformed culling, bounded sprite queue stats/warnings and 16449-
-  entity native/browser/editor evidence remain intact. See PLAN_PROGRESS.md,
-  CAMERAS_2D.md and evidence/A05_CAMERA_DEAD_ZONES.md.
+- ADR-0107 implements camera_shake(x,y,seconds,hertz,seed) and camera_shake_stop().
+  Validated commands commit with callbacks, share a bounded 32-request queue across
+  scene/attached scripts and return false when full. Suspended/failed callbacks do
+  not expose uncommitted effects. Active mixer holds 32 seeded decaying effects;
+  overflow replaces oldest. No dependencies added.
+- Shared SliceSession camera adapter delivers effects in editor/native/browser,
+  holds time during UI pause and rejects suspended tick updates. Offsets do not
+  feed back into follow/dead-zone history. Pixel snapping and bounds apply after
+  shake; camera validation failures cannot advance effect clocks.
+- Runtime contract now kiln-authoring-v8. Matching editor/CLI/player and prepared
+  browser rebuilt. Actual export using previous v7 browser bundle rejects. VM/save
+  layout unchanged; transient shake history is deliberately not logically saved.
+- Source-only camera_shake sample, optional motion/beacon pixel observer gates,
+  and native/browser expiry CI cases. See CAMERAS_2D.md and
+  evidence/A05_CAMERA_SHAKE.md for contracts and evidence.
+- Prior A05 work remains: authored dead zones/finite camera mapping (1453c19),
+  transformed culling and bounded sprite queue stats/warnings (c21915b). Prior A04
+  scripting/debugger/source continuation improvements remain intact.
 
 ## Executed validation
 
-- Locked full Rust workspace: 879 PASS. just check PASS. Default/opt-out WASM strict
-  Clippy PASS. Python helper suite 49 PASS; Node syntax/py_compile/whitespace PASS.
-- Old settings default to zero; nonzero zones round-trip and validate. Existing
-  two-scene editor persistence fixture includes nonzero dead zone. Runtime tests
-  cover inside/outside movement, bad/missing target recovery, failed initial
-  update recovery, extreme finite matrices, 30/120 Hz smoothing, zoom/viewport
-  caps, offset/scaled/Y-direction mappings and bounds/pixel snapping.
-- Exact native/browser pixels PASS: target 160→180 keeps origin 0, green bounds
-  [128,88,192,152]; target 160→220 moves origin to 28, bounds [100,88,164,152].
-  Each has 4096 green pixels, relocated export, authoring copy hidden, native PATH
-  without developer tools, no browser page errors. Existing default projectile
-  game also passes both exports (3932 green pixels). Replays ran serially.
-- Stale v6 browser bundle export rejects as incompatible engine build. Matching
-  v7 tools prepared. New inspector fields are compiled/persistence tested; no new
-  OS widget-drag, physical DPI/device or performance acceptance is claimed.
-- Raw target/a05-camera-{focused,final-focused,workspace,quality,wasm,wasm-optout,
-  python,precommit,tools-final,web-final,stale-runtime}.log. Pixel evidence under
-  target/a05-camera-{inside,edge,default}-{native,browser}/.
+- Full locked workspace 885 Rust tests PASS (serial test execution), Python helper
+  suite 49 PASS. just check PASS; strict default/opt-out WASM Clippy PASS; Node syntax,
+  py_compile and whitespace PASS. Initial concurrent workspace run hit an atlas
+  publication lock; final serial run passes. A pause-test namespace was corrected.
+- Actual native/browser expiry replays observe 12/13 distinct green bounds, then
+  [128,88,192,152], 4096 green pixels and 64 blue beacon pixels. Explicit script
+  cancellation observes 14/17 bounds, then the same exact resting pixels. Existing
+  no-shake dead-zone fixture also passes both runtimes. Replays run serially after
+  all builds, with relocated exports and authoring copies hidden; native player
+  PATH excludes developer tools, browser has no page errors.
+- Tests cover shared pending limits, argument rejection, callback failure/debug
+  suspension, cancellation delivery, authored UI pause, deterministic decay,
+  active replacement, follow isolation and recovery after bad camera settings.
+- Raw logs target/a05-shake-*.log; screenshots/receipts under
+  target/a05-shake-{native,browser}, target/a05-shake-cancel-{native,browser},
+  target/a05-shake-default-{native,browser}. Prior v7 runtime retained in
+  target/a05-shake-prior-web-runtime. Generated outputs are not committed.
 
 ## Deferred / limits
 
-- A04 source widget gate incomplete after three attempts (setup-baseline assertion);
-  saved-screen UI source dispatch atomic. Exact saved-physics continuation still
-  blocked from its prior pose divergence. Do not retry these by default.
-- A03 nested/variant identities, arbitrary overrides, multi-file crash transactions
-  and combined production acceptance deferred. A02 every-inspector-property combined
-  widget acceptance open. No release/3D/external certification approval implied.
-- Dead zones track a point, not the target's full bounds. Camera follow history
-  resets with its controller and is not persisted in logical saves. Mapping
-  extrapolates outside a viewport; gameplay callers must choose/clip their view.
+- A04 source widget gate incomplete after three attempts (setup-baseline assertion).
+  Exact saved-physics pose continuation has its prior divergence. Do not retry
+  these by default. A03 nested/variant identities, arbitrary overrides, multi-file
+  crash transactions and combined production acceptance remain deferred. A02 full
+  inspector combined widget acceptance remains open.
+- Shake history resets with controllers, is not serialized in logical saves and
+  can be suppressed by final camera bounds. Identical seeds/time reproduce the
+  oscillator without a cross-platform bit-identical pixel guarantee. No physical
+  DPI/device, release, 3D or external certification acceptance is claimed.
+- Culling still visits ECS entities and uses conservative quads, not a spatial
+  index. Dense visible scenes over 16384 drop with diagnostics; independent
+  overlay/texture allocation limits remain open.
 
 ## Next
 
-- Continue A05 shake/transitions/parallax, multiple views/split input routing and
-  remaining sorting/mask/outline/blend/material/texture-capacity acceptance. Select
-  substantial feasible work by inspecting actual code; keep A03-dependent pieces
-  deferred as needed. Apply the same bounded-attempt skip policy.
-- Culling still visits ECS entities and uses conservative quad bounds, not a spatial
-  index/occlusion system. Dense visible scenes beyond 16384 drop with diagnostics;
-  complete independent overlay-queue/texture allocation limits remain open.
+- Continue A05 transitions/parallax, multiple views/split input routing, remaining
+  sorting/mask/outline/blend/material/texture-capacity acceptance. Inspect actual
+  code for substantial feasible work; keep A03-dependent pieces deferred and use
+  the same bounded-attempt skip policy. Do not begin A06 unasked.

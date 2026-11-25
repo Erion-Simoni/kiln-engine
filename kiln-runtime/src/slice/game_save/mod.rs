@@ -252,6 +252,7 @@ impl SliceHost {
         std::mem::swap(&mut self.storage_events, &mut other.storage_events);
         std::mem::swap(&mut self.spawn_counter, &mut other.spawn_counter);
         std::mem::swap(&mut self.game_data, &mut other.game_data);
+        std::mem::swap(&mut self.camera_effects, &mut other.camera_effects);
         std::mem::swap(&mut self.save_requests, &mut other.save_requests);
         std::mem::swap(&mut self.save_status, &mut other.save_status);
         std::mem::swap(&mut self.save_error, &mut other.save_error);

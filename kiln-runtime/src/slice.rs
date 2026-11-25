@@ -10,6 +10,7 @@
 //! behaves identically in both.
 
 mod authored_ui;
+mod camera_effects;
 mod game_save;
 mod live_debug;
 mod pending_tick;
@@ -116,6 +117,8 @@ pub struct SliceFacts {
 /// A change the script asked for.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SliceCommand {
+    /// Validated transient camera effect, committed with the callback.
+    CameraEffect(crate::camera::CameraEffect),
     /// Move the player by the given delta.
     MovePlayer { dx: f64, dy: f64 },
     /// Add to the score.
@@ -298,6 +301,8 @@ pub struct SliceHost {
     scene_request: Option<String>,
     facts: SliceFacts,
     commands: Vec<SliceCommand>,
+    camera_effects: Vec<crate::camera::CameraEffect>,
+    pending_camera_effects: usize,
     #[cfg(feature = "audio")]
     audio: Option<AudioEngine>,
     #[cfg(feature = "physics")]
@@ -385,6 +390,8 @@ impl SliceHost {
             scene_request: None,
             facts,
             commands: Vec::new(),
+            camera_effects: Vec::new(),
+            pending_camera_effects: 0,
             #[cfg(feature = "audio")]
             audio: None,
             #[cfg(feature = "physics")]
@@ -429,6 +436,7 @@ impl SliceHost {
 
     /// Take the recorded commands, leaving the host empty.
     pub fn take_commands(&mut self) -> Vec<SliceCommand> {
+        self.pending_camera_effects = 0;
         std::mem::take(&mut self.commands)
     }
 
@@ -1367,6 +1375,7 @@ impl SliceHost {
                 .into(),
             )),
             116..=123 => self.call_task(func_id, args),
+            124 | 125 => self.call_camera_effect(func_id, args),
             110 => Ok(Value::Map(Default::default())),
             61 | 62 | 111 | 113 => value_reads::call(func_id, args),
             112 | 114 => {
@@ -2215,6 +2224,7 @@ impl SliceSession {
     /// Apply one command to the world and the slice state.
     fn apply(&mut self, command: SliceCommand, world: &mut GameWorld) {
         match command {
+            SliceCommand::CameraEffect(effect) => self.vm.host_mut().camera_effects.push(effect),
             SliceCommand::MovePlayer { dx, dy } => {
                 if let Some(player) = find_player(world) {
                     let target = crate::tilemap_collision::move_with_collision(

@@ -1558,7 +1558,8 @@ impl EditorApp {
             play.error = None;
             let _ = play.slice.take_ui_commands();
             let _ = kiln_runtime::scene::update_global_transforms(world);
-            match play.camera_controller.update(
+            match play.slice.update_camera(
+                &mut play.camera_controller,
                 &settings,
                 world,
                 size,

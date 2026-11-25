@@ -874,7 +874,8 @@ impl PlayerApp {
                 }
                 transition = slice.take_scene_request();
                 let _ = kiln_runtime::scene::update_global_transforms(world);
-                match controller.update(
+                match slice.update_camera(
+                    controller,
                     &camera_settings,
                     world,
                     camera.viewport_size,

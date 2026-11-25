@@ -4,10 +4,14 @@ use crate::{GameWorld, SourceId};
 use kiln_core::camera::CameraSettings;
 use kiln_render::camera::Camera;
 
+mod shake;
+pub use shake::{CameraEffect, CameraShake, MAX_CAMERA_EFFECTS};
+
 #[derive(Debug, Default)]
 pub struct CameraController {
     position: [f32; 2],
     initialized: bool,
+    shakes: shake::Mixer,
 }
 
 fn coordinate(value: f64) -> Result<f32, String> {
@@ -30,6 +34,17 @@ fn clamp_position(position: &mut [f64; 2], extent: [f64; 2], bounds: Option<[f32
 }
 
 impl CameraController {
+    /// Apply validated transient effects; reset/scene replacement clears all effects.
+    pub fn apply_effect(&mut self, effect: CameraEffect) -> Result<(), String> {
+        match effect {
+            CameraEffect::Shake(request) => self.shakes.add(request),
+            CameraEffect::StopShake => {
+                self.shakes.clear();
+                Ok(())
+            }
+        }
+    }
+
     /// Update a camera in world units using frame-rate independent smoothing.
     pub fn update(
         &mut self,
@@ -103,6 +118,11 @@ impl CameraController {
         }
         clamp_position(&mut candidate, extent, settings.bounds);
         let base = [coordinate(candidate[0])?, coordinate(candidate[1])?];
+        let mut shakes = self.shakes.clone();
+        let offset = shakes.advance(dt as f64);
+        for axis in 0..2 {
+            candidate[axis] += offset[axis];
+        }
         if settings.pixel_perfect {
             for position in &mut candidate {
                 *position = (*position * settings.pixels_per_unit as f64).round()
@@ -120,6 +140,7 @@ impl CameraController {
             return Err("Camera projection is not representable at this position/extent".into());
         }
         self.position = base;
+        self.shakes = shakes;
         self.initialized = true;
         Ok(camera)
     }
@@ -386,5 +407,63 @@ mod dead_zone_tests {
             .screen_to_world(point, [30.0, 40.0, 400.0, 400.0])
             .unwrap();
         assert!((back[0] - 100.0).abs() < 0.001 && (back[1] - 40.0).abs() < 0.001);
+    }
+}
+
+#[cfg(test)]
+mod shake_controller_tests {
+    use super::*;
+    #[test]
+    fn shake_does_not_feed_follow_origin_and_failed_updates_do_not_advance_time() {
+        let mut world = GameWorld::new();
+        world.spawn((
+            SourceId::new("hero"),
+            GlobalTransform(kiln_core::Transform::new(160.0, 120.0)),
+        ));
+        let settings = CameraSettings {
+            target: Some("hero".into()),
+            dead_zone: [64.0, 32.0],
+            ..Default::default()
+        };
+        let mut a = CameraController::default();
+        let mut b = CameraController::default();
+        for c in [&mut a, &mut b] {
+            c.update(&settings, &world, [320.0, 240.0], 0.0).unwrap();
+            c.apply_effect(CameraEffect::Shake(CameraShake {
+                amplitude: [12.0, 8.0],
+                duration: 1.0,
+                frequency: 7.0,
+                seed: 17,
+            }))
+            .unwrap();
+            c.update(&settings, &world, [320.0, 240.0], 0.0).unwrap();
+            assert_eq!(c.position, [0.0, 0.0]);
+        }
+        let invalid = CameraSettings {
+            target: None,
+            position: [f32::MAX; 2],
+            ..settings.clone()
+        };
+        assert!(a.update(&invalid, &world, [320.0, 240.0], 0.5).is_err());
+        let current = a.update(&settings, &world, [320.0, 240.0], 0.1).unwrap();
+        assert_eq!(
+            current.position,
+            b.update(&settings, &world, [320.0, 240.0], 0.1)
+                .unwrap()
+                .position
+        );
+        assert_eq!(
+            current.position,
+            a.update(&settings, &world, [320.0, 240.0], 0.0)
+                .unwrap()
+                .position
+        );
+        assert_eq!(
+            a.update(&settings, &world, [320.0, 240.0], 2.0)
+                .unwrap()
+                .position,
+            [0.0, 0.0]
+        );
+        assert_eq!(a.position, [0.0, 0.0]);
     }
 }

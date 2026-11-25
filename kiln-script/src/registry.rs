@@ -122,4 +122,6 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("save_status", 91, 0),
     ("save_error", 92, 0),
     ("has_save", 93, 1),
+    ("camera_shake", 124, 5),
+    ("camera_shake_stop", 125, 0),
 ];
