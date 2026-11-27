@@ -24,6 +24,28 @@ pub fn collect_scene_draws_filtered(
     resolve: impl Fn(&str) -> Option<u32>,
     include: impl Fn(Option<&str>) -> bool,
 ) -> Vec<(TextureId, SpriteInstance)> {
+    collect_scene_draws_filtered_mode(world, view, resolve, include, true)
+}
+
+/// Authoring geometry stays in world coordinates for selection and gizmos.
+/// Play/gameplay uses the normal collector with camera-relative parallax.
+pub fn collect_authoring_draws_filtered(
+    world: &GameWorld,
+    view: [f32; 4],
+    resolve: impl Fn(&str) -> Option<u32>,
+    include: impl Fn(Option<&str>) -> bool,
+) -> Vec<(TextureId, SpriteInstance)> {
+    collect_scene_draws_filtered_mode(world, view, resolve, include, false)
+}
+
+/// Select gameplay parallax or logical authoring geometry while retaining all filters.
+pub fn collect_scene_draws_filtered_mode(
+    world: &GameWorld,
+    view: [f32; 4],
+    resolve: impl Fn(&str) -> Option<u32>,
+    include: impl Fn(Option<&str>) -> bool,
+    parallax: bool,
+) -> Vec<(TextureId, SpriteInstance)> {
     if !view.iter().all(|value| value.is_finite()) || view[0] >= view[2] || view[1] >= view[3] {
         return Vec::new();
     }
@@ -44,7 +66,14 @@ pub fn collect_scene_draws_filtered(
         let id = source
             .map(|id| id.0.clone())
             .unwrap_or_else(|| format!("{entity:?}"));
-        let mut instance = sprite.draw_instance(pose.0);
+        let mut instance = if parallax {
+            let Some(instance) = sprite.parallax_instance(pose.0, [view[0], view[1]]) else {
+                continue;
+            };
+            instance
+        } else {
+            sprite.draw_instance(pose.0)
+        };
         if !instance.intersects_view(view) {
             continue;
         }

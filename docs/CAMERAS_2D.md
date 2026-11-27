@@ -34,8 +34,8 @@ viewport extrapolation remains available for tools; callers must still choose an
 clip the correct viewport for gameplay input. Offset/scale and Y orientation are
 covered by round-trip tests; split-view routing remains separate work.
 
-Runtime tools now require kiln-authoring-v9. Rebuild matching editor/CLI/player and
-browser bundles; older runtimes lack dead zones, shake or transition calls and are rejected by the new
+Runtime tools now require kiln-authoring-v10. Rebuild matching editor/CLI/player and
+browser bundles; older runtimes lack dead zones, camera effects or sprite parallax and are rejected by the new
 exporter. VM-memory/save-slot layout is unchanged. See samples/camera_dead_zone and
 [evidence](evidence/A05_CAMERA_DEAD_ZONES.md).
 
@@ -77,3 +77,29 @@ Logical saves do not preserve transition history. The shared editor/player/brows
 adapter implements these semantics without extra render passes or dependencies.
 
 See `samples/camera_transition` and [transition evidence](evidence/A05_CAMERA_TRANSITIONS.md).
+
+## Sprite parallax
+
+Open **Inspector → Sprite Pivot / Pixel Scale / Parallax**, or **View → Sprite
+Editor**, to edit per-axis scroll factors and camera-origin anchor. The default
+factor `[1,1]` keeps ordinary world scrolling. `[0,0]` keeps the sprite at a fixed
+camera-relative origin; fractional factors scroll slowly, factors above one scroll
+faster, and negative factors reverse motion. Factors must be finite in -8..8;
+anchors must be finite. For each axis the renderer adds
+`(camera_origin - anchor) * (1 - factor)` to the transformed sprite quad, then culls
+and sorts it. The anchor is the camera origin where the offset is zero.
+
+```toml
+{ type = "SpriteLayout", settings = { parallax = [0.5, 0.25], parallax_origin = [20.0, 8.0] } }
+```
+
+Factors apply to world X/Y independently, after hierarchy/pivot/rotation/scale.
+They do not alter transforms, collisions or descendants. Zoom still scales these
+sprites, and camera shake/transitions affect their camera-relative offset. Use UI
+widgets for HUDs. Authoring view retains logical world coordinates for selection
+and gizmos; Play shows the actual parallax. Edits use existing component undo/redo
+and persist through project restart and logical gameplay saves. Old layouts/saves
+without these fields default to ordinary scrolling. Invalid authored layouts
+reject export before publication. Tile/particle parallax and repeated backgrounds
+remain separate work. See `samples/parallax` and
+[parallax evidence](evidence/A05_SPRITE_PARALLAX.md).

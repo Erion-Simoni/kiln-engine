@@ -306,6 +306,22 @@ pub fn layout_ui(ui: &mut egui::Ui, layout: &mut SpriteLayout) -> bool {
                 .range(0.001..=8192.0),
         );
     });
+    ui.label("Parallax (Play preview; 1 = normal scrolling, 0 = fixed camera-relative origin)");
+    ui.horizontal(|ui| {
+        for (value, label) in layout.parallax.iter_mut().zip(["Scroll X ", "Y "]) {
+            ui.add(
+                egui::DragValue::new(value)
+                    .prefix(label)
+                    .speed(0.01)
+                    .range(-8.0..=8.0),
+            );
+        }
+    });
+    ui.horizontal(|ui| {
+        for (value, label) in layout.parallax_origin.iter_mut().zip(["Anchor X ", "Y "]) {
+            ui.add(egui::DragValue::new(value).prefix(label).speed(1.0));
+        }
+    });
     *layout != before
 }
 /// Generate tight or spaced grid frames without touching scene files.

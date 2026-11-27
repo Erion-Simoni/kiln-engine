@@ -332,6 +332,8 @@ pub fn spawn_entities(
                             sprite.flip_x = settings.flip_x;
                             sprite.flip_y = settings.flip_y;
                             sprite.pixels_per_unit = settings.pixels_per_unit;
+                            sprite.parallax = settings.parallax;
+                            sprite.parallax_origin = settings.parallax_origin;
                         }
                     }
                 }

@@ -3637,7 +3637,7 @@ impl EditorApp {
                 let camera = &scene_camera;
                 let view_bounds = camera.view_bounds();
                 let _ = kiln_runtime::update_global_transforms(&mut self.world);
-                for (texture, instance) in kiln_runtime::visual::collect_scene_draws_filtered(
+                for (texture, instance) in kiln_runtime::visual::collect_scene_draws_filtered_mode(
                     &self.world,
                     view_bounds,
                     |name| gpu.scene_view_sprite_renderer.material_id(name),
@@ -3647,6 +3647,7 @@ impl EditorApp {
                                 .and_then(|id| authoring_flags.get(id))
                                 .is_some_and(|f| f.hidden)
                     },
+                    self.is_playing,
                 ) {
                     gpu.scene_view_sprite_renderer
                         .push_textured(texture, instance);
@@ -5629,7 +5630,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         }
                         if has_sprite {
                             let mut settings=authored.components.iter().find_map(|component|match component{kiln_core::Component::SpriteLayout {settings}=>Some(*settings),_=>None}).unwrap_or_default();
-                            ui.collapsing("Sprite Pivot / Pixel Scale",|ui|{
+                            ui.collapsing("Sprite Pivot / Pixel Scale / Parallax",|ui|{
                                 if crate::sprite_editor::layout_ui(ui,&mut settings) {self.queue_component(entity,ComponentEdit::SetVisual(kiln_core::Component::SpriteLayout {settings}));}
                             });
                         }

@@ -2491,3 +2491,24 @@ committing transition/follow/shake clocks. Transient transition state is not sav
 in logical save slots. No dependencies, additional render pass or persistent camera
 schema. Contract v9 rejects older bundles missing these calls. A05 remains PARTIAL;
 parallax/split views and A03/A04 deferred acceptance remain separate work.
+
+### ADR-0109 — Authored sprite parallax before culling (2026-11-27)
+
+Status: accepted. Extend defaulted SpriteLayout with per-axis parallax factors
+(default [1,1]) and camera-origin anchor (default [0,0]); copy to runtime Sprite
+and capture in logical saves. Export validates layouts in scenes and prefab roots
+before publishing. Finite factors -8..8 support fixed backgrounds,
+ordinary scrolling, foreground acceleration and reverse motion. Anchors must be
+finite. Drawing translates the transformed sprite quad by
+(camera_origin - anchor) * (1 - factor), using f64 intermediate arithmetic and
+rejecting unrepresentable results. Apply before frustum culling, retaining painter
+order/materials/UVs. Do not mutate world transforms, physics, hierarchy or particles.
+Zoom still scales parallax sprites; this is not HUD/screen-space UI.
+
+All gameplay hosts use the shared collector. The editor authoring collector draws
+logical world geometry, keeping existing selection/gizmos coherent; Play previews
+parallax. Sprite-layout controls expose factor/anchor edits through existing
+validated undoable component commands. No new component, dependency or render pass.
+Tile/particle parallax, automatic repeated backgrounds and multiple views remain
+separate work. Contract v10 rejects older bundles that would ignore saved fields.
+Preserve A03/A04 deferrals and the user's bounded-attempt policy; A05 stays PARTIAL.

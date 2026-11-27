@@ -13,7 +13,7 @@ View. The editor decodes its dimensions and creates an undoable sprite entity at
 the pointer's world position. Image payloads are distinct from prefab payloads.
 The texture path remains project-relative after saving and packing.
 
-Use **Inspector → Sprite Pivot / Pixel Scale**, or **View → Sprite Editor**, to
+Use **Inspector → Sprite Pivot / Pixel Scale / Parallax**, or **View → Sprite Editor**, to
 set the pivot, horizontal/vertical flips and pixels per world unit. A pivot of
 `[0,0]` is the image's top left; `[0.5,1]` anchors its feet. Higher pixel density
 reduces drawn world size. Rotation and negative transform scale apply around the
@@ -148,3 +148,11 @@ On a graphical machine, record the build revision, OS/GPU, results and screensho
 
 Camera follow, dead zones, bounds and finite screen mapping are documented in
 [CAMERAS_2D.md](CAMERAS_2D.md).
+
+## Parallax sprites
+
+Sprite Layout now includes per-axis scroll factors and a camera-origin anchor.
+Defaults preserve ordinary world scrolling. Inspector and Sprite Editor edits
+are validated and undoable; Play previews parallax while authoring retains world
+geometry for picking and gizmos. Project files and logical saves preserve the
+settings. See [camera/parallax contracts](CAMERAS_2D.md#sprite-parallax).

@@ -773,7 +773,7 @@ Add `KILN_DEBUG_EXPRESSION_WATCHES=1` to verify computed watch values before and
 after corrected-source Restart. `KILN_DEBUG_ACTIVE_SCOPES=1` additionally verifies
 strict scope reads, the active-only view and completed-scope rejection.
 
-Runtime tools now use contract `kiln-authoring-v9` (camera transition host calls, following
+Runtime tools now use contract `kiln-authoring-v10` (authored sprite parallax, following
 the v6 shared-call change). Function-using VM snapshots
 include `shared-calls-v1` in their memory signature, so older incompatible function
 slot layouts reject before a load commits. Straight-line program signatures remain

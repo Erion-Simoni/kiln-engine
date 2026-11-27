@@ -13,6 +13,20 @@ pub fn read_project(path: &Path) -> Result<Project> {
         bail!("Project needs an ID and at least one scene");
     }
     project.ui.validate().map_err(anyhow::Error::msg)?;
+    for entity in project
+        .scenes
+        .values()
+        .flat_map(|scene| &scene.entities)
+        .chain(project.prefabs.values().map(|prefab| &prefab.root_entity))
+    {
+        for component in &entity.components {
+            if let Component::SpriteLayout { settings } = component {
+                settings
+                    .validate()
+                    .map_err(|error| anyhow::anyhow!("Entity '{}': {error}", entity.id))?;
+            }
+        }
+    }
     kiln_runtime::materials::plans(&project).map_err(anyhow::Error::msg)?;
     Ok(project)
 }

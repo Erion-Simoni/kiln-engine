@@ -604,6 +604,17 @@ missing these calls. Native/browser source-only export checks cover pan/zoom,
 cancel and interruption. Parallax/split views and full A05 acceptance remain open.
 [Evidence](evidence/A05_CAMERA_TRANSITIONS.md).
 
+**Sprite parallax checkpoint 2026-11-27:** ADR-0109 adds defaulted per-axis
+SpriteLayout scroll factors/anchors, validated undoable editor controls and logical
+save capture/restore. The shared gameplay collector offsets transformed quads
+before culling; authoring retains logical world geometry for picking/gizmos.
+World transforms/physics remain unchanged. Export rejects invalid scene/prefab
+layouts before publication. Native/browser exact-position replays cover slow,
+fixed, ordinary and reverse/foreground scrolling. Contract v10 rejects older
+bundles ignoring the fields. Tile/particle parallax, repeats, split views and full
+A05 acceptance remain open. [Evidence](evidence/A05_SPRITE_PARALLAX.md).
+
+
 
 
 ### A06 — Complete tilemap and level authoring

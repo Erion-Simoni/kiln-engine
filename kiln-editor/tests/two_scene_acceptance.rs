@@ -333,6 +333,8 @@ fn rich_project() -> Project {
                     flip_x: true,
                     flip_y: true,
                     pixels_per_unit: 2.0,
+                    parallax: [0.5, 0.25],
+                    parallax_origin: [100.0, 50.0],
                 },
             },
             Component::Particles {

@@ -505,3 +505,38 @@ fn unchanged_straight_line_programs_retain_legacy_memory_signatures() {
         )
         .is_ok());
 }
+
+#[test]
+fn logical_save_restores_runtime_parallax_and_rejects_invalid_factors() {
+    let temp = Temp::new();
+    let (project, scripts) = fixture();
+    let (session, mut world) = launch(&project, &scripts, "a", &temp);
+    let actor = entity(&world, "actor");
+    {
+        let mut sprite = world.world_mut().get::<&mut Sprite>(actor).unwrap();
+        sprite.parallax = [0.5, -1.0];
+        sprite.parallax_origin = [80.0, 40.0];
+    }
+    let saved = session.snapshot(&world).unwrap();
+    let saved = GameSave::from_json(&saved.to_json().unwrap()).unwrap();
+    let (_, restored) = saved
+        .restore(
+            &project,
+            |path| scripts.get(path).cloned().ok_or(path.into()),
+            |_| None,
+        )
+        .unwrap();
+    let sprite = restored
+        .world_ref()
+        .get::<&Sprite>(entity(&restored, "actor"))
+        .unwrap();
+    assert_eq!(sprite.parallax, [0.5, -1.0]);
+    assert_eq!(sprite.parallax_origin, [80.0, 40.0]);
+    drop(sprite);
+    world
+        .world_mut()
+        .get::<&mut Sprite>(actor)
+        .unwrap()
+        .parallax = [9.0, 1.0];
+    assert!(session.snapshot(&world).is_err());
+}

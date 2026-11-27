@@ -615,3 +615,36 @@ fn atlas_exports_rebuild_current_art_in_native_and_browser_staging_only() {
         assert_eq!(fs::read(root.join("art/atlas.png")).unwrap(), saved_atlas);
     }
 }
+
+#[test]
+fn invalid_parallax_in_scene_or_prefab_never_publishes() {
+    for prefab in [false, true] {
+        let f = Fixture::new();
+        let mut project = Project::from_toml(&fs::read_to_string(&f.project).unwrap()).unwrap();
+        let actor = kiln_core::Entity {
+            id: "background".into(),
+            name: "Background".into(),
+            components: vec![kiln_core::Component::SpriteLayout {
+                settings: kiln_core::visual::SpriteLayout {
+                    parallax: [9.0, 1.0],
+                    ..Default::default()
+                },
+            }],
+        };
+        if prefab {
+            project.prefabs.insert(
+                "background".into(),
+                kiln_core::Prefab::new("Background".into(), actor),
+            );
+        } else {
+            project.scenes.get_mut("main").unwrap().entities.push(actor);
+        }
+        fs::write(&f.project, project.to_toml().unwrap()).unwrap();
+        let output = f.root.join("invalid-parallax");
+        let result = f.run(&output, "invalid-parallax");
+        assert!(!result.status.success());
+        assert!(String::from_utf8_lossy(&result.stderr).contains("Parallax factors"));
+        assert!(!output.exists());
+        assert!(!export::staging_path(&output, "invalid-parallax").exists());
+    }
+}

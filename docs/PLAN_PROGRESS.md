@@ -99,3 +99,10 @@ endpoint holding, cuts and cancellation to current authored follow. Shared effec
 queue/adapter provides editor/native/browser parity, pause and callback atomicity.
 Contract v9 tools rebuilt. See [transition evidence](evidence/A05_CAMERA_TRANSITIONS.md).
 A05 stays PARTIAL; parallax/multiple views and deferred A03/A04 gates remain open.
+
+2026-11-27 ADR-0109 checkpoint: authored per-sprite parallax factors/anchors,
+validated editor controls/undo, logical-save preservation and shared pre-cull
+geometry adjustment. Authoring stays in world coordinates; Play previews camera
+scrolling. Contract v10 tools rebuilt; old runtime rejected. A05 remains PARTIAL;
+tile/particle/repeated backgrounds and split views remain separate work. See
+[parallax evidence](evidence/A05_SPRITE_PARALLAX.md).

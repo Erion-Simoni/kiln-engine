@@ -711,6 +711,8 @@ fn sprite_layout_and_effect_commands_preserve_history_projection_and_disk() {
                 pivot: [0.0, 1.0],
                 flip_x: true,
                 pixels_per_unit: 16.0,
+                parallax: [0.25, -0.5],
+                parallax_origin: [12.0, 24.0],
                 ..Default::default()
             },
         },

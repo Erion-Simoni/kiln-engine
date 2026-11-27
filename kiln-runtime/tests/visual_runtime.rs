@@ -265,3 +265,77 @@ fn culling_uses_actual_pivot_rotation_and_scale_and_keeps_edge_contact() {
     )
     .is_empty());
 }
+
+#[test]
+fn sprite_parallax_precedes_culling_without_mutating_world_or_authoring_geometry() {
+    let mut world = GameWorld::new();
+    let sprite = Sprite {
+        parallax: [0.0, 0.5],
+        ..Sprite::new(0.0, 1.0, 0.0, 1.0).with_size(20.0, 20.0)
+    };
+    let handle = world
+        .world_mut()
+        .spawn((GlobalTransform(Transform::new(20.0, 30.0)), sprite));
+    let view = [1000.0, 200.0, 1100.0, 300.0];
+    // Logical sprite is far outside; parallax shifts it into view before culling.
+    let draws = kiln_runtime::visual::collect_scene_draws(&world, view);
+    assert_eq!(draws.len(), 0); // Vertical half-speed still leaves it below this view.
+    let view = [1000.0, 40.0, 1100.0, 140.0];
+    let draws = kiln_runtime::visual::collect_scene_draws(&world, view);
+    assert_eq!(draws.len(), 1);
+    assert_eq!(draws[0].1.position, [1020.0, 50.0]);
+    assert_eq!(
+        world
+            .world_ref()
+            .get::<&GlobalTransform>(handle)
+            .unwrap()
+            .position
+            .to_array(),
+        [20.0, 30.0]
+    );
+    assert!(kiln_runtime::visual::collect_authoring_draws_filtered(
+        &world,
+        view,
+        |_| None,
+        |_| true
+    )
+    .is_empty());
+    assert_eq!(
+        kiln_runtime::visual::collect_authoring_draws_filtered(
+            &world,
+            [0.0, 0.0, 100.0, 100.0],
+            |_| None,
+            |_| true
+        )[0]
+        .1
+        .position,
+        [20.0, 30.0]
+    );
+}
+#[test]
+fn parallax_handles_anchors_reverse_foreground_geometry_and_finite_limits() {
+    let mut sprite = Sprite::default().with_pivot(0.0, 1.0).with_size(20.0, 10.0);
+    let pose = Transform::new(100.0, 100.0)
+        .with_rotation(0.5)
+        .with_scale(Vec2::new(-2.0, 3.0));
+    let base = sprite.draw_instance(pose);
+    assert_eq!(
+        sprite
+            .parallax_instance(pose, [80.0, 40.0])
+            .unwrap()
+            .position,
+        base.position
+    );
+    sprite.parallax = [-1.0, 2.0];
+    sprite.parallax_origin = [20.0, 10.0];
+    let draw = sprite.parallax_instance(pose, [80.0, 40.0]).unwrap();
+    assert!((draw.position[0] - (base.position[0] + 120.0)).abs() < 0.001);
+    assert!((draw.position[1] - (base.position[1] - 30.0)).abs() < 0.001);
+    assert_eq!(draw.size, base.size);
+    assert_eq!(draw.rotation, base.rotation);
+    assert_eq!(draw.uv_rect, base.uv_rect);
+    sprite.parallax = [0.0; 2];
+    sprite.parallax_origin = [-f32::MAX; 2];
+    assert!(sprite.parallax_instance(pose, [f32::MAX; 2]).is_none());
+    assert!(sprite.parallax_instance(pose, [f32::NAN, 0.0]).is_none());
+}

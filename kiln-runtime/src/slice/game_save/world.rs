@@ -105,6 +105,8 @@ pub(super) fn capture(
                     flip_x: sprite.flip_x,
                     flip_y: sprite.flip_y,
                     pixels_per_unit: sprite.pixels_per_unit,
+                    parallax: sprite.parallax,
+                    parallax_origin: sprite.parallax_origin,
                 },
             });
         }
