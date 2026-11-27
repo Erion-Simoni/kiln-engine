@@ -114,3 +114,14 @@ See `samples/vertical_slice/kiln.toml` for a complete project with a ground laye
 - `kiln-runtime/src/tilemap_collision.rs` — solid-tile collision and axis-split movement
 - `kiln-runtime/src/tilemap_scene.rs` — spawning tilemaps from scene data
 - `kiln-editor/src/tilemap_editor.rs` — editor painting panel
+## Sparse query safety
+
+Rendering and collision now scan stored intersecting chunks, so a huge viewport
+or collision box cannot enumerate billions of empty coordinates. Chunk draw order
+and layer/global-row first collision priority remain deterministic. Invalid
+rectangles/scales/offsets reject; malformed or unsupported chunk coordinates are
+ignored. Chunk/tile arithmetic uses wide intermediates and map extent reporting
+saturates. Atlas UVs reject overflowing image dimensions. Tests cover sparse
+tiles at coordinate 2,000,000,000, full finite world queries, offset collision,
+edge contact and invalid geometry. Raw logs: target/a06-sparse-*.log. This is
+bounded sparse traversal, not streaming or a spatial index.

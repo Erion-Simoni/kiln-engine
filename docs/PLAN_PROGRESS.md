@@ -119,3 +119,8 @@ See [view/input evidence](evidence/A05_VIEW_UPLOADS_AND_POINTERS.md).
 projections and clear stale draw-call diagnostics on texture replacement. User
 now authorizes advancing sequentially through A07; A05 remains PARTIAL with
 remaining split-screen/rendering acceptance open.
+
+2026-11-27 A06 ADR-0111: sparse render/collision queries visit stored chunks,
+retain deterministic order and reject invalid geometry. Saturating map extents
+and checked atlas dimensions remove overflow paths. Focused core/runtime tests
+and just check PASS. A06 remains PARTIAL; advancing to authorized A07 work.

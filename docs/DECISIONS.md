@@ -2537,3 +2537,17 @@ when invalid. Pointer validity travels with frozen/debug-suspended ticks and all
 attached/UI callbacks. UI pointer paths stay independent. Contract v11 rejects
 older bundles missing the validity call. No logical-save schema/layout change.
 A05 remains PARTIAL; A03/A04 deferred gates and bounded-attempt policy remain.
+
+### ADR-0111 — Sparse tilemap queries bounded by stored chunks (2026-11-27)
+
+Status: accepted. User authorized sequential work through A07. Advance A05 as
+PARTIAL, retaining its open acceptance. A06 render/collision queries traverse
+stored intersecting chunks instead of enumerating every coordinate in a camera/
+query rectangle. Shared finite f64 chunk bounds avoid overflow and pathological
+empty-range scans. Rendering keeps deterministic chunk row order; collision keeps
+layer priority and global tile row-major first-hit order. Use wide intermediates
+for chunk/tile arithmetic, reject invalid views/scales/offsets and ignore malformed
+chunk keys or unsupported negative/out-of-range tile coordinates. Saturate legacy
+map-size reporting instead of panicking. No dependency or persistent schema change.
+This does not add streaming, stamps, negative-coordinate editing or a spatial index.
+A06 production/editor acceptance remains PARTIAL; continue into A07 as requested.

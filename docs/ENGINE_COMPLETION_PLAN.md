@@ -636,6 +636,14 @@ not completed authored split-screen/host integration. A05 stays PARTIAL.
 - [ ] Verify palette/brush presets/erase/rectangle and flood fill, grid controls, layer visibility/locking, selection/copy/paste, terrain/autotile rules, animated tiles, collision shapes and previews, chunking and import/export. Add reusable stamp/level tools and streamed or bounded large-map editing.
 - [ ] **Acceptance:** Create a multilayer scrolling level entirely in the editor, paint terrain/collision, undo, save/restart and play both exports; edits affect the actual collision geometry and references survive reimport.
 
+**Sparse-query checkpoint 2026-11-27:** render/collision traversal is bounded by
+stored chunks rather than empty coordinate span. Wide finite chunk bounds avoid
+huge-range hangs and integer overflow; collision preserves layer/global-row first
+hit order, draw order remains deterministic. Invalid views return empty results,
+map size saturates, oversized atlas geometry rejects UV calculation. Unit/runtime
+regressions and just check pass. Authoring stamps/streaming and full A06 acceptance
+remain open; continue to A07 under explicit user authorization. See ADR-0111.
+
 ### A07 — Animation graphs, timelines and 2D rigs
 
 **Status:** PARTIAL. **Depends on:** A04, A05.

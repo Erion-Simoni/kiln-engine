@@ -79,7 +79,11 @@ impl TileSet {
             return None;
         }
         let [tw, th] = self.tile_size;
-        let [iw, ih] = self.image_size();
+        let iw = tw.checked_mul(self.columns)?;
+        let ih = th.checked_mul(self.rows)?;
+        if iw == 0 || ih == 0 {
+            return None;
+        }
         let col = index % self.columns;
         let row = index / self.columns;
         let x = col * tw;
@@ -227,6 +231,58 @@ impl TileMapLayer {
         self.chunk_or_insert(cx, cy).set_tile(lx, ly, tile);
     }
 
+    /// Stored chunks intersecting a finite world rectangle, in chunk row order.
+    /// Query cost depends on stored data, never the span of empty coordinates.
+    pub fn visible_chunks(
+        &self,
+        view: [f32; 4],
+        tile_size: [f32; 2],
+        offset: [f32; 2],
+    ) -> Vec<&TileChunk> {
+        if !view
+            .iter()
+            .chain(tile_size.iter())
+            .chain(offset.iter())
+            .chain(self.offset.iter())
+            .all(|v| v.is_finite())
+            || view[0] >= view[2]
+            || view[1] >= view[3]
+            || tile_size.iter().any(|v| *v <= 0.0)
+        {
+            return Vec::new();
+        }
+        let origin = [
+            offset[0] as f64 + self.offset[0] as f64,
+            offset[1] as f64 + self.offset[1] as f64,
+        ];
+        let mut chunks: Vec<_> = self
+            .chunks
+            .iter()
+            .filter_map(|(key, chunk)| {
+                if chunk.x < 0 || chunk.y < 0 || key != &Self::chunk_key(chunk.x, chunk.y) {
+                    return None;
+                }
+                let tile = [
+                    chunk.x as i64 * CHUNK_SIZE as i64,
+                    chunk.y as i64 * CHUNK_SIZE as i64,
+                ];
+                if tile.iter().any(|v| *v > i32::MAX as i64) {
+                    return None;
+                }
+                for axis in 0..2 {
+                    let low = origin[axis] + tile[axis] as f64 * tile_size[axis] as f64;
+                    let high = low + CHUNK_SIZE as f64 * tile_size[axis] as f64;
+                    if low > view[axis + 2] as f64 || high <= view[axis] as f64 {
+                        return None;
+                    }
+                }
+                Some(chunk)
+            })
+            .collect();
+        chunks.sort_by_key(|chunk| (chunk.y, chunk.x));
+        chunks
+    }
+
     /// Remove all tiles of a chunk.
     pub fn clear_chunk(&mut self, cx: i32, cy: i32) {
         if let Some(chunk) = self.chunks.get_mut(&Self::chunk_key(cx, cy)) {
@@ -288,8 +344,8 @@ impl TileMap {
         let mut h = 0;
         for layer in &self.layers {
             for chunk in layer.chunks.values() {
-                let x = chunk.x * CHUNK_SIZE as i32 + CHUNK_SIZE as i32;
-                let y = chunk.y * CHUNK_SIZE as i32 + CHUNK_SIZE as i32;
+                let x = chunk.x.saturating_add(1).saturating_mul(CHUNK_SIZE as i32);
+                let y = chunk.y.saturating_add(1).saturating_mul(CHUNK_SIZE as i32);
                 w = w.max(x);
                 h = h.max(y);
             }
@@ -306,30 +362,55 @@ impl TileMap {
         tilesets: &HashMap<String, TileSet>,
         rect: [f32; 4],
     ) -> Option<[f32; 2]> {
-        let [min_x, min_y, max_x, max_y] = rect;
-        let ts = self.tile_size;
-        if ts[0] <= 0.0 || ts[1] <= 0.0 {
-            return None;
-        }
-        for layer in &self.layers {
-            let tx0 = ((min_x - layer.offset[0]) / ts[0]).floor() as i32;
-            let ty0 = ((min_y - layer.offset[1]) / ts[1]).floor() as i32;
-            let tx1 = ((max_x - layer.offset[0]) / ts[0]).ceil() as i32 - 1;
-            let ty1 = ((max_y - layer.offset[1]) / ts[1]).ceil() as i32 - 1;
+        self.first_solid_hit_offset(tilesets, rect, [0.0; 2])
+    }
 
-            let Some(tileset) = tilesets.get(&layer.tileset) else {
+    /// Collision query with a map origin; finite wide arithmetic avoids shifted-rect overflow.
+    pub fn first_solid_hit_offset(
+        &self,
+        tilesets: &HashMap<String, TileSet>,
+        rect: [f32; 4],
+        offset: [f32; 2],
+    ) -> Option<[f32; 2]> {
+        let ts = self.tile_size;
+        for layer in &self.layers {
+            let Some(set) = tilesets.get(&layer.tileset) else {
                 continue;
             };
-            for ty in ty0..=ty1 {
-                for tx in tx0..=tx1 {
-                    let tile = layer.tile_at(tx, ty);
-                    if tileset.is_solid(tile) {
-                        return Some([
-                            layer.offset[0] + tx as f32 * ts[0],
-                            layer.offset[1] + ty as f32 * ts[1],
-                        ]);
+            let mut first: Option<(i64, i64, [f32; 2])> = None;
+            for chunk in layer.visible_chunks(rect, ts, offset) {
+                for ly in 0..CHUNK_SIZE {
+                    for lx in 0..CHUNK_SIZE {
+                        let tile = chunk.tile(lx, ly);
+                        if tile == EMPTY_TILE || !set.is_solid(tile) {
+                            continue;
+                        }
+                        let tx = chunk.x as i64 * CHUNK_SIZE as i64 + lx as i64;
+                        let ty = chunk.y as i64 * CHUNK_SIZE as i64 + ly as i64;
+                        if tx > i32::MAX as i64 || ty > i32::MAX as i64 {
+                            continue;
+                        }
+                        let x =
+                            offset[0] as f64 + layer.offset[0] as f64 + tx as f64 * ts[0] as f64;
+                        let y =
+                            offset[1] as f64 + layer.offset[1] as f64 + ty as f64 * ts[1] as f64;
+                        if x < rect[2] as f64
+                            && x + ts[0] as f64 > rect[0] as f64
+                            && y < rect[3] as f64
+                            && y + ts[1] as f64 > rect[1] as f64
+                            && x.abs() <= f32::MAX as f64
+                            && y.abs() <= f32::MAX as f64
+                            && first
+                                .as_ref()
+                                .is_none_or(|(fy, fx, _)| (ty, tx) < (*fy, *fx))
+                        {
+                            first = Some((ty, tx, [x as f32, y as f32]));
+                        }
                     }
                 }
+            }
+            if let Some((_, _, point)) = first {
+                return Some(point);
             }
         }
         None
@@ -449,5 +530,60 @@ mod tests {
         layer.set_tile_at(CHUNK_SIZE as i32 - 1, CHUNK_SIZE as i32 - 1, 1);
         map.layers.push(layer);
         assert_eq!(map.size_in_tiles(), [16, 16]);
+    }
+}
+
+#[cfg(test)]
+mod sparse_query_tests {
+    use super::*;
+    #[test]
+    fn huge_sparse_queries_preserve_global_row_order_and_reject_bad_geometry() {
+        let mut map = TileMap::default();
+        let mut layer = TileMapLayer {
+            tileset: "set".into(),
+            ..Default::default()
+        };
+        layer.set_tile_at(0, 1, 0);
+        layer.set_tile_at(16, 0, 0);
+        layer.set_tile_at(2_000_000_000, 2_000_000_000, 0);
+        map.layers.push(layer);
+        let sets = HashMap::from([(
+            "set".into(),
+            TileSet {
+                solid: vec![true],
+                ..Default::default()
+            },
+        )]);
+        assert_eq!(
+            map.first_solid_hit(&sets, [-f32::MAX, -f32::MAX, f32::MAX, f32::MAX]),
+            Some([256.0, 0.0])
+        );
+        assert_eq!(
+            map.first_solid_hit_offset(&sets, [260.0, 4.0, 280.0, 20.0], [8.0, 8.0]),
+            Some([264.0, 8.0])
+        );
+        for rect in [
+            [0.0, 0.0, 0.0, 1.0],
+            [1.0, 1.0, 0.0, 0.0],
+            [f32::NAN, 0.0, 1.0, 1.0],
+        ] {
+            assert!(map.first_solid_hit(&sets, rect).is_none());
+        }
+        assert!(map
+            .first_solid_hit(&sets, [240.0, 0.0, 256.0, 16.0])
+            .is_none()); // Edge contact is not collision.
+        map.layers[0]
+            .chunks
+            .insert("bad".into(), TileChunk::new(i32::MAX, i32::MAX));
+        assert_eq!(map.size_in_tiles(), [i32::MAX; 2]);
+    }
+    #[test]
+    fn oversized_atlas_geometry_cannot_overflow_uv_arithmetic() {
+        let set = TileSet {
+            columns: 3,
+            tile_size: [u32::MAX, 16],
+            ..Default::default()
+        };
+        assert!(set.tile_uv(2).is_none());
     }
 }
