@@ -138,3 +138,10 @@ Validated inspector drafts, component undo/redo, script callback atomicity and
 logical saves are integrated. Native/browser real-keyboard movement/action/idle
 replays pass. v13 tools rebuilt. A07 stays PARTIAL; blend/timeline/rig acceptance
 remains open. See [character-state evidence](evidence/A07_CHARACTER_STATES.md).
+
+2026-11-27 A07 ADR-0114: saved script cutscene movement/tint tracks with four
+curves, pause/seek/cancel and shared bounded ownership. Camera-follow rig demo
+passes native/browser exports. 924 Rust tests, 49 Python helpers, quality and
+strict WASM checks pass; v14 rejects stale SDKs. A07 remains PARTIAL; graphical
+timeline, general/audio/event tracks, blending and skeletal rigs/IK remain open.
+See [cutscene evidence](evidence/A07_CUTSCENE_TWEENS.md).

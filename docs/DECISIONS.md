@@ -2587,3 +2587,25 @@ atomicity. Inspector uses a persistent draft with validation and explicit Apply,
 then existing undoable component transactions. No dependency or blending system.
 Contract v13 rejects older runtimes missing the component/calls. Skeletal rigs,
 arbitrary timelines, blend trees and full A07 acceptance remain open.
+
+### ADR-0114 — Saved, callback-atomic cutscene tweens (2026-11-27)
+
+Status: accepted. A07 adds script-authorable local-position and sprite-color tweens,
+with linear/smooth/in/out easing, cancel, seek, per-track pause and active/remaining
+queries. Up to 64 active entity/property tracks are shared across scene/attached
+scripts. Pending start commands count against capacity; full queues return false.
+Changes commit only on callback success. Replacement starts from the property's
+current value, zero seconds cuts immediately, completion holds an exact endpoint.
+One update per simulation tick; UI/source pause holds time without replaying work.
+
+Interpolate with finite f64 intermediates, validating targets, durations (0..60),
+colors and easing before enqueue. Reject position ownership on physics bodies.
+Manual position/color writes cancel their matching track; despawn/component removal
+cleans up tracks. Missing bindings cancel during advance. Persist bounded active
+tracks, elapsed time, easing and pause flags in an optional GameSave field, validate
+bindings before snapshot/restore, and preserve old slots on invalid state. Seek
+clamps without historical completion callbacks; completion is polled via active.
+No new dependency or authored timeline GUI. Combine with existing camera_transition
+and script tasks for sequences; camera history remains transient as documented.
+Contract v14 rejects older runtimes lacking tween host calls. Full timeline/track
+editor, sound tracks and rigs/IK remain open A07 work.

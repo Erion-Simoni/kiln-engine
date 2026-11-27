@@ -37,6 +37,8 @@ pub struct AttachedSnapshot {
 /// A complete active-scene save, independent of the sample score/coin API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameSave {
+    #[serde(default)]
+    pub tweens: crate::tweens::TweenSnapshot,
     pub version: u32,
     pub spawn_counter: u64,
     pub pending_scene: Option<String>,
@@ -148,6 +150,8 @@ impl GameSave {
             attached.frame = saved.tick;
         }
         let world = world::restore(&self.scene, &self.entities, &candidate, resolve)?;
+        self.tweens.validate(&world)?;
+        session.vm.host_mut().tweens = self.tweens.clone();
         Ok((session, world))
     }
 }
@@ -253,6 +257,7 @@ impl SliceHost {
         std::mem::swap(&mut self.spawn_counter, &mut other.spawn_counter);
         std::mem::swap(&mut self.game_data, &mut other.game_data);
         std::mem::swap(&mut self.camera_effects, &mut other.camera_effects);
+        std::mem::swap(&mut self.tweens, &mut other.tweens);
         std::mem::swap(&mut self.save_requests, &mut other.save_requests);
         std::mem::swap(&mut self.save_status, &mut other.save_status);
         std::mem::swap(&mut self.save_error, &mut other.save_error);
@@ -417,7 +422,9 @@ impl SliceSession {
                 );
             }
         }
+        self.vm.host().tweens.validate(world)?;
         let saved = GameSave {
+            tweens: self.vm.host().tweens.clone(),
             version: GAME_SAVE_VERSION,
             spawn_counter: self.vm.host().spawn_counter,
             pending_scene: self.vm.host().scene_request.clone().or_else(|| {

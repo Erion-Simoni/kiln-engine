@@ -1,78 +1,69 @@
 # Kiln Session Handoff
 
-Branch fix/a01-ci-baseline. Current A07 checkpoint: character animation states,
-2026-11-27, following a9b72c1. User asked to prioritize features that matter; this
-session chose character animation control. A05/A06/A07 remain PARTIAL. Current
-scope stops at A07; do not advance to A08 unasked. At most three focused attempts
-per blocked check; record and move on. A03/A04 gates stay deferred. Full 3D behind G2D.
+Branch fix/a01-ci-baseline. A07 saved cutscene tween checkpoint, 2026-11-27,
+following 6d5f74f (character animation states). A05/A06/A07 remain PARTIAL.
+Authorized scope ends at A07; do not start A08 unasked. At most three focused
+attempts per blocked check, then record and move on. A03/A04 gates stay deferred.
+Full 3D remains behind G2D.
 
 ## Done
 
-- ADR-0113: inline AnimationGraph sprite component with named states, declared
-  numeric/bool parameters, ordered conditions, wildcard interrupts and one-shot
-  finish edges. First match wins, one transition per positive unpaused update.
-  State entry restarts its clip, including aliases; repeated movement parameters
-  do not restart running. Existing events remain chronological/unconsumed events
-  survive transitions. Graph clips cannot also use clip.next.
-- Script APIs set_animation_parameter(entity,name,value) (129, returns queued bool)
-  and get_animation_state(entity) (130, empty if absent/detached). Facts include
-  graph state/parameters. Failed or suspended callbacks do not deliver pending
-  changes. Manual valid play/stop detaches; unknown manual clip requests preserve
-  graph ownership. Pause holds graph evaluation.
-- Inspector Animation States drafts support states/clip selection, parameters,
-  condition/finish edges and priority reordering. Validated Apply uses undoable
-  component transactions. Project snapshot/reopen retains graphs. Removing an
-  attached sprite rejects atomically until its graph is removed.
-- Logical snapshots preserve graph definition/state/parameters plus clip clock.
-  Invalid references, parameter sets or state/current-clip mismatch reject.
-  Optional graph fields keep legacy snapshots readable. Limits: 64 states,
-  64 parameters, 256 edges; finite numbers/names up to 64 bytes. Export validates
-  scene/prefab graph references and requires a sprite. No new dependency or VM
-  memory layout change. Runtime contract v13; matching tools rebuilt, v12 SDK rejects.
-- Interactive samples/character_states: automatic state proof, then Left/Right or
-  A/D moves and Space plays one-shot action. This is animation, not physics jump.
-  Native/browser CI tests exercise real input and pixels. See ANIMATION_STATES_2D.md
-  and evidence/A07_CHARACTER_STATES.md. Prior A05/A06/A07 work remains intact.
+- ADR-0114: shared bounded script cutscene service for local-position and sprite
+  tint, four easing curves, exact endpoints, replacement, zero-duration cuts,
+  pause/seek/cancel and active/remaining queries. IDs 131–137; see CUTSCENE_TWEENS.md.
+  Root/attachments share 64 active property tracks with pending-start reservations.
+  Mutations commit only after successful callbacks; queries read committed state.
+- Position excludes all RigidBody2D entities. Manual property writes cancel matching
+  tracks; despawn/component removal cleans bindings. Simulation advances once;
+  UI and source-debugger pauses hold progression. Stop clears service.
+- Optional GameSave tween snapshot retains source/destination, clock, easing and
+  paused state. Missing legacy field defaults empty; invalid bindings reject
+  before replacing a running session. No dependency or VM memory-layout change.
+- Runtime contract v14; matching editor/CLI/player and browser SDK rebuilt.
+  Actual prior v13 browser SDK export rejects.
+- Source-authored samples/cutscene_tweens: actor movement/tint plus camera-follow
+  Transform rig at zero smoothing. Automatic pause/held-clock/seek/resume/endpoint
+  proof turns beacon blue. Space pauses, Right seeks, R restarts, C cancels.
+  Saved rig pose/track preserves camera view; direct camera effect history remains
+  transient. CI native/browser replay steps added. Existing character states,
+  ping-pong/speed, camera and pointer features retained.
 
 ## Executed validation
 
-- Full locked Rust workspace 915 PASS (serial), Python helpers 49 PASS; just check,
-  strict default/opt-out WASM Clippy, Node syntax/py_compile/whitespace PASS.
-- Runtime tests: movement continuity, pause, priority, finish, same-clip state entry,
-  manual override, parameter validation, corrupt/resumed snapshots, preserved events,
-  failed/debug-suspended callback commit, and general logical saves. Editor test:
-  undo/redo, projection, disk reopen and atomic dependent-sprite-removal rejection.
-- Both native/browser exports observe automatic idle/run/action/idle/run with a
-  delayed blue beacon, then real Right/Space input: run moves, release idles,
-  one-shot action plays, finish idles, run reaches boundary. Final green 4096 at
-  [256,88,320,152] plus blue beacon 64. Source hidden/exports relocated/native PATH
-  lacks developer tools/browser no page errors. Existing ping-pong and pointer
-  fixtures also pass both exports. Six replays ran serially after builds.
-- Actual prior v12 browser SDK export rejects. Controls compile and have transaction/
-  persistence coverage; no full OS graph-creation widget replay claimed.
-- Raw target/a07-graph-*.log; receipts/screenshots target/a07-graph-{native,browser},
-  target/a07-graph-ping_pong-{native,browser},
-  target/a07-graph-world_pointer-{native,browser}. Prior bundle
-  target/a07-graph-prior-web-runtime. Generated outputs are not committed.
+- Full locked Rust workspace: 924 passing; Python helpers: 49 passing. just check,
+  strict default and opt-out WASM checks, Node syntax, py_compile and whitespace
+  checks passed, including the final pre-commit just check after documentation edits.
+- Eight tween integration tests plus math coverage: exact finite interpolation,
+  pause/seek, replacement/manual override, shared capacity, callback rollback,
+  debugger suspension, UI pause, physics exclusion, corrupt/legacy/resumed saves.
+- Camera-rig cutscene native/browser exports pass: green 4096 pixels at
+  [192,88,256,152], blue beacon 64. Earlier static-camera variant passes too.
+- Character-state real keyboard input regression passes both exports: run moves,
+  release idles, one-shot action returns, boundary reached; final green 4096 at
+  [256,88,320,152], blue 64. Pointer five-phase regression passes both exports,
+  including invalid letterbox/outside positions, green bounds [288,88,352,152].
+- All six final replays ran serially after builds, with relocated exports and
+  hidden authoring sources. Native player PATH excludes developer tools.
+  Receipts/screenshots target/a07-tween-{rig,states,pointer}-{native,browser}.
+  Logs target/a07-tween-*.log. See evidence/A07_CUTSCENE_TWEENS.md.
 
 ## Open / deferred
 
-- A07 blending/blend trees, arbitrary property/camera/audio/event tracks/curves,
-  tween authoring, rigs/weights/skinning/IK and full editor acceptance. Conditions
-  are level values; scripts should pulse one-shot parameters (sample shows rising
-  edge). Current-target edges are ignored; different states sharing clips restart.
-  Graphs are inline components; arbitrary prefab override authoring remains A03.
-- A05 full split-screen host/authoring and remaining rendering/capacity acceptance.
-  A06 stamps/streaming, further tile validation and complete level-authoring gate.
-  Existing animation 4096-cycle cap/extreme event overload and physical performance
-  acceptance remain open; no budget bypass introduced.
-- A04 source widget gate remains stopped after three attempts and saved-physics pose
-  divergence remains. A03 identity/override/crash-transaction and A02 combined
-  inspector acceptance remain deferred. No physical device/DPI, production
-  performance, release/certification or full 3D acceptance claimed.
+- A07 graphical timeline, general/audio/event tracks, blending/blend trees,
+  skeletal bones/weights/skinning/IK and complete editor/reimport acceptance.
+  Tween completion is script-owned polling; no internal completion-event queue.
+  Direct camera transitions/shake history remains transient. Physical F5/F9
+  replay not performed; logical JSON save/resume is tested.
+- A05 full split-screen authoring/host and remaining rendering/capacity acceptance;
+  A06 stamps/streaming and complete level-authoring acceptance remain open.
+  Animation 4096-cycle cap/extreme overload and physical performance acceptance
+  remain open; no budgets bypassed.
+- A04 source widget gate stopped after three attempts; saved-physics pose divergence
+  remains. A03 identity/override/crash-transaction and A02 combined inspector gates
+  deferred. No physical device/DPI, production performance, release/certification
+  or full 3D acceptance claimed.
 
 ## Next
 
-Continue useful A07 gameplay/authoring work or consolidate state-machine acceptance.
-Keep all remaining milestones honest, preserve bounded-attempt policy and do not
-retry deferred A03/A04 gates or advance beyond A07 without user direction.
+Continue useful A07 gameplay/authoring work within authorized scope. Preserve
+bounded attempts; do not retry deferred A03/A04 gates or advance past A07 unasked.

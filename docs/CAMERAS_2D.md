@@ -34,7 +34,7 @@ viewport extrapolation remains available for tools; callers must still choose an
 clip the correct viewport for gameplay input. Offset/scale and Y orientation are
 covered by round-trip tests; split-view routing remains separate work.
 
-Runtime tools now require kiln-authoring-v13. Rebuild matching editor/CLI/player and
+Runtime tools now require kiln-authoring-v14. Rebuild matching editor/CLI/player and
 browser bundles; older runtimes lack current camera effects, parallax or pointer validity and are rejected by the new
 exporter. VM-memory/save-slot layout is unchanged. See samples/camera_dead_zone and
 [evidence](evidence/A05_CAMERA_DEAD_ZONES.md).
@@ -132,3 +132,7 @@ default hosts keep that path. No extra allocation is added to their frame loop.
 
 See [prepared-view and pointer evidence](evidence/A05_VIEW_UPLOADS_AND_POINTERS.md)
 and `samples/world_pointer`.
+
+Saved script-authored movement, tint and camera-follow rig sequences are described
+in [Cutscene tweens](CUTSCENE_TWEENS.md). Pause, seek, cancel and logical save/resume
+are supported; a graphical timeline remains open A07 work.

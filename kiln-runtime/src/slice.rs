@@ -17,6 +17,7 @@ mod pending_tick;
 mod source_debug;
 pub use source_debug::{SourceBreakpoint, SourceStop};
 mod tasks;
+mod tweens;
 mod value_reads;
 mod watch_expression;
 mod work_budget;
@@ -80,6 +81,7 @@ pub const ROLE_COIN: &str = "coin";
 /// What the script can read about the current frame.
 #[derive(Debug, Clone, Default)]
 pub struct SliceFacts {
+    pub entity_tween_positions: std::collections::HashSet<String>,
     pub entity_animation_states: HashMap<String, String>,
     pub entity_animation_parameters: HashMap<String, std::collections::BTreeMap<String, f64>>,
     /// Horizontal input axis, -1 to 1.
@@ -119,6 +121,7 @@ pub struct SliceFacts {
 /// A change the script asked for.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SliceCommand {
+    Tween(crate::tweens::TweenCommand),
     /// Callback-atomic change to a declared animation graph parameter.
     SetAnimationParameter {
         entity: String,
@@ -128,7 +131,10 @@ pub enum SliceCommand {
     /// Validated transient camera effect, committed with the callback.
     CameraEffect(crate::camera::CameraEffect),
     /// Move the player by the given delta.
-    MovePlayer { dx: f64, dy: f64 },
+    MovePlayer {
+        dx: f64,
+        dy: f64,
+    },
     /// Add to the score.
     AddScore(i64),
     /// Collect the pickup with the given source id.
@@ -145,9 +151,17 @@ pub enum SliceCommand {
     /// Despawn an entity by source id.
     DespawnEntity(String),
     /// Set entity position.
-    SetEntityPos { source_id: String, x: f64, y: f64 },
+    SetEntityPos {
+        source_id: String,
+        x: f64,
+        y: f64,
+    },
     /// Set entity velocity.
-    SetEntityVel { source_id: String, vx: f64, vy: f64 },
+    SetEntityVel {
+        source_id: String,
+        vx: f64,
+        vy: f64,
+    },
     /// Set entity component value.
     SetEntityComponent {
         source_id: String,
@@ -171,11 +185,20 @@ pub enum SliceCommand {
         clip_name: String,
     },
     /// Stop the current animation on an entity.
-    StopAnimation { source_id: String },
+    StopAnimation {
+        source_id: String,
+    },
     /// Set animation playback speed on an entity.
-    SetAnimationSpeed { source_id: String, speed: f64 },
+    SetAnimationSpeed {
+        source_id: String,
+        speed: f64,
+    },
     /// Render a UI button at screen position.
-    UiButton { id: String, x: f64, y: f64 },
+    UiButton {
+        id: String,
+        x: f64,
+        y: f64,
+    },
     /// Render a UI label at screen position.
     UiLabel {
         id: String,
@@ -192,7 +215,9 @@ pub enum SliceCommand {
         h: f64,
     },
     /// Load a save slot.
-    LoadGame { slot: u32 },
+    LoadGame {
+        slot: u32,
+    },
     /// Create a new animation clip on an entity.
     CreateAnimationClip {
         source_id: String,
@@ -216,7 +241,9 @@ pub enum SliceCommand {
         loops: bool,
     },
     /// Create a particle system on an entity.
-    CreateParticleSystem { source_id: String },
+    CreateParticleSystem {
+        source_id: String,
+    },
     /// Add a particle emitter to an entity's particle system.
     AddParticleEmitter {
         source_id: String,
@@ -234,9 +261,13 @@ pub enum SliceCommand {
         fade_out: bool,
     },
     /// Start particle system emission.
-    StartParticleSystem { source_id: String },
+    StartParticleSystem {
+        source_id: String,
+    },
     /// Stop particle system emission.
-    StopParticleSystem { source_id: String },
+    StopParticleSystem {
+        source_id: String,
+    },
 }
 
 /// The persistent state of a slice.
@@ -310,6 +341,7 @@ pub struct SliceHost {
     facts: SliceFacts,
     commands: Vec<SliceCommand>,
     camera_effects: Vec<crate::camera::CameraEffect>,
+    tweens: crate::tweens::TweenSnapshot,
     pending_camera_effects: usize,
     #[cfg(feature = "audio")]
     audio: Option<AudioEngine>,
@@ -399,6 +431,7 @@ impl SliceHost {
             facts,
             commands: Vec::new(),
             camera_effects: Vec::new(),
+            tweens: Default::default(),
             pending_camera_effects: 0,
             #[cfg(feature = "audio")]
             audio: None,
@@ -1388,6 +1421,7 @@ impl SliceHost {
                 .into(),
             )),
             116..=123 => self.call_task(func_id, args),
+            131..=137 => self.call_tween(func_id, args),
             129 => {
                 let entity = args[0]
                     .as_str()
@@ -1952,6 +1986,7 @@ impl SliceSession {
             Ok(())
         })();
         self.source_debug.mute(false);
+        self.host_mut().tweens.tracks.clear();
         result
     }
 
@@ -2115,6 +2150,7 @@ impl SliceSession {
 
             // Update animations (reads AnimationPlayer, writes Sprite uv_rect)
             if advance_systems {
+                self.advance_tweens(world, dt);
                 crate::sprite::update_animations_dt(world.world_mut(), dt as f32);
                 // Update particle systems
                 crate::sprite::update_particle_systems(world.world_mut(), dt as f32);
@@ -2277,6 +2313,19 @@ impl SliceSession {
                 entity_animation_parameters.insert(id.0.clone(), params.clone());
             }
         }
+        let blocked: std::collections::HashSet<_> = world
+            .world_ref()
+            .query::<(&SourceId, &kiln_core::physics_data::RigidBody2D)>()
+            .iter()
+            .map(|(id, _)| id.0.clone())
+            .collect();
+        let entity_tween_positions = entity_positions
+            .iter()
+            .filter(|(id, point)| {
+                !blocked.contains(*id) && point.0.is_finite() && point.1.is_finite()
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
         self.host_mut().frame_count += 1;
 
         SliceFacts {
@@ -2290,6 +2339,7 @@ impl SliceSession {
             delta_time: dt,
             frame_count: self.host_mut().frame_count,
             time_scale: self.host_mut().time_scale,
+            entity_tween_positions,
             entity_animation_states,
             entity_animation_parameters,
             entity_positions,
@@ -2304,6 +2354,7 @@ impl SliceSession {
     /// Apply one command to the world and the slice state.
     fn apply(&mut self, command: SliceCommand, world: &mut GameWorld) {
         match command {
+            SliceCommand::Tween(command) => self.apply_tween(command, world),
             SliceCommand::SetAnimationParameter {
                 entity,
                 name,
@@ -2326,6 +2377,11 @@ impl SliceSession {
             SliceCommand::CameraEffect(effect) => self.vm.host_mut().camera_effects.push(effect),
             SliceCommand::MovePlayer { dx, dy } => {
                 if let Some(player) = find_player(world) {
+                    if dx != 0.0 || dy != 0.0 {
+                        self.host_mut()
+                            .tweens
+                            .cancel(&player.source_id, crate::tweens::TweenProperty::Position);
+                    }
                     let target = crate::tilemap_collision::move_with_collision(
                         world,
                         [
@@ -2349,6 +2405,7 @@ impl SliceSession {
                 if self.state.is_collected(&source_id) {
                     return;
                 }
+                self.host_mut().tweens.remove_entity(&source_id);
                 despawn_coin(world, &source_id);
                 self.state.collected.push(source_id);
                 self.state.collected.sort();
@@ -2396,6 +2453,7 @@ impl SliceSession {
                 }
             }
             SliceCommand::DespawnEntity(source_id) => {
+                self.host_mut().tweens.remove_entity(&source_id);
                 use crate::SourceId;
                 for (eid, sid) in world.world_mut().query_mut::<(hecs::Entity, &SourceId)>() {
                     if sid.0 == source_id {
@@ -2405,6 +2463,9 @@ impl SliceSession {
                 }
             }
             SliceCommand::SetEntityPos { source_id, x, y } => {
+                self.host_mut()
+                    .tweens
+                    .cancel(&source_id, crate::tweens::TweenProperty::Position);
                 use crate::SourceId;
                 use kiln_core::Transform;
                 for (eid, sid) in world.world_mut().query_mut::<(hecs::Entity, &SourceId)>() {
@@ -2460,6 +2521,10 @@ impl SliceSession {
                                                 .world_mut()
                                                 .query_one_mut::<&mut Transform>(eid)
                                             {
+                                                self.host_mut().tweens.cancel(
+                                                    &source_id,
+                                                    crate::tweens::TweenProperty::Position,
+                                                );
                                                 transform.position.x = *x as f32;
                                                 transform.position.y = *y as f32;
                                             }
@@ -2503,6 +2568,10 @@ impl SliceSession {
                                             if let Ok(sprite) =
                                                 world.world_mut().query_one_mut::<&mut Sprite>(eid)
                                             {
+                                                self.host_mut().tweens.cancel(
+                                                    &source_id,
+                                                    crate::tweens::TweenProperty::Color,
+                                                );
                                                 sprite.color =
                                                     [*r as f32, *g as f32, *b as f32, *a as f32];
                                             }
@@ -2538,6 +2607,10 @@ impl SliceSession {
                                                 .world_mut()
                                                 .query_one_mut::<&mut Transform>(eid)
                                             {
+                                                self.host_mut().tweens.cancel(
+                                                    &source_id,
+                                                    crate::tweens::TweenProperty::Position,
+                                                );
                                                 transform.position.x = *x as f32;
                                                 transform.position.y = *y as f32;
                                             }
@@ -2581,6 +2654,10 @@ impl SliceSession {
                                             if let Ok(sprite) =
                                                 world.world_mut().query_one_mut::<&mut Sprite>(eid)
                                             {
+                                                self.host_mut().tweens.cancel(
+                                                    &source_id,
+                                                    crate::tweens::TweenProperty::Color,
+                                                );
                                                 sprite.color =
                                                     [*r as f32, *g as f32, *b as f32, *a as f32];
                                             }
@@ -2598,6 +2675,17 @@ impl SliceSession {
                 source_id,
                 component_type,
             } => {
+                match component_type.as_str() {
+                    "sprite" | "Sprite" => self
+                        .host_mut()
+                        .tweens
+                        .cancel(&source_id, crate::tweens::TweenProperty::Color),
+                    "transform" | "Transform" => self
+                        .host_mut()
+                        .tweens
+                        .cancel(&source_id, crate::tweens::TweenProperty::Position),
+                    _ => {}
+                }
                 #[cfg(feature = "physics")]
                 use crate::Velocity;
                 use crate::{SourceId, Sprite};

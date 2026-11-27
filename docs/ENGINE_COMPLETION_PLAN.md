@@ -670,6 +670,13 @@ replays verify run movement, release-to-idle, one-shot action/return and bounds.
 Contract v13 rejects older tools. Blending, arbitrary tracks, rigs/IK and complete
 A07 authoring acceptance remain open. [Evidence](evidence/A07_CHARACTER_STATES.md).
 
+**Cutscene checkpoint 2026-11-27:** ADR-0114 adds script-authored local-position
+and color tweens, four easing curves, bounded shared ownership, pause/seek/cancel
+and validated save/resume. A camera-follow rig supplies a saved dolly. Native and
+browser exports prove hold, seek and exact endpoints. Contract v14 rejects older
+SDKs. Timeline GUI, general/audio/event tracks, blending and skeletal rigs/IK
+remain open; A07 stays PARTIAL. [Evidence](evidence/A07_CUTSCENE_TWEENS.md).
+
 ### A08 — Complete 2D physics and character tools
 
 **Status:** PARTIAL. **Depends on:** A04, A06.

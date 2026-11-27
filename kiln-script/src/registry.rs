@@ -129,4 +129,11 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("mouse_world_valid", 128, 0),
     ("set_animation_parameter", 129, 3),
     ("get_animation_state", 130, 1),
+    ("tween_position", 131, 5),
+    ("tween_color", 132, 7),
+    ("tween_cancel", 133, 2),
+    ("tween_seek", 134, 3),
+    ("tween_active", 135, 2),
+    ("tween_remaining", 136, 2),
+    ("tween_pause", 137, 3),
 ];

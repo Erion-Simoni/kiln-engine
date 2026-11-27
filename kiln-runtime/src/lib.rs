@@ -20,6 +20,7 @@ pub mod storage;
 pub mod tilemap;
 pub mod tilemap_collision;
 pub mod tilemap_scene;
+pub mod tweens;
 pub mod world;
 
 #[cfg(feature = "audio")]

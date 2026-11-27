@@ -293,6 +293,14 @@ jobs:
             if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
             KILN_ATLAS_PROJECT="target/a05-native-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" KILN_ATLAS_PLAYER_EVIDENCE="target/a05-$kind-native" python3 tests/native/atlas_player_smoke.py
           done
+      - name: Verify saved cutscene tween playback in native exports
+        env:
+          KILN_ATLAS_PROJECT: samples/cutscene_tweens
+          KILN_PIXEL_SCENARIO: cutscene-tweens
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 192,88,256,152
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a07-tween-rig-native
+        run: python3 tests/native/atlas_player_smoke.py
       - name: Verify character animation states and real input in native exports
         env:
           KILN_ATLAS_PROJECT: samples/character_states
@@ -565,6 +573,14 @@ jobs:
             if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
             KILN_ATLAS_PROJECT="target/a05-browser-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" WEB_ATLAS_EVIDENCE="target/a05-$kind-browser" node tests/web/atlas.cjs target/debug/web-runtime
           done
+      - name: Verify saved cutscene tween playback in browser exports
+        env:
+          KILN_ATLAS_PROJECT: samples/cutscene_tweens
+          KILN_PIXEL_SCENARIO: cutscene-tweens
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 192,88,256,152
+          WEB_ATLAS_EVIDENCE: target/a07-tween-rig-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
       - name: Verify character animation states and real input in browser exports
         env:
           KILN_ATLAS_PROJECT: samples/character_states

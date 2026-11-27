@@ -778,7 +778,7 @@ Add `KILN_DEBUG_EXPRESSION_WATCHES=1` to verify computed watch values before and
 after corrected-source Restart. `KILN_DEBUG_ACTIVE_SCOPES=1` additionally verifies
 strict scope reads, the active-only view and completed-scope rejection.
 
-Runtime tools now use contract `kiln-authoring-v13` (character animation states, following
+Runtime tools now use contract `kiln-authoring-v14` (saved cutscene tweens and character animation states, following
 the v6 shared-call change). Function-using VM snapshots
 include `shared-calls-v1` in their memory signature, so older incompatible function
 slot layouts reject before a load commits. Straight-line program signatures remain
@@ -802,3 +802,7 @@ callback. Updates become visible only on successful callback completion.
 for an absent/detached graph. Conditions run at the next animation update, so a
 queued parameter does not immediately change the current state in the callback.
 See [authoring and runtime contracts](ANIMATION_STATES_2D.md).
+
+Saved script-authored movement, tint and camera-follow rig sequences are described
+in [Cutscene tweens](CUTSCENE_TWEENS.md). Pause, seek, cancel and logical save/resume
+are supported; a graphical timeline remains open A07 work.

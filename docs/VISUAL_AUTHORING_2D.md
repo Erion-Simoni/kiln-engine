@@ -182,3 +182,7 @@ project clips, parameters and ordered conditions; select an entry state and clic
 One-shot states can return automatically after completion. Project reopen and
 logical saves preserve the graph. See [the workflow](ANIMATION_STATES_2D.md) and
 `samples/character_states`: Left/Right or A/D moves, Space plays a one-shot action.
+
+Saved script-authored movement, tint and camera-follow rig sequences are described
+in [Cutscene tweens](CUTSCENE_TWEENS.md). Pause, seek, cancel and logical save/resume
+are supported; a graphical timeline remains open A07 work.
