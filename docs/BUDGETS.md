@@ -525,3 +525,14 @@ This closes repeated-callback allowance multiplication; it is not a wall-clock
 frame-time certification, host-call cost meter or rollback mechanism. Existing
 world/state effects from completed callbacks remain committed. Physical reference-
 hardware CPU/GPU measurements and other resource budgets remain separate gates.
+
+## A05 prepared sprite views — 2026-11-27
+
+Prepared views allocate only when explicitly requested, for the bounded current
+queue (at most 16384 × 56 bytes of GPU instance data plus 64 camera bytes per view).
+Empty queues allocate nothing. Hosts must bound retained view count; viewport
+routing accepts at most four views. Texture/material resources are shared, and
+resource identity checks reject stale/foreign views. Current single-view host
+loops retain their existing reusable buffers; no additional frame allocation is
+introduced there. This establishes isolation/correctness, not physical-hardware
+frame-time or memory acceptance. No dependency or resource-budget bypass.

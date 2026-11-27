@@ -84,6 +84,15 @@ impl Camera {
         ])
     }
 
+    /// Gameplay mapping rejects letterbox bars and out-of-view pointers.
+    /// Tools needing extrapolation can still use screen_to_world directly.
+    pub fn pointer_to_world(&self, point: [f32; 2], viewport: [f32; 4]) -> Option<[f32; 2]> {
+        crate::views::ViewRect(viewport)
+            .contains(point)
+            .then(|| self.screen_to_world(point, viewport))
+            .flatten()
+    }
+
     /// Inverse of screen_to_world, including viewport offsets and Y direction.
     pub fn world_to_screen(&self, point: [f32; 2], viewport: [f32; 4]) -> Option<[f32; 2]> {
         if self.viewport_size[0] <= 0.0

@@ -289,7 +289,7 @@ pub struct SliceHost {
     ui_size: [f32; 2],
     ui_key_edges: Vec<String>,
     ui_pointer_edges: Vec<(Option<[f32; 2]>, bool)>,
-    mouse_world: [f64; 2],
+    mouse_world: Option<[f64; 2]>,
     self_entity: String,
     script_state: HashMap<String, Value>,
     properties: HashMap<String, f64>,
@@ -378,7 +378,7 @@ impl SliceHost {
             ui_size: [0.0; 2],
             ui_key_edges: Vec::new(),
             ui_pointer_edges: Vec::new(),
-            mouse_world: [0.0; 2],
+            mouse_world: None,
             self_entity: String::new(),
             script_state: HashMap::new(),
             properties: HashMap::new(),
@@ -449,7 +449,12 @@ impl SliceHost {
 
     /// Set the pointer position mapped through the active gameplay camera.
     pub fn set_mouse_world(&mut self, point: [f64; 2]) {
-        self.mouse_world = point;
+        self.set_world_pointer(Some(point));
+    }
+
+    /// Set or clear the clipped gameplay pointer, rejecting non-finite coordinates.
+    pub fn set_world_pointer(&mut self, point: Option<[f64; 2]>) {
+        self.mouse_world = point.filter(|point| point.iter().all(|v| v.is_finite()));
     }
 
     /// Whether a UI widget was clicked this frame.
@@ -1375,6 +1380,7 @@ impl SliceHost {
                 .into(),
             )),
             116..=123 => self.call_task(func_id, args),
+            128 => Ok(Value::Bool(self.mouse_world.is_some())),
             124..=127 => self.call_camera_effect(func_id, args),
             110 => Ok(Value::Map(Default::default())),
             61 | 62 | 111 | 113 => value_reads::call(func_id, args),
@@ -1489,8 +1495,8 @@ impl SliceHost {
                 }
                 Ok(Value::Bool(false))
             }
-            72 => Ok(Value::F64(self.mouse_world[0])),
-            73 => Ok(Value::F64(self.mouse_world[1])),
+            72 => Ok(Value::F64(self.mouse_world.unwrap_or([0.0; 2])[0])),
+            73 => Ok(Value::F64(self.mouse_world.unwrap_or([0.0; 2])[1])),
             74 => Ok(Value::Str(self.animation_event.0.clone())),
             75 => Ok(Value::Str(self.animation_event.1.clone())),
             76 => {

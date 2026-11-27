@@ -1498,13 +1498,13 @@ impl EditorApp {
                 play.slice
                     .host_mut()
                     .set_ui_pointer(viewport, Some(point), pointer_down);
-                if let Some(position) = play.game_camera.screen_to_world(point, viewport) {
-                    play.slice
-                        .host_mut()
-                        .set_mouse_world(position.map(|value| value as f64));
-                }
-            }
-            if mouse_mapping.is_none() {
+                play.slice.host_mut().set_world_pointer(
+                    play.game_camera
+                        .pointer_to_world(point, viewport)
+                        .map(|point| point.map(f64::from)),
+                );
+            } else {
+                play.slice.host_mut().set_world_pointer(None);
                 play.slice
                     .host_mut()
                     .set_ui_pointer([0.0, 0.0, size[0], size[1]], None, false);

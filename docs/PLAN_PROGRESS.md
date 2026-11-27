@@ -106,3 +106,11 @@ geometry adjustment. Authoring stays in world coordinates; Play previews camera
 scrolling. Contract v10 tools rebuilt; old runtime rejected. A05 remains PARTIAL;
 tile/particle/repeated backgrounds and split views remain separate work. See
 [parallax evidence](evidence/A05_SPRITE_PARALLAX.md).
+
+2026-11-27 ADR-0110 checkpoint: independent prepared sprite-view uploads, stale/
+foreign resource rejection and pending-queue cleanup on texture replacement.
+Bounded viewport routing and clipped gameplay pointer validity reach all current
+hosts; source-debug/UI/attached callbacks retain captured validity. Real two-view
+GPU pixels and native/browser pointer phases pass. Contract v11 tools rebuilt.
+Authored split-screen scheduling/configuration remains open; A05 stays PARTIAL.
+See [view/input evidence](evidence/A05_VIEW_UPLOADS_AND_POINTERS.md).

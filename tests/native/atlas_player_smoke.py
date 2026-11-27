@@ -16,6 +16,7 @@ def main():
     supplied=os.environ.get('KILN_ATLAS_PROJECT')
     original=Path(supplied) if supplied else Path(json.loads((REPO/'target/a03-atlas-recipe/result.json').read_text())['project'])
     scenario=os.environ.get('KILN_PIXEL_SCENARIO')
+    pointer_test=os.environ.get('KILN_PIXEL_TEST_POINTER')=='1'
     expect_warning=os.environ.get('KILN_EXPECT_SPRITE_DROPS')=='1'
     expected_bounds=[int(n) for n in os.environ['KILN_PIXEL_EXPECT_GREEN_BOUNDS'].split(',')] if os.environ.get('KILN_PIXEL_EXPECT_GREEN_BOUNDS') else None
     if expected_bounds:assert len(expected_bounds)==4
@@ -66,11 +67,32 @@ def main():
                 blue_pixels=sum(1 for at in range(0,len(frame),3) if frame[at+2]>220 and frame[at]<30 and frame[at+1]<30)
                 if blue_pixels<=20:return None
             return (width,height,green) if green>200 else None
+        if pointer_test:
+            subprocess.run([xdo,'windowsize','--sync',handle,'640','240'],env=env,check=True,timeout=10)
+            subprocess.run([xdo,'mousemove','--sync','--window',handle,'320','120'],env=env,check=True,timeout=10)
+            wait_for(pixels,player,player_log)
+            subprocess.run([executable('import'),'-display',':86','-window',handle,str(output/'pointer-valid.png')],env=env,check=True)
+            subprocess.run([xdo,'mousemove','--sync','--window',handle,'40','120'],env=env,check=True,timeout=10)
+            def invalid_pointer():
+                ppm=subprocess.check_output([executable('import'),'-display',':86','-window',handle,'-depth','8','ppm:-'],env=env)
+                frame=ppm.split(b'\n255\n',1)[1]
+                green=sum(1 for at in range(0,len(frame),3) if frame[at+1]>220 and frame[at]<30 and frame[at+2]<30)
+                red=sum(1 for at in range(0,len(frame),3) if frame[at]>220 and frame[at+1]<30 and frame[at+2]<30)
+                return green==0 and red>200
+            wait_for(invalid_pointer,player,player_log)
+            subprocess.run([executable('import'),'-display',':86','-window',handle,str(output/'pointer-invalid.png')],env=env,check=True)
+            subprocess.run([xdo,'mousemove','--sync','--window',handle,'320','120'],env=env,check=True,timeout=10)
+            wait_for(pixels,player,player_log)
+            subprocess.run([xdo,'mousemove','--sync','--window',handle,'700','120'],env=env,check=True,timeout=10)
+            wait_for(invalid_pointer,player,player_log)
+            subprocess.run([executable('import'),'-display',':86','-window',handle,str(output/'pointer-outside.png')],env=env,check=True)
+            subprocess.run([xdo,'mousemove','--sync','--window',handle,'320','120'],env=env,check=True,timeout=10)
         width,height,green=wait_for(pixels,player,player_log)
         subprocess.run([executable('import'),'-display',':86','-window',handle,str(output/('rendered_scene.png' if scenario else 'generated_clip.png'))],env=env,check=True)
         result=dict(passed=True,relocated_native_export=True,authoring_copy_hidden=True,developer_tools_absent_from_player_path=True,
                     frame=[width,height],scope='Linux Xvfb/software graphics')
         result['rendered_warning_pixels' if expect_warning else ('rendered_green_pixels' if scenario else 'generated_clip_green_pixels')]=green
+        if pointer_test:result['pointer_phases']=['inside','letterbox-invalid','inside','outside-invalid','inside']
         if scenario:result['scenario']=scenario
         if expected_bounds:result['observed_green_bounds']=observed_bounds
         if require_motion:result['distinct_green_bounds']=len(seen_bounds)

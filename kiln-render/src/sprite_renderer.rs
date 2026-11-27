@@ -8,6 +8,7 @@
 //! Sprites sharing a [`TextureId`] are drawn in one instanced call.
 
 use bytemuck::{Pod, Zeroable};
+use wgpu::util::DeviceExt;
 use wgpu::{Device, Queue};
 
 use crate::camera::Camera;
@@ -153,6 +154,28 @@ struct TextureSlot {
     pub height: u32,
 }
 
+/// Independent immutable GPU uploads for one prepared camera view.
+/// Keep alive through submission; discard when project texture/material bindings change.
+/// Geometry is bounded by MAX_SPRITES and empty queues allocate nothing.
+pub struct PreparedSpriteView {
+    _uniform_buffer: wgpu::Buffer,
+    uniform_bind_group: wgpu::BindGroup,
+    instances: wgpu::Buffer,
+    runs: Vec<(TextureId, u32, std::ops::Range<u32>)>,
+    count: usize,
+    resources: std::sync::Arc<()>,
+}
+impl PreparedSpriteView {
+    /// Number of retained sprite instances in this view.
+    pub fn queued_count(&self) -> usize {
+        self.count
+    }
+    /// Adjacent painter-order batches in this view.
+    pub fn draw_calls(&self) -> usize {
+        self.runs.len()
+    }
+}
+
 /// Batching 2D sprite renderer with per-texture draw calls and custom material support.
 pub struct SpriteRenderer {
     pipeline: wgpu::RenderPipeline,
@@ -174,6 +197,7 @@ pub struct SpriteRenderer {
     pending: Vec<(TextureId, u32, f32, SpriteInstance)>,
     last_draw_calls: u32,
     frame_stats: SpriteFrameStats,
+    resources: std::sync::Arc<()>,
 }
 
 const QUAD_VERTS: &[QuadVertex] = &[
@@ -193,10 +217,7 @@ const QUAD_INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 impl SpriteRenderer {
     /// Drop project bindings when a host rebuilds all affected sprites.
     pub fn clear_project_textures(&mut self) {
-        self.material_key.clear();
-        self.material_names.clear();
-        self.material_pipelines.clear();
-        self.textures.truncate(1);
+        self.clear_asset_textures();
     }
     /// Create a new renderer (includes [`TextureId::WHITE`]).
     pub fn new(device: &Device, queue: &Queue, format: wgpu::TextureFormat) -> Self {
@@ -354,6 +375,7 @@ impl SpriteRenderer {
             pending: Vec::with_capacity(MAX_SPRITES),
             last_draw_calls: 0,
             frame_stats: Default::default(),
+            resources: std::sync::Arc::new(()),
         };
 
         let white = this.create_texture_rgba(device, queue, "white", 1, 1, &[255, 255, 255, 255]);
@@ -442,6 +464,7 @@ impl SpriteRenderer {
     /// Release asset textures, retaining the built-in white texel. All other
     /// texture IDs are invalidated; call only when replacing the owning resource library.
     pub fn clear_asset_textures(&mut self) {
+        self.resources = std::sync::Arc::new(());
         self.pending.clear();
         self.frame_stats = Default::default();
         self.material_key.clear();
@@ -558,6 +581,7 @@ impl SpriteRenderer {
         if self.material_key == key {
             return self.material_error.clone().map_or(Ok(()), Err);
         }
+        self.resources = std::sync::Arc::new(());
         self.material_key = key;
         self.material_names.clear();
         self.material_pipelines.clear();
@@ -684,7 +708,106 @@ impl SpriteRenderer {
         Ok(MaterialPipeline { pipeline, bindings })
     }
 
-    /// Upload instances and draw one instanced call per distinct (material, texture) pair.
+    /// Snapshot the bounded queue into independent camera/instance GPU buffers.
+    /// Prepare each view before opening a render pass, then draw all views before
+    /// one submission. This avoids queue.write_buffer overwriting earlier draws.
+    pub fn prepare_view(
+        &mut self,
+        device: &Device,
+        camera: &Camera,
+    ) -> Result<Option<PreparedSpriteView>, String> {
+        let bounds = camera.view_bounds();
+        if !bounds.iter().all(|v| v.is_finite())
+            || bounds[0] >= bounds[2]
+            || bounds[1] >= bounds[3]
+            || !camera.projection_matrix().is_finite()
+        {
+            return Err("Cannot prepare an invalid camera view".into());
+        }
+        self.last_draw_calls = 0;
+        if self.pending.is_empty() {
+            return Ok(None);
+        }
+        sort_painter_order(&mut self.pending);
+        let matrix = camera.projection_matrix().to_cols_array();
+        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("prepared_view_camera"),
+            contents: bytemuck::cast_slice(&matrix),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("prepared_view_camera_group"),
+            layout: &self.uniform_bgl,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+        });
+        let all: Vec<SpriteInstance> = self
+            .pending
+            .iter()
+            .map(|(_, _, _, instance)| *instance)
+            .collect();
+        let instances = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("prepared_view_instances"),
+            contents: bytemuck::cast_slice(&all),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let mut runs = Vec::new();
+        let mut i = 0;
+        while i < self.pending.len() {
+            let (texture, material, _, _) = self.pending[i];
+            let start = i;
+            while i < self.pending.len()
+                && self.pending[i].0 == texture
+                && self.pending[i].1 == material
+            {
+                i += 1;
+            }
+            runs.push((texture, material, start as u32..i as u32));
+        }
+        self.last_draw_calls = runs.len() as u32;
+        Ok(Some(PreparedSpriteView {
+            _uniform_buffer: uniform_buffer,
+            uniform_bind_group,
+            instances,
+            runs,
+            count: all.len(),
+            resources: self.resources.clone(),
+        }))
+    }
+
+    /// Draw a prepared view after setting its viewport/scissor. Uploads remain
+    /// independent even when the pending queue is cleared or another view prepared.
+    pub fn draw_prepared<'a>(
+        &'a self,
+        pass: &mut wgpu::RenderPass<'a>,
+        view: &'a PreparedSpriteView,
+    ) -> Result<(), String> {
+        if !std::sync::Arc::ptr_eq(&self.resources, &view.resources) {
+            return Err("Prepared view uses replaced or different renderer resources".into());
+        }
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &view.uniform_bind_group, &[]);
+        pass.set_vertex_buffer(0, self.quad_vertices.slice(..));
+        pass.set_vertex_buffer(1, view.instances.slice(..));
+        pass.set_index_buffer(self.quad_indices.slice(..), wgpu::IndexFormat::Uint16);
+        for (texture, material, range) in &view.runs {
+            if let Some(material) = self.material_pipelines.get(material) {
+                pass.set_pipeline(&material.pipeline);
+                pass.set_bind_group(2, &material.bindings, &[]);
+            } else {
+                pass.set_pipeline(&self.pipeline);
+            }
+            let slot = &self.textures[texture.0 as usize];
+            pass.set_bind_group(1, &slot.bind_group, &[]);
+            pass.draw_indexed(0..QUAD_INDICES.len() as u32, 0, range.clone());
+        }
+        Ok(())
+    }
+
+    /// Single-view upload/draw. Multiple views before one submit must use
+    /// prepare_view/draw_prepared, since this path reuses its mutable GPU buffers.
     pub fn flush<'a>(
         &'a mut self,
         render_pass: &mut wgpu::RenderPass<'a>,

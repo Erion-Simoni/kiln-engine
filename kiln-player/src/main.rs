@@ -269,6 +269,7 @@ struct PlayerApp {
     /// UI renderer for drawing widgets with nine-slice backgrounds and text.
     ui_renderer: UiRenderer,
     /// Current mouse position (screen space, top-left origin).
+    mouse_present: bool,
     mouse_x: f64,
     /// Current mouse position (screen space, top-left origin).
     mouse_y: f64,
@@ -328,6 +329,7 @@ impl PlayerApp {
             ui_commands: Vec::new(),
             ui_widgets: Vec::new(),
             ui_renderer: UiRenderer::new(),
+            mouse_present: false,
             mouse_x: 0.0,
             mouse_y: 0.0,
             mouse_pressed: false,
@@ -788,6 +790,7 @@ impl PlayerApp {
         }
         let axis = self.axis();
         let save_dir = self.save_dir.clone();
+        let mouse_present = self.mouse_present;
         let mouse_x = self.mouse_x;
         let mouse_y = self.mouse_y;
         let mouse_pressed = self.mouse_pressed;
@@ -827,16 +830,18 @@ impl PlayerApp {
                 return;
             }
             if let Some(slice) = slice.as_mut() {
-                if let Some(position) =
-                    camera.screen_to_world([mouse_x as f32, mouse_y as f32], mouse_viewport)
-                {
-                    slice
-                        .host_mut()
-                        .set_mouse_world(position.map(|value| value as f64));
-                }
+                slice.host_mut().set_world_pointer(
+                    mouse_present
+                        .then(|| {
+                            camera
+                                .pointer_to_world([mouse_x as f32, mouse_y as f32], mouse_viewport)
+                        })
+                        .flatten()
+                        .map(|point| point.map(f64::from)),
+                );
                 slice.host_mut().set_ui_pointer(
                     mouse_viewport,
-                    Some([mouse_x as f32, mouse_y as f32]),
+                    mouse_present.then_some([mouse_x as f32, mouse_y as f32]),
                     mouse_pressed,
                 );
                 // Pass mouse state to the slice host for UI click detection.
@@ -1435,6 +1440,9 @@ impl winit::application::ApplicationHandler for PlayerApp {
             }
             winit::event::WindowEvent::Focused(focused) => {
                 self.focused = focused;
+                if !focused {
+                    self.mouse_present = false;
+                }
                 if let Some(slice) = self.slice.as_mut() {
                     slice.host_mut().reset_ui_input();
                 }
@@ -1448,18 +1456,24 @@ impl winit::application::ApplicationHandler for PlayerApp {
                 // Keep the configured world extent when the physical window
                 // changes. Rendering and input mapping use the same viewport.
             }
+            winit::event::WindowEvent::CursorLeft { .. } => {
+                self.mouse_present = false;
+            }
             winit::event::WindowEvent::CursorMoved { position, .. } => {
+                self.mouse_present = true;
                 self.mouse_x = position.x;
                 self.mouse_y = position.y;
             }
             winit::event::WindowEvent::Touch(touch) => match touch.phase {
                 winit::event::TouchPhase::Started => {
+                    self.mouse_present = true;
                     self.mouse_x = touch.location.x;
                     self.mouse_y = touch.location.y;
                     self.mouse_pressed = true;
                     self.queue_ui_pointer(true);
                 }
                 winit::event::TouchPhase::Moved => {
+                    self.mouse_present = true;
                     self.mouse_x = touch.location.x;
                     self.mouse_y = touch.location.y;
                 }
@@ -1468,6 +1482,7 @@ impl winit::application::ApplicationHandler for PlayerApp {
                     self.mouse_y = touch.location.y;
                     self.mouse_pressed = false;
                     self.queue_ui_pointer(false);
+                    self.mouse_present = false;
                 }
             },
             winit::event::WindowEvent::MouseInput {

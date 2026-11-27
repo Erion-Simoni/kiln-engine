@@ -18,6 +18,7 @@ pub mod screenshot;
 pub mod sprite_renderer;
 pub mod texture;
 pub mod tier;
+pub mod views;
 
 pub use frame::{clear_view, execute_passes, Frame2dGraph, FrameResources, PassExecContext};
 pub use graph::{
@@ -32,8 +33,13 @@ pub use post_gpu::{PostGpuPipeline, PostUniforms};
 pub use profiler::{GpuProfiler, PassTiming};
 pub use renderer::Renderer;
 pub use screenshot::{render_graph_screenshot, try_render_graph_screenshot, GOLDEN_LOW_64_SHA256};
-pub use sprite_renderer::{SpriteFrameStats, SpriteInstance, SpriteRenderer, MAX_SPRITES};
+pub use sprite_renderer::{
+    PreparedSpriteView, SpriteFrameStats, SpriteInstance, SpriteRenderer, MAX_SPRITES,
+};
 pub use texture::{
     build_grid_atlas_rgba, create_rgba8_texture, uv_rect_pixels, TextureId, FULL_UV,
 };
 pub use tier::RenderTier;
+
+#[cfg(test)]
+mod sprite_views_test;

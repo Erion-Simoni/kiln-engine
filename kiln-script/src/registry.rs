@@ -126,4 +126,5 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("camera_shake_stop", 125, 0),
     ("camera_transition", 126, 4),
     ("camera_transition_stop", 127, 0),
+    ("mouse_world_valid", 128, 0),
 ];

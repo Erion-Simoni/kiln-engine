@@ -2512,3 +2512,28 @@ validated undoable component commands. No new component, dependency or render pa
 Tile/particle parallax, automatic repeated backgrounds and multiple views remain
 separate work. Contract v10 rejects older bundles that would ignore saved fields.
 Preserve A03/A04 deferrals and the user's bounded-attempt policy; A05 stays PARTIAL.
+
+### ADR-0110 — Isolated sprite view uploads and clipped world pointers (2026-11-27)
+
+Status: accepted. Add immutable prepared sprite views with independent camera and
+instance GPU buffers, built from the existing bounded sprite queue. Resource
+identity tokens reject stale/foreign prepared views. Clearing project textures
+also clears pending sprites holding invalidated IDs. Views share
+texture/material resources and painter ordering, but never overwrite another
+view's uploads before submission. Empty queues allocate nothing; each prepared
+view is bounded by MAX_SPRITES. Hosts must bound active view count; shared viewport
+layout helpers accept at most four nonempty finite rectangles. Existing single-view
+flush remains supported; callers use prepared views for multiple draws per submit.
+Discard prepared views on project resource replacement. No dependency/render pass
+or default renderer memory increase. Full authored split-screen host/configuration
+integration remains separate; this checkpoint fixes its GPU/input prerequisites.
+
+Add half-open viewport hit-testing and topmost-view pointer routing, respecting
+letterbox rectangles and rejecting non-finite/invalid input instead of extrapolating.
+Keep screen_to_world extrapolation for authoring tools. All gameplay hosts use the
+clipped pointer path and explicitly clear stale world coordinates outside the view.
+Expose mouse_world_valid() (host call 128); existing coordinate reads return zero
+when invalid. Pointer validity travels with frozen/debug-suspended ticks and all
+attached/UI callbacks. UI pointer paths stay independent. Contract v11 rejects
+older bundles missing the validity call. No logical-save schema/layout change.
+A05 remains PARTIAL; A03/A04 deferred gates and bounded-attempt policy remain.

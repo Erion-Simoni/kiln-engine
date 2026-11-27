@@ -232,7 +232,8 @@ configuration while live particles finish their lifetimes.
 |----------|-----------|---------|-------------|
 | `get_action(action_name)` | 1 (str) | bool | Whether an action is pressed |
 | `get_action_axis(action_name)` | 1 (str) | f64 | Axis value -1 to 1 |
-| `get_mouse_world_x()` / `get_mouse_world_y()` | 0 | f64 | Pointer mapped through the gameplay camera and physical viewport |
+| `mouse_world_valid()` | 0 | bool | Pointer is present inside the fitted gameplay viewport |
+| `get_mouse_world_x()` / `get_mouse_world_y()` | 0 | f64 | Mapped world position, or zero when invalid |
 
 Physics queries use world coordinates. Directions are normalized, distances are
 in world units, and attached scripts exclude their own body from rays. Ray
@@ -245,7 +246,11 @@ result layout: use stable source ID at index 0 and distance at index 1.
 `[vx, vy]`. `set_entity_vel` changes the physics body for the next fixed tick;
 preserve its current Y velocity when changing horizontal movement. Position
 getters/setters address authored local transforms. The mouse world APIs are
-provided by the native editor/player; custom hosts must call `set_mouse_world`.
+provided by editor/native/browser. Gate world interactions with `mouse_world_valid()`;
+letterbox bars and absent pointers clear validity and coordinates. Custom hosts
+should use clipped camera mapping and `set_world_pointer(Some(point))` or `None`;
+`set_mouse_world(point)` remains a finite-checked convenience. Debugger-suspended
+ticks retain their captured pointer/validity, including attached/UI callbacks.
 See [Physics and cameras](PHYSICS_2D.md) and the checked-in editor sample.
 
 ### Localization builtins
@@ -773,7 +778,7 @@ Add `KILN_DEBUG_EXPRESSION_WATCHES=1` to verify computed watch values before and
 after corrected-source Restart. `KILN_DEBUG_ACTIVE_SCOPES=1` additionally verifies
 strict scope reads, the active-only view and completed-scope rejection.
 
-Runtime tools now use contract `kiln-authoring-v10` (authored sprite parallax, following
+Runtime tools now use contract `kiln-authoring-v11` (clipped world-pointer validity, following
 the v6 shared-call change). Function-using VM snapshots
 include `shared-calls-v1` in their memory signature, so older incompatible function
 slot layouts reject before a load commits. Straight-line program signatures remain

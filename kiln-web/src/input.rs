@@ -46,8 +46,10 @@ impl App {
         if let Some(canvas) = &self.canvas_element {
             let rect = canvas.get_bounding_client_rect();
             if rect.width() <= 0.0 || rect.height() <= 0.0 {
+                self.input.pointer_present = false;
                 return;
             }
+            self.input.pointer_present = true;
             self.input.mouse_x = (x - rect.left()) * self.canvas_width as f64 / rect.width();
             self.input.mouse_y = (y - rect.top()) * self.canvas_height as f64 / rect.height();
             if let Some(down) = edge {
@@ -194,11 +196,20 @@ pub(super) fn install(app: &SharedApp, window: &web_sys::Window) {
                         Some(false),
                     );
                 }
+                app.input.pointer_present = false;
                 app.input.touch_origin = None;
                 app.input.touch_axis = [0.0; 2];
             }
         });
     }
+    let shared = app.clone();
+    listen(window, "mouseout", move |event: web_sys::MouseEvent| {
+        if event.related_target().is_none() {
+            if let Some(app) = shared.borrow_mut().as_mut() {
+                app.input.pointer_present = false;
+            }
+        }
+    });
     let shared = app.clone();
     listen(window, "blur", move |_: web_sys::Event| {
         if let Some(app) = shared.borrow_mut().as_mut() {

@@ -22,7 +22,7 @@ pub(super) struct PendingTick {
     index: usize,
     entered: bool,
     keys: std::collections::HashSet<String>,
-    mouse: [f64; 2],
+    mouse: Option<[f64; 2]>,
     save_dir: Option<std::path::PathBuf>,
     collisions: Vec<(String, String, bool)>,
     animations: Vec<(String, kiln_core::FrameEvent)>,

@@ -1,0 +1,26 @@
+id = "world-pointer"
+name = "Clipped World Pointer"
+version = "0.1.0"
+features = []
+
+[window]
+width = 320
+height = 240
+
+[cameras.main]
+pixel_perfect = true
+
+[scenes.main]
+id = "main"
+name = "Green only for a valid pointer near world center"
+script = "scripts/main.ks"
+nested_scenes = []
+
+[[scenes.main.entities]]
+id = "actor"
+name = "Stationary screen-position witness"
+components = [
+  { type = "Transform", x = 160.0, y = 120.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [0.0, 1.0, 0.0, 1.0], width = 64.0, height = 64.0, layer = 0.0 },
+]
+

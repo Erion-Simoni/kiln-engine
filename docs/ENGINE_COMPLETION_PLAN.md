@@ -614,6 +614,18 @@ fixed, ordinary and reverse/foreground scrolling. Contract v10 rejects older
 bundles ignoring the fields. Tile/particle parallax, repeats, split views and full
 A05 acceptance remain open. [Evidence](evidence/A05_SPRITE_PARALLAX.md).
 
+**View/input prerequisites checkpoint 2026-11-27:** ADR-0110 adds independent
+prepared sprite uploads sharing render resources, with real GPU two-camera/zoom
+pixels in one submission. Stale/foreign resources reject and clearing textures
+also discards invalid pending sprites. Shared bounded viewport hit-testing routes
+split boundaries/gaps/overlaps; all current gameplay hosts use clipped mapping
+and clear absent/letterbox world pointers. `mouse_world_valid()` is propagated
+through frozen ticks/attachments/UI callbacks. Native/browser five-phase pointer
+pixels pass; contract v11 rejects older bundles. This is a renderer/input foundation,
+not completed authored split-screen/host integration. A05 stays PARTIAL.
+[Evidence](evidence/A05_VIEW_UPLOADS_AND_POINTERS.md).
+
+
 
 
 

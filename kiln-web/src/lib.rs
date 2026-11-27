@@ -122,6 +122,7 @@ struct WebInput {
     keys: std::collections::HashSet<String>,
     key_edges: Vec<String>,
     pointer_edges: Vec<([f32; 2], bool)>,
+    pointer_present: bool,
     mouse_x: f64,
     mouse_y: f64,
     mouse_pressed: bool,
@@ -433,16 +434,24 @@ impl App {
                 }
                 host.set_ui_pointer(
                     viewport,
-                    Some([input.mouse_x as f32, input.mouse_y as f32]),
+                    input
+                        .pointer_present
+                        .then_some([input.mouse_x as f32, input.mouse_y as f32]),
                     input.mouse_pressed,
                 );
                 host.set_mouse_state(input.mouse_x, input.mouse_y, input.mouse_just_pressed);
-                if let Some(position) = self
-                    .camera
-                    .screen_to_world([input.mouse_x as f32, input.mouse_y as f32], viewport)
-                {
-                    host.set_mouse_world(position.map(|v| v as f64));
-                }
+                host.set_world_pointer(
+                    input
+                        .pointer_present
+                        .then(|| {
+                            self.camera.pointer_to_world(
+                                [input.mouse_x as f32, input.mouse_y as f32],
+                                viewport,
+                            )
+                        })
+                        .flatten()
+                        .map(|point| point.map(f64::from)),
+                );
                 if let Err(error) = slice.step(&mut self.world, input.axes(), dt.as_secs_f64()) {
                     web_sys::console::error_1(&JsValue::from_str(&format!(
                         "Script execution failed: {error}"

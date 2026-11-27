@@ -34,8 +34,8 @@ viewport extrapolation remains available for tools; callers must still choose an
 clip the correct viewport for gameplay input. Offset/scale and Y orientation are
 covered by round-trip tests; split-view routing remains separate work.
 
-Runtime tools now require kiln-authoring-v10. Rebuild matching editor/CLI/player and
-browser bundles; older runtimes lack dead zones, camera effects or sprite parallax and are rejected by the new
+Runtime tools now require kiln-authoring-v11. Rebuild matching editor/CLI/player and
+browser bundles; older runtimes lack current camera effects, parallax or pointer validity and are rejected by the new
 exporter. VM-memory/save-slot layout is unchanged. See samples/camera_dead_zone and
 [evidence](evidence/A05_CAMERA_DEAD_ZONES.md).
 
@@ -103,3 +103,32 @@ without these fields default to ordinary scrolling. Invalid authored layouts
 reject export before publication. Tile/particle parallax and repeated backgrounds
 remain separate work. See `samples/parallax` and
 [parallax evidence](evidence/A05_SPRITE_PARALLAX.md).
+
+## Gameplay pointer validity and prepared views
+
+Gameplay now uses `Camera::pointer_to_world`: viewport edges are half-open and
+letterbox bars are excluded. Missing/non-finite pointers clear stale world
+coordinates. Use `mouse_world_valid()` before world interactions; coordinate
+getters return zero when invalid. Native cursor leave/focus loss and browser
+pointer absence/touch completion clear presence. Editor Play clears absent input.
+UI event routing stays separate. Tools can use `screen_to_world` to extrapolate.
+
+`kiln_render::views::route_pointer` accepts up to four fitted view rectangles,
+rejects invalid rectangles and maps through the last (frontmost) containing camera.
+Shared edges belong to one adjacent view, gaps to none. This helper and the
+renderer API below are prerequisites; authored split-screen configuration and
+multi-camera host scheduling are still open.
+
+Multiple world views before one GPU submission must use
+`SpriteRenderer::prepare_view(device,camera)` and `draw_prepared(pass,view)`.
+Prepared views retain independent camera/instance buffers while sharing textures
+and materials. Set viewport/scissor before each draw. Empty queues allocate
+nothing, sprite count remains capped at 16384, and each view exposes its own
+queued/draw-call counts. Prepared uploads survive clearing the CPU queue and can
+be retained while renderer resources stay unchanged. Replaced/foreign resources
+reject drawing. Clear project textures also discards pending invalid texture IDs.
+The existing single-view `flush` remains supported and reuses mutable buffers;
+default hosts keep that path. No extra allocation is added to their frame loop.
+
+See [prepared-view and pointer evidence](evidence/A05_VIEW_UPLOADS_AND_POINTERS.md)
+and `samples/world_pointer`.

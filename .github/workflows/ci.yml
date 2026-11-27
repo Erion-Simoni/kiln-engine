@@ -71,6 +71,10 @@ jobs:
       - name: Install Linux audio/controller development headers
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libgl1-mesa-dri mesa-vulkan-drivers
+      - name: Verify prepared sprite views on a real GPU adapter
+        env:
+          KILN_REQUIRE_GPU_TESTS: '1'
+        run: cargo test --locked -p kiln-render prepared_views -- --nocapture
       - name: Run tests
         run: cargo nextest run --workspace --locked
       - name: Test portable package preparation and captured builds
@@ -289,6 +293,14 @@ jobs:
             if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
             KILN_ATLAS_PROJECT="target/a05-native-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" KILN_ATLAS_PLAYER_EVIDENCE="target/a05-$kind-native" python3 tests/native/atlas_player_smoke.py
           done
+      - name: Verify clipped gameplay pointer in native exports
+        env:
+          KILN_ATLAS_PROJECT: samples/world_pointer
+          KILN_PIXEL_SCENARIO: clipped-pointer
+          KILN_PIXEL_TEST_POINTER: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 288,88,352,152
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a05-views-pointer-native
+        run: python3 tests/native/atlas_player_smoke.py
       - name: Verify anchored sprite parallax in native exports
         env:
           KILN_ATLAS_PROJECT: samples/parallax
@@ -538,6 +550,14 @@ jobs:
             if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
             KILN_ATLAS_PROJECT="target/a05-browser-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" WEB_ATLAS_EVIDENCE="target/a05-$kind-browser" node tests/web/atlas.cjs target/debug/web-runtime
           done
+      - name: Verify clipped gameplay pointer in browser exports
+        env:
+          KILN_ATLAS_PROJECT: samples/world_pointer
+          KILN_PIXEL_SCENARIO: clipped-pointer
+          KILN_PIXEL_TEST_POINTER: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 288,88,352,152
+          WEB_ATLAS_EVIDENCE: target/a05-views-pointer-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
       - name: Verify anchored sprite parallax in browser exports
         env:
           KILN_ATLAS_PROJECT: samples/parallax
