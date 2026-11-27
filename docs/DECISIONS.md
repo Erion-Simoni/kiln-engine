@@ -2566,3 +2566,24 @@ controls share settings. Existing 4096-cycle update bound remains; extreme overl
 acceptance is not claimed. Contract v12 rejects older runtimes ignoring the fields.
 No dependencies, VM-memory or logical-save layout change. State graphs, arbitrary
 tracks/curves, rigs/IK and full A07 authoring acceptance remain open.
+
+### ADR-0113 — Parameter-driven character animation states (2026-11-27)
+
+Status: accepted. A07 adds an inline AnimationGraph component with named states
+referencing project clips, finite named numeric parameters, and ordered conditional
+transitions. Bool script values map to 0/1. At most 64 states/parameters and 256
+transitions; validate references, names, thresholds and one-shot finish conditions.
+First matching transition wins, at most one per positive unpaused animation update.
+Entering a state restarts its clip, including states sharing a clip. Graph-owned
+clips cannot also have clip.next; one-shot completion is handled by graph edges.
+
+set_animation_parameter(entity,name,value) queues callback-atomic changes and
+returns whether a declared parameter was queued. get_animation_state(entity)
+reads current state from the normal world facts snapshot. Manual play/stop detach
+the graph; rebinding/reset starts at entry. Preserve graph definition, parameters
+and current state alongside clip time in logical snapshots, validating before
+restore. Pauses hold graph evaluation; source suspension retains existing tick
+atomicity. Inspector uses a persistent draft with validation and explicit Apply,
+then existing undoable component transactions. No dependency or blending system.
+Contract v13 rejects older runtimes missing the component/calls. Skeletal rigs,
+arbitrary timelines, blend trees and full A07 acceptance remain open.

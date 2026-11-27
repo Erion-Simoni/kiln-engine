@@ -5634,6 +5634,14 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 if crate::sprite_editor::layout_ui(ui,&mut settings) {self.queue_component(entity,ComponentEdit::SetVisual(kiln_core::Component::SpriteLayout {settings}));}
                             });
                         }
+                        if has_sprite {
+                            let scope=format!("{:?}:{}",self.asset_browser.root(),self.scenes.active_id().unwrap_or(""));
+                            let graph=self.current_project.as_ref().and_then(|project|crate::animation_graph_editor::show(ui,&mut self.anim_editor.graph_editor,&authored,&project.animation_clips,&scope));
+                            if let Some(graph)=graph {self.queue_component(entity,ComponentEdit::SetVisual(kiln_core::Component::AnimationGraph {graph}));}
+                            if authored.components.iter().any(|c|matches!(c,kiln_core::Component::AnimationGraph {..})) && ui.button("Remove Animation States").clicked() {
+                                self.remove_component(entity,ComponentKind::AnimationGraph);
+                            }
+                        }
                         if authored.components.iter().any(|component|matches!(component,kiln_core::Component::Particles {..})) {
                             ui.label("Saved particle effect: edit in VFX Editor.");
                             if ui.button("Remove Particles").clicked() {self.remove_component(entity,ComponentKind::Particles);}

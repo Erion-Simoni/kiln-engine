@@ -661,6 +661,15 @@ Contract v12 rejects older runtimes ignoring fields. State graphs, arbitrary
 tracks/curves, rigs/IK and full A07 acceptance remain open. A07 stays PARTIAL.
 See [A06/A07 evidence](evidence/A06_A07_SPARSE_MAPS_AND_PLAYBACK.md).
 
+**Character-state checkpoint 2026-11-27:** ADR-0113 adds bounded authored state
+machines with script parameters, ordered comparisons, wildcard interrupts and
+one-shot finish transitions. Inspector drafts validate before undoable Apply;
+scene/project and logical saves preserve graph state. Manual play can detach;
+repeated movement parameters retain run time. Actual native/browser keyboard
+replays verify run movement, release-to-idle, one-shot action/return and bounds.
+Contract v13 rejects older tools. Blending, arbitrary tracks, rigs/IK and complete
+A07 authoring acceptance remain open. [Evidence](evidence/A07_CHARACTER_STATES.md).
+
 ### A08 — Complete 2D physics and character tools
 
 **Status:** PARTIAL. **Depends on:** A04, A06.

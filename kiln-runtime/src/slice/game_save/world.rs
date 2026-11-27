@@ -257,6 +257,16 @@ pub(super) fn validate(
                         resource_path(path)?;
                     }
                 }
+                Component::AnimationGraph { graph } => {
+                    graph.validate(&project.animation_clips)?;
+                    if !entity
+                        .components
+                        .iter()
+                        .any(|c| matches!(c, Component::Sprite { .. }))
+                    {
+                        return Err("Animation graph requires a saved sprite".into());
+                    }
+                }
                 Component::SpriteLayout { settings } => settings.validate()?,
                 Component::Physics { body, collider } => {
                     kiln_core::physics_data::validate_body(body, collider)?

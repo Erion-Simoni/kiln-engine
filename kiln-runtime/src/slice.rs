@@ -80,6 +80,8 @@ pub const ROLE_COIN: &str = "coin";
 /// What the script can read about the current frame.
 #[derive(Debug, Clone, Default)]
 pub struct SliceFacts {
+    pub entity_animation_states: HashMap<String, String>,
+    pub entity_animation_parameters: HashMap<String, std::collections::BTreeMap<String, f64>>,
     /// Horizontal input axis, -1 to 1.
     pub input_x: f64,
     /// Vertical input axis, -1 to 1.
@@ -117,6 +119,12 @@ pub struct SliceFacts {
 /// A change the script asked for.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SliceCommand {
+    /// Callback-atomic change to a declared animation graph parameter.
+    SetAnimationParameter {
+        entity: String,
+        name: String,
+        value: f64,
+    },
     /// Validated transient camera effect, committed with the callback.
     CameraEffect(crate::camera::CameraEffect),
     /// Move the player by the given delta.
@@ -1380,6 +1388,56 @@ impl SliceHost {
                 .into(),
             )),
             116..=123 => self.call_task(func_id, args),
+            129 => {
+                let entity = args[0]
+                    .as_str()
+                    .ok_or_else(|| VmError::HostCallError("Expected entity ID".into()))?;
+                let name = args[1].as_str().ok_or_else(|| {
+                    VmError::HostCallError("Expected animation parameter name".into())
+                })?;
+                let value = match &args[2] {
+                    Value::Bool(v) => {
+                        if *v {
+                            1.0
+                        } else {
+                            0.0
+                        }
+                    }
+                    v => v.to_f64().ok_or_else(|| {
+                        VmError::HostCallError("Expected numeric/bool animation parameter".into())
+                    })?,
+                };
+                if !value.is_finite() {
+                    return Err(VmError::HostCallError(
+                        "Animation parameter must be finite".into(),
+                    ));
+                }
+                if !self
+                    .facts
+                    .entity_animation_parameters
+                    .get(entity)
+                    .is_some_and(|params| params.contains_key(name))
+                {
+                    return Ok(Value::Bool(false));
+                }
+                self.commands.push(SliceCommand::SetAnimationParameter {
+                    entity: entity.into(),
+                    name: name.into(),
+                    value,
+                });
+                Ok(Value::Bool(true))
+            }
+            130 => {
+                let entity = args[0]
+                    .as_str()
+                    .ok_or_else(|| VmError::HostCallError("Expected entity ID".into()))?;
+                Ok(self
+                    .facts
+                    .entity_animation_states
+                    .get(entity)
+                    .map(|state| Value::Str(state.clone()))
+                    .unwrap_or_else(|| Value::Str(String::new())))
+            }
             128 => Ok(Value::Bool(self.mouse_world.is_some())),
             124..=127 => self.call_camera_effect(func_id, args),
             110 => Ok(Value::Map(Default::default())),
@@ -2205,6 +2263,20 @@ impl SliceSession {
             entity_sprite_sizes.insert(source_id.0.clone(), sprite.size.map(|s| s as f64));
         }
 
+        let mut entity_animation_states = HashMap::new();
+        let mut entity_animation_parameters = HashMap::new();
+        for (id, player) in world
+            .world_ref()
+            .query::<(&SourceId, &crate::AnimationPlayer)>()
+            .iter()
+        {
+            if let Some(state) = player.graph_state() {
+                entity_animation_states.insert(id.0.clone(), state.into());
+            }
+            if let Some(params) = player.graph_parameters() {
+                entity_animation_parameters.insert(id.0.clone(), params.clone());
+            }
+        }
         self.host_mut().frame_count += 1;
 
         SliceFacts {
@@ -2218,6 +2290,8 @@ impl SliceSession {
             delta_time: dt,
             frame_count: self.host_mut().frame_count,
             time_scale: self.host_mut().time_scale,
+            entity_animation_states,
+            entity_animation_parameters,
             entity_positions,
             entity_velocities,
             entity_sprite_colors,
@@ -2230,6 +2304,25 @@ impl SliceSession {
     /// Apply one command to the world and the slice state.
     fn apply(&mut self, command: SliceCommand, world: &mut GameWorld) {
         match command {
+            SliceCommand::SetAnimationParameter {
+                entity,
+                name,
+                value,
+            } => {
+                let handle = world
+                    .world_ref()
+                    .query::<(hecs::Entity, &SourceId)>()
+                    .iter()
+                    .find(|(_, id)| id.0 == entity)
+                    .map(|(handle, _)| handle);
+                if let Some(handle) = handle {
+                    if let Ok(mut player) =
+                        world.world_mut().get::<&mut crate::AnimationPlayer>(handle)
+                    {
+                        let _ = player.set_graph_parameter(&name, value);
+                    }
+                }
+            }
             SliceCommand::CameraEffect(effect) => self.vm.host_mut().camera_effects.push(effect),
             SliceCommand::MovePlayer { dx, dy } => {
                 if let Some(player) = find_player(world) {

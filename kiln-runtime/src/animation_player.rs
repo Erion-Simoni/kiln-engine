@@ -1,11 +1,15 @@
 //! Shared clip playback, crossed frame events and non-looping transitions.
 use kiln_core::{Clip, Frame, FrameEvent};
+mod graph;
+pub use graph::GraphSnapshot;
 use kiln_render::TextureId;
 use std::collections::HashMap;
 
 /// Logical clip playback; GPU bindings and pending frame events are transient.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AnimationSnapshot {
+    #[serde(default)]
+    pub graph: Option<GraphSnapshot>,
     pub clips: std::collections::BTreeMap<String, Clip>,
     pub current: Option<String>,
     pub elapsed: f64,
@@ -15,6 +19,7 @@ pub struct AnimationSnapshot {
 
 #[derive(Debug)]
 pub struct AnimationPlayer {
+    graph: Option<GraphSnapshot>,
     clips: HashMap<String, Clip>,
     textures: HashMap<String, (TextureId, [u32; 2])>,
     current: Option<String>,
@@ -27,6 +32,7 @@ pub struct AnimationPlayer {
 impl AnimationPlayer {
     pub fn snapshot(&self) -> Result<AnimationSnapshot, String> {
         let saved = AnimationSnapshot {
+            graph: self.graph.clone(),
             clips: self
                 .clips
                 .iter()
@@ -76,6 +82,7 @@ impl AnimationPlayer {
         {
             return Err("Missing saved animation clip".into());
         }
+        player.restore_graph(saved.graph.clone(), saved.current.as_deref())?;
         player.current.clone_from(&saved.current);
         player.elapsed = saved.elapsed;
         player.speed = saved.speed;
@@ -84,6 +91,7 @@ impl AnimationPlayer {
     }
     pub fn new() -> Self {
         Self {
+            graph: None,
             clips: HashMap::new(),
             textures: HashMap::new(),
             current: None,
@@ -109,6 +117,10 @@ impl AnimationPlayer {
     }
     /// Switching state starts a clip; requesting the current state preserves time.
     pub fn play(&mut self, name: &str) {
+        if !self.clips.contains_key(name) {
+            return;
+        }
+        self.graph = None;
         if self.current.as_deref() != Some(name) && self.clips.contains_key(name) {
             self.current = Some(name.into());
             self.elapsed = 0.0;
@@ -116,6 +128,7 @@ impl AnimationPlayer {
         }
     }
     pub fn stop(&mut self) {
+        self.graph = None;
         self.current = None;
         self.elapsed = 0.0;
         self.started = false;
@@ -199,6 +212,7 @@ impl AnimationPlayer {
         if !dt.is_finite() || dt <= 0.0 || self.speed <= 0.0 {
             return;
         }
+        self.advance_graph();
         let mut remaining = dt as f64;
         for _ in 0..4096 {
             let Some(clip) = self.current.as_ref().and_then(|name| self.clips.get(name)) else {

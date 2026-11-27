@@ -1,72 +1,78 @@
 # Kiln Session Handoff
 
-Branch fix/a01-ci-baseline. Current checkpoint: authorized progression through
-A07, 2026-11-27. A05/A06/A07 remain PARTIAL; this session completed concrete
-checkpoints, not all milestone acceptance. User authorized crossing milestones
-through A07, overriding local single-milestone session guidance. Stop at A07.
-At most three focused attempts per blocked check; retain evidence and advance.
-A03/A04 gates remain deferred. Full 3D behind G2D. MIT OR Apache-2.0.
+Branch fix/a01-ci-baseline. Current A07 checkpoint: character animation states,
+2026-11-27, following a9b72c1. User asked to prioritize features that matter; this
+session chose character animation control. A05/A06/A07 remain PARTIAL. Current
+scope stops at A07; do not advance to A08 unasked. At most three focused attempts
+per blocked check; record and move on. A03/A04 gates stay deferred. Full 3D behind G2D.
 
 ## Done
 
-- Environment execution disconnected and later resumed with edits intact. A05
-  commit was verified absent and completed as 898ba25: collapsed projection pointer
-  rejection and cleared draw-call diagnostics on texture replacement. Prior A05
-  prepared views, clipped pointers, parallax, camera effects/dead zones and culling
-  remain intact. Full authored split-screen/rendering acceptance remains open.
-- A06 54521e7 /ADR-0111: render/collision work follows stored intersecting chunks,
-  not enormous empty coordinate spans. Finite f64 bounds/wide tile coordinates,
-  stable chunk draw/global-row collision order, saturating map size and checked
-  atlas dimensions prevent hangs/overflow. Source sparse_tilemap fixture added.
-- A07 ADR-0112: defaulted ping-pong/speed controls reach editor preview/history,
-  runtime and logical snapshots. Loop endpoints are not duplicated; one-shot
-  returns to frame zero. One precise timeline drives frame/event/seek. Zero dt/
-  speed is silent; leftover transition time uses the next clip's speed. Old fields
-  default to forward/speed one. Source ping_pong event/speed proof fixture added.
-- Matching editor/CLI/player/browser rebuilt, contract kiln-authoring-v12. Actual
-  prior-v11 SDK export rejects. No dependency, VM-memory or save-layout change.
-  Docs: evidence/A06_A07_SPARSE_MAPS_AND_PLAYBACK.md. CI adds both export fixtures.
+- ADR-0113: inline AnimationGraph sprite component with named states, declared
+  numeric/bool parameters, ordered conditions, wildcard interrupts and one-shot
+  finish edges. First match wins, one transition per positive unpaused update.
+  State entry restarts its clip, including aliases; repeated movement parameters
+  do not restart running. Existing events remain chronological/unconsumed events
+  survive transitions. Graph clips cannot also use clip.next.
+- Script APIs set_animation_parameter(entity,name,value) (129, returns queued bool)
+  and get_animation_state(entity) (130, empty if absent/detached). Facts include
+  graph state/parameters. Failed or suspended callbacks do not deliver pending
+  changes. Manual valid play/stop detaches; unknown manual clip requests preserve
+  graph ownership. Pause holds graph evaluation.
+- Inspector Animation States drafts support states/clip selection, parameters,
+  condition/finish edges and priority reordering. Validated Apply uses undoable
+  component transactions. Project snapshot/reopen retains graphs. Removing an
+  attached sprite rejects atomically until its graph is removed.
+- Logical snapshots preserve graph definition/state/parameters plus clip clock.
+  Invalid references, parameter sets or state/current-clip mismatch reject.
+  Optional graph fields keep legacy snapshots readable. Limits: 64 states,
+  64 parameters, 256 edges; finite numbers/names up to 64 bytes. Export validates
+  scene/prefab graph references and requires a sprite. No new dependency or VM
+  memory layout change. Runtime contract v13; matching tools rebuilt, v12 SDK rejects.
+- Interactive samples/character_states: automatic state proof, then Left/Right or
+  A/D moves and Space plays one-shot action. This is animation, not physics jump.
+  Native/browser CI tests exercise real input and pixels. See ANIMATION_STATES_2D.md
+  and evidence/A07_CHARACTER_STATES.md. Prior A05/A06/A07 work remains intact.
 
 ## Executed validation
 
-- Full locked workspace 907 Rust PASS (serial), Python helpers 49 PASS; just check,
-  strict default/opt-out WASM Clippy, targeted editor control history, Node syntax,
-  py_compile and whitespace PASS.
-- A06 core/runtime regressions: full finite-world sparse queries, tile coordinate
-  2,000,000,000, row priority across chunks, offsets/edge contact, bad geometry,
-  map/atlas overflow. Initial chunk-edge culling mismatch fixed before final tests.
-- A07 regressions: ping-pong boundaries/hold/seek, old defaults/roundtrip, invalid
-  speed, pause/entry silence, event sequence, different-speed transition leftovers,
-  snapshot resume and nondefault editor undo/redo.
-- Native/browser sparse-map pixels: 4096 green, bounds [128,112,192,176]. Ping-pong:
-  4096 green, bounds [128,88,192,152], gated by zero/one/two/one/zero event order and
-  tick-15 speed checkpoint. Existing five-phase pointer regression passes both
-  runtimes. Six replays run serially after builds, with relocation/hidden source,
-  no native developer PATH and no browser page errors.
-- Raw target/a06-sparse-*.log and target/a07-*.log. Receipts/screenshots under
-  target/a07-{sparse_tilemap,ping_pong}-{native,browser} and
-  target/a07-pointer-{native,browser}. Prior v11 bundle target/a07-prior-web-runtime.
-  Generated outputs excluded from commits. New PNG sample texels are tiny generated
-  fixture assets, not external art.
+- Full locked Rust workspace 915 PASS (serial), Python helpers 49 PASS; just check,
+  strict default/opt-out WASM Clippy, Node syntax/py_compile/whitespace PASS.
+- Runtime tests: movement continuity, pause, priority, finish, same-clip state entry,
+  manual override, parameter validation, corrupt/resumed snapshots, preserved events,
+  failed/debug-suspended callback commit, and general logical saves. Editor test:
+  undo/redo, projection, disk reopen and atomic dependent-sprite-removal rejection.
+- Both native/browser exports observe automatic idle/run/action/idle/run with a
+  delayed blue beacon, then real Right/Space input: run moves, release idles,
+  one-shot action plays, finish idles, run reaches boundary. Final green 4096 at
+  [256,88,320,152] plus blue beacon 64. Source hidden/exports relocated/native PATH
+  lacks developer tools/browser no page errors. Existing ping-pong and pointer
+  fixtures also pass both exports. Six replays ran serially after builds.
+- Actual prior v12 browser SDK export rejects. Controls compile and have transaction/
+  persistence coverage; no full OS graph-creation widget replay claimed.
+- Raw target/a07-graph-*.log; receipts/screenshots target/a07-graph-{native,browser},
+  target/a07-graph-ping_pong-{native,browser},
+  target/a07-graph-world_pointer-{native,browser}. Prior bundle
+  target/a07-graph-prior-web-runtime. Generated outputs are not committed.
 
 ## Open / deferred
 
-- A05 full split-screen authoring/host integration and rendering/capacity acceptance.
-- A06 stamps/streaming, further tile asset validation and complete editor-authored
-  scrolling/collision/reimport/export acceptance. Sparse traversal is not an index;
-  unsupported negative/malformed chunk data is ignored. Stored-data cost remains.
-- A07 state graphs/conditions, arbitrary property/camera/audio/event tracks/curves,
-  script tween authoring and 2D rigs/weights/skinning/IK with full editor acceptance.
-  Existing 4096-cycle update cap remains; extreme event/cycle overload and physical
-  performance acceptance are open. Controls compile/history/persistence/pixel tested;
-  no new OS widget-drag acceptance claimed.
-- A04 source widget gate remains stopped after three attempts; saved-physics pose
-  divergence remains. A03 identities/overrides/crash transactions and A02 combined
-  inspector acceptance deferred. No physical device/DPI, production performance,
-  release, certification or full 3D acceptance implied.
+- A07 blending/blend trees, arbitrary property/camera/audio/event tracks/curves,
+  tween authoring, rigs/weights/skinning/IK and full editor acceptance. Conditions
+  are level values; scripts should pulse one-shot parameters (sample shows rising
+  edge). Current-target edges are ignored; different states sharing clips restart.
+  Graphs are inline components; arbitrary prefab override authoring remains A03.
+- A05 full split-screen host/authoring and remaining rendering/capacity acceptance.
+  A06 stamps/streaming, further tile validation and complete level-authoring gate.
+  Existing animation 4096-cycle cap/extreme event overload and physical performance
+  acceptance remain open; no budget bypass introduced.
+- A04 source widget gate remains stopped after three attempts and saved-physics pose
+  divergence remains. A03 identity/override/crash-transaction and A02 combined
+  inspector acceptance remain deferred. No physical device/DPI, production
+  performance, release/certification or full 3D acceptance claimed.
 
 ## Next
 
-Continue feasible A07 work or consolidate its acceptance. Keep A05/A06 open items
-accurate, preserve the bounded-attempt skip policy, and do not advance to A08 unless
-requested. Do not resume deferred A03/A04 gates by default.
+Continue useful A07 gameplay/authoring work or consolidate state-machine acceptance.
+Keep all remaining milestones honest, preserve bounded-attempt policy and do not
+retry deferred A03/A04 gates or advance beyond A07 without user direction.

@@ -370,6 +370,14 @@ pub fn spawn_entities(
             if let Some(initial) = initial_clip {
                 animation.play(&initial);
             }
+            if let Some(graph) = entity.components.iter().find_map(|c| match c {
+                Component::AnimationGraph { graph } => Some(graph),
+                _ => None,
+            }) {
+                if let Err(error) = animation.bind_graph(graph.clone()) {
+                    log::warn!("Animation graph: {error}");
+                }
+            }
             if let Ok(mut sprite) = world.world_mut().get::<&mut Sprite>(*child) {
                 animation.apply_to_sprite(&mut sprite);
             }

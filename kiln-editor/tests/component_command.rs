@@ -799,3 +799,42 @@ fn joint_endpoints_require_unique_entities_in_the_edited_composition() {
     assert_eq!(json(&scene), before);
     assert_eq!(history.undo_depth(), depth);
 }
+
+#[test]
+fn animation_graph_component_roundtrips_through_history_projection_and_disk() {
+    let mut project = fixture();
+    let mut clip = kiln_core::Clip::new("idle".into(), "art/idle.png".into());
+    clip.add_frame(kiln_core::Frame {
+        rect: [0, 0, 1, 1],
+        pivot: [0.5; 2],
+        duration: 0.125,
+        events: vec![],
+    });
+    project.animation_clips.insert("idle".into(), clip);
+    project.scenes.get_mut("main").unwrap().entities[0]
+        .components
+        .push(ComponentKind::Sprite.default_component().unwrap());
+    let mut scene = project.scenes["main"].clone();
+    let before = json(&scene);
+    let mut history = SceneHistory::new();
+    let graph = kiln_core::animation_graph::AnimationGraph::idle("idle".into());
+    command(ComponentEdit::SetVisual(Component::AnimationGraph {
+        graph,
+    }))
+    .execute(&mut scene, &project, &mut history)
+    .unwrap();
+    let edited = json(&scene);
+    let depth = history.undo_depth();
+    assert!(command(ComponentEdit::Remove(ComponentKind::Sprite))
+        .execute(&mut scene, &project, &mut history)
+        .is_err());
+    assert_eq!(json(&scene), edited);
+    assert_eq!(history.undo_depth(), depth);
+
+    scene = history.undo(scene).unwrap();
+    assert_eq!(json(&scene), before);
+    scene = history.redo(scene).unwrap();
+    assert_eq!(json(&scene), edited);
+    project.scenes.insert("main".into(), scene);
+    assert_disk(&project);
+}

@@ -20,6 +20,18 @@ pub fn read_project(path: &Path) -> Result<Project> {
         .chain(project.prefabs.values().map(|prefab| &prefab.root_entity))
     {
         for component in &entity.components {
+            if let Component::AnimationGraph { graph } = component {
+                graph
+                    .validate(&project.animation_clips)
+                    .map_err(anyhow::Error::msg)?;
+                if !entity
+                    .components
+                    .iter()
+                    .any(|c| matches!(c, Component::Sprite { .. }))
+                {
+                    bail!("Animation graph requires a sprite");
+                }
+            }
             if let Component::SpriteLayout { settings } = component {
                 settings
                     .validate()

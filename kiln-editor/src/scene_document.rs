@@ -169,6 +169,7 @@ fn reconcile(
                 Component::Script { .. } => Some(component.clone()),
                 Component::Physics { .. }
                 | Component::Joint { .. }
+                | Component::AnimationGraph { .. }
                 | Component::SpriteLayout { .. }
                 | Component::Particles { .. } => Some(component.clone()),
             };

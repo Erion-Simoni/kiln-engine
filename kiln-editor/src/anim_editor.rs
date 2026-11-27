@@ -6,6 +6,7 @@ use std::{collections::HashMap, path::Path};
 
 #[derive(Debug, Default)]
 pub struct AnimationEditorState {
+    pub graph_editor: crate::animation_graph_editor::GraphEditorState,
     pub clips: HashMap<String, Clip>,
     pub selected_clip: Option<String>,
     pub selected_frame: usize,

@@ -778,7 +778,7 @@ Add `KILN_DEBUG_EXPRESSION_WATCHES=1` to verify computed watch values before and
 after corrected-source Restart. `KILN_DEBUG_ACTIVE_SCOPES=1` additionally verifies
 strict scope reads, the active-only view and completed-scope rejection.
 
-Runtime tools now use contract `kiln-authoring-v12` (authored ping-pong/speed, following
+Runtime tools now use contract `kiln-authoring-v13` (character animation states, following
 the v6 shared-call change). Function-using VM snapshots
 include `shared-calls-v1` in their memory signature, so older incompatible function
 slot layouts reject before a load commits. Straight-line program signatures remain
@@ -791,3 +791,14 @@ return whether their bounded callback command was queued. See [camera contracts]
 
 `camera_transition(x,y,zoom,seconds)` and `camera_transition_stop()` queue bounded
 pan/zoom commands. See [transition contracts](CAMERAS_2D.md#scripted-transitions).
+
+### Character animation states
+
+`set_animation_parameter(entity, name, value)` accepts a finite number or boolean
+(booleans become 0/1) and returns whether a declared parameter update was queued.
+Missing graph/entity/parameter returns false; invalid argument types fail the
+callback. Updates become visible only on successful callback completion.
+`get_animation_state(entity)` reads the current state name, or an empty string
+for an absent/detached graph. Conditions run at the next animation update, so a
+queued parameter does not immediately change the current state in the callback.
+See [authoring and runtime contracts](ANIMATION_STATES_2D.md).

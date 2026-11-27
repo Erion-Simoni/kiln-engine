@@ -17,6 +17,7 @@ def main():
     original=Path(supplied) if supplied else Path(json.loads((REPO/'target/a03-atlas-recipe/result.json').read_text())['project'])
     scenario=os.environ.get('KILN_PIXEL_SCENARIO')
     pointer_test=os.environ.get('KILN_PIXEL_TEST_POINTER')=='1'
+    animation_test=os.environ.get('KILN_PIXEL_TEST_ANIMATION_STATES')=='1'
     expect_warning=os.environ.get('KILN_EXPECT_SPRITE_DROPS')=='1'
     expected_bounds=[int(n) for n in os.environ['KILN_PIXEL_EXPECT_GREEN_BOUNDS'].split(',')] if os.environ.get('KILN_PIXEL_EXPECT_GREEN_BOUNDS') else None
     if expected_bounds:assert len(expected_bounds)==4
@@ -88,10 +89,35 @@ def main():
             subprocess.run([executable('import'),'-display',':86','-window',handle,str(output/'pointer-outside.png')],env=env,check=True)
             subprocess.run([xdo,'mousemove','--sync','--window',handle,'320','120'],env=env,check=True,timeout=10)
         width,height,green=wait_for(pixels,player,player_log)
+        if animation_test:
+            def phase(kind):
+                ppm=subprocess.check_output([executable('import'),'-display',':86','-window',handle,'-depth','8','ppm:-'],env=env)
+                header,frame=ppm.split(b'\n255\n',1);w=int(header.splitlines()[-1].split()[0]);red=blue=0;green=[]
+                for at in range(0,len(frame),3):
+                    r,g,b=frame[at:at+3]
+                    if g>220 and r<30 and b<30:green.append(at//3%w)
+                    if r>220 and g<30 and b<30:red+=1
+                    if b>220 and r<30 and g<30:blue+=1
+                if kind=='moving':return len(green)>1000 and min(green)>150
+                if kind=='idle':return red>1000 and not green and blue<200
+                return blue>1000 and not green
+            subprocess.run([xdo,'keydown','Right'],env=env,check=True,timeout=10)
+            wait_for(lambda:phase('moving'),player,player_log)
+            subprocess.run([xdo,'keyup','Right'],env=env,check=True,timeout=10)
+            wait_for(lambda:phase('idle'),player,player_log)
+            subprocess.run([xdo,'keydown','space'],env=env,check=True,timeout=10)
+            wait_for(lambda:phase('action'),player,player_log)
+            subprocess.run([xdo,'keyup','space'],env=env,check=True,timeout=10)
+            wait_for(lambda:phase('idle'),player,player_log)
+            subprocess.run([xdo,'keydown','Right'],env=env,check=True,timeout=10)
+            expected_bounds=[256,88,320,152]
+            width,height,green=wait_for(pixels,player,player_log)
+
         subprocess.run([executable('import'),'-display',':86','-window',handle,str(output/('rendered_scene.png' if scenario else 'generated_clip.png'))],env=env,check=True)
         result=dict(passed=True,relocated_native_export=True,authoring_copy_hidden=True,developer_tools_absent_from_player_path=True,
                     frame=[width,height],scope='Linux Xvfb/software graphics')
         result['rendered_warning_pixels' if expect_warning else ('rendered_green_pixels' if scenario else 'generated_clip_green_pixels')]=green
+        if animation_test:result['animation_input_phases']=['run-moves','idle-on-release','one-shot-action','idle-on-finish','run-at-boundary']
         if pointer_test:result['pointer_phases']=['inside','letterbox-invalid','inside','outside-invalid','inside']
         if scenario:result['scenario']=scenario
         if expected_bounds:result['observed_green_bounds']=observed_bounds

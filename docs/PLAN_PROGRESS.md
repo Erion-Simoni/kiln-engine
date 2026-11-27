@@ -131,3 +131,10 @@ controls survive snapshots and editor undo/redo. Full workspace 907 Rust /49
 Python, quality/WASM and native/browser sparse-map/playback/pointer fixtures PASS.
 A05/A06/A07 stay PARTIAL; requested progression stops at A07. See
 [A06/A07 evidence](evidence/A06_A07_SPARSE_MAPS_AND_PLAYBACK.md).
+
+2026-11-27 ADR-0113: character animation state machines with ordered conditions,
+finite numeric/bool parameters, wildcard interrupts and one-shot finish edges.
+Validated inspector drafts, component undo/redo, script callback atomicity and
+logical saves are integrated. Native/browser real-keyboard movement/action/idle
+replays pass. v13 tools rebuilt. A07 stays PARTIAL; blend/timeline/rig acceptance
+remains open. See [character-state evidence](evidence/A07_CHARACTER_STATES.md).

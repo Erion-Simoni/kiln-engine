@@ -173,3 +173,12 @@ checkpoint. Matching tools require contract v12. These are clip playback control
 state graphs, arbitrary property/camera/audio tracks, curves, rigs and IK remain
 open A07 work. The existing 4096-cycle update limit remains; extreme event/cycle
 overload and production performance acceptance are separate.
+
+## Character animation states
+
+Select a sprite and open **Inspector → Animation States**. Add states referencing
+project clips, parameters and ordered conditions; select an entry state and click
+**Apply Animation States**. Drafts validate before one undoable component edit.
+One-shot states can return automatically after completion. Project reopen and
+logical saves preserve the graph. See [the workflow](ANIMATION_STATES_2D.md) and
+`samples/character_states`: Left/Right or A/D moves, Space plays a one-shot action.

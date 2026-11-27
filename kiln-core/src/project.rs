@@ -348,6 +348,10 @@ pub struct Entity {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Component {
+    /// Parameter-driven sprite animation, referencing project clips.
+    AnimationGraph {
+        graph: crate::animation_graph::AnimationGraph,
+    },
     /// Editor-only authoring flags. Runtime/game visibility is unaffected.
     EditorFlags {
         #[serde(default)]
