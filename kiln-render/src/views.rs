@@ -108,6 +108,9 @@ mod tests {
         ] {
             assert!(route_pointer([0.0; 2], &[(&a, ViewRect(bad))]).is_err());
         }
+        let mut extreme = a.clone();
+        extreme.position = [f32::MAX; 2];
+        assert_eq!(route_pointer([50.0; 2], &[(&extreme, rect)]).unwrap(), None);
         let mut bad = a;
         bad.zoom = 0.0;
         assert_eq!(route_pointer([50.0; 2], &[(&bad, rect)]).unwrap(), None);

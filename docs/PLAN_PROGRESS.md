@@ -114,3 +114,8 @@ hosts; source-debug/UI/attached callbacks retain captured validity. Real two-vie
 GPU pixels and native/browser pointer phases pass. Contract v11 tools rebuilt.
 Authored split-screen scheduling/configuration remains open; A05 stays PARTIAL.
 See [view/input evidence](evidence/A05_VIEW_UPLOADS_AND_POINTERS.md).
+
+2026-11-27 A05 checkpoint: reject gameplay pointer mapping for collapsed/nonfinite
+projections and clear stale draw-call diagnostics on texture replacement. User
+now authorizes advancing sequentially through A07; A05 remains PARTIAL with
+remaining split-screen/rendering acceptance open.

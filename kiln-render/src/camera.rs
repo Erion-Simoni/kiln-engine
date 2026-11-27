@@ -87,6 +87,14 @@ impl Camera {
     /// Gameplay mapping rejects letterbox bars and out-of-view pointers.
     /// Tools needing extrapolation can still use screen_to_world directly.
     pub fn pointer_to_world(&self, point: [f32; 2], viewport: [f32; 4]) -> Option<[f32; 2]> {
+        let bounds = self.view_bounds();
+        if !bounds.iter().all(|v| v.is_finite())
+            || bounds[0] >= bounds[2]
+            || bounds[1] >= bounds[3]
+            || !self.projection_matrix().is_finite()
+        {
+            return None;
+        }
         crate::views::ViewRect(viewport)
             .contains(point)
             .then(|| self.screen_to_world(point, viewport))

@@ -464,6 +464,7 @@ impl SpriteRenderer {
     /// Release asset textures, retaining the built-in white texel. All other
     /// texture IDs are invalidated; call only when replacing the owning resource library.
     pub fn clear_asset_textures(&mut self) {
+        self.last_draw_calls = 0;
         self.resources = std::sync::Arc::new(());
         self.pending.clear();
         self.frame_stats = Default::default();

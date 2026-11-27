@@ -77,8 +77,13 @@ Full 3D behind G2D. MIT OR Apache-2.0.
 
 ## Next
 
+User explicitly authorized continuing through A07 in this session. Checkpoint
+A05 as PARTIAL and proceed sequentially through A06 and A07; this overrides the
+local one-milestone restriction for this requested scope. A03/A04 remain deferred.
+
+
 - Continue A05 authored split views and host integration using the prepared GPU
   API/routing helpers, or remaining sorting/masks/outlines/blends/materials/texture
   capacity acceptance. Tile/particle/repeated backgrounds remain open. Inspect code
   for substantial feasible work and keep the bounded-attempt skip policy. Do not
-  retry deferred A03/A04 gates or begin A06 unasked.
+  retry deferred A03/A04 gates or proceed beyond A07 unasked.
