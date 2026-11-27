@@ -651,6 +651,16 @@ remain open; continue to A07 under explicit user authorization. See ADR-0111.
 - [ ] Extend existing frame clips/events with ping-pong, speed, conditions, state graphs and transitions. Author property/transform/color/camera/audio/event tracks and curves; expose tween controls to scripts/graphs. Integrate the ADR-selected 2D skeletal approach: bones, attachments, weights, skinning and basic IK with real editor authoring.
 - [ ] **Acceptance:** Author idle/run/jump plus a cutscene and a rigged example; events fire once under pause/seek/transition, all tracks/rigs survive reimport/reopen and match native/browser playback.
 
+**Playback checkpoint 2026-11-27:** authored ping-pong/speed controls now reach
+editor preview, runtime and logical snapshots. Looping ping-pong does not duplicate
+endpoints; one-shot returns to frame zero. One f64 timeline drives sampling,
+seek and events; zero dt/speed is silent, and transition leftovers use the next
+clip's speed. Editor undo/redo and snapshot regressions pass. Native/browser
+fixture validates both event legs, speed checkpoint and exact final pixels.
+Contract v12 rejects older runtimes ignoring fields. State graphs, arbitrary
+tracks/curves, rigs/IK and full A07 acceptance remain open. A07 stays PARTIAL.
+See [A06/A07 evidence](evidence/A06_A07_SPARSE_MAPS_AND_PLAYBACK.md).
+
 ### A08 — Complete 2D physics and character tools
 
 **Status:** PARTIAL. **Depends on:** A04, A06.

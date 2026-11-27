@@ -156,3 +156,20 @@ Defaults preserve ordinary world scrolling. Inspector and Sprite Editor edits
 are validated and undoable; Play previews parallax while authoring retains world
 geometry for picking and gizmos. Project files and logical saves preserve the
 settings. See [camera/parallax contracts](CAMERAS_2D.md#sprite-parallax).
+
+## Ping-pong and authored playback speed
+
+Animation Editor now exposes **Ping-pong** and **Speed** (0..16; zero pauses).
+Defaults preserve forward playback at speed one. Looping ping-pong visits forward
+frames then reverse interiors without holding endpoints twice. A non-looping
+ping-pong returns through frame zero, then holds or transitions to its next clip.
+Authored speed multiplies runtime player speed. Frame sampling, crossed events
+and seek share one f64 clock. Paused/zero-dt updates emit nothing, including initial
+entry; seek suppresses historical events. Leftover real time crossing a transition
+uses the new clip's speed. Controls participate in clip undo/redo and saves.
+
+`samples/ping_pong` turns green only after zero/one/two/one/zero events and a speed-2
+checkpoint. Matching tools require contract v12. These are clip playback controls;
+state graphs, arbitrary property/camera/audio tracks, curves, rigs and IK remain
+open A07 work. The existing 4096-cycle update limit remains; extreme event/cycle
+overload and production performance acceptance are separate.

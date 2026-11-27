@@ -293,6 +293,12 @@ jobs:
             if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
             KILN_ATLAS_PROJECT="target/a05-native-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" KILN_ATLAS_PLAYER_EVIDENCE="target/a05-$kind-native" python3 tests/native/atlas_player_smoke.py
           done
+      - name: Verify sparse tilemap and ping-pong playback in native exports
+        run: |
+          for scenario in sparse_tilemap ping_pong; do
+            if [ "$scenario" = sparse_tilemap ]; then bounds=128,112,192,176; else bounds=128,88,192,152; fi
+            KILN_ATLAS_PROJECT="samples/$scenario" KILN_PIXEL_SCENARIO="$scenario" KILN_PIXEL_EXPECT_GREEN_BOUNDS="$bounds" KILN_ATLAS_PLAYER_EVIDENCE="target/a07-$scenario-native" python3 tests/native/atlas_player_smoke.py
+          done
       - name: Verify clipped gameplay pointer in native exports
         env:
           KILN_ATLAS_PROJECT: samples/world_pointer
@@ -549,6 +555,12 @@ jobs:
           for kind in offscreen overflow; do
             if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
             KILN_ATLAS_PROJECT="target/a05-browser-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" WEB_ATLAS_EVIDENCE="target/a05-$kind-browser" node tests/web/atlas.cjs target/debug/web-runtime
+          done
+      - name: Verify sparse tilemap and ping-pong playback in browser exports
+        run: |
+          for scenario in sparse_tilemap ping_pong; do
+            if [ "$scenario" = sparse_tilemap ]; then bounds=128,112,192,176; else bounds=128,88,192,152; fi
+            KILN_ATLAS_PROJECT="samples/$scenario" KILN_PIXEL_SCENARIO="$scenario" KILN_PIXEL_EXPECT_GREEN_BOUNDS="$bounds" WEB_ATLAS_EVIDENCE="target/a07-$scenario-browser" node tests/web/atlas.cjs target/debug/web-runtime
           done
       - name: Verify clipped gameplay pointer in browser exports
         env:

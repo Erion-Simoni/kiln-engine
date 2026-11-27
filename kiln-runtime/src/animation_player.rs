@@ -133,13 +133,13 @@ impl AnimationPlayer {
             return;
         }
         if let Some(clip) = self.current.as_ref().and_then(|name| self.clips.get(name)) {
-            let duration = clip.total_duration();
+            let duration = clip.duration_seconds();
             self.elapsed = if duration > 0.0 {
-                (if clip.loops {
-                    time.max(0.0).rem_euclid(duration)
+                if clip.loops {
+                    (time as f64).max(0.0).rem_euclid(duration)
                 } else {
-                    time.clamp(0.0, duration)
-                }) as f64
+                    (time as f64).clamp(0.0, duration)
+                }
             } else {
                 0.0
             };
@@ -163,7 +163,7 @@ impl AnimationPlayer {
     }
     pub fn frame(&self) -> Option<&Frame> {
         let clip = self.clips.get(self.current.as_ref()?)?;
-        Some(&clip.frames[clip.frame_at_time(self.elapsed as f32).ok()?.0])
+        Some(&clip.frames[clip.frame_at_time_seconds(self.elapsed).ok()?.0])
     }
     pub fn current_uv_rect(&self) -> Option<[f32; 4]> {
         let frame = self.frame()?;
@@ -196,15 +196,19 @@ impl AnimationPlayer {
     }
     /// Consume real elapsed time, reporting every crossed frame once.
     pub fn update(&mut self, dt: f32) {
-        if !dt.is_finite() || dt < 0.0 {
+        if !dt.is_finite() || dt <= 0.0 || self.speed <= 0.0 {
             return;
         }
-        let mut remaining = dt as f64 * self.speed as f64;
+        let mut remaining = dt as f64;
         for _ in 0..4096 {
             let Some(clip) = self.current.as_ref().and_then(|name| self.clips.get(name)) else {
                 return;
             };
-            let total = clip.total_duration() as f64;
+            let total = clip.duration_seconds();
+            let speed = self.speed as f64 * clip.speed as f64;
+            if !speed.is_finite() || speed <= 0.0 {
+                return;
+            }
             if !total.is_finite() || total <= 0.0 || clip.frames.is_empty() {
                 return;
             }
@@ -212,15 +216,16 @@ impl AnimationPlayer {
                 self.events.extend(clip.frames[0].events.clone());
                 self.started = true;
             }
-            let end = (self.elapsed + remaining).min(total);
+            self.elapsed = self.elapsed.min(total);
+            let end = (self.elapsed + remaining * speed).min(total);
             let mut start = 0.0;
-            for frame in &clip.frames {
+            for (_, frame) in clip.playback_frames() {
                 if start > self.elapsed && start <= end {
                     self.events.extend(frame.events.clone());
                 }
                 start += frame.duration as f64;
             }
-            remaining -= (end - self.elapsed).max(0.0);
+            remaining = (remaining - (end - self.elapsed).max(0.0) / speed).max(0.0);
             self.elapsed = end;
             if end < total {
                 return;
@@ -332,5 +337,85 @@ mod tests {
         player.stop();
         player.update(1.0);
         assert!(player.current_uv_rect().is_none());
+    }
+}
+
+#[cfg(test)]
+mod playback_controls_tests {
+    use super::*;
+    fn bounce() -> Clip {
+        let mut c = Clip::new("bounce".into(), "white.png".into());
+        c.ping_pong = true;
+        c.loops = false;
+        c.speed = 2.0;
+        for (i, name) in ["zero", "one", "two"].iter().enumerate() {
+            c.add_frame(Frame {
+                rect: [i as u32, 0, 1, 1],
+                pivot: [0.5; 2],
+                duration: 0.125,
+                events: vec![FrameEvent {
+                    name: (*name).into(),
+                    payload: None,
+                }],
+            });
+        }
+        c
+    }
+    #[test]
+    fn paused_entry_is_silent_and_ping_pong_events_follow_both_legs() {
+        let mut p = AnimationPlayer::new();
+        p.add_clip(bounce());
+        p.play("bounce");
+        p.update(0.0);
+        assert!(p.take_events().is_empty());
+        p.set_speed(0.0);
+        p.update(1.0);
+        assert!(p.take_events().is_empty());
+        assert_eq!(p.elapsed(), 0.0);
+        p.set_speed(1.0);
+        p.update(0.3125);
+        assert_eq!(
+            p.take_events()
+                .iter()
+                .map(|e| e.name.as_str())
+                .collect::<Vec<_>>(),
+            ["zero", "one", "two", "one", "zero"]
+        );
+        assert_eq!(p.frame().unwrap().rect, [0, 0, 1, 1]);
+        p.update(1.0);
+        assert!(p.take_events().is_empty());
+        p.seek(0.375);
+        p.update(0.0);
+        assert!(p.take_events().is_empty());
+        assert_eq!(p.frame().unwrap().rect, [1, 0, 1, 1]);
+    }
+    #[test]
+    fn transition_leftover_time_uses_next_speed_and_snapshot_preserves_controls() {
+        let mut walk = bounce();
+        walk.next = Some("idle".into());
+        let mut idle = walk.clone();
+        idle.name = "idle".into();
+        idle.loops = true;
+        idle.ping_pong = false;
+        idle.next = None;
+        idle.speed = 0.5;
+        let mut p = AnimationPlayer::new();
+        p.add_bound_clip(walk, TextureId::WHITE, [3, 1]);
+        p.add_bound_clip(idle, TextureId::WHITE, [3, 1]);
+        p.play("bounce");
+        p.update(0.4375);
+        assert_eq!(p.current_clip(), Some("idle"));
+        assert_eq!(p.elapsed(), 0.0625);
+        assert_eq!(p.take_events().len(), 6);
+        let saved = p.snapshot().unwrap();
+        let mut restored =
+            AnimationPlayer::restore_snapshot(&saved, |_| Some((TextureId::WHITE, [3, 1])))
+                .unwrap();
+        p.update(0.125);
+        restored.update(0.125);
+        assert_eq!(p.elapsed(), restored.elapsed());
+        assert_eq!(p.current_uv_rect(), restored.current_uv_rect());
+        assert_eq!(p.take_events().len(), 1);
+        assert_eq!(restored.take_events().len(), 1);
     }
 }

@@ -124,3 +124,10 @@ remaining split-screen/rendering acceptance open.
 retain deterministic order and reject invalid geometry. Saturating map extents
 and checked atlas dimensions remove overflow paths. Focused core/runtime tests
 and just check PASS. A06 remains PARTIAL; advancing to authorized A07 work.
+
+2026-11-27 A07 ADR-0112: authored ping-pong and speed, canonical f64 frame/event/
+seek timeline, silent pause and speed-correct transition leftovers. Nondefault
+controls survive snapshots and editor undo/redo. Full workspace 907 Rust /49
+Python, quality/WASM and native/browser sparse-map/playback/pointer fixtures PASS.
+A05/A06/A07 stay PARTIAL; requested progression stops at A07. See
+[A06/A07 evidence](evidence/A06_A07_SPARSE_MAPS_AND_PLAYBACK.md).

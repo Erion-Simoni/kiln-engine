@@ -2551,3 +2551,18 @@ chunk keys or unsupported negative/out-of-range tile coordinates. Saturate legac
 map-size reporting instead of panicking. No dependency or persistent schema change.
 This does not add streaming, stamps, negative-coordinate editing or a spatial index.
 A06 production/editor acceptance remains PARTIAL; continue into A07 as requested.
+
+### ADR-0112 — Authored ping-pong and speed with one precise clip clock (2026-11-27)
+
+Status: accepted. A07 extends defaulted clip data with ping_pong=false and
+speed=1 (finite 0..16). Looping ping-pong visits forward frames then reverse
+interiors without duplicating endpoints; one-shot ping-pong returns through frame
+zero before holding or transitioning. Shared frame sampling/events/seek use the
+same f64 timeline; float accessors remain compatible. Runtime speed multiplies
+authored speed, and leftover real time is converted using each next clip's speed.
+Zero dt or either zero speed emits no events, including initial/transition entry;
+seek suppresses historical events. Persisted clips/snapshots and editor undoable
+controls share settings. Existing 4096-cycle update bound remains; extreme overload
+acceptance is not claimed. Contract v12 rejects older runtimes ignoring the fields.
+No dependencies, VM-memory or logical-save layout change. State graphs, arbitrary
+tracks/curves, rigs/IK and full A07 authoring acceptance remain open.
