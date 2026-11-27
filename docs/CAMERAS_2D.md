@@ -1,4 +1,4 @@
-# Gameplay camera follow and dead zones
+# Gameplay cameras
 
 Open View → Scene Editor → Gameplay Camera. Choose a follow entity and edit
 Dead zone (world width / height). Settings are stored per scene in the project:
@@ -23,8 +23,8 @@ world extent after zoom. A stationary camera ignores dead_zone.
 Follow response applies exponential smoothing to that goal; zero snaps. World
 bounds apply before and after pixel snapping and take priority if a bound lies
 off the pixel grid. A view larger than its level centers on the bounded level.
-Follow history resets with the controller; this checkpoint does not add persisted
-camera motion history, shake, transitions, parallax or multiple views.
+Follow history resets with the controller. Camera motion history is transient;
+parallax and multiple views remain separate work.
 
 Invalid settings, targets, overflow or unrepresentable projections return an error
 without changing the controller's stored position/initialization. Fixing the data
@@ -34,8 +34,8 @@ viewport extrapolation remains available for tools; callers must still choose an
 clip the correct viewport for gameplay input. Offset/scale and Y orientation are
 covered by round-trip tests; split-view routing remains separate work.
 
-Runtime tools now require kiln-authoring-v8. Rebuild matching editor/CLI/player and
-browser bundles; older runtimes lack dead zones or shake calls and are rejected by the new
+Runtime tools now require kiln-authoring-v9. Rebuild matching editor/CLI/player and
+browser bundles; older runtimes lack dead zones, shake or transition calls and are rejected by the new
 exporter. VM-memory/save-slot layout is unchanged. See samples/camera_dead_zone and
 [evidence](evidence/A05_CAMERA_DEAD_ZONES.md).
 
@@ -55,3 +55,25 @@ holds effect time. Controller resets clear transient effects; logical saves do
 not preserve shake history. Matching seeds and elapsed time reproduce the same
 oscillator, without promising identical native/browser floating-point pixels.
 See `samples/camera_shake` and [evidence](evidence/A05_CAMERA_SHAKE.md).
+
+## Scripted transitions
+
+`camera_transition(x, y, zoom, seconds)` moves to a world-space camera **origin**
+and zoom using smoothstep interpolation. Coordinates must be finite; zoom must be
+1/64..64 and duration 0..60 seconds. Zero seconds cuts immediately. Nonzero requests
+start at time zero on delivery and hold the exact endpoint after completion.
+`camera_transition_stop()` returns immediately to the current authored follow view.
+Both calls return false if the shared 32-request effect queue is full. Invalid
+arguments fail the callback; failed/suspended callbacks do not deliver requests.
+
+New transitions replace the active one, starting from the last successfully
+sampled view after bounds/pixel snapping, excluding shake. Authored follow keeps
+updating underneath. UI pause holds transition time; invalid projections commit
+neither transition nor shake time. Transitioned zoom determines final world bounds.
+Pixel-perfect mode rounds zoom to an integer, so use it only when stepped zoom is
+wanted. Shake offsets layer over transitions. Stop-transition leaves shake active;
+stop-shake leaves the transition active. Scene/controller reset clears both.
+Logical saves do not preserve transition history. The shared editor/player/browser
+adapter implements these semantics without extra render passes or dependencies.
+
+See `samples/camera_transition` and [transition evidence](evidence/A05_CAMERA_TRANSITIONS.md).

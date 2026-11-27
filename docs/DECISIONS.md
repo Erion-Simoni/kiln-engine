@@ -2470,3 +2470,24 @@ camera updates do not advance its clock. Shake state/requests are transient and
 not persisted in logical saves; scene/controller reset clears them. No new pass or
 dependency. Runtime contract v8 rejects older tools lacking the new host calls.
 A05 transitions/parallax/split views and A03/A04 deferred gates remain separate.
+
+### ADR-0108 — Interruptible scripted camera pan/zoom (2026-11-27)
+
+Status: accepted. Add camera_transition(x,y,zoom,seconds) and
+camera_transition_stop() to the shared callback camera queue (same 32-request cap,
+success-only delivery and debugger/UI pause semantics). Targets are world-space
+camera origins, not centers. Finite coordinates, zoom 1/64..64 and duration 0..60
+seconds validate before enqueue. Zero duration cuts immediately. Smoothstep
+interpolation uses f64 intermediates and exact endpoint assignment; the endpoint
+holds until stopped/replaced/reset. A new transition starts from the previously
+sampled unshaken view, or the authored base on the first camera update. Fresh
+nonzero transitions sample time zero. Interruption never includes shake offsets.
+
+Keep authored follow/dead-zone history advancing independently underneath the
+transition, so stop returns to the current authored camera rather than a stale
+origin. Apply transitioned zoom before final bounds, then shake and pixel snapping;
+pixel-perfect zoom retains integer rounding. Validate candidate matrices before
+committing transition/follow/shake clocks. Transient transition state is not saved
+in logical save slots. No dependencies, additional render pass or persistent camera
+schema. Contract v9 rejects older bundles missing these calls. A05 remains PARTIAL;
+parallax/split views and A03/A04 deferred acceptance remain separate work.

@@ -93,3 +93,9 @@ shake, cancellation and shared editor/native/browser delivery, without follow
 feedback. Runtime v8 tools rebuilt; v7 export rejected. Native/browser motion and
 exact-rest replays pass for expiry and cancellation. A05 remains PARTIAL; next
 transitions/parallax/split views. See [shake evidence](evidence/A05_CAMERA_SHAKE.md).
+
+2026-11-27 ADR-0108 checkpoint: interruptible smooth scripted camera pan/zoom,
+endpoint holding, cuts and cancellation to current authored follow. Shared effect
+queue/adapter provides editor/native/browser parity, pause and callback atomicity.
+Contract v9 tools rebuilt. See [transition evidence](evidence/A05_CAMERA_TRANSITIONS.md).
+A05 stays PARTIAL; parallax/multiple views and deferred A03/A04 gates remain open.

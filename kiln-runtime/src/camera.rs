@@ -5,13 +5,16 @@ use kiln_core::camera::CameraSettings;
 use kiln_render::camera::Camera;
 
 mod shake;
+mod transition;
 pub use shake::{CameraEffect, CameraShake, MAX_CAMERA_EFFECTS};
+pub use transition::CameraTransition;
 
 #[derive(Debug, Default)]
 pub struct CameraController {
     position: [f32; 2],
     initialized: bool,
     shakes: shake::Mixer,
+    transition: transition::Controller,
 }
 
 fn coordinate(value: f64) -> Result<f32, String> {
@@ -33,11 +36,26 @@ fn clamp_position(position: &mut [f64; 2], extent: [f64; 2], bounds: Option<[f32
     }
 }
 
+fn finish_position(position: &mut [f64; 2], extent: [f64; 2], settings: &CameraSettings) {
+    if settings.pixel_perfect {
+        for value in position.iter_mut() {
+            *value = (*value * settings.pixels_per_unit as f64).round()
+                / settings.pixels_per_unit as f64;
+        }
+    }
+    clamp_position(position, extent, settings.bounds);
+}
+
 impl CameraController {
     /// Apply validated transient effects; reset/scene replacement clears all effects.
     pub fn apply_effect(&mut self, effect: CameraEffect) -> Result<(), String> {
         match effect {
             CameraEffect::Shake(request) => self.shakes.add(request),
+            CameraEffect::Transition(request) => self.transition.start(request),
+            CameraEffect::StopTransition => {
+                self.transition.stop();
+                Ok(())
+            }
             CameraEffect::StopShake => {
                 self.shakes.clear();
                 Ok(())
@@ -118,18 +136,36 @@ impl CameraController {
         }
         clamp_position(&mut candidate, extent, settings.bounds);
         let base = [coordinate(candidate[0])?, coordinate(candidate[1])?];
+        let mut transition = self.transition.clone();
+        let view = transition.advance(
+            transition::View {
+                position: base,
+                zoom: camera.zoom,
+            },
+            dt as f64,
+        );
+        camera.zoom = if settings.pixel_perfect {
+            view.zoom.round().max(1.0)
+        } else {
+            view.zoom
+        };
+        let extent = [
+            size[0] as f64 / camera.zoom as f64,
+            size[1] as f64 / camera.zoom as f64,
+        ];
+        candidate = view.position.map(f64::from);
+        let mut unshaken = candidate;
+        finish_position(&mut unshaken, extent, settings);
+        transition.record(transition::View {
+            position: [coordinate(unshaken[0])?, coordinate(unshaken[1])?],
+            zoom: camera.zoom,
+        });
         let mut shakes = self.shakes.clone();
         let offset = shakes.advance(dt as f64);
         for axis in 0..2 {
             candidate[axis] += offset[axis];
         }
-        if settings.pixel_perfect {
-            for position in &mut candidate {
-                *position = (*position * settings.pixels_per_unit as f64).round()
-                    / settings.pixels_per_unit as f64;
-            }
-        }
-        clamp_position(&mut candidate, extent, settings.bounds);
+        finish_position(&mut candidate, extent, settings);
         camera.position = [coordinate(candidate[0])?, coordinate(candidate[1])?];
         let bounds = camera.view_bounds();
         if !bounds.iter().all(|value| value.is_finite())
@@ -141,6 +177,7 @@ impl CameraController {
         }
         self.position = base;
         self.shakes = shakes;
+        self.transition = transition;
         self.initialized = true;
         Ok(camera)
     }
@@ -465,5 +502,90 @@ mod shake_controller_tests {
             [0.0, 0.0]
         );
         assert_eq!(a.position, [0.0, 0.0]);
+    }
+}
+
+#[cfg(test)]
+mod transition_controller_tests {
+    use super::*;
+    #[test]
+    fn follow_stays_independent_and_bad_projection_does_not_advance_transition() {
+        let mut world = GameWorld::new();
+        world.spawn((
+            SourceId::new("hero"),
+            GlobalTransform(kiln_core::Transform::new(160.0, 120.0)),
+        ));
+        let settings = CameraSettings {
+            target: Some("hero".into()),
+            ..Default::default()
+        };
+        let mut a = CameraController::default();
+        a.update(&settings, &world, [320.0, 240.0], 0.0).unwrap();
+        a.apply_effect(CameraEffect::Transition(CameraTransition {
+            position: [80.0, 40.0],
+            zoom: 2.0,
+            duration: 1.0,
+        }))
+        .unwrap();
+        a.update(&settings, &world, [320.0, 240.0], 0.0).unwrap();
+        assert!(a
+            .update(&settings, &world, [f32::MIN_POSITIVE, 240.0], 0.5)
+            .is_err());
+        let half = a.update(&settings, &world, [320.0, 240.0], 0.5).unwrap();
+        assert_eq!(half.position, [40.0, 20.0]);
+        assert_eq!(half.zoom, 1.5);
+        for pose in world.world_mut().query::<&mut GlobalTransform>().iter() {
+            pose.0.position.x = 200.0;
+        }
+        let end = a.update(&settings, &world, [320.0, 240.0], 0.5).unwrap();
+        assert_eq!(end.position, [80.0, 40.0]);
+        assert_eq!(end.zoom, 2.0);
+        a.apply_effect(CameraEffect::StopTransition).unwrap();
+        let restored = a.update(&settings, &world, [320.0, 240.0], 0.0).unwrap();
+        assert_eq!(restored.position, [40.0, 0.0]);
+        assert_eq!(restored.zoom, 1.0);
+    }
+    #[test]
+    fn transitioned_zoom_drives_bounds_snapping_and_shake_is_independent() {
+        let world = GameWorld::new();
+        let mut c = CameraController::default();
+        let settings = CameraSettings {
+            pixel_perfect: true,
+            bounds: Some([0.0, 0.0, 320.0, 240.0]),
+            ..Default::default()
+        };
+        c.apply_effect(CameraEffect::Transition(CameraTransition {
+            position: [999.0, 999.0],
+            zoom: 2.4,
+            duration: 0.0,
+        }))
+        .unwrap();
+        let end = c.update(&settings, &world, [320.0, 240.0], 0.0).unwrap();
+        assert_eq!(end.position, [160.0, 120.0]);
+        assert_eq!(end.zoom, 2.0);
+        c.apply_effect(CameraEffect::Shake(CameraShake {
+            amplitude: [8.0, 8.0],
+            duration: 1.0,
+            frequency: 8.0,
+            seed: 17,
+        }))
+        .unwrap();
+        let _ = c.update(&settings, &world, [320.0, 240.0], 0.0).unwrap();
+        c.apply_effect(CameraEffect::Transition(CameraTransition {
+            position: [0.0; 2],
+            zoom: 1.0,
+            duration: 1.0,
+        }))
+        .unwrap();
+        let from = c
+            .update(&CameraSettings::default(), &world, [320.0, 240.0], 0.0)
+            .unwrap();
+        c.apply_effect(CameraEffect::StopShake).unwrap();
+        let unshaken = c
+            .update(&CameraSettings::default(), &world, [320.0, 240.0], 0.0)
+            .unwrap();
+        assert_eq!(unshaken.position, [160.0, 120.0]);
+        assert_eq!(unshaken.zoom, 2.0);
+        assert_ne!(from.position, unshaken.position);
     }
 }

@@ -33,6 +33,10 @@ impl CameraShake {
 pub enum CameraEffect {
     Shake(CameraShake),
     StopShake,
+    /// Replace the current pan/zoom transition.
+    Transition(super::CameraTransition),
+    /// Return immediately to the current authored follow view.
+    StopTransition,
 }
 #[derive(Debug, Clone)]
 struct Active {

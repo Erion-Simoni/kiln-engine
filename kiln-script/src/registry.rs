@@ -124,4 +124,6 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("has_save", 93, 1),
     ("camera_shake", 124, 5),
     ("camera_shake_stop", 125, 0),
+    ("camera_transition", 126, 4),
+    ("camera_transition_stop", 127, 0),
 ];

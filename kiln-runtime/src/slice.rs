@@ -1375,7 +1375,7 @@ impl SliceHost {
                 .into(),
             )),
             116..=123 => self.call_task(func_id, args),
-            124 | 125 => self.call_camera_effect(func_id, args),
+            124..=127 => self.call_camera_effect(func_id, args),
             110 => Ok(Value::Map(Default::default())),
             61 | 62 | 111 | 113 => value_reads::call(func_id, args),
             112 | 114 => {

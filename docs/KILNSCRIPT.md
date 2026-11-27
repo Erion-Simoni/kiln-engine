@@ -773,7 +773,7 @@ Add `KILN_DEBUG_EXPRESSION_WATCHES=1` to verify computed watch values before and
 after corrected-source Restart. `KILN_DEBUG_ACTIVE_SCOPES=1` additionally verifies
 strict scope reads, the active-only view and completed-scope rejection.
 
-Runtime tools now use contract `kiln-authoring-v8` (camera shake host calls, following
+Runtime tools now use contract `kiln-authoring-v9` (camera transition host calls, following
 the v6 shared-call change). Function-using VM snapshots
 include `shared-calls-v1` in their memory signature, so older incompatible function
 slot layouts reject before a load commits. Straight-line program signatures remain
@@ -783,3 +783,6 @@ native/browser check: imported repeated and nested calls turn its square green.
 
 Camera effects: `camera_shake(x,y,seconds,hertz,seed)` and `camera_shake_stop()`
 return whether their bounded callback command was queued. See [camera contracts](CAMERAS_2D.md#scripted-shake).
+
+`camera_transition(x,y,zoom,seconds)` and `camera_transition_stop()` queue bounded
+pan/zoom commands. See [transition contracts](CAMERAS_2D.md#scripted-transitions).

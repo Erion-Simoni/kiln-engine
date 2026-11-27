@@ -1,18 +1,28 @@
 //! Bounded callback camera commands shared by scene and attachment services.
 use super::*;
-use crate::camera::{CameraController, CameraEffect, CameraShake, MAX_CAMERA_EFFECTS};
+use crate::camera::{
+    CameraController, CameraEffect, CameraShake, CameraTransition, MAX_CAMERA_EFFECTS,
+};
 impl SliceHost {
     pub(super) fn call_camera_effect(&mut self, id: u32, args: &[Value]) -> Result<Value, VmError> {
-        let effect = if id == 125 {
+        let number = |index: usize| {
+            args[index].to_f64().map(|v| v as f32).ok_or_else(|| {
+                VmError::HostCallError("Camera effect expects numeric arguments".into())
+            })
+        };
+        let effect = if id == 127 {
+            CameraEffect::StopTransition
+        } else if id == 126 {
+            let request = CameraTransition {
+                position: [number(0)?, number(1)?],
+                zoom: number(2)?,
+                duration: number(3)?,
+            };
+            request.validate().map_err(VmError::HostCallError)?;
+            CameraEffect::Transition(request)
+        } else if id == 125 {
             CameraEffect::StopShake
         } else {
-            let number = |index: usize| {
-                args[index].to_f64().map(|v| v as f32).ok_or_else(|| {
-                    VmError::HostCallError(
-                        "Camera shake expects numeric amplitude/duration/frequency".into(),
-                    )
-                })
-            };
             let seed = args[4]
                 .as_i64()
                 .and_then(|v| u32::try_from(v).ok())

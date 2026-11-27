@@ -595,6 +595,16 @@ observe motion then exact rest after expiry and cancellation. Runtime contract v
 rejects older bundles missing the calls. Transitions/parallax/split views and full
 A05 acceptance remain open. [Evidence](evidence/A05_CAMERA_SHAKE.md).
 
+**Transition checkpoint 2026-11-27:** ADR-0108 adds script pan/zoom with smoothstep,
+exact endpoint holding, interruption from the current unshaken view, instant cuts
+and stop back to authored follow. All hosts use the existing shared bounded queue
+and camera adapter. Follow history advances independently; UI pause holds time and
+invalid projections do not commit effect clocks. Contract v9 rejects old runtimes
+missing these calls. Native/browser source-only export checks cover pan/zoom,
+cancel and interruption. Parallax/split views and full A05 acceptance remain open.
+[Evidence](evidence/A05_CAMERA_TRANSITIONS.md).
+
+
 
 ### A06 — Complete tilemap and level authoring
 

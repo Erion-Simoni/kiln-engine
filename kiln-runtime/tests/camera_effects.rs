@@ -166,3 +166,74 @@ fn shared_camera_adapter_applies_and_cancels_script_effects() {
         }))
         .is_err());
 }
+
+#[test]
+fn transition_commands_share_limits_and_callback_atomicity() {
+    let (mut s, mut world) = session("for(let i=0;i<40;i+=1){camera_transition(i,0,2,1);}", 0);
+    s.step(&mut world, (0.0, 0.0), 0.016).unwrap();
+    assert_eq!(s.take_camera_effects().len(), 32);
+    for source in [
+        "camera_transition(80,40,2,1);\nstate_set(\"done\",1);",
+        "camera_transition_stop();\nstate_set(\"done\",1);",
+    ] {
+        let (mut paused, mut w) = session(source, 0);
+        paused.add_source_breakpoint("main.ks", 2).unwrap();
+        assert!(matches!(
+            paused.step(&mut w, (0.0, 0.0), 0.016),
+            Err(VmError::DebugSuspended)
+        ));
+        assert!(paused.take_camera_effects().is_empty());
+        paused.debug_continue();
+        paused.step(&mut w, (0.0, 0.0), 0.016).unwrap();
+        assert_eq!(paused.take_camera_effects().len(), 1);
+    }
+    let (mut failed, mut w) = session("camera_transition(80,40,2,1);let fail=1/0;", 0);
+    assert!(failed.step(&mut w, (0.0, 0.0), 0.016).is_err());
+    assert!(failed.take_camera_effects().is_empty());
+    for args in [
+        vec![],
+        vec![Value::I64(0), Value::I64(0), Value::I64(0), Value::I64(1)],
+        vec![Value::I64(0), Value::I64(0), Value::I64(2), Value::I64(61)],
+    ] {
+        assert!(s.host_mut().call_host(126, &args).is_err());
+        assert!(s.host_mut().commands().is_empty());
+    }
+}
+#[test]
+fn transition_adapter_holds_pause_and_script_stop_restores_authored_camera() {
+    let (mut s, mut world) = session("if get_frame_count()==1 {camera_transition(80,40,2,1);}", 0);
+    let mut c = CameraController::default();
+    s.step(&mut world, (0.0, 0.0), 0.016).unwrap();
+    s.update_camera(&mut c, &Default::default(), &world, [320.0, 240.0], 0.016)
+        .unwrap();
+    let half = s
+        .update_camera(&mut c, &Default::default(), &world, [320.0, 240.0], 0.5)
+        .unwrap();
+    assert_eq!(half.position, [40.0, 20.0]);
+    assert_eq!(half.zoom, 1.5);
+    let mut doc = kiln_core::ui::UiDocument {
+        initial_screen: "pause".into(),
+        ..Default::default()
+    };
+    doc.screens.insert(
+        "pause".into(),
+        kiln_core::ui::UiScreen {
+            pause_game: true,
+            ..Default::default()
+        },
+    );
+    *s.host_mut().ui_runtime_mut() = kiln_ui::authored::UiRuntime::new(&doc, "main").unwrap();
+    assert_eq!(
+        s.update_camera(&mut c, &Default::default(), &world, [320.0, 240.0], 1.0)
+            .unwrap()
+            .position,
+        half.position
+    );
+    let (mut stop, mut w) = session("camera_transition_stop();", 0);
+    stop.step(&mut w, (0.0, 0.0), 0.016).unwrap();
+    let restored = stop
+        .update_camera(&mut c, &Default::default(), &world, [320.0, 240.0], 0.016)
+        .unwrap();
+    assert_eq!(restored.position, [0.0; 2]);
+    assert_eq!(restored.zoom, 1.0);
+}
