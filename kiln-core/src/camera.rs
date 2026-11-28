@@ -12,6 +12,8 @@ pub struct CameraSettings {
     pub zoom: f32,
     /// Exponential follow response in inverse seconds; zero snaps immediately.
     pub smoothing: f32,
+    /// Full centered follow dead-zone width/height in world units; zero centers.
+    pub dead_zone: [f32; 2],
     /// World rectangle [left, bottom, right, top].
     pub bounds: Option<[f32; 4]>,
     pub pixel_perfect: bool,
@@ -25,6 +27,7 @@ impl Default for CameraSettings {
             position: [0.0; 2],
             zoom: 1.0,
             smoothing: 0.0,
+            dead_zone: [0.0; 2],
             bounds: None,
             pixel_perfect: false,
             pixels_per_unit: 1.0,
@@ -45,6 +48,13 @@ impl CameraSettings {
         {
             return Err("Camera values must be finite, with positive zoom/pixel density".into());
         }
+        if !self
+            .dead_zone
+            .iter()
+            .all(|value| value.is_finite() && *value >= 0.0)
+        {
+            return Err("Camera dead zone dimensions must be finite and nonnegative".into());
+        }
         if self.bounds.is_some_and(|bounds| {
             !bounds.iter().all(|value| value.is_finite())
                 || bounds[0] >= bounds[2]
@@ -53,5 +63,31 @@ impl CameraSettings {
             return Err("Camera bounds must be finite and ordered".into());
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod dead_zone_tests {
+    use super::*;
+    #[test]
+    fn old_cameras_default_to_center_follow_and_new_zones_roundtrip() {
+        let old: CameraSettings = toml::from_str("zoom=2.0\nsmoothing=4.0").unwrap();
+        assert_eq!(old.dead_zone, [0.0; 2]);
+        let settings = CameraSettings {
+            dead_zone: [64.0, 32.0],
+            ..old
+        };
+        assert_eq!(
+            toml::from_str::<CameraSettings>(&toml::to_string(&settings).unwrap()).unwrap(),
+            settings
+        );
+        for zone in [[-1.0, 0.0], [f32::NAN, 0.0], [0.0, f32::INFINITY]] {
+            assert!(CameraSettings {
+                dead_zone: zone,
+                ..settings.clone()
+            }
+            .validate()
+            .is_err());
+        }
     }
 }

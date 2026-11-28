@@ -1,6 +1,6 @@
 //! Typed resource dependencies and reference-safe path rewriting.
 use crate::{Component, ComponentOverride, Entity, MaterialParam, Project};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 fn entity_paths(entity: &mut Entity, owner: &str, visit: &mut impl FnMut(&mut String, &str)) {
     for component in &mut entity.components {
@@ -26,6 +26,36 @@ fn entity_paths(entity: &mut Entity, owner: &str, visit: &mut impl FnMut(&mut St
     }
 }
 impl Project {
+    /// Return stable asset identities in input order. Existing IDs and orphaned
+    /// import presets reserve their namespace when allocating after project load.
+    pub fn ensure_asset_ids<'a>(
+        &mut self,
+        paths: impl IntoIterator<Item = &'a str>,
+    ) -> Vec<String> {
+        let mut reserved: HashSet<String> = self
+            .asset_ids
+            .values()
+            .chain(self.asset_import_settings.keys())
+            .chain(self.asset_platform_import_settings.keys())
+            .cloned()
+            .collect();
+        paths
+            .into_iter()
+            .map(|path| {
+                if let Some(id) = self.asset_ids.get(path) {
+                    return id.clone();
+                }
+                loop {
+                    let candidate = crate::next_id().to_string();
+                    if reserved.insert(candidate.clone()) {
+                        self.asset_ids.insert(path.into(), candidate.clone());
+                        return candidate;
+                    }
+                }
+            })
+            .collect()
+    }
+
     fn visit_resource_paths(&mut self, mut visit: impl FnMut(&mut String, &str)) {
         for (scene_id, scene) in &mut self.scenes {
             if let Some(path) = &mut scene.script {
@@ -44,6 +74,12 @@ impl Project {
         }
         for (id, clip) in &mut self.animation_clips {
             visit(&mut clip.texture, &format!("clip:{id}"));
+        }
+        for (id, atlas) in &mut self.atlases {
+            visit(&mut atlas.output, &format!("atlas:{id}/output"));
+            for (label, path) in &mut atlas.sources {
+                visit(path, &format!("atlas:{id}/source:{label}"));
+            }
         }
         for (id, tileset) in &mut self.tilesets {
             visit(&mut tileset.texture, &format!("tileset:{id}"));

@@ -14,12 +14,24 @@ pub struct DebuggerPanel {
     pub show_call_stack: bool,
     /// Show local variables.
     pub show_locals: bool,
+    /// Filter the live local view to current-frame lexical bindings.
+    pub active_locals_only: bool,
     /// Show watch expressions.
     pub show_watches: bool,
     /// New breakpoint instruction input.
     pub new_breakpoint_instr: String,
     /// New watch expression input.
     pub new_watch_expr: String,
+    /// Live VM target: scene or entity:ID.
+    pub live_watch_owner: String,
+    /// Bounded live data selector or read-only expression being authored.
+    pub live_watch_selector: String,
+    /// Session-only live data watches (owner, selector).
+    pub live_watches: Vec<(String, String)>,
+    /// Exact project-relative executable source breakpoint being authored.
+    pub source_path: String,
+    pub source_line: String,
+    pub source_message: String,
 }
 
 impl DebuggerPanel {
@@ -29,10 +41,77 @@ impl DebuggerPanel {
             show_breakpoints: true,
             show_call_stack: true,
             show_locals: true,
+            active_locals_only: false,
             show_watches: true,
             new_breakpoint_instr: String::new(),
             new_watch_expr: String::new(),
+            live_watch_owner: "scene".into(),
+            live_watch_selector: String::new(),
+            live_watches: Vec::new(),
+            source_path: String::new(),
+            source_line: "1".into(),
+            source_message: String::new(),
         }
+    }
+
+    /// Render bounded selectors and isolated expressions against actual gameplay VMs.
+    pub fn render_live_watches(
+        &mut self,
+        ui: &mut Ui,
+        session: &kiln_runtime::SliceSession,
+        inspect: bool,
+    ) {
+        ui.collapsing("Live data watches", |ui| {
+            ui.label("Owner: scene or entity:ID. Selector: slot:N, local:NAME or state:KEY, followed by /key or /index.");
+            ui.add(egui::TextEdit::singleline(&mut self.live_watch_owner).char_limit(256).hint_text("scene"));
+            ui.add(egui::TextEdit::singleline(&mut self.live_watch_selector).char_limit(512).hint_text("local:health"));
+            if ui.add_enabled(self.live_watches.len() < 32 && !self.live_watch_selector.is_empty(), egui::Button::new("Add watch")).clicked() {
+                self.live_watches.push((self.live_watch_owner.clone(), self.live_watch_selector.clone()));
+                self.live_watch_selector.clear();
+            }
+            let mut remove = None;
+            for (index, (owner, selector)) in self.live_watches.iter().enumerate() {
+                ui.horizontal_wrapped(|ui| {
+                    if ui.small_button("Remove").clicked() { remove = Some(index); }
+                    ui.monospace(format!("{owner} / {selector}"));
+                    if inspect {
+                        match session.live_watch(owner, selector) {
+                            Ok(value) => { ui.monospace(value); }
+                            Err(error) => { ui.colored_label(Color32::LIGHT_RED, error); }
+                        }
+                    } else { ui.label("Pause to inspect"); }
+                });
+            }
+            if let Some(index) = remove { self.live_watches.remove(index); }
+            ui.label("Expression: expr: health * 2. Reads: slot(0), state(\"key\"), game(\"key\"). Pure calls: array_get, array_length, dict_get, dict_has. Names use allocated locals; mutations are rejected.");
+        });
+    }
+
+    /// Configure executable source lines on the actual gameplay scheduler.
+    pub fn render_source_breakpoints(
+        &mut self,
+        ui: &mut Ui,
+        session: &mut kiln_runtime::SliceSession,
+    ) -> bool {
+        let mut added = false;
+        ui.collapsing("Source breakpoints",|ui| {
+            ui.label("Exact project-relative path and executable line. Saved-screen UI callbacks remain atomic.");
+            ui.add(egui::TextEdit::singleline(&mut self.source_path).char_limit(256).hint_text("scripts/main.ks"));
+            ui.add(egui::TextEdit::singleline(&mut self.source_line).char_limit(10).hint_text("line"));
+            if ui.button("Add source breakpoint").clicked() {
+                self.source_message=match self.source_line.parse::<usize>().map_err(|_|"Line must be a positive integer".to_owned()).and_then(|line|session.add_source_breakpoint(&self.source_path,line)) {
+                    Ok(())=>{added=true;"Source breakpoint added".into()},Err(error)=>error,
+                };
+            }
+            ui.label(&self.source_message);
+            for point in session.source_breakpoints() {
+                ui.horizontal(|ui| {
+                    ui.monospace(format!("{}:{}",point.path,point.line));
+                    if ui.small_button("Remove source breakpoint").clicked() {session.remove_source_breakpoint(&point.path,point.line);}
+                });
+            }
+        });
+        added
     }
 
     /// Render the debugger panel.

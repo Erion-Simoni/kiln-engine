@@ -1,12 +1,16 @@
 //! Kiln Editor — native desktop editor app.
 
 pub mod anim_editor;
+pub mod animation_graph_editor;
 pub mod app;
 mod asset_shelf;
 pub mod assets;
 pub mod audio_editor;
 pub mod build_panel;
 pub mod component_command;
+pub mod cutscene;
+pub mod cutscene_editor;
+pub mod cutscene_preview;
 pub mod debugger_panel;
 pub mod editing;
 pub mod editor_shell;
@@ -81,3 +85,9 @@ mod scene_selection;
 mod asset_diagnostics;
 
 mod source_search;
+
+mod source_move;
+
+mod atlas_editor;
+
+pub mod skin_editor;

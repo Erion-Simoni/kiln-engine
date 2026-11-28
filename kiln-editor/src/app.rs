@@ -82,6 +82,7 @@ struct RecoveryPrompt {
 
 enum ProjectRequest {
     OpenScript(String),
+    FocusScriptEditor,
     ScriptError(String),
     Export(crate::build_panel::BuildConfig),
     RefreshVisuals,
@@ -513,6 +514,36 @@ fn start_play_session(
     Ok((slice, scene_id.to_owned(), world))
 }
 
+/// Prepare a restart without mutating the running session or authored document.
+fn prepare_play_restart(
+    project: &Project,
+    scene_id: &str,
+    root: &Path,
+    textures: &SceneTextures,
+) -> Result<(PlaySession, GameWorld), String> {
+    let (slice, scene_id, world) = start_play_session(project, scene_id, root, textures)?;
+    let mut camera_controller = kiln_runtime::camera::CameraController::default();
+    let settings = project.cameras.get(&scene_id).cloned().unwrap_or_default();
+    let game_camera = camera_controller.update(
+        &settings,
+        &world,
+        [project.window.width as f32, project.window.height as f32],
+        0.0,
+    )?;
+    Ok((
+        PlaySession {
+            slice,
+            scene_id,
+            error: None,
+            clock: kiln_runtime::play_clock::PlayClock::default(),
+            last_tick: Instant::now(),
+            camera_controller,
+            game_camera,
+        },
+        world,
+    ))
+}
+
 /// Build the scene data of a world.
 ///
 /// The source id keeps the entity's identity, so the roles and textures of
@@ -748,6 +779,7 @@ impl EditorApp {
         self.scenes.mark_saved(&project);
         self.lifecycle.mark_saved(&project);
         self.current_project = Some(project);
+        self.last_autosave = Instant::now();
         self.project_error = None;
         Ok(())
     }
@@ -776,6 +808,11 @@ impl EditorApp {
         }
         let project = self.project_to_save()?;
         let path = crate::project_files::save_as(&project, source, &path)?;
+        let loaded = crate::project_files::load(&path)?;
+        for message in loaded.messages {
+            self.console_log.push(format!("[WARN] {message}"));
+        }
+        let project = loaded.project;
         self.shell.script_editor.reset();
         self.shell.entity_clipboard = None;
         self.shell.selection_origin = None;
@@ -803,6 +840,7 @@ impl EditorApp {
         }
         self.selected_entity = None;
         self.upload_scene_textures();
+        self.last_autosave = Instant::now();
         self.project_error = None;
         Ok(())
     }
@@ -810,7 +848,10 @@ impl EditorApp {
     /// Load a project from a file path.
     pub fn load_project(&mut self, path: PathBuf) -> Result<(), String> {
         self.shell.script_editor.require_saved()?;
-        let loaded = crate::project_files::load(&path)?;
+        let loaded = crate::project_files::load_recovering(&path)?;
+        for message in &loaded.messages {
+            self.console_log.push(format!("[WARN] {message}"));
+        }
         self.shell.script_editor.reset();
         self.shell.entity_clipboard = None;
         self.shell.selection_origin = None;
@@ -1098,6 +1139,60 @@ impl EditorApp {
         });
         self.is_playing = true;
 
+        Ok(())
+    }
+
+    /// Restart from saved source only after the replacement has fully prepared.
+    fn restart_play(&mut self) -> Result<(), String> {
+        let Some(scene_id) = self.play.as_ref().map(|play| play.scene_id.clone()) else {
+            return Ok(());
+        };
+        self.shell.script_editor.require_saved()?;
+        let project = self.current_project.as_ref().ok_or("No project loaded")?;
+        let root = self
+            .project_root
+            .as_ref()
+            .ok_or("The project has no directory")?;
+        let textures = self
+            .gpu
+            .as_ref()
+            .map(|gpu| gpu.scene_textures.clone())
+            .unwrap_or_default();
+        let (mut replacement, world) = prepare_play_restart(project, &scene_id, root, &textures)?;
+        if let Some(old) = self.play.as_ref() {
+            for point in old.slice.source_breakpoints() {
+                if let Err(error) = replacement
+                    .slice
+                    .add_source_breakpoint(&point.path, point.line)
+                {
+                    self.console_log.push(format!(
+                        "[WARN] Unbound breakpoint {}:{}: {error}",
+                        point.path, point.line
+                    ));
+                }
+            }
+        }
+        self.stop_play();
+        #[cfg(feature = "audio")]
+        if self
+            .current_project
+            .as_ref()
+            .is_some_and(|p| !p.audio_assets.is_empty())
+        {
+            if let Err(error) = replacement.slice.host_mut().open_audio_output() {
+                self.console_log
+                    .push(format!("[WARN] Audio output unavailable: {error}"));
+            }
+        }
+        replacement.last_tick = Instant::now();
+        self.world = world;
+        self.selected_entity = None;
+        self.hierarchy_panel.clear_selection();
+        self.gizmo = GizmoState::default();
+        self.play = Some(replacement);
+        self.is_playing = true;
+        self.console_log
+            .push("[INFO] Restarted from saved source; runtime state reset".into());
         Ok(())
     }
 
@@ -1404,13 +1499,13 @@ impl EditorApp {
                 play.slice
                     .host_mut()
                     .set_ui_pointer(viewport, Some(point), pointer_down);
-                if let Some(position) = play.game_camera.screen_to_world(point, viewport) {
-                    play.slice
-                        .host_mut()
-                        .set_mouse_world(position.map(|value| value as f64));
-                }
-            }
-            if mouse_mapping.is_none() {
+                play.slice.host_mut().set_world_pointer(
+                    play.game_camera
+                        .pointer_to_world(point, viewport)
+                        .map(|point| point.map(f64::from)),
+                );
+            } else {
+                play.slice.host_mut().set_world_pointer(None);
                 play.slice
                     .host_mut()
                     .set_ui_pointer([0.0, 0.0, size[0], size[1]], None, false);
@@ -1419,7 +1514,11 @@ impl EditorApp {
                 .slice
                 .step(world, axis, kiln_runtime::play_clock::PLAY_STEP)
             {
-                play.error = Some(format!("Scene '{}': {error}", play.scene_id));
+                play.error = if matches!(error, kiln_ir::VmError::DebugSuspended) {
+                    None
+                } else {
+                    Some(format!("Scene '{}': {error}", play.scene_id))
+                };
                 play.clock.set_paused(true);
                 break;
             }
@@ -1460,7 +1559,8 @@ impl EditorApp {
             play.error = None;
             let _ = play.slice.take_ui_commands();
             let _ = kiln_runtime::scene::update_global_transforms(world);
-            match play.camera_controller.update(
+            match play.slice.update_camera(
+                &mut play.camera_controller,
                 &settings,
                 world,
                 size,
@@ -1773,8 +1873,11 @@ impl EditorApp {
         let mut before = self.prefab_apply_snapshot()?;
         before.scenes.insert(scene_id.clone(), scene);
         let project = self.current_project.as_mut().ok_or("No project loaded")?;
+        let mut staged = project.clone();
+        staged.scenes = before.scenes.clone();
         let updated_prefab =
-            crate::editing::apply_prefab_instance_to_definition(project, &scene_id, entity_id)?;
+            crate::editing::apply_prefab_instance_to_definition(&mut staged, &scene_id, entity_id)?;
+        *project = staged;
         self.prefab_apply_redo.clear();
         self.prefab_editor
             .state
@@ -1874,7 +1977,30 @@ impl EditorApp {
             .to_path_buf();
         let old_cached_path = root.join(old_path).canonicalize().ok();
         let new_full_path = root.join(new_path);
-        self.asset_browser.rename_asset(old_path, new_path)?;
+        let source_move = std::path::Path::new(old_path)
+            .extension()
+            .is_some_and(|e| e == "ks")
+            || std::path::Path::new(new_path)
+                .extension()
+                .is_some_and(|e| e == "ks");
+        if source_move {
+            self.shell.script_editor.require_saved()?;
+        }
+        let loaded_source = self.shell.script_editor.loaded_path().to_owned();
+        let source_updates =
+            crate::source_move::move_asset(&mut self.asset_browser, old_path, new_path)?;
+        if source_move && !loaded_source.is_empty() {
+            let path = if loaded_source == old_path {
+                new_path
+            } else {
+                &loaded_source
+            };
+            if let Err(error) = self.shell.script_editor.open(&root, path) {
+                self.console_log.push(format!(
+                    "[WARN] Source moved, but open script could not reload: {error}"
+                ));
+            }
+        }
         let mut cache = kiln_assets::AssetCache::new(root.join(".kiln-cache"));
         if let Err(error) = cache.load() {
             self.console_log.push(format!(
@@ -1911,7 +2037,7 @@ impl EditorApp {
             self.upload_scene_textures();
         }
         self.console_log.push(format!(
-            "[INFO] Moved asset {old_path} to {new_path} and updated {updated} references"
+            "[INFO] Moved asset {old_path} to {new_path} and updated {updated} references and {source_updates} source files"
         ));
         Ok(())
     }
@@ -2133,7 +2259,15 @@ impl EditorApp {
             return Ok(());
         }
         let snapshot = prompt.snapshot.as_ref().map_err(Clone::clone)?;
-        let recovered_project = snapshot.project.clone();
+        let mut recovered_project = snapshot.project.clone();
+        let root = prompt
+            .project_path
+            .parent()
+            .ok_or("Missing project directory")?;
+        for message in kiln_assets::atlas_project::recover(&mut recovered_project, root) {
+            log::warn!("{message}");
+            self.console_log.push(format!("[WARN] {message}"));
+        }
         let saved_project = self.current_project.clone().ok_or("No project loaded")?;
         let recovered_script = snapshot
             .script
@@ -2154,6 +2288,7 @@ impl EditorApp {
             self.scenes = SceneWorkspace::open(&recovered_project);
             self.scenes.set_saved_baselines(&saved_project);
             self.lifecycle.mark_saved(&saved_project);
+            self.upload_scene_textures();
             self.reset_scene_view();
             if let Some(editor) = recovered_script {
                 self.shell.script_editor = editor;
@@ -2415,6 +2550,9 @@ impl EditorApp {
                 }
                 ProjectRequest::PausePlay => {
                     if let Some(play) = self.play.as_mut() {
+                        if play.clock.paused() {
+                            play.slice.debug_continue();
+                        }
                         play.clock.set_paused(!play.clock.paused());
                         play.last_tick = Instant::now();
                     }
@@ -2422,18 +2560,12 @@ impl EditorApp {
                 }
                 ProjectRequest::StepPlay => {
                     if let Some(play) = self.play.as_mut() {
+                        play.slice.debug_continue();
                         play.clock.request_step();
                     }
                     Ok(())
                 }
-                ProjectRequest::RestartPlay => {
-                    if let Some(scene_id) = self.play.as_ref().map(|play| play.scene_id.clone()) {
-                        self.stop_play();
-                        self.start_play_scene(&scene_id)
-                    } else {
-                        Ok(())
-                    }
-                }
+                ProjectRequest::RestartPlay => self.restart_play(),
                 ProjectRequest::PlayProject => {
                     if self.play.is_some() {
                         self.stop_play();
@@ -2448,6 +2580,10 @@ impl EditorApp {
                     }
                 }
                 ProjectRequest::ScriptError(error) => Err(error),
+                ProjectRequest::FocusScriptEditor => {
+                    open_panel(&mut self.dock_state, Tab::ScriptEditor);
+                    Ok(())
+                }
                 ProjectRequest::OpenScript(path) => {
                     let result = self
                         .asset_browser
@@ -2577,6 +2713,23 @@ impl EditorApp {
             self.update_play();
         }
 
+        let preview_scope = format!(
+            "{}:{}",
+            self.asset_browser
+                .root()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default(),
+            self.scenes.active_id().unwrap_or_default()
+        );
+        self.anim_editor.cutscene.sync_scope(&preview_scope);
+        if self.play.is_none()
+            && self
+                .anim_editor
+                .cutscene
+                .advance(self.egui_winit.egui_ctx().input(|i| i.stable_dt))
+        {
+            self.egui_winit.egui_ctx().request_repaint();
+        }
         // The world size and the scene view rectangle are read before the GPU
         // state is borrowed, so the scene can be drawn into the panel.
         let world = self.world_size();
@@ -2982,6 +3135,7 @@ impl EditorApp {
                 tier,
                 is_playing,
                 project_dirty || self.shell.script_editor.dirty(),
+                gpu.scene_view_sprite_renderer.frame_stats().warning(),
             );
         }
 
@@ -3505,17 +3659,28 @@ impl EditorApp {
                 let camera = &scene_camera;
                 let view_bounds = camera.view_bounds();
                 let _ = kiln_runtime::update_global_transforms(&mut self.world);
-                for (texture, instance) in kiln_runtime::visual::collect_scene_draws_filtered(
-                    &self.world,
-                    view_bounds,
-                    |name| gpu.scene_view_sprite_renderer.material_id(name),
-                    |source| {
-                        self.is_playing
-                            || !source
-                                .and_then(|id| authoring_flags.get(id))
-                                .is_some_and(|f| f.hidden)
+                let draws = crate::cutscene_preview::collect(
+                    &mut self.world,
+                    (!self.is_playing && self.anim_editor.cutscene.scene_preview).then_some((
+                        &self.anim_editor.cutscene.draft,
+                        self.anim_editor.cutscene.time,
+                    )),
+                    |draw_world| {
+                        kiln_runtime::visual::collect_scene_draws_filtered_mode(
+                            draw_world,
+                            view_bounds,
+                            |name| gpu.scene_view_sprite_renderer.material_id(name),
+                            |source| {
+                                self.is_playing
+                                    || !source
+                                        .and_then(|id| authoring_flags.get(id))
+                                        .is_some_and(|f| f.hidden)
+                            },
+                            self.is_playing,
+                        )
                     },
-                ) {
+                );
+                for (texture, instance) in draws {
                     gpu.scene_view_sprite_renderer
                         .push_textured(texture, instance);
                 }
@@ -3557,8 +3722,12 @@ impl EditorApp {
                         1.0,
                     );
                     pass.set_scissor_rect(origin_x, origin_y, viewport.width, viewport.height);
-                    gpu.scene_view_sprite_renderer
-                        .flush(&mut pass, camera, queue);
+                    gpu.scene_view_sprite_renderer.flush(
+                        &mut pass,
+                        camera,
+                        queue,
+                        gpu.renderer.device(),
+                    );
                 }
 
                 // Apply post-processing if available.
@@ -3641,8 +3810,12 @@ impl EditorApp {
                         1.0,
                     );
                     pass.set_scissor_rect(origin_x, origin_y, viewport.width, viewport.height);
-                    gpu.scene_view_overlay_renderer
-                        .flush(&mut pass, &overlay_camera, queue);
+                    gpu.scene_view_overlay_renderer.flush(
+                        &mut pass,
+                        &overlay_camera,
+                        queue,
+                        gpu.renderer.device(),
+                    );
                 }
             }
         }
@@ -3864,6 +4037,7 @@ impl EditorApp {
             tier: kiln_render::RenderTier,
             is_playing: bool,
             project_dirty: bool,
+            render_warning: Option<String>,
         ) {
             egui::TopBottomPanel::bottom("status_bar")
                 .exact_height(22.0)
@@ -3882,6 +4056,9 @@ impl EditorApp {
                             ("All changes saved", egui::Color32::from_rgb(152, 166, 184))
                         };
                         ui.colored_label(color, status);
+                        if let Some(warning) = &render_warning {
+                            ui.colored_label(egui::Color32::LIGHT_RED, warning);
+                        }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.weak(format!(
                                 "{} · {} entities · {:?}",
@@ -4202,6 +4379,9 @@ impl TabViewer<'_> {
     }
 
     fn translation_canvas(&mut self, ui: &mut egui::Ui, panel: egui::Rect) {
+        if self.anim_editor.cutscene.scene_preview && !*self.is_playing {
+            return;
+        }
         if self.editing_locked() || self.project_blocked {
             return;
         }
@@ -4704,16 +4884,16 @@ impl TabViewer<'_> {
             return;
         }
         let entries = self.asset_browser.entries().to_vec();
+        let Some(project) = self.current_project.as_mut() else {
+            return;
+        };
+        let identities = project.ensure_asset_ids(entries.iter().map(|entry| entry.path.as_str()));
         let mut results = Vec::new();
-        for entry in entries {
+        for (entry, asset_id) in entries.into_iter().zip(identities) {
             let Some(project) = self.current_project.as_mut() else {
                 return;
             };
-            let asset_id = project
-                .asset_ids
-                .entry(entry.path.clone())
-                .or_insert_with(|| kiln_core::next_id().to_string())
-                .clone();
+
             let path = dir.join(&entry.path);
             let settings = *project.asset_import_settings.entry(asset_id).or_default();
             let settings = kiln_assets::ImportSettings {
@@ -4769,6 +4949,14 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
         }
         match tab {
             Tab::SceneView | Tab::GameView => {
+                if self.anim_editor.cutscene.scene_preview && !*self.is_playing {
+                    ui.horizontal(|ui| {
+                        ui.label("Cutscene preview · scene poses are unchanged");
+                        if ui.button("Stop Scene Preview").clicked() {
+                            self.anim_editor.cutscene.scene_preview = false;
+                        }
+                    });
+                }
                 if matches!(tab, Tab::GameView) {
                     self.shell.set_preview(false);
                 }
@@ -4801,7 +4989,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     }
                     if *self.is_playing {
                         ui.menu_button("Play", |ui| {
-                            if ui.button("Restart").clicked() {
+                            if ui.button("Restart").on_hover_text("Restart from saved scripts. Save or revert source edits first; compile errors keep the current run.").clicked() {
                                 self.project_requests.push(ProjectRequest::RestartPlay);
                                 ui.close_menu();
                             }
@@ -4945,6 +5133,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                 // Draw gizmo mode indicator in the top-left of the scene view
                 if self.shell.gizmos
+                    && !self.anim_editor.cutscene.scene_preview
                     && self.gizmo.mode != GizmoMode::None
                     && !self.selected_flags().hidden
                     && !self.selected_flags().locked
@@ -5493,9 +5682,21 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         }
                         if has_sprite {
                             let mut settings=authored.components.iter().find_map(|component|match component{kiln_core::Component::SpriteLayout {settings}=>Some(*settings),_=>None}).unwrap_or_default();
-                            ui.collapsing("Sprite Pivot / Pixel Scale",|ui|{
+                            ui.collapsing("Sprite Pivot / Pixel Scale / Parallax",|ui|{
                                 if crate::sprite_editor::layout_ui(ui,&mut settings) {self.queue_component(entity,ComponentEdit::SetVisual(kiln_core::Component::SpriteLayout {settings}));}
                             });
+                        }
+                        if has_sprite {
+                            let scope=format!("{:?}:{}",self.asset_browser.root(),self.scenes.active_id().unwrap_or(""));
+                            let graph=self.current_project.as_ref().and_then(|project|crate::animation_graph_editor::show(ui,&mut self.anim_editor.graph_editor,&authored,&project.animation_clips,&scope));
+                            if let Some(graph)=graph {self.queue_component(entity,ComponentEdit::SetVisual(kiln_core::Component::AnimationGraph {graph}));}
+                            let mesh=self.current_project.as_ref().and_then(|p|self.scenes.active_id().and_then(|id|p.scenes.get(id))).and_then(|scene|crate::skin_editor::show(ui,&mut self.anim_editor.skin_editor,scene,&authored,&scope));
+                            if let Some(mesh)=mesh{self.queue_component(entity,ComponentEdit::SetVisual(kiln_core::Component::SkinnedMesh{mesh}));}
+                            if authored.components.iter().any(|c|matches!(c,kiln_core::Component::SkinnedMesh{..}))&&ui.button("Remove Skinned Mesh").clicked(){self.remove_component(entity,ComponentKind::SkinnedMesh);}
+
+                            if authored.components.iter().any(|c|matches!(c,kiln_core::Component::AnimationGraph {..})) && ui.button("Remove Animation States").clicked() {
+                                self.remove_component(entity,ComponentKind::AnimationGraph);
+                            }
                         }
                         if authored.components.iter().any(|component|matches!(component,kiln_core::Component::Particles {..})) {
                             ui.label("Saved particle effect: edit in VFX Editor.");
@@ -5687,11 +5888,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                 let ready = self.play.is_none()
                     && !self.project_blocked
                     && !self.shell.script_editor.is_dirty()
-                    && self
-                        .shell
-                        .script_editor
-                        .source
-                        .starts_with("// kiln-graph-v1\n");
+                    && kiln_graph::document::has_visual_header(&self.shell.script_editor.source);
                 if ui
                     .add_enabled(ready, egui::Button::new("Use for Active Scene"))
                     .clicked()
@@ -5719,7 +5916,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             }
             Tab::Assets => {
                 ui.vertical(|ui| {
-                    let rename_source = self.asset_browser.preview_source().map(str::to_owned);
+                    let rename_source = self.asset_browser.selected_source().map(str::to_owned);
                     ui.horizontal(|ui| {
                         ui.weak("Assets");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -5773,8 +5970,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         Some(crate::asset_shelf::ShelfAction::OpenScript(path)) => {
                             self.project_requests.push(ProjectRequest::OpenScript(path));
                         }
-                        Some(crate::asset_shelf::ShelfAction::SelectImage(path)) => {
-                            if let Err(error) = self.asset_browser.select(&path) { self.console_log.push(format!("[ERROR] {error}")); }
+                        Some(crate::asset_shelf::ShelfAction::SelectAsset(path)) => {
+                            if let Err(error) = self.asset_browser.select_source(&path) { self.console_log.push(format!("[ERROR] {error}")); }
                         }
                         Some(crate::asset_shelf::ShelfAction::OpenScene(id)) => {
                             self.project_requests.push(ProjectRequest::Scene(SceneAction::Open(id)));
@@ -6109,30 +6306,38 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     // Returns true if overrides were applied, in which case we
                     // update all ECS instances to match the edited prefab.
                     let applied = self.prefab_editor.render(ui);
-                    if let Some(project) = self.current_project.as_mut() {
-                        project.prefabs = self.prefab_editor.state.prefabs().clone();
-                    }
                     if applied {
-                        let prefabs: Vec<_> = self
-                            .prefab_editor
-                            .state
-                            .prefab_list()
-                            .into_iter()
-                            .cloned()
-                            .collect();
-                        for prefab in prefabs {
-                            let updated =
-                                crate::editing::update_prefab_instances(self.world, &prefab);
-                            let saved = self.current_project.as_mut().map_or(0, |project| {
-                                crate::editing::propagate_prefab_in_scenes(project, &prefab)
+                        let prefabs = self.prefab_editor.state.prefabs().clone();
+                        let result = self.current_project.as_ref().ok_or("No project loaded".to_owned())
+                            .and_then(|project| {
+                                let mut staged = project.clone();
+                                staged.prefabs = prefabs.clone();
+                                let mut counts = Vec::new();
+                                for prefab in prefabs.values() {
+                                    let count = crate::editing::propagate_prefab_in_scenes(&mut staged, prefab)?;
+                                    counts.push((prefab.clone(), count));
+                                }
+                                Ok((staged, counts))
                             });
-                            if updated > 0 || saved > 0 {
-                                self.log(&format!(
-                                    "[INFO] Updated {} live and {} saved instances of prefab '{}'",
-                                    updated, saved, prefab.name
-                                ));
+                        match result {
+                            Ok((staged, counts)) => {
+                                *self.current_project = Some(staged);
+                                for (prefab, saved) in counts {
+                                    let updated = crate::editing::update_prefab_instances(self.world, &prefab);
+                                    if updated > 0 || saved > 0 {
+                                        self.log(&format!("[INFO] Updated {} live and {} saved instances of prefab '{}'", updated, saved, prefab.name));
+                                    }
+                                }
+                            }
+                            Err(error) => {
+                                if let Some(project) = self.current_project.as_ref() {
+                                    self.prefab_editor.state.replace_prefabs(project.prefabs.clone());
+                                }
+                                self.log(&format!("[ERROR] Prefab propagation refused: {error}"));
                             }
                         }
+                    } else if let Some(project) = self.current_project.as_mut() {
+                        project.prefabs = self.prefab_editor.state.prefabs().clone();
                     }
                 });
             }
@@ -6536,11 +6741,14 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             }
 
             Tab::AnimationEditor => {
-                ui.vertical(|ui| {
+                egui::ScrollArea::vertical().id_salt("animation_workspace_scroll").show(ui, |ui| {
                     if self.editing_locked() {
                         ui.disable();
                     }
                     if let Some(project) = self.current_project.as_mut() {
+                        if ui.button("Create Two-Bone Cutout Rig").clicked() {
+                            if let Some(scene_id)=self.scenes.active_id(){self.project_requests.push(ProjectRequest::Entity(crate::entity_command::EntityCommand{scene_id:scene_id.into(),edit:crate::entity_command::EntityEdit::CreateCutoutRig{position:[80.0,120.0],length:64.0}}));}
+                        }
                         let before = serde_json::to_value(&project.animation_clips).ok();
                         AnimationEditorState::render_with_root(
                             ui,
@@ -6551,6 +6759,16 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         );
                         if before != serde_json::to_value(&project.animation_clips).ok() {
                             self.project_requests.push(ProjectRequest::RefreshVisuals);
+                        }
+                        if let Some(scene) = self.scenes.active_id().and_then(|id| project.scenes.get(id)) {
+                            let scope = format!("{}:{}", self.asset_browser.root().map(|p|p.display().to_string()).unwrap_or_default(), scene.id);
+                            if let Some(source) = self.anim_editor.cutscene.render(ui, scene, (&self.shell.script_editor.source,self.shell.script_editor.loaded_path()), &scope, ui.input(|i|i.stable_dt)) {
+                                let result = self.anim_editor.cutscene.draft.validate_assets(project).and_then(|_|self.asset_browser.root().ok_or_else(||"Open a project first".to_owned())).and_then(|root|self.shell.script_editor.stage_cutscene(root,&self.anim_editor.cutscene.path,source));
+                                match result {
+                                    Ok(()) => {self.anim_editor.cutscene.message="Generated source staged; Save Script, then attach it to one director entity.".into();self.project_requests.push(ProjectRequest::FocusScriptEditor);},
+                                    Err(error) => self.anim_editor.cutscene.message=error,
+                                }
+                            }
                         }
                     } else {
                         ui.heading("Animation Editor");
@@ -6591,6 +6809,8 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                     if let Some(play) = &mut self.play {
                         ui.heading("Live Gameplay Debugger");
                         ui.label(format!("Scene: {}", play.scene_id));
+                        let (used, limit) = play.slice.script_instruction_usage();
+                        ui.label(format!("Script work this tick: {used} / {limit} instructions"));
                         ui.horizontal(|ui| {
                             if ui
                                 .button(if play.clock.paused() {
@@ -6605,15 +6825,43 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             if ui.button("Step Frame").clicked() {
                                 self.project_requests.push(ProjectRequest::StepPlay);
                             }
-                            if ui.button("Restart").clicked() {
+                            if ui.button("Step Statement").clicked() {
+                                play.slice.debug_step_statement();play.clock.request_step();
+                            }
+                            if ui.button("Restart").on_hover_text("Restart from saved scripts. Save or revert source edits first; compile errors keep the current run.").clicked() {
                                 self.project_requests.push(ProjectRequest::RestartPlay);
                             }
                         });
                         if let Some(error) = &play.error {
                             ui.colored_label(egui::Color32::LIGHT_RED, error);
                         }
-                        ui.checkbox(&mut self.debugger_panel.show_locals, "Inspect entity state");
+                        if let Some(stop)=play.slice.source_stop() {
+                            ui.colored_label(egui::Color32::LIGHT_BLUE,format!("Source stop: {}:{} ({})",stop.source.path,stop.source.line,stop.owner));
+                        }
+                        self.debugger_panel.render_live_watches(ui, &play.slice, play.clock.paused() || play.error.is_some());
+                        if self.debugger_panel.render_source_breakpoints(ui,&mut play.slice) {play.clock.set_paused(true);}
+                        ui.checkbox(&mut self.debugger_panel.show_locals, "Inspect live state and locals");
                         if self.debugger_panel.show_locals {
+                            if play.clock.paused() || play.error.is_some() {
+                                ui.checkbox(&mut self.debugger_panel.active_locals_only, "Active lexical locals only");
+                                ui.label(if self.debugger_panel.active_locals_only { "Current function frame: initialized lexical bindings" } else { "Allocated VM locals (slots may be outside their lexical scope)" });
+                                ui.label("Inspection limit: 64 VMs, 128 locals each; containers show counts.");
+                                for snapshot in play.slice.live_vm_debug_scoped(self.debugger_panel.active_locals_only) {
+                                    ui.collapsing(format!("{} — instruction {}", snapshot.owner, snapshot.instruction), |ui| {
+                                        if let Some(location) = snapshot.location { ui.monospace(location); }
+                                        ui.label("Call frames: entry to current function");
+                                        for frame in snapshot.frames {
+                                            ui.monospace(format!("{} @ {}", frame.function, frame.location.unwrap_or_else(|| format!("instruction {}", frame.instruction))));
+                                        }
+                                        for local in snapshot.locals {
+                                            ui.monospace(format!("[{}] {}::{} = {}", local.slot, local.function.as_deref().unwrap_or("<entry>"), local.name, local.value));
+                                        }
+                                        if snapshot.omitted_locals > 0 { ui.label(format!("{} locals omitted", snapshot.omitted_locals)); }
+                                    });
+                                }
+                            } else {
+                                ui.label("Pause to inspect VM locals.");
+                            }
                             for entity in play.slice.entity_script_debug() {
                                 ui.collapsing(
                                     format!(
@@ -6798,7 +7046,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                                 }
                             }
                         }
+                        let atlas_built = self.sprite_editor.atlas.take_built();
                         if changed
+                            || atlas_built
                             || resources != serde_json::to_value(&project.animation_clips).ok()
                         {
                             self.project_requests.push(ProjectRequest::RefreshVisuals);
@@ -7204,5 +7454,102 @@ mod play_tests {
             Err(error) => error,
         };
         assert!(error.contains("second.ks:2:1:"), "{error}");
+    }
+    #[test]
+    fn staged_restart_keeps_old_run_on_import_failure_and_uses_fresh_saved_source_on_success() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(
+            root.path().join("main.ks"),
+            "import \"logic.ks\";\nadd_score(points());",
+        )
+        .unwrap();
+        std::fs::write(root.path().join("logic.ks"), "fn points() { return 1; }").unwrap();
+        let mut project = Project::default();
+        project.scenes.insert(
+            "main".into(),
+            Scene {
+                id: "main".into(),
+                name: "Main".into(),
+                script: Some("main.ks".into()),
+                entities: vec![],
+                nested_scenes: vec![],
+            },
+        );
+        let authored = serde_json::to_value(&project).unwrap();
+        let textures = SceneTextures::default();
+        let (mut old, mut world) =
+            prepare_play_restart(&project, "main", root.path(), &textures).unwrap();
+        old.slice
+            .step(&mut world, (0.0, 0.0), kiln_runtime::play_clock::PLAY_STEP)
+            .unwrap();
+        old.clock.set_paused(true);
+        old.error = Some("retained error".into());
+        std::fs::create_dir_all(root.path().join(".kiln-save")).unwrap();
+        let slot = root.path().join(".kiln-save/keep.txt");
+        std::fs::write(&slot, "persistent slot").unwrap();
+        std::fs::write(
+            root.path().join("logic.ks"),
+            "fn points() { unknown_restart_call(); return 1; }",
+        )
+        .unwrap();
+        let error = match prepare_play_restart(&project, "main", root.path(), &textures) {
+            Ok(_) => panic!("Invalid imported source must reject replacement"),
+            Err(error) => error,
+        };
+        assert!(error.contains("logic.ks"), "{error}");
+        assert!(old.clock.paused());
+        assert_eq!(old.error.as_deref(), Some("retained error"));
+        old.slice
+            .step(&mut world, (0.0, 0.0), kiln_runtime::play_clock::PLAY_STEP)
+            .unwrap();
+        assert_eq!(old.slice.state().score, 2);
+        std::fs::write(root.path().join("logic.ks"), "fn points() { return 7; }").unwrap();
+        let (mut replacement, mut fresh_world) =
+            prepare_play_restart(&project, "main", root.path(), &textures).unwrap();
+        assert_eq!(replacement.slice.state().score, 0);
+        assert!(!replacement.clock.paused());
+        assert!(replacement.error.is_none());
+        replacement
+            .slice
+            .step(
+                &mut fresh_world,
+                (0.0, 0.0),
+                kiln_runtime::play_clock::PLAY_STEP,
+            )
+            .unwrap();
+        assert_eq!(replacement.slice.state().score, 7);
+        assert_eq!(old.slice.state().score, 2);
+        assert_eq!(serde_json::to_value(&project).unwrap(), authored);
+        assert_eq!(std::fs::read_to_string(slot).unwrap(), "persistent slot");
+    }
+
+    #[test]
+    fn restart_preparation_rejects_missing_source_and_invalid_camera() {
+        let root = tempfile::tempdir().unwrap();
+        let mut project = Project::default();
+        project.scenes.insert(
+            "main".into(),
+            Scene {
+                id: "main".into(),
+                name: "Main".into(),
+                script: Some("main.ks".into()),
+                entities: vec![],
+                nested_scenes: vec![],
+            },
+        );
+        assert!(
+            prepare_play_restart(&project, "main", root.path(), &SceneTextures::default()).is_err()
+        );
+        std::fs::write(root.path().join("main.ks"), "add_score(1);").unwrap();
+        project.cameras.insert(
+            "main".into(),
+            kiln_core::camera::CameraSettings {
+                zoom: 0.0,
+                ..Default::default()
+            },
+        );
+        assert!(
+            prepare_play_restart(&project, "main", root.path(), &SceneTextures::default()).is_err()
+        );
     }
 }

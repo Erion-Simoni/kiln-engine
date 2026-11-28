@@ -20,6 +20,7 @@ pub mod storage;
 pub mod tilemap;
 pub mod tilemap_collision;
 pub mod tilemap_scene;
+pub mod tweens;
 pub mod world;
 
 #[cfg(feature = "audio")]
@@ -61,3 +62,5 @@ pub use kiln_render::materials;
 
 /// Whitespace-only KilnScript formatting shared with the editor.
 pub use kiln_script::format_source as format_script;
+
+pub mod rig;

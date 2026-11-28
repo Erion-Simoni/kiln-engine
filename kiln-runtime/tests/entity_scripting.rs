@@ -277,3 +277,40 @@ fn runaway_attached_loop_reports_runtime_budget_error() {
     let error = session.step(&mut world, (0.0, 0.0), 0.016).unwrap_err();
     assert!(error.to_string().contains("Instruction budget exceeded"));
 }
+
+#[test]
+fn self_despawn_in_collision_prevents_later_callbacks_and_stops_once() {
+    let (project, mut sources, mut world) = fixture();
+    sources.insert(
+        "enemy.ks".into(),
+        r#"
+if script_phase() == "collision_enter" { state_set("removed",true); despawn_entity(self_entity()); }
+if script_phase() == "update" {
+    if state_get("removed",false) { let invalid=1/0; }
+    state_set("updates",state_get("updates",0)+1);
+}
+if script_phase() == "stop" { state_set("stops",state_get("stops",0)+1); }
+"#
+        .into(),
+    );
+    let mut session = SliceSession::with_scene_sources(&project, "main", |p| {
+        sources.get(p).cloned().ok_or(p.to_owned())
+    })
+    .unwrap();
+    session
+        .queue_collision_event("enemy-a".into(), "projectile".into(), true)
+        .unwrap();
+    session.step(&mut world, (0.0, 0.0), 1.0 / 60.0).unwrap();
+    for _ in 0..2 {
+        session.step(&mut world, (0.0, 0.0), 1.0 / 60.0).unwrap();
+    }
+    assert_eq!(session.entity_script_state("enemy-a", "updates"), None);
+    assert_eq!(
+        session.entity_script_state("enemy-a", "stops"),
+        Some(&Value::I64(1))
+    );
+    assert_eq!(
+        session.entity_script_state("enemy-b", "updates"),
+        Some(&Value::I64(3))
+    );
+}

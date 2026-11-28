@@ -2,6 +2,7 @@
 //! Math, time, shared types, ECS glue
 
 pub mod access;
+pub mod animation_graph;
 pub mod audio;
 pub mod camera;
 pub mod clip;
@@ -49,3 +50,7 @@ pub use transform::*;
 
 pub mod vfx;
 pub mod visual;
+
+pub mod atlas;
+
+pub mod skin;

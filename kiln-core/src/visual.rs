@@ -9,6 +9,10 @@ pub struct SpriteLayout {
     pub flip_x: bool,
     pub flip_y: bool,
     pub pixels_per_unit: f32,
+    /// Camera scroll multiplier per axis: one is ordinary world scrolling.
+    pub parallax: [f32; 2],
+    /// Camera world origin where parallax introduces no render offset.
+    pub parallax_origin: [f32; 2],
 }
 
 impl Default for SpriteLayout {
@@ -18,6 +22,8 @@ impl Default for SpriteLayout {
             flip_x: false,
             flip_y: false,
             pixels_per_unit: 1.0,
+            parallax: [1.0; 2],
+            parallax_origin: [0.0; 2],
         }
     }
 }
@@ -32,6 +38,16 @@ impl SpriteLayout {
             || self.pixels_per_unit <= 0.0
         {
             return Err("Pivot must be within 0–1 and pixel scale must be positive".into());
+        }
+        if !self
+            .parallax
+            .iter()
+            .all(|v| v.is_finite() && (-8.0..=8.0).contains(v))
+            || !self.parallax_origin.iter().all(|v| v.is_finite())
+        {
+            return Err(
+                "Parallax factors must be finite in -8..8 and anchors must be finite".into(),
+            );
         }
         Ok(())
     }
@@ -72,5 +88,40 @@ impl ParticleEffect {
             emitter.validate()?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod parallax_tests {
+    use super::*;
+    #[test]
+    fn old_layout_defaults_and_authored_parallax_roundtrips_and_validates() {
+        let old: SpriteLayout = toml::from_str("pixels_per_unit=2.0").unwrap();
+        assert_eq!(old.parallax, [1.0; 2]);
+        assert_eq!(old.parallax_origin, [0.0; 2]);
+        let layout = SpriteLayout {
+            parallax: [0.5, -1.0],
+            parallax_origin: [100.0, 50.0],
+            ..old
+        };
+        assert_eq!(
+            toml::from_str::<SpriteLayout>(&toml::to_string(&layout).unwrap()).unwrap(),
+            layout
+        );
+        layout.validate().unwrap();
+        for factor in [f32::NAN, f32::INFINITY, 8.01, -8.01] {
+            assert!(SpriteLayout {
+                parallax: [factor, 1.0],
+                ..layout
+            }
+            .validate()
+            .is_err());
+        }
+        assert!(SpriteLayout {
+            parallax_origin: [f32::INFINITY, 0.0],
+            ..layout
+        }
+        .validate()
+        .is_err());
     }
 }

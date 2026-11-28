@@ -8,6 +8,17 @@ use crate::tilemap::{TileMap, TileSet};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Default total script instructions across one gameplay tick.
+pub const DEFAULT_SCRIPT_INSTRUCTION_BUDGET: u64 = 1_000_000;
+/// Largest accepted authored aggregate script budget.
+pub const MAX_SCRIPT_INSTRUCTION_BUDGET: u64 = 10_000_000;
+fn default_script_instruction_budget() -> u64 {
+    DEFAULT_SCRIPT_INSTRUCTION_BUDGET
+}
+fn is_default_script_instruction_budget(value: &u64) -> bool {
+    *value == DEFAULT_SCRIPT_INSTRUCTION_BUDGET
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     pub id: String,
@@ -18,6 +29,12 @@ pub struct Project {
     #[serde(default)]
     pub icon: String,
     pub features: Vec<String>,
+    /// Aggregate script instructions per gameplay tick, shared across callbacks.
+    #[serde(
+        default = "default_script_instruction_budget",
+        skip_serializing_if = "is_default_script_instruction_budget"
+    )]
+    pub script_instruction_budget: u64,
     #[serde(default)]
     pub window: WindowSettings,
     #[serde(default)]
@@ -39,6 +56,9 @@ pub struct Project {
     /// Animation clips of the project, keyed by their id.
     #[serde(default)]
     pub animation_clips: HashMap<String, Clip>,
+    /// Reproducible generated sprite sheets and their static clip regions.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub atlases: HashMap<String, crate::atlas::AtlasRecipe>,
     /// Shader programs of the project, keyed by their id.
     #[serde(default)]
     pub shaders: HashMap<String, Shader>,
@@ -328,6 +348,13 @@ pub struct Entity {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Component {
+    SkinnedMesh {
+        mesh: crate::skin::SkinMesh,
+    },
+    /// Parameter-driven sprite animation, referencing project clips.
+    AnimationGraph {
+        graph: crate::animation_graph::AnimationGraph,
+    },
     /// Editor-only authoring flags. Runtime/game visibility is unaffected.
     EditorFlags {
         #[serde(default)]
@@ -350,7 +377,9 @@ pub enum Component {
         collider: crate::physics_data::Collider2D,
     },
     /// Authored physical joint between stable entity source IDs.
-    Joint { joint: crate::physics_data::Joint2D },
+    Joint {
+        joint: crate::physics_data::Joint2D,
+    },
     /// Entity-attached gameplay program with per-instance numeric properties.
     Script {
         /// Project-relative script resource path.
@@ -451,6 +480,7 @@ impl Default for Project {
             publisher: String::new(),
             icon: String::new(),
             features: vec![],
+            script_instruction_budget: DEFAULT_SCRIPT_INSTRUCTION_BUDGET,
             window: WindowSettings::default(),
             mobile: MobileSettings::default(),
             scenes: HashMap::new(),
@@ -459,6 +489,7 @@ impl Default for Project {
             terrains: HashMap::new(),
             tilesets: HashMap::new(),
             animation_clips: HashMap::new(),
+            atlases: HashMap::new(),
             shaders: HashMap::new(),
             materials: HashMap::new(),
             audio_assets: vec![],

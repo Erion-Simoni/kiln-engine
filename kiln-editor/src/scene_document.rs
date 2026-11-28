@@ -169,7 +169,9 @@ fn reconcile(
                 Component::Script { .. } => Some(component.clone()),
                 Component::Physics { .. }
                 | Component::Joint { .. }
+                | Component::AnimationGraph { .. }
                 | Component::SpriteLayout { .. }
+                | Component::SkinnedMesh { .. }
                 | Component::Particles { .. } => Some(component.clone()),
             };
             if let Some(updated) = updated {
@@ -301,6 +303,8 @@ fn capture_prefab_overrides(project: &Project, entity: &mut Entity) {
             );
         }
     }
+    capture_sprite_geometry(&prefab.root_entity, entity, &mut overrides);
+    capture_sprite_resources(&prefab.root_entity, entity, &mut overrides);
     overrides.entity_id = entity.id.clone();
     if let Some(Component::PrefabInstance {
         overrides: current, ..
@@ -313,5 +317,78 @@ fn capture_prefab_overrides(project: &Project, entity: &mut Entity) {
             entity_id: entity.id.clone(),
             overrides: overrides.overrides,
         };
+    }
+}
+
+fn capture_sprite_geometry(
+    base: &Entity,
+    entity: &Entity,
+    overrides: &mut kiln_core::PrefabOverride,
+) {
+    let geometry = |entity: &Entity| {
+        entity
+            .components
+            .iter()
+            .find_map(|component| match component {
+                Component::Sprite {
+                    width,
+                    height,
+                    layer,
+                    ..
+                } => Some((*width, *height, *layer)),
+                _ => None,
+            })
+    };
+    if let (Some(base), Some(current)) = (geometry(base), geometry(entity)) {
+        let width = (base.0 != current.0).then_some(current.0);
+        let height = (base.1 != current.1).then_some(current.1);
+        let layer = (base.2 != current.2).then_some(current.2);
+        if width.is_none() && height.is_none() && layer.is_none() {
+            overrides.overrides.remove("sprite_geometry");
+        } else {
+            overrides.overrides.insert(
+                "sprite_geometry".into(),
+                kiln_core::ComponentOverride::SpriteGeometry {
+                    width,
+                    height,
+                    layer,
+                },
+            );
+        }
+    }
+}
+
+fn capture_sprite_resources(
+    base: &Entity,
+    entity: &Entity,
+    overrides: &mut kiln_core::PrefabOverride,
+) {
+    let resources = |entity: &Entity| {
+        entity
+            .components
+            .iter()
+            .find_map(|component| match component {
+                Component::Sprite {
+                    material,
+                    animation_clip,
+                    ..
+                } => Some((material.clone(), animation_clip.clone())),
+                _ => None,
+            })
+    };
+    if let (Some(base), Some(current)) = (resources(base), resources(entity)) {
+        let material = (base.0 != current.0).then_some(current.0);
+        let animation_clip = (base.1 != current.1).then_some(current.1);
+        if material.is_none() && animation_clip.is_none() {
+            overrides.overrides.remove("sprite_resources");
+        } else {
+            overrides.overrides.insert(
+                "sprite_resources".into(),
+                kiln_core::ComponentOverride::SpriteResources {
+                    material,
+                    animation_clip,
+                },
+            );
+        }
     }
 }

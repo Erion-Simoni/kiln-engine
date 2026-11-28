@@ -38,9 +38,19 @@ pub struct Clip {
     /// Whether the clip loops.
     #[serde(default = "default_true")]
     pub loops: bool,
+    /// Play reverse interiors after forward frames; one-shot returns to frame zero.
+    #[serde(default)]
+    pub ping_pong: bool,
+    /// Authored playback multiplier; zero pauses without dispatching events.
+    #[serde(default = "default_speed")]
+    pub speed: f32,
     /// Optional automatic transition after a non-looping clip completes.
     #[serde(default)]
     pub next: Option<String>,
+}
+
+fn default_speed() -> f32 {
+    1.0
 }
 
 fn default_true() -> bool {
@@ -55,6 +65,8 @@ impl Clip {
             texture,
             frames: Vec::new(),
             loops: true,
+            ping_pong: false,
+            speed: 1.0,
             next: None,
         }
     }
@@ -64,35 +76,59 @@ impl Clip {
         self.frames.push(frame);
     }
 
-    /// Get the total duration of the clip.
-    pub fn total_duration(&self) -> f32 {
-        self.frames.iter().map(|f| f.duration).sum()
+    /// Frames in playback order, retaining authored frame indices.
+    pub fn playback_frames(&self) -> impl Iterator<Item = (usize, &Frame)> {
+        let reverse = if self.ping_pong {
+            self.frames
+                .len()
+                .saturating_sub(if self.loops { 2 } else { 1 })
+        } else {
+            0
+        };
+        self.frames
+            .iter()
+            .enumerate()
+            .chain(self.frames.iter().enumerate().rev().skip(1).take(reverse))
     }
-
-    /// Get the frame at a given time, assuming the clip starts at t=0.
-    ///
-    /// Returns `(frame_index, local_time_within_frame)`.
-    pub fn frame_at_time(&self, t: f32) -> Result<(usize, f32), ClipError> {
+    /// Precise playback duration before speed scaling.
+    pub fn duration_seconds(&self) -> f64 {
+        self.playback_frames()
+            .map(|(_, frame)| frame.duration as f64)
+            .sum()
+    }
+    /// Compatibility float duration, including reverse frames when authored.
+    pub fn total_duration(&self) -> f32 {
+        self.duration_seconds() as f32
+    }
+    /// Sample the canonical timeline without float rounding at frame boundaries.
+    pub fn frame_at_time_seconds(&self, t: f64) -> Result<(usize, f64), ClipError> {
         if self.frames.is_empty() {
             return Err(ClipError::Empty);
         }
-
-        let total = self.total_duration();
-        if total <= 0.0 {
+        let total = self.duration_seconds();
+        if !total.is_finite() || total <= 0.0 {
             return Ok((0, 0.0));
         }
-
         let t = if t.is_finite() { t.max(0.0) } else { 0.0 };
-        let mut time = if self.loops { t % total } else { t.min(total) };
-
-        for (i, frame) in self.frames.iter().enumerate() {
-            if time < frame.duration {
-                return Ok((i, time));
+        let mut time = if self.loops {
+            t.rem_euclid(total)
+        } else {
+            t.min(total)
+        };
+        let mut last = 0;
+        for (index, frame) in self.playback_frames() {
+            last = index;
+            if time < frame.duration as f64 {
+                return Ok((index, time));
             }
-            time -= frame.duration;
+            time -= frame.duration as f64;
         }
-
-        Ok((self.frames.len() - 1, 0.0))
+        Ok((last, 0.0))
+    }
+    /// Frame index and local time using the same timeline as runtime events.
+    pub fn frame_at_time(&self, t: f32) -> Result<(usize, f32), ClipError> {
+        self.frame_at_time_seconds(t as f64)
+            .map(|(index, time)| (index, time as f32))
     }
 
     /// Validate a clip against the decoded sheet, including overflow-safe rects.
@@ -103,6 +139,14 @@ impl Clip {
             || self.frames.len() > 4096
         {
             return Err("Clip needs a name, texture and 1–4096 frames".into());
+        }
+        if !self.speed.is_finite()
+            || !(0.0..=16.0).contains(&self.speed)
+            || !self.total_duration().is_finite()
+        {
+            return Err(
+                "Clip speed must be finite in 0..16 and total duration representable".into(),
+            );
         }
         for frame in &self.frames {
             let [x, y, w, h] = frame.rect;
@@ -179,5 +223,53 @@ mod tests {
         let (idx, local_t) = clip.frame_at_time(0.15).unwrap();
         assert_eq!(idx, 1);
         assert!((local_t - 0.05).abs() < 0.001);
+    }
+}
+
+#[cfg(test)]
+mod playback_controls_tests {
+    use super::*;
+    fn three() -> Clip {
+        let mut c = Clip::new("bounce".into(), "white.png".into());
+        c.ping_pong = true;
+        for _ in 0..3 {
+            c.add_frame(Frame {
+                rect: [0, 0, 1, 1],
+                pivot: [0.5; 2],
+                duration: 0.125,
+                events: vec![],
+            });
+        }
+        c
+    }
+    #[test]
+    fn ping_pong_endpoints_defaults_and_authored_controls_roundtrip() {
+        let mut c = three();
+        assert_eq!(
+            c.playback_frames().map(|(i, _)| i).collect::<Vec<_>>(),
+            [0, 1, 2, 1]
+        );
+        assert_eq!(c.duration_seconds(), 0.5);
+        assert_eq!(c.frame_at_time(0.375).unwrap().0, 1);
+        assert_eq!(c.frame_at_time(0.5).unwrap().0, 0);
+        c.loops = false;
+        assert_eq!(c.duration_seconds(), 0.625);
+        assert_eq!(c.frame_at_time(0.625).unwrap().0, 0);
+        c.speed = 2.0;
+        c.validate([1, 1]).unwrap();
+        let json = serde_json::to_value(&c).unwrap();
+        let mut legacy = json.clone();
+        legacy.as_object_mut().unwrap().remove("ping_pong");
+        legacy.as_object_mut().unwrap().remove("speed");
+        let old: Clip = serde_json::from_value(legacy).unwrap();
+        assert!(!old.ping_pong);
+        assert_eq!(old.speed, 1.0);
+        let round: Clip = serde_json::from_value(json).unwrap();
+        assert!(round.ping_pong);
+        assert_eq!(round.speed, 2.0);
+        for speed in [-1.0, 17.0, f32::NAN] {
+            c.speed = speed;
+            assert!(c.validate([1, 1]).is_err());
+        }
     }
 }

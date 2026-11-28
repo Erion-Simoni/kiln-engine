@@ -318,6 +318,37 @@ Before/after regressions and real widgets verify reference resolution, safe dele
 history and exact restart. [Evidence](evidence/A02_ENTITY_REFERENCES.md). Full A02
 acceptance and matching hosted checks remain open; prior-source CI failed local axes.
 
+**Centered-error replay checkpoint 2026-11-17:** reproduced current-source hosted
+manifest-rescue failure: the replay searched the old error-window location after
+the production dialog was centered. Both rescue and reference-deletion tests now
+share the centered screen observer, with negative controls and unchanged project/
+resource/history assertions. All three rescue cases pass locally; matching hosted
+confirmation remains required. [Evidence](evidence/A02_CENTERED_ERROR_OBSERVER.md).
+A02 stays PARTIAL; this reliability repair does not close broader authoring gates.
+
+**Copied-joint reference checkpoint 2026-11-17:** clipboard/duplicate and prefab
+placement/Revert now validate staged joint references before publishing history.
+Unique nested endpoints work, ambiguous/missing references fail atomically, and
+joint self-references follow the copied owner ID. Real two-scene widgets combine
+failed/successful paste, one-step history, real-timer crash recovery and complete
+project restart; prefab disk/runtime checks pass. [Evidence](evidence/A02_COPIED_JOINT_REFERENCES.md).
+A02 remains PARTIAL; this does not complete nested prefab/variant production workflows.
+
+2026-11-18 replay checkpoint: complete floating-panel headers now distinguish a
+foreground animation panel from an exposed enlarged source header, settle both
+position and width, and use separate pointer/down events. A controlled previous-
+helper failure now passes; 49 Python checks and all three exact authoring/six
+export replays pass locally. CI includes the overlap widget regression. Matching
+hosted checks and broader acceptance remain open; A02 stays PARTIAL.
+[Evidence](evidence/A02_COMPLETE_PANEL_HEADERS.md).
+
+2026-11-18 combined-oracle checkpoint: recovery now compares the complete project
+against a precrash expected document and preserves script bytes in the two-scene
+hierarchy widget flow. Headless acceptance preserves all 12 component variants,
+cameras and references through projection/history/recovery/restart. Both layers
+pass locally; every-field widget and cross-platform acceptance remain open.
+[Evidence](evidence/A02_COMBINED_PROPERTY_ORACLE.md). A02 stays PARTIAL.
+
 ### A03 — Assets, sprites and prefab production workflow
 
 **Status:** PARTIAL. **Depends on:** A02.
@@ -343,9 +374,74 @@ lifetime crash and hidden import controls. Nested/variant prefab and integrated
 atlas rebuild/export acceptance remain open. See
 [checkpoint evidence](evidence/A03_A04_RESOURCE_TOOLS.md).
 
+**Source-module refactor 2026-11-18:** source cards now support Move / Rename.
+Caller imports and moved-file relative imports update with typed manifest paths
+and stable IDs; clean open buffers retarget and dirty buffers block moves. Staged
+publication rollback, runtime import compilation, complete source restart, and
+real widget moves pass; full Rust workspace has 790 passing tests. Process-crash
+atomicity across source moves and manifest Save remains open. Nested/variant,
+atlas and combined visual acceptance remain open; A03 stays PARTIAL.
+[Evidence](evidence/A03_SOURCE_MODULE_MOVES.md).
+
+**Saved atlas checkpoint 2026-11-18:** recipes now build/rebuild ordinary PNGs and
+named static clips, survive source moves/reopen, and rebuild current art in native/
+browser export staging without changing authoring files. Actual widget art moves,
+rendered color changes, stable IDs/regions, portable editor exports and relocated
+native/Chromium pixels pass. Central asset allocation also avoids reused saved IDs
+and orphaned import presets after project load. Full workspace: 797 tests pass.
+Nested/variant and combined prefab/multiple-scene acceptance remain open; generated
+PNG/manifest crash atomicity is separate. A03 stays PARTIAL.
+[Evidence](evidence/A03_SAVED_ATLAS_RECIPES.md).
+
+**Interrupted atlas checkpoint 2026-11-19:** bounded provenance allows explicit
+Open and autosave Restore to reconstruct the selected known-generated PNG without
+changing original art or the saved manifest. Save's disk-conflict check remains
+read-only; Save As and native/browser export normalize isolated copies. Real
+pre-autosave crash and timer-snapshot Restore/Save/restart widgets pass, including
+whole-project/PNG equality and rendered pixels. Full workspace: 804 tests pass.
+This supersedes the atlas interruption limitation above. General source/multi-file
+crash transactions, nested/variant prefabs and combined acceptance remain open.
+A03 stays PARTIAL. [Evidence](evidence/A03_ATLAS_CRASH_RECOVERY.md).
+
+**Prefab texture persistence 2026-11-19:** explicit texture clears now remain
+separate from inheritance through TOML project saves and JSON recovery. Legacy
+path/null input remains supported; invalid values are rejected. Headless two-scene
+capture/save/recovery/move/propagation/Apply/reopen proves the clear survives while
+inherited paths update. Nested/variant and combined visual acceptance remain open.
+A03 stays PARTIAL. [Evidence](evidence/A03_PREFAB_TEXTURE_PERSISTENCE.md).
+
+**Prefab joint propagation 2026-11-19:** Apply and definition propagation now remap
+joint owner references between template and each instance and validate changed
+endpoints in the staged destination compositions. Missing/ambiguous targets reject
+atomically; unique nested targets and unchanged legacy joints remain supported.
+Apply uses current captured edits. Six headless regressions cover saved/reopened
+and runtime-spawned identities; broader GUI/nested-variant acceptance remains open.
+A03 stays PARTIAL. [Evidence](evidence/A03_PREFAB_JOINT_PROPAGATION.md).
+
+**Sprite geometry overrides 2026-11-19:** width, height and draw layer now capture
+as sparse per-instance overrides and survive project/recovery persistence, cross-
+scene Apply and live refresh. Per-property inheritance and one-command Revert with
+exact Undo/Redo pass headless. Runtime contract `kiln-authoring-v3` rejects stale
+native/browser parsers. Material/clip and arbitrary component overrides, nested/
+variant semantics and combined visual acceptance remain open. A03 stays PARTIAL.
+[Evidence](evidence/A03_PREFAB_SPRITE_GEOMETRY.md).
+
+**Sprite resource overrides 2026-11-20:** material and animation-clip assignments
+and explicit clears now persist independently through capture, TOML/JSON recovery,
+cross-scene Apply and live refresh. Revert/Undo/Redo and inherited-value refresh
+have headless coverage. Atlas clip removal guards include dormant override links.
+Runtime contract v4 rejects older parsers. Arbitrary component overrides, nested/
+variant semantics and combined visual acceptance remain open. A03 stays PARTIAL.
+[Evidence](evidence/A03_PREFAB_SPRITE_RESOURCES.md).
+
 ### A04 — General scripting, graphs and real debugging
 
 **Status:** PARTIAL. **Depends on:** A02.
+
+Execution policy (user-directed 2026-11-24): make at most three focused attempts
+on a blocked step/check, record its failure and move to the next feasible step.
+Skipped checks remain incomplete; do not repeat an unavailable acceptance gate
+indefinitely or label a deferred milestone complete.
 
 - [ ] Retain shared host registry, lifecycle/events/signals, functions/modules/collections and runtime entity APIs. Complete for/while loops, dictionaries, enums/structured values, documented global-state rules, timers/delayed execution and bounded coroutine scheduling; extend existing language constructs rather than duplicate them. Add highlighting, completion/docs, project search, formatter and source navigation; source breakpoints, statement stepping, stack/locals/watches. Wire editable graph pins/connections, compile diagnostics and runtime value inspection to the same semantics. Specify safe reload/restart and script budgets.
 - [ ] **Acceptance:** Build a new enemy/projectile/trigger game using scripts and an equivalent graph; debug an imported function, stop infinite work with a useful diagnostic, and reproduce source/export behavior without engine edits.
@@ -378,12 +474,160 @@ save/restart, native gameplay and browser save/restore pass; graph/text movement
 logical-save parity pass. Source debugging and the required new equivalent game
 remain open; see [graph evidence](evidence/A04_GRAPH_WORKFLOW.md).
 
+**Shared dependency checkpoint 2026-11-23:** graph code generation now emits one
+lazy case per reachable node, removing exponential source duplication on shared
+inputs. Existing side-effect order, trigger/branch laziness and inspection state
+remain covered. Maximum depth 64 executes; depth 65 rejects. Guarded v1 loading
+preserves existing visuals and oversized drafts; explicit visual save upgrades
+to v2. This is an A04 compiler fix, not completion of equivalent-game/debugger
+acceptance. [Evidence](evidence/A04_SHARED_GRAPH_DEPENDENCIES.md).
+
+**Equivalent-game checkpoint 2026-11-24:** source-only script and editable graph
+projectile range now cover a moving enemy, input-controlled projectile, actual
+sensor hit/despawn and downstream victory trigger. Text/graph fixed-tick gameplay
+and logical-save victory outcomes pass. This exposed and fixed same-tick update
+after collision-time self-despawn and graph equality's numeric-only pin mismatch.
+Exact resumed physics poses diverge; that check is recorded blocked and work
+continues under the user's skip policy. Full debugger/production acceptance remains
+open. [Evidence](evidence/A04_PROJECTILE_RANGE.md).
+
+**Expression-watch checkpoint 2026-11-24:** live watches accept bounded read-only
+expressions over allocated locals, explicit slots, instance state and shared game
+data. An isolated host/VM uses normal compiler/operator semantics and shared pure
+container reads. Mutations/statements reject and gameplay state/allowance remain
+unchanged. Active lexical scopes, source breakpoints and statement continuation
+remain open. [Evidence](evidence/A04_EXPRESSION_WATCHES.md).
+
+**Lexical inspection checkpoint 2026-11-24:** compiler metadata tracks initialized
+binding lifetimes through blocks, loops and functions. The live debugger filters
+to the current frame before preview bounds; active:NAME and scope(name) watches
+resolve strict lexical bindings, including loop shadowing. Allocated inspection
+remains available after completion. Source breakpoints and scheduler statement
+continuation remain open. [Evidence](evidence/A04_LEXICAL_SCOPES.md).
+
+**Source continuation checkpoint 2026-11-24:** actual scene/attachment VMs now
+suspend at mapped imported source statements and resume the same tick/callback,
+preserving stacks, locals, events, input, time and remaining budgets. Source-line
+breakpoints, statement-enter stepping and Restart rebinding are wired to the live
+editor. Unfinished logical saves reject; Stop abandons pending commands. Saved-screen
+UI dispatch remains atomic. The widget replay observed functional stops/stepping
+but failed its setup-baseline assertion after the third attempt; that gate is
+recorded incomplete and not retried. Under the user's skip policy, proceed next
+to independent A05 work with A04 still PARTIAL and its remaining acceptance deferred.
+[Evidence](evidence/A04_SOURCE_CONTINUATION.md).
+
+**Safe restart checkpoint 2026-11-21:** user deferred remaining A03 acceptance and
+moved to A04. Saved-source Restart now prepares the replacement VM/world/camera
+before stopping the current run, requires dirty source saved/reverted, and preserves
+the current run on loading/compile/camera failure. Fresh reset/persistence behavior
+is specified. Headless imported-function failure/retry and camera/source guards
+pass; live source debugging and the equivalent-game acceptance remain open. A04
+stays PARTIAL. [Evidence](evidence/A04_SAFE_RESTART.md).
+
+**Live local inspection 2026-11-23:** paused/error Debugger inspection now reads
+actual scene and attached VMs, including named allocated locals, instruction and
+mapped source origin. Bounded previews avoid container traversal. Imported-function
+failure, runaway-loop budget, per-instance values and truncation regressions pass
+headless. These are allocated slots, not active lexical frames; source breakpoints,
+statement stepping, watches and equivalent-game acceptance remain open. A04 stays
+PARTIAL. [Evidence](evidence/A04_LIVE_VM_LOCALS.md).
+
+**Live data watches 2026-11-23:** actual scene/entity VMs support read-only slot,
+unique allocated-name and state selectors with bounded nested data lookup. Live
+Debugger adds/removes watches and inspects only while paused/errored. Ambiguity,
+invalid paths and bounds return errors without expression/host execution. Runtime
+regressions pass; arbitrary expressions, active frames, source breakpoints, statement
+stepping and equivalent-game acceptance remain open. A04 stays PARTIAL.
+[Evidence](evidence/A04_LIVE_DATA_WATCHES.md).
+
+**Shared gameplay budget 2026-11-23:** fixed per-invocation allowance multiplication
+across scene/entity/lifecycle/UI callbacks. One configurable aggregate pool resets
+per tick; individual loop guards remain. Tests cover root/entities, signals,
+collisions, paused UI, reset, cleanup, accounting and persistence; Debugger shows
+usage. Actual Linux widgets verify budget failure, real local watches and corrected-
+source Restart with unchanged manifest. Runtime contract v5 rejects older enforcement
+policy. This is not a physical frame-time claim or state rollback. A04 stays PARTIAL; source continuation/debug and
+full equivalent-game acceptance remain open. [Evidence](evidence/A04_SHARED_SCRIPT_BUDGET.md).
+[Consolidated A02–A04 progress](PLAN_PROGRESS.md).
+
+**Callable bodies/imported frames 2026-11-23:** fixed per-call-site body/local
+expansion; valid reuse-heavy source now compiles compactly. Source functions use
+actual Call/Return, with static recursion/transitive depth guards and raw VM depth
+protection. Live debugger shows real imported call sites/current function and local
+ownership. Old function-layout snapshots reject safely while unchanged straight-
+line signatures remain compatible. Actual imported-frame/watch/Restart widgets
+and relocated native/Chromium green-pixel exports pass. Source breakpoints,
+statement continuation, lexical-block inspection and equivalent-game acceptance
+remain open. A04 stays PARTIAL. [Evidence](evidence/A04_SHARED_CALLS_AND_FRAMES.md).
+
 ### A05 — Sprite rendering, cameras and large-scene behavior
 
 **Status:** PARTIAL. **Depends on:** A03.
 
 - [ ] Complete sorting/masks/outlines/blend modes, flipping, materials, pixel scale, atlas batching, filtering/compression and transparent order. Add camera shake/dead zones/transitions, parallax, multiple viewports/split-screen with correct input mapping. Implement suitable culling and report sprite/texture capacity overflow rather than silently dropping submissions.
 - [ ] **Acceptance:** Pixel/interaction regressions cover transforms, camera resize/DPI, split view input and sorting; dense/offscreen scenes remain correct at and beyond configured capacity with visible diagnostics.
+
+**Culling/capacity checkpoint 2026-11-25:** A05 is now active under the user's
+skip policy; A03/A04 acceptance remains deferred, not completed. Shared scene
+collection culls transformed sprite/particle/tile quads before sorting/submission.
+The 16384-sprite queue now exposes attempted/queued/dropped/missing-texture counts
+and visible world-rendering warnings in editor/player/browser. Real GPU queue tests
+and source-only stress export checks cover offscreen starvation and overflow;
+remaining camera/split-view/production acceptance stays open.
+[Evidence](evidence/A05_CULLING_AND_CAPACITY.md).
+
+**Camera checkpoint 2026-11-25:** authored world-unit dead zones now hold the
+camera inside the follow box and move the goal minimally outside it. Effective
+zone size follows zoomed viewport extent; existing smoothing/bounds/pixel snapping
+still apply. Camera updates validate before committing internal state, and
+projection/screen mapping avoids non-finite results from intermediate overflow.
+Native/browser pixel-position checks pass inside/outside the zone. Runtime tools
+advance to v7 to reject older bundles that would ignore the new setting. Shake,
+transitions/parallax/split views and full A05 acceptance remain open.
+[Evidence](evidence/A05_CAMERA_DEAD_ZONES.md).
+
+**Shake checkpoint 2026-11-25:** ADR-0107 adds seeded, decaying script camera
+shake/cancel through the common editor/native/browser adapter. Committed commands
+share a bounded queue across scripts; failed/suspended callbacks cannot leak
+pending effects. Shake never feeds back into follow history, UI pause holds time,
+and invalid camera updates do not advance the mixer. Actual native/browser exports
+observe motion then exact rest after expiry and cancellation. Runtime contract v8
+rejects older bundles missing the calls. Transitions/parallax/split views and full
+A05 acceptance remain open. [Evidence](evidence/A05_CAMERA_SHAKE.md).
+
+**Transition checkpoint 2026-11-27:** ADR-0108 adds script pan/zoom with smoothstep,
+exact endpoint holding, interruption from the current unshaken view, instant cuts
+and stop back to authored follow. All hosts use the existing shared bounded queue
+and camera adapter. Follow history advances independently; UI pause holds time and
+invalid projections do not commit effect clocks. Contract v9 rejects old runtimes
+missing these calls. Native/browser source-only export checks cover pan/zoom,
+cancel and interruption. Parallax/split views and full A05 acceptance remain open.
+[Evidence](evidence/A05_CAMERA_TRANSITIONS.md).
+
+**Sprite parallax checkpoint 2026-11-27:** ADR-0109 adds defaulted per-axis
+SpriteLayout scroll factors/anchors, validated undoable editor controls and logical
+save capture/restore. The shared gameplay collector offsets transformed quads
+before culling; authoring retains logical world geometry for picking/gizmos.
+World transforms/physics remain unchanged. Export rejects invalid scene/prefab
+layouts before publication. Native/browser exact-position replays cover slow,
+fixed, ordinary and reverse/foreground scrolling. Contract v10 rejects older
+bundles ignoring the fields. Tile/particle parallax, repeats, split views and full
+A05 acceptance remain open. [Evidence](evidence/A05_SPRITE_PARALLAX.md).
+
+**View/input prerequisites checkpoint 2026-11-27:** ADR-0110 adds independent
+prepared sprite uploads sharing render resources, with real GPU two-camera/zoom
+pixels in one submission. Stale/foreign resources reject and clearing textures
+also discards invalid pending sprites. Shared bounded viewport hit-testing routes
+split boundaries/gaps/overlaps; all current gameplay hosts use clipped mapping
+and clear absent/letterbox world pointers. `mouse_world_valid()` is propagated
+through frozen ticks/attachments/UI callbacks. Native/browser five-phase pointer
+pixels pass; contract v11 rejects older bundles. This is a renderer/input foundation,
+not completed authored split-screen/host integration. A05 stays PARTIAL.
+[Evidence](evidence/A05_VIEW_UPLOADS_AND_POINTERS.md).
+
+
+
+
 
 ### A06 — Complete tilemap and level authoring
 
@@ -392,12 +636,88 @@ remain open; see [graph evidence](evidence/A04_GRAPH_WORKFLOW.md).
 - [ ] Verify palette/brush presets/erase/rectangle and flood fill, grid controls, layer visibility/locking, selection/copy/paste, terrain/autotile rules, animated tiles, collision shapes and previews, chunking and import/export. Add reusable stamp/level tools and streamed or bounded large-map editing.
 - [ ] **Acceptance:** Create a multilayer scrolling level entirely in the editor, paint terrain/collision, undo, save/restart and play both exports; edits affect the actual collision geometry and references survive reimport.
 
+**Sparse-query checkpoint 2026-11-27:** render/collision traversal is bounded by
+stored chunks rather than empty coordinate span. Wide finite chunk bounds avoid
+huge-range hangs and integer overflow; collision preserves layer/global-row first
+hit order, draw order remains deterministic. Invalid views return empty results,
+map size saturates, oversized atlas geometry rejects UV calculation. Unit/runtime
+regressions and just check pass. Authoring stamps/streaming and full A06 acceptance
+remain open; continue to A07 under explicit user authorization. See ADR-0111.
+
 ### A07 — Animation graphs, timelines and 2D rigs
 
 **Status:** PARTIAL. **Depends on:** A04, A05.
 
 - [ ] Extend existing frame clips/events with ping-pong, speed, conditions, state graphs and transitions. Author property/transform/color/camera/audio/event tracks and curves; expose tween controls to scripts/graphs. Integrate the ADR-selected 2D skeletal approach: bones, attachments, weights, skinning and basic IK with real editor authoring.
 - [ ] **Acceptance:** Author idle/run/jump plus a cutscene and a rigged example; events fire once under pause/seek/transition, all tracks/rigs survive reimport/reopen and match native/browser playback.
+
+**Playback checkpoint 2026-11-27:** authored ping-pong/speed controls now reach
+editor preview, runtime and logical snapshots. Looping ping-pong does not duplicate
+endpoints; one-shot returns to frame zero. One f64 timeline drives sampling,
+seek and events; zero dt/speed is silent, and transition leftovers use the next
+clip's speed. Editor undo/redo and snapshot regressions pass. Native/browser
+fixture validates both event legs, speed checkpoint and exact final pixels.
+Contract v12 rejects older runtimes ignoring fields. State graphs, arbitrary
+tracks/curves, rigs/IK and full A07 acceptance remain open. A07 stays PARTIAL.
+See [A06/A07 evidence](evidence/A06_A07_SPARSE_MAPS_AND_PLAYBACK.md).
+
+**Character-state checkpoint 2026-11-27:** ADR-0113 adds bounded authored state
+machines with script parameters, ordered comparisons, wildcard interrupts and
+one-shot finish transitions. Inspector drafts validate before undoable Apply;
+scene/project and logical saves preserve graph state. Manual play can detach;
+repeated movement parameters retain run time. Actual native/browser keyboard
+replays verify run movement, release-to-idle, one-shot action/return and bounds.
+Contract v13 rejects older tools. Blending, arbitrary tracks, rigs/IK and complete
+A07 authoring acceptance remain open. [Evidence](evidence/A07_CHARACTER_STATES.md).
+
+**Cutscene checkpoint 2026-11-27:** ADR-0114 adds script-authored local-position
+and color tweens, four easing curves, bounded shared ownership, pause/seek/cancel
+and validated save/resume. A camera-follow rig supplies a saved dolly. Native and
+browser exports prove hold, seek and exact endpoints. Contract v14 rejects older
+SDKs. Timeline GUI, general/audio/event tracks, blending and skeletal rigs/IK
+remain open; A07 stays PARTIAL. [Evidence](evidence/A07_CUTSCENE_TWEENS.md).
+
+**Transform-track checkpoint 2026-11-28:** ADR-0115 extends saved cutscene tracks
+with local rotation and XY scale. Unwrapped radians support deliberate multi-turn
+spins; positive scale supports squash/stretch while preserving saved geometry.
+Pause/seek/cancel and shared capacity apply to all four property types. Transform
+removal releases all transform tracks; position writes preserve spin/stretch.
+Contract v15 requires matching tools. A07 remains PARTIAL; graphical timeline,
+general/audio/event tracks, blending and skeletal rigs/IK remain open.
+See [transform evidence](evidence/A07_TRANSFORM_TWEENS.md).
+
+**Composer checkpoint 2026-11-28:** ADR-0116 adds Animation Editor property
+keyframes with incoming easing, timeline-strip/value scrubbing and draft undo/redo.
+Generated source embeds reloadable authoring data and uses guarded Source Editor
+saving; unrelated or manually altered source rejects replacement. One saved
+script clock samples all keys, including across large ticks. Existing v15 exports
+execute the generated sequence. A07 stays PARTIAL: scene-view preview, broader
+tracks/audio/events, blending, skeletal rigs/IK and full authoring acceptance
+remain open. See [composer evidence](evidence/A07_CUTSCENE_COMPOSER.md).
+
+**Animation-workflow checkpoint 2026-11-28:** ADR-0117 implements reversible
+Scene View pose/rig preview, chronological once-per-playthrough sound/signal cues,
+weighted two-take property animation, and custom cutout skeletal authoring with
+rigid sprite attachments and weighted two-bone FK/IK. Rig creation is one undoable
+scene transaction; scenes and logical saves retain hierarchy, poses, clocks and
+cue latches. Contract v16 gates queued audio and IK. Full Rust suite: 946 passing.
+The cutout approach uses one bone influence per sprite. Soft multi-influence
+vertex meshes, sprite-frame crossfades, automated blend trees, external rig imports
+and full OS/performance acceptance remain open; A07 stays PARTIAL rather than
+claiming these advanced capabilities. See [workflows](A07_ANIMATION_WORKFLOWS.md)
+and [evidence](evidence/A07_ANIMATION_WORKFLOWS.md).
+
+**Advanced-animation checkpoint 2026-11-28:** ADR-0118 implements soft
+multi-influence triangle skins with bind/weight editor controls, actual dual-texture
+crossfades and parameter-driven automatic 1D clip blend trees. Save/restore retains
+mesh binds, parameters and fade clocks and rebuilds the blended sprite immediately.
+Native/browser exports observe both intermediate texture mixes and the final soft
+mesh; prior cutout/audio regression passes. Full Rust suite: 953 passing; contract
+v17 gates renderer/data changes. Requested feature areas are implemented within
+bounded 2D workflows. Full OS authoring/reimport, hardware/performance acceptance
+and external rig imports remain separate A07 acceptance work; A07 stays PARTIAL.
+See [advanced guide](ADVANCED_ANIMATION_2D.md) and
+[evidence](evidence/A07_ADVANCED_ANIMATION.md).
 
 ### A08 — Complete 2D physics and character tools
 

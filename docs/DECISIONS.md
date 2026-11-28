@@ -2140,3 +2140,570 @@ checks remain separate Task 8 gates.
   Disable all composition controls during Play and project replacement/recovery.
 - Keep per-scene camera baselines alongside scene baselines so closing a dirty
   camera tab cannot silently discard the change. Track settings by scene ID.
+
+### ADR-0089 — Saved atlas recipes bake ordinary textures and clips (2026-11-18)
+
+Status: accepted. A03 requires reproducible atlas rebuilds across editor reopen
+and export. Store named recipes on Project: output PNG, size/padding and a stable
+label-to-source map. Packing order follows labels, so source-path renames retain
+clip identities and placement order. Each image produces a named single-frame
+clip using existing texture/animation rendering; existing scene/prefab texture
+references are never implicitly converted. Authors choose generated clips normally.
+No new runtime texture lookup/UV format or dependency is required.
+
+Build all pixels/regions before publication. Record output content hash and prior
+regions to distinguish generated output/clips from external edits. Refuse unrelated
+output/clip collisions and removal of generated clips still referenced by authored
+entities. Staged editor publication updates the PNG and in-memory recipe/clips;
+Save Project persists the document. Export rebuilds only its staging snapshot from
+current source art, preserving the source project. Generated static clips are owned
+by the recipe; duplicate a clip before making independent animation edits.
+
+Recipes are bounded to 256 PNGs, 4096-pixel output sides and 256 MiB total decoded
+source pixels; no resource-budget exception. This is atlas authoring/rebuilding,
+not an automatic conversion of every texture or certification of nested prefabs.
+
+### ADR-0090 — Recover generated atlases from bounded provenance (2026-11-19)
+
+Status: accepted. A PNG and its later manifest Save cannot be replaced atomically
+as one file. Before publishing an atlas PNG, persist its project/recipe/output/hash
+provenance. Reopening a saved project or restoring its recovery draft may rebuild
+an interrupted, known-generated output using that selected recipe and current source
+art. Original art is authoritative and never rewritten. Unknown output edits remain
+protected. Multiple interrupted builds retain provenance until manifest Save commits
+the matching generation. The ledger is bounded to 512 KiB/4096 generations.
+
+Use a standard-library advisory file lock for cooperating publishers/cleanup. It
+releases on process exit/crash. Publication checks output bytes again after recording
+provenance. Export copies the ledger into its staging snapshot, never repairs source
+files, and strips private transaction metadata before publishing. This recovery
+contract concerns derived atlas data; source-module/file moves remain separate.
+
+Recovery is explicit on project Open and recovery-draft Restore. Ordinary project
+reads, including Save's external-manifest conflict check, remain read-only so they
+cannot overwrite a draft's generated PNG. Save As repairs only its copied staging
+project. A successful manual Save restarts the autosave interval.
+
+### ADR-0091 — Persist explicit prefab texture clears (2026-11-19)
+
+Status: accepted. A prefab texture override has three states: inherit, set a path,
+and clear. Nested Option serialization conflates inherit/clear in JSON and cannot
+represent a clear in TOML. Keep the existing Rust API and legacy string overrides;
+serialize absent override as an omitted field, a set override as its string, and an
+explicit clear as `texture = false`. Reject true and other invalid types. Legacy
+JSON null retains its prior inherit meaning. Optional override fields are omitted
+rather than serialized as null, allowing TOML to persist sparse overrides. No new
+dependency or runtime component format. The same contract applies to project files,
+recovery snapshots and export manifests, preserving typed resource-path rewrites.
+
+### ADR-0092 — Stage prefab propagation and remap joint owners (2026-11-19)
+
+Status: accepted. Prefab Apply and definition propagation stage the complete project
+before publishing. Convert a source instance's self-referential joint endpoints to
+the template ID, then remap that ID to each destination owner. External endpoints
+remain literal scene identities and must resolve uniquely in the destination's
+composition. Validate newly changed joints against the fully staged project and
+reject the operation without changing definitions/scenes if any destination fails.
+Unchanged legacy joints remain repairable; unrelated edits do not reject them.
+The live Apply path stages the currently captured scene before applying, so unsaved
+instance edits are the source. Publish runtime/editor state only after validation.
+No dependency or serialized format change; this extends existing reference guards.
+
+### ADR-0093 — Preserve sprite geometry prefab overrides (2026-11-19)
+
+Status: accepted. Add an optional `SpriteGeometry` override variant for width,
+height and draw layer, with sparse inherited fields. Existing Sprite color/texture
+and Transform overrides retain their format. Capture per-property differences from
+the definition under `sprite_geometry`; remove the entry when all values inherit.
+Apply/Revert/propagation use the ordinary override path, and live instance refresh
+uses the same properties. No resource path or runtime component format changes and
+no new dependency. Material/clip, arbitrary component and nested/variant prefab
+contracts remain separate; this extends the supported Sprite property subset.
+
+Bump the shared runtime contract to `kiln-authoring-v3`: older same-version players
+cannot deserialize the new override tag (or explicit texture-clear booleans).
+Existing native/web identity guards reject those stale tools before publication;
+matching player/browser tools must be rebuilt together. The previous contract is
+an explicit negative control in the compatibility test.
+
+### ADR-0094 — Preserve prefab material and clip overrides (2026-11-20)
+
+Status: accepted. Add sparse `SpriteResources` material/animation_clip overrides.
+Use the existing nullable-string representation: omitted inherits, string assigns,
+false explicitly clears. Capture per-property differences; core/live propagation
+and Revert share the existing override path. Atlas generated-clip removal also
+checks override references, including dormant overrides on prefab templates.
+No filesystem resource paths or new dependency. Runtime contract advances to
+kiln-authoring-v4 because older parsers cannot deserialize the new override tag.
+Nested/variant and arbitrary component override contracts remain separate.
+
+### ADR-0095 — Stage saved-source Play restart (2026-11-21)
+
+Status: accepted. User deferred remaining A03 acceptance and requested the next
+milestone. Continue A04 with explicit restart semantics, not in-place VM patching.
+Restart requires the editor source buffer saved/reverted, then reads current saved
+scene/import/attached sources and prepares a fresh session/world/camera before
+stopping the current run. Compile/read/camera failure preserves the old VM/world,
+pause/error/clock state and authored project. Success invokes old Stop, replaces
+runtime state with authored initial state, clears transient progress/tasks/timers
+and starts an unpaused clock. Persistent save files are not erased or implicitly
+loaded. Existing Stop callbacks retain their documented effects. No new dependency,
+serialized format, or automatic reload while a game is running.
+
+### ADR-0096 — Inspect real gameplay VM locals (2026-11-23)
+
+Status: accepted. A04 live debugger inspection reads executing scene/attachment VMs,
+not the separate bytecode debugger. Compiler records allocated local slot names in
+nonserialized Program metadata. Snapshots expose slot/name, bounded value previews,
+current instruction and available source origin. Slot numbers disambiguate shadowed/
+inlined locals; allocated slots are not claimed to be active lexical scopes or call
+frames. Snapshot only on explicit paused/error inspection in editor UI. Bound to
+64 sessions/128 locals per session; strings truncate at 128 Unicode scalars and
+containers summarize length without cloning/traversing their contents. No new
+dependency, execution semantics or runtime compatibility revision. Source breakpoints,
+statement stepping, true imported frames and expression evaluation remain separate.
+
+### ADR-0097 — Read-only gameplay data watches (2026-11-23)
+
+Status: accepted. A04 watches query actual scene/entity VMs using bounded data
+selectors, never script-expression compilation or host execution. Owner is scene
+or entity:<stable-id>; duplicate entity owners reject as ambiguous. Roots are
+slot:<number>, local:<unique allocated-name>, or state:<key>. Slash-separated array
+indexes/map keys allow nested inspection; ~0/~1 escape tilde/slash. Duplicate local
+names require an explicit slot rather than guessing an active scope. Limit owner
+256 bytes, selector 512 bytes, 16 path components and editor list 32 watches. Reuse
+bounded value previews. Evaluate only while paused/errored in the editor. Watches
+are session/editor state, not project/save data. No new dependency, execution or
+serialized format change. Arbitrary expressions and active-frame watches remain
+separate from these data selectors.
+
+### ADR-0098 — Share script work across a gameplay tick (2026-11-23)
+
+Status: accepted. Per-invocation VM limits permit scene/attachment/lifecycle/UI
+work to multiply a frame's allowance. Introduce one shared instruction pool for
+all actual gameplay VMs/callbacks in a SliceSession tick. Project root
+script_instruction_budget defaults to 1,000,000 and accepts 1..10,000,000; retain
+the individual VM invocation limit. Reserve unused shared allowance once per VM
+execution and refund unused instructions, avoiding atomic operations per opcode.
+Reset once at public step; standalone Stop gets a fresh bounded cleanup allowance.
+Report aggregate exhaustion through existing source/entity/phase diagnostics and
+expose used/limit to the live debugger. Completed prior callbacks are not rolled
+back; this is work bounding, not transactional frame state or a wall-clock deadline.
+Validate configuration before loading project sources. Native/web runtime contract
+advances to kiln-authoring-v5 so old tools cannot silently ignore the aggregate cap.
+No new dependency. Physical host-call/render/physics costs remain separate budgets.
+
+An opt-in native widget replay uses the already available tesseract OCR utility
+alongside Xvfb/xdotool/ImageMagick. This is a test-tool prerequisite, not an added
+application dependency or default CI installation. OCR observes usage/error/watch
+values; normalized field coordinates avoid faint-placeholder text ambiguity.
+
+### ADR-0099 — Compile shared callable bodies and expose real frames (2026-11-23)
+
+Status: accepted. Replace per-call-site function expansion with one emitted body
+per reachable function, using existing IR Call/Return. A jump skips each embedded
+body during ordinary caller flow. Function slots allocate once; static acyclic
+call graphs permit fixed per-function slots without recursive activation records.
+Retain recursion rejection and enforce maximum transitive call depth 32, including
+cached callees. VM raw bytecode also rejects call stacks deeper than 32. Shared
+function metadata records instruction ranges/local ownership without cloning a
+function name per instruction. Runtime inspection shows real call frames and
+function-owned allocated locals; active lexical block scopes remain separate.
+
+Runtime contract advances to kiln-authoring-v6. Add a shared-calls-v1 VM-memory
+signature prefix only to programs with calls, rejecting incompatible old function
+slot layouts before load commit. Straight-line programs keep their legacy memory
+signatures. Do not silently reinterpret saved locals. No new dependency; ordinary source, graph
+lowering and native/web all use the same compiler/VM. This does not add recursion,
+source breakpoints or statement-level scheduler continuation.
+
+### ADR-0100 — Bound graph generation by the dependency DAG (2026-11-23)
+
+Status: accepted. Recursive source expansion copies reused dependencies despite
+runtime computed flags, rejecting small valid DAGs. Emit one lazy node case per
+reachable node and dispatch through a balanced decision tree in an ordinary-source
+loop. Dependencies request their node via a cursor; completed nodes restart demand
+from Output. Runtime computed/value/event locals keep per-invocation memoization;
+false triggers and unselected branches never execute their data dependencies.
+Static memoized validation retains cycle/depth/pin/connection/signature guards.
+No recursive helper calls or increase to VM call depth is needed. Node/edge/depth,
+256 KiB generated source and 1 MiB visual-document bounds remain enforced.
+
+Encode new documents with v2 header. A frozen v1 generator verifies canonical old
+bodies during decode, then exposes the same graph model; explicit visual edits/save
+upgrade to v2. Opening alone does not rewrite files. Manual body edits still reject
+visual overwrite. Invalid draft bodies retain existing guarded compile-error text.
+The runtime executes ordinary existing source constructs, so no new language,
+project format or runtime contract is needed. No new dependency.
+
+### ADR-0101 — Script/graph projectile range acceptance fixture (2026-11-24)
+
+Status: accepted. Add source-only script and editable graph variants of a small
+projectile range: moving enemy, input-controlled projectile, sensor hit/despawn,
+score and downstream victory trigger. Both use existing host calls and physics;
+compare real gameplay and save/restore before export checks. Generate checked-in
+graph documents with deterministic identities using an example, not a separate
+interpreter. Comparison pins accept ordinary VM Value inputs, matching the existing
+comparison instruction's string/boolean/numeric semantics; arithmetic remains
+numeric. Existing comparison pin identities survive signature refresh. No new
+dependency or runtime contract. Debugger continuation/breakpoints remain open.
+Honor the user's maximum three focused attempts per blocked step, retain failure
+evidence and continue independent work; skipped acceptance stays incomplete.
+
+The real sensor replay exposed same-tick update dispatch after collision-time
+self-despawn. Check entity liveness before every non-stop attached callback; keep
+one stop dispatch under the existing started flag. This prevents later signal,
+animation, collision or update callbacks from reading a removed entity. Preserve
+other instances and existing bounded stop cleanup. A queued-collision before
+control and real-physics game replay cover the lifecycle correction.
+
+### ADR-0102 — Bounded read-only live expression watches (2026-11-24)
+
+Status: accepted. Extend live selectors with expr: expressions over actual allocated
+locals, explicit slot(index), state(key) and game(key) reads. Parse a single return
+expression with the existing parser; reject statements and every call outside a
+small read-only allowlist before compiling. Rewrite bare identifiers as local reads.
+Use the existing compiler/VM for arithmetic, comparison and short-circuit semantics,
+with an isolated host that never calls the gameplay host. Share pure array/dictionary
+read implementations with normal gameplay. No assignment, user functions, host
+mutation, imports, tasks, loops or I/O. Bound source/AST depth/node count, cloned
+value depth/nodes/bytes and evaluation instructions. Actual VM state, bytecode
+position, commands, signals and instruction allowance remain untouched.
+
+Keep existing selector syntax and UI field positions; expr: is a new selector mode.
+Names still refer to allocated locals and reject ambiguity, not active lexical
+scopes. Missing/skipped reads follow ordinary lazy semantics. This does not implement
+source breakpoints or suspended scheduler continuations. No dependency or runtime
+contract change; purely debugger-side evaluation with existing language operators.
+
+### ADR-0103 — Active lexical bindings alongside allocated VM slots (2026-11-24)
+
+Status: accepted. Record per-slot lexical instruction ranges and function ownership
+as compiler metadata. A binding becomes visible after its initializer/parameter
+store, closes at block/loop/function exit, and is active only in the current
+function frame. Jumps for break/continue/return naturally leave these ranges;
+function ownership excludes stale values from other calls. Metadata does not
+change instructions, VM-memory signatures or runtime ABI.
+
+Keep allocated-slot inspection/default expression names for post-completion
+compatibility. Add an active-only live-local view, active:NAME selector and
+scope(name) expression read for strict current-frame resolution. Filter before
+applying preview limits so later active slots are not hidden by inactive ones.
+Completed executions have no active lexical bindings; explicit allocated slots
+remain available. This does not add source breakpoints or scheduler continuation.
+No new dependency. Preserve the user's bounded-attempt skip policy.
+
+### ADR-0104 — Resumable gameplay ticks and source statement stops (2026-11-24)
+
+Status: accepted. Add statement-boundary metadata without changing bytecode, and
+map executable boundaries to imported project-relative source lines. A suspended
+callback keeps its real VM stack/locals/call frames, queued commands and remaining
+instruction allowance. A pending tick preserves input/time/collisions/signals and
+its attachment callback queue, so Resume never replays completed callbacks or
+advances systems twice. Share source-stop control across the scene and attachments;
+resume skips the stopped boundary once. Statement stepping stops at the next
+executed statement, including imported calls and later callbacks. Gameplay/shared
+budgets are not refreshed while suspended. Unconfigured execution keeps its fast
+run-to-completion VM path.
+
+Editor pauses its fixed clock on a dedicated suspension outcome, displays the
+source stop, and supplies source breakpoint/statement controls. Logical snapshots
+reject unfinished ticks; Stop/Restart abandon pending execution then run bounded
+cleanup with debug probes disabled. Existing staged Restart guards remain. Saved
+screen UI input/start/UI-event dispatch remains atomic in this implementation;
+those callbacks do not suspend. No new dependency, instructions or save ABI.
+
+### ADR-0105 — Cull transformed quads before bounded sprite submission (2026-11-25)
+
+Status: accepted. Shared scene collection rejects offscreen sprite/particle quads
+using conservative rotated AABBs of the actual pivoted/scaled draw instances.
+Touching view edges remain included. Non-finite/degenerate geometry or invalid
+views are excluded; use f64 bounds arithmetic to avoid finite f32 overflow. Fixed
+vertex/custom-fragment materials preserve these geometry bounds. Tilemaps retain
+chunk selection and receive the same final quad test. Cull before sorting and the
+existing 16384-sprite GPU queue so offscreen entities cannot consume visible slots.
+
+Keep the GPU queue bounded. Expose per-frame attempted/queued/dropped and missing
+texture counters, with visible editor/player/browser warnings. Reset counters with
+begin_frame and route all submission variants through one accounting path. Unknown
+textures retain the white fallback but become diagnosable. No new texture allocation
+cap, dependency, render pass or resource-budget increase. Capacity overflow remains
+reported rather than claimed fully rendered. A03/A04 acceptance stays deferred.
+
+### ADR-0106 — Authored camera dead zones and atomic finite updates (2026-11-25)
+
+Status: accepted. Add per-scene dead_zone=[width,height] in world units, default
+zero for existing centered follow. After initial centering, move the camera goal
+only when the target plus follow offset leaves the centered zone. Cap the effective
+zone to the zoomed viewport extent, then apply existing smoothing, bounds and pixel
+snapping. Expose both dimensions in the existing camera inspector. No dependency.
+
+Compute candidate camera state locally using f64 intermediates; validate resulting
+view/projection before committing position/initialization. Invalid targets or
+unrepresentable coordinates cannot poison later valid updates. Screen/world mapping
+uses finite f64 intermediates and returns None for unrepresentable outputs, retaining
+existing outside-viewport extrapolation semantics. Orthographic translation avoids
+intermediate f32 sum overflow.
+
+Advance runtime compatibility to kiln-authoring-v7: older runtimes could silently
+ignore the new persisted camera field. Rebuild matching editor/CLI/player/browser
+runtime. This is a project behavior addition, not a VM-memory/save-slot-layout
+change. Shake/transitions/parallax/split views remain separate A05 work. Preserve
+the user's bounded-attempt policy and A03/A04 deferrals.
+
+### ADR-0107 — Bounded deterministic gameplay camera shake (2026-11-25)
+
+Status: accepted. Add camera_shake(x,y,duration,frequency,seed) and
+camera_shake_stop() through the shared host registry. Validated effects are queued
+as ordinary callback commands and become visible only after callback completion;
+scene/attachments share a bounded 32-request pool. Full queues return false.
+Hosts consume effects only after completed ticks using one shared camera update
+adapter. Saved-screen pause holds effect time; source suspension does not consume
+requests or advance the camera.
+
+Use seeded bounded oscillators with quadratic decay, no platform RNG. At most 32
+active shakes; new requests replace the oldest at this active limit. Fresh effects
+sample time zero, pause holds the sample, expiry/cancel restores the unshaken base.
+Follow/dead-zone state never includes shake; offsets apply before pixel snapping
+and final bounds. Clone bounded effect state for candidate validation so failed
+camera updates do not advance its clock. Shake state/requests are transient and
+not persisted in logical saves; scene/controller reset clears them. No new pass or
+dependency. Runtime contract v8 rejects older tools lacking the new host calls.
+A05 transitions/parallax/split views and A03/A04 deferred gates remain separate.
+
+### ADR-0108 — Interruptible scripted camera pan/zoom (2026-11-27)
+
+Status: accepted. Add camera_transition(x,y,zoom,seconds) and
+camera_transition_stop() to the shared callback camera queue (same 32-request cap,
+success-only delivery and debugger/UI pause semantics). Targets are world-space
+camera origins, not centers. Finite coordinates, zoom 1/64..64 and duration 0..60
+seconds validate before enqueue. Zero duration cuts immediately. Smoothstep
+interpolation uses f64 intermediates and exact endpoint assignment; the endpoint
+holds until stopped/replaced/reset. A new transition starts from the previously
+sampled unshaken view, or the authored base on the first camera update. Fresh
+nonzero transitions sample time zero. Interruption never includes shake offsets.
+
+Keep authored follow/dead-zone history advancing independently underneath the
+transition, so stop returns to the current authored camera rather than a stale
+origin. Apply transitioned zoom before final bounds, then shake and pixel snapping;
+pixel-perfect zoom retains integer rounding. Validate candidate matrices before
+committing transition/follow/shake clocks. Transient transition state is not saved
+in logical save slots. No dependencies, additional render pass or persistent camera
+schema. Contract v9 rejects older bundles missing these calls. A05 remains PARTIAL;
+parallax/split views and A03/A04 deferred acceptance remain separate work.
+
+### ADR-0109 — Authored sprite parallax before culling (2026-11-27)
+
+Status: accepted. Extend defaulted SpriteLayout with per-axis parallax factors
+(default [1,1]) and camera-origin anchor (default [0,0]); copy to runtime Sprite
+and capture in logical saves. Export validates layouts in scenes and prefab roots
+before publishing. Finite factors -8..8 support fixed backgrounds,
+ordinary scrolling, foreground acceleration and reverse motion. Anchors must be
+finite. Drawing translates the transformed sprite quad by
+(camera_origin - anchor) * (1 - factor), using f64 intermediate arithmetic and
+rejecting unrepresentable results. Apply before frustum culling, retaining painter
+order/materials/UVs. Do not mutate world transforms, physics, hierarchy or particles.
+Zoom still scales parallax sprites; this is not HUD/screen-space UI.
+
+All gameplay hosts use the shared collector. The editor authoring collector draws
+logical world geometry, keeping existing selection/gizmos coherent; Play previews
+parallax. Sprite-layout controls expose factor/anchor edits through existing
+validated undoable component commands. No new component, dependency or render pass.
+Tile/particle parallax, automatic repeated backgrounds and multiple views remain
+separate work. Contract v10 rejects older bundles that would ignore saved fields.
+Preserve A03/A04 deferrals and the user's bounded-attempt policy; A05 stays PARTIAL.
+
+### ADR-0110 — Isolated sprite view uploads and clipped world pointers (2026-11-27)
+
+Status: accepted. Add immutable prepared sprite views with independent camera and
+instance GPU buffers, built from the existing bounded sprite queue. Resource
+identity tokens reject stale/foreign prepared views. Clearing project textures
+also clears pending sprites holding invalidated IDs. Views share
+texture/material resources and painter ordering, but never overwrite another
+view's uploads before submission. Empty queues allocate nothing; each prepared
+view is bounded by MAX_SPRITES. Hosts must bound active view count; shared viewport
+layout helpers accept at most four nonempty finite rectangles. Existing single-view
+flush remains supported; callers use prepared views for multiple draws per submit.
+Discard prepared views on project resource replacement. No dependency/render pass
+or default renderer memory increase. Full authored split-screen host/configuration
+integration remains separate; this checkpoint fixes its GPU/input prerequisites.
+
+Add half-open viewport hit-testing and topmost-view pointer routing, respecting
+letterbox rectangles and rejecting non-finite/invalid input instead of extrapolating.
+Keep screen_to_world extrapolation for authoring tools. All gameplay hosts use the
+clipped pointer path and explicitly clear stale world coordinates outside the view.
+Expose mouse_world_valid() (host call 128); existing coordinate reads return zero
+when invalid. Pointer validity travels with frozen/debug-suspended ticks and all
+attached/UI callbacks. UI pointer paths stay independent. Contract v11 rejects
+older bundles missing the validity call. No logical-save schema/layout change.
+A05 remains PARTIAL; A03/A04 deferred gates and bounded-attempt policy remain.
+
+### ADR-0111 — Sparse tilemap queries bounded by stored chunks (2026-11-27)
+
+Status: accepted. User authorized sequential work through A07. Advance A05 as
+PARTIAL, retaining its open acceptance. A06 render/collision queries traverse
+stored intersecting chunks instead of enumerating every coordinate in a camera/
+query rectangle. Shared finite f64 chunk bounds avoid overflow and pathological
+empty-range scans. Rendering keeps deterministic chunk row order; collision keeps
+layer priority and global tile row-major first-hit order. Use wide intermediates
+for chunk/tile arithmetic, reject invalid views/scales/offsets and ignore malformed
+chunk keys or unsupported negative/out-of-range tile coordinates. Saturate legacy
+map-size reporting instead of panicking. No dependency or persistent schema change.
+This does not add streaming, stamps, negative-coordinate editing or a spatial index.
+A06 production/editor acceptance remains PARTIAL; continue into A07 as requested.
+
+### ADR-0112 — Authored ping-pong and speed with one precise clip clock (2026-11-27)
+
+Status: accepted. A07 extends defaulted clip data with ping_pong=false and
+speed=1 (finite 0..16). Looping ping-pong visits forward frames then reverse
+interiors without duplicating endpoints; one-shot ping-pong returns through frame
+zero before holding or transitioning. Shared frame sampling/events/seek use the
+same f64 timeline; float accessors remain compatible. Runtime speed multiplies
+authored speed, and leftover real time is converted using each next clip's speed.
+Zero dt or either zero speed emits no events, including initial/transition entry;
+seek suppresses historical events. Persisted clips/snapshots and editor undoable
+controls share settings. Existing 4096-cycle update bound remains; extreme overload
+acceptance is not claimed. Contract v12 rejects older runtimes ignoring the fields.
+No dependencies, VM-memory or logical-save layout change. State graphs, arbitrary
+tracks/curves, rigs/IK and full A07 authoring acceptance remain open.
+
+### ADR-0113 — Parameter-driven character animation states (2026-11-27)
+
+Status: accepted. A07 adds an inline AnimationGraph component with named states
+referencing project clips, finite named numeric parameters, and ordered conditional
+transitions. Bool script values map to 0/1. At most 64 states/parameters and 256
+transitions; validate references, names, thresholds and one-shot finish conditions.
+First matching transition wins, at most one per positive unpaused animation update.
+Entering a state restarts its clip, including states sharing a clip. Graph-owned
+clips cannot also have clip.next; one-shot completion is handled by graph edges.
+
+set_animation_parameter(entity,name,value) queues callback-atomic changes and
+returns whether a declared parameter was queued. get_animation_state(entity)
+reads current state from the normal world facts snapshot. Manual play/stop detach
+the graph; rebinding/reset starts at entry. Preserve graph definition, parameters
+and current state alongside clip time in logical snapshots, validating before
+restore. Pauses hold graph evaluation; source suspension retains existing tick
+atomicity. Inspector uses a persistent draft with validation and explicit Apply,
+then existing undoable component transactions. No dependency or blending system.
+Contract v13 rejects older runtimes missing the component/calls. Skeletal rigs,
+arbitrary timelines, blend trees and full A07 acceptance remain open.
+
+### ADR-0114 — Saved, callback-atomic cutscene tweens (2026-11-27)
+
+Status: accepted. A07 adds script-authorable local-position and sprite-color tweens,
+with linear/smooth/in/out easing, cancel, seek, per-track pause and active/remaining
+queries. Up to 64 active entity/property tracks are shared across scene/attached
+scripts. Pending start commands count against capacity; full queues return false.
+Changes commit only on callback success. Replacement starts from the property's
+current value, zero seconds cuts immediately, completion holds an exact endpoint.
+One update per simulation tick; UI/source pause holds time without replaying work.
+
+Interpolate with finite f64 intermediates, validating targets, durations (0..60),
+colors and easing before enqueue. Reject position ownership on physics bodies.
+Manual position/color writes cancel their matching track; despawn/component removal
+cleans up tracks. Missing bindings cancel during advance. Persist bounded active
+tracks, elapsed time, easing and pause flags in an optional GameSave field, validate
+bindings before snapshot/restore, and preserve old slots on invalid state. Seek
+clamps without historical completion callbacks; completion is polled via active.
+No new dependency or authored timeline GUI. Combine with existing camera_transition
+and script tasks for sequences; camera history remains transient as documented.
+Contract v14 rejects older runtimes lacking tween host calls. Full timeline/track
+editor, sound tracks and rigs/IK remain open A07 work.
+
+## ADR-0115 — Rotation and scale cutscene tracks (2026-11-28)
+
+Extend ADR-0114's bounded shared service with local rotation (radians, unwrapped
+linear angle interpolation for deliberate multi-turn spins) and local XY scale.
+Finite f32-representable scale sources and targets must be at least 0.000001
+per axis, preserving existing non-singular saved-geometry contracts. Positive
+interpolation supports squash/stretch; zero crossings and mirroring are deferred. All transform tracks reject RigidBody2D ownership; color remains valid.
+Use tween_rotation(entity,radians,seconds,ease), ID 138, and
+tween_scale(entity,x,y,seconds,ease), ID 139. Existing property control/query APIs
+accept rotation and scale. Save clocks and sources/destinations use the existing
+validated optional snapshot, with no new dependency or VM layout change.
+Removing Transform clears all transform tracks; position-only writes preserve
+rotation/scale tracks. Bound/property validation and shared capacity stay intact.
+Runtime contract v15 rejects older SDKs that cannot execute the new builtins.
+A source-authored exported fixture and logical-save tests verify these contracts;
+this does not close graphical timeline or skeletal-rig acceptance.
+
+## ADR-0116 — Source-backed graphical cutscene composer (2026-11-28)
+
+Add an Animation Editor composer for explicit per-entity position, rotation,
+positive XY scale and tint keyframes. A bounded versioned document (16 unique
+entity/property tracks, 64 total keys, duration <=60 seconds) compiles to ordinary
+KilnScript using existing zero-duration tween writes. One saved script-state clock
+samples every track analytically, so large ticks and seeking skip no interpolation
+state. Easing belongs to each destination key; endpoints hold. Pause/seek/restart/
+cancel use named actions and rising edges. Completion stops writing until restarted
+or sought. No audio/event tracks or skeletal rigging are implied.
+
+Embed the document as a single JSON comment in the generated .ks file. The composer
+can reload canonical generated source; altered source rejects regeneration to
+preserve manual work. Generated source enters the existing guarded Script Editor
+buffer and uses its explicit atomic Save and external-change protection. Never
+overwrite unrelated source or silently attach/replace gameplay. Users attach the
+saved file to one director entity with existing Inspector controls. Draft undo/redo
+and a timeline scrub strip support authoring; the property-value preview shares
+the compiler's interpolation contract. No runtime ABI, dependency or VM layout
+change: matching v15 runtimes already execute all emitted builtins. Logical saves
+retain the script clock/flags and rendered poses. Graphical scene preview,
+audio/events, reimport conflict resolution and full A07 acceptance remain open.
+
+Composer metadata serializes key times/values as decimal strings (numeric recipe
+JSON is accepted), preserving exact f64 values without changing workspace JSON
+features. Emitted literals use decimal notation supported by KilnScript.
+
+## ADR-0117 — A07 preview, cues, pose blending and cutout skeletal rigs (2026-11-28)
+
+Extend ADR-0116 with a reversible draw-only Scene View preview; original local
+poses/tints and resolved globals restore before picking, saving or simulation.
+Preview playback advances even when the composer tab is hidden. No audio/events
+are emitted by scrubbing. Add bounded chronological sound/signal cues, saved
+once-per-playthrough latches, silent seeking and explicit restart rearming.
+A queued sound host call defers audio delivery until successful callback commit.
+Add a second key take with 0..1 weighted pose blending and optional saved game
+variable controlling weight. Preview uses the authored weight; live playback can
+change it. Rotation blends unwrapped radians. Legacy empty additions serialize
+away and preserve original canonical generated source.
+
+Supersede ADR-0022's deferral for a custom cutout skeletal workflow: hierarchy
+Transform entities are bones, sprite children are rigid skin attachments (one
+bone influence, weight 1). Bone-local animation uses the same authored tracks;
+attachment transforms follow the shared native/browser hierarchy resolver. Add an
+undoable two-bone rig creation transaction and a callback-atomic analytic two-bone
+IK solver with bend direction, unreachable-target clamping and 0..1 IK/FK weight.
+The solver accepts +X rest links and positive uniform scale ancestry; unsupported
+chains reject without partial pose changes. Logical snapshots retain hierarchy,
+pose and generated clocks. No external dependency. Soft multi-influence vertex
+mesh deformation and external Spine/DragonBones import are outside this cutout
+approach and must not be claimed. Runtime contract v16 gates new host calls.
+
+## ADR-0118 — Soft skins, texture crossfades and automatic 1D blend trees (2026-11-28)
+
+Extend the existing bounded sprite path with CPU linear-blend skinning of authored
+triangle meshes, up to four normalized bone influences per vertex. Capture mesh
+and bone world bind poses; evaluate current bone globals through the shared
+hierarchy. Submit deformed triangles with per-corner UVs through the sprite queue,
+retaining culling, materials, painter order, prepared views and MAX_SPRITES warning.
+Limits: 64 bone binds, 256 vertices, 512 triangles per mesh. Editor drafts capture
+binds/generate a grid and edit influences; validated Apply uses component undo and
+project save. Logical snapshots preserve the mesh and bind data. No dependency.
+
+Default sprite shading blends two independently bound textures/UVs in premultiplied
+color, then converts to the existing straight-alpha output. Compact vertex attrs
+stay below the downlevel 16-attribute limit. Texture-pair bind groups are cached
+with a 1024-pair ceiling and cleared with resource replacement. Custom fragments
+can call sample_sprite to honor blending. Graph transitions and an explicit script
+call support saved, bounded timed crossfades; seek cancels the fade. Active fades
+finish before another graph edge is evaluated, preventing unsupported three-way
+interruption. Manual play/stop can cut immediately.
+
+State-local automatic 1D blend trees map a declared parameter to sorted clip
+thresholds and interpolate the adjacent samples. Clocks synchronize to the state's
+reference clip normalized phase; that reference owns events, avoiding duplicate
+child events. Trees and timed fades each use at most two textures. A timed edge
+involving a tree is rejected rather than silently dropping a third sample.
+Editor controls author thresholds, parameter and transition fade duration.
+Runtime contract v17 gates renderer/mesh/graph data and crossfade builtin.
+A07 scope only; no physical performance or external rig importer claim.

@@ -217,6 +217,24 @@ impl ScriptEditor {
         Ok(())
     }
 
+    /// Stage a generated timeline using the normal guarded source-save workflow.
+    pub fn stage_cutscene(
+        &mut self,
+        root: &Path,
+        path: &str,
+        source: String,
+    ) -> Result<(), String> {
+        self.require_saved()?;
+        crate::cutscene::Cutscene::from_source(&source)?;
+        let target = resource(root, path)?;
+        if target.exists() {
+            crate::cutscene::Cutscene::from_source(&read(root, path)?)?;
+        }
+        self.open(root, path)?;
+        self.source = source;
+        Ok(())
+    }
+
     pub(crate) fn create_movement(root: &Path) -> Result<String, String> {
         let target = resource(root, "scripts/character_movement.ks")?;
         std::fs::create_dir_all(target.parent().ok_or("Missing script directory")?)

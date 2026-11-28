@@ -1,0 +1,60 @@
+id = "authored-cutscene"
+name = "Authored Cutscene"
+version = "0.1.0"
+features = []
+
+[window]
+width = 320
+height = 240
+
+[cameras.main]
+target = "camera_rig"
+smoothing = 0.0
+pixel_perfect = true
+
+[scenes.main]
+id = "main"
+name = "Paused and seekable Graphically authored keyframe sequence"
+script = "scripts/main.ks"
+nested_scenes = []
+
+[[scenes.main.entities]]
+id = "actor"
+name = "Spinning and stretching actor"
+components = [
+  { type = "Transform", x = 80.0, y = 120.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [1.0, 0.0, 0.0, 1.0], width = 64.0, height = 64.0, layer = 0.0 },
+]
+
+[[scenes.main.entities]]
+id = "ready"
+name = "Completion beacon"
+components = [
+  { type = "Transform", x = 64.0, y = 16.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [1.0, 0.0, 0.0, 1.0], width = 8.0, height = 8.0, layer = 0.0 },
+]
+
+[action_map.actions.pause]
+id="pause"
+name="pause"
+bindings=[{binding_type={Key="Space"}}]
+
+[action_map.actions.restart]
+id="restart"
+name="restart"
+bindings=[{binding_type={Key="r"}}]
+
+[action_map.actions.seek]
+id="seek"
+name="seek"
+bindings=[{binding_type={Key="ArrowRight"}}]
+
+[action_map.actions.cancel]
+id="cancel"
+name="cancel"
+bindings=[{binding_type={Key="c"}}]
+
+[[scenes.main.entities]]
+id="camera_rig"
+name="Saved camera dolly"
+components=[{type="Transform",x=160.0,y=120.0,rotation=0.0,scale=1.0}]

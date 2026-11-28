@@ -501,3 +501,38 @@ measure these existing goals on appropriate reference hardware:
 Record evidence and any performance/resource exceptions in STATE.md. File-count,
 input-size and archive validation bounds are technical resource protections, not
 release-size goals; they remain enforced.
+
+## Saved atlas recipe bounds — 2026-11-18
+
+Atlas authoring/export accepts 1–256 sources per recipe, 4096-pixel output sides,
+80 MiB encoded PNG files and 256 MiB decoded input pixels. The output RGBA buffer
+is at most 64 MiB, in addition to input/build/encoding buffers. Inputs are checked
+before decode/allocation and packing failure preserves prior output. Recipes bake
+ordinary textures/static clips; no new runtime draw path or budget exception.
+Linux software-rendered pixel evidence is functional, not physical memory/FPS
+certification. Source paths can move without changing stable labels or clip IDs.
+
+## Shared script work per gameplay tick (2026-11-23)
+
+ADR-0098 adds an aggregate instruction pool to actual scene/entity/lifecycle/UI
+execution. Project script_instruction_budget defaults to 1,000,000; authored range
+1..10,000,000. Each VM keeps its individual 1,000,000 instruction limit. Public
+step resets once; all callbacks share the same pool. Explicit Stop gets its own
+fresh bounded cleanup pool. Reserve/refund occurs per execution, not per opcode.
+Debugger counters show used/limit. Exhaustion retains source/entity/phase context.
+
+This closes repeated-callback allowance multiplication; it is not a wall-clock
+frame-time certification, host-call cost meter or rollback mechanism. Existing
+world/state effects from completed callbacks remain committed. Physical reference-
+hardware CPU/GPU measurements and other resource budgets remain separate gates.
+
+## A05 prepared sprite views — 2026-11-27
+
+Prepared views allocate only when explicitly requested, for the bounded current
+queue (at most 16384 × 56 bytes of GPU instance data plus 64 camera bytes per view).
+Empty queues allocate nothing. Hosts must bound retained view count; viewport
+routing accepts at most four views. Texture/material resources are shared, and
+resource identity checks reject stale/foreign views. Current single-view host
+loops retain their existing reusable buffers; no additional frame allocation is
+introduced there. This establishes isolation/correctness, not physical-hardware
+frame-time or memory acceptance. No dependency or resource-budget bypass.

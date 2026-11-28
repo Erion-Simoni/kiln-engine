@@ -3,9 +3,18 @@
 use kiln_render::{TextureId, FULL_UV};
 use kiln_vfx::{Emitter, EmitterConfig, ParticleSystem};
 
+#[derive(Debug, Clone)]
+/// Secondary atlas sample consumed by the shared dual-texture sprite renderer.
+pub struct TextureBlend {
+    pub texture: TextureId,
+    pub uv: [f32; 4],
+    pub weight: f32,
+}
+
 /// CPU-side sprite drawn via [`kiln_render::SpriteRenderer`].
 #[derive(Debug, Clone, hecs::Bundle)]
 pub struct Sprite {
+    pub blend: Option<TextureBlend>,
     pub color: [f32; 4],
     pub size: [f32; 2],
     /// Normalised UV rect into [`Self::texture`].
@@ -29,6 +38,10 @@ pub struct Sprite {
     pub pivot: [f32; 2],
     /// Texture pixels represented by one world unit.
     pub pixels_per_unit: f32,
+    /// Per-axis camera scroll multiplier; one preserves ordinary world geometry.
+    pub parallax: [f32; 2],
+    /// Camera origin with zero parallax offset.
+    pub parallax_origin: [f32; 2],
 }
 
 impl Sprite {
@@ -64,18 +77,49 @@ impl Sprite {
         if self.flip_y {
             uv.swap(1, 3);
         }
+        let mut blend_uv = self.blend.as_ref().map(|b| b.uv).unwrap_or(FULL_UV);
+        if self.flip_x {
+            blend_uv.swap(0, 2);
+        }
+        if self.flip_y {
+            blend_uv.swap(1, 3);
+        }
         kiln_render::SpriteInstance {
             position: center.to_array(),
             size,
             color: self.color,
             uv_rect: uv,
+            blend_uv,
+            blend_weight: self.blend.as_ref().map_or(0.0, |b| b.weight),
+            secondary_texture: self.blend.as_ref().map_or(0, |b| b.texture.0),
             material_id: 0,
             rotation: 0.0,
+            ..Default::default()
         }
         .with_transform(pose.rotation, pose.scale.to_array())
     }
+    /// Gameplay draw quad with parallax applied before visibility testing.
+    /// World bounds/physics stay in logical authoring coordinates.
+    pub fn parallax_instance(
+        &self,
+        pose: kiln_core::Transform,
+        camera_origin: [f32; 2],
+    ) -> Option<kiln_render::SpriteInstance> {
+        let mut draw = self.draw_instance(pose);
+        for (axis, position) in draw.position.iter_mut().enumerate() {
+            let value = *position as f64
+                + (camera_origin[axis] as f64 - self.parallax_origin[axis] as f64)
+                    * (1.0 - self.parallax[axis] as f64);
+            if !value.is_finite() || value.abs() > f32::MAX as f64 {
+                return None;
+            }
+            *position = value as f32;
+        }
+        Some(draw)
+    }
     pub fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
         Self {
+            blend: None,
             color: [r, g, b, a],
             size: [32.0, 32.0],
             uv_rect: FULL_UV,
@@ -87,6 +131,8 @@ impl Sprite {
             flip_y: false,
             pivot: [0.5, 0.5],
             pixels_per_unit: 1.0,
+            parallax: [1.0; 2],
+            parallax_origin: [0.0; 2],
         }
     }
 

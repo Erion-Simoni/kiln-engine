@@ -6,6 +6,8 @@ use kiln_core::{Component, Project, Scene};
 /// Components exposed by the entity inspector. Parent is edited by the hierarchy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComponentKind {
+    SkinnedMesh,
+    AnimationGraph,
     SpriteLayout,
     Particles,
     Physics,
@@ -21,6 +23,8 @@ impl ComponentKind {
     /// Identify an inspector component, excluding hierarchy links.
     pub fn of(component: &Component) -> Option<Self> {
         match component {
+            Component::SkinnedMesh { .. } => Some(Self::SkinnedMesh),
+            Component::AnimationGraph { .. } => Some(Self::AnimationGraph),
             Component::SpriteLayout { .. } => Some(Self::SpriteLayout),
             Component::Particles { .. } => Some(Self::Particles),
             Component::Physics { .. } => Some(Self::Physics),
@@ -48,6 +52,8 @@ impl ComponentKind {
                 body: Default::default(),
                 collider: Default::default(),
             }),
+            Self::SkinnedMesh => None,
+            Self::AnimationGraph => None,
             Self::Joint => None,
             Self::Script => None,
             Self::Transform => Some(Component::Transform {
@@ -125,7 +131,23 @@ impl ComponentCommand {
         history: &mut SceneHistory,
     ) -> Result<bool, String> {
         let before = scene.clone();
-        let changed = self.apply(scene, project)?;
+        let mut edited = scene.clone();
+        let changed = self.apply(&mut edited, project)?;
+        for entity in &edited.entities {
+            for component in &entity.components {
+                if let Component::SkinnedMesh { mesh } = component {
+                    mesh.validate_scene(&edited)?;
+                    if !entity
+                        .components
+                        .iter()
+                        .any(|c| matches!(c, Component::Sprite { .. }))
+                    {
+                        return Err("Skinned mesh requires sprite".into());
+                    }
+                }
+            }
+        }
+        *scene = edited;
         if changed {
             history.record(before);
         }
@@ -151,9 +173,16 @@ impl ComponentCommand {
             ComponentEdit::SetVisual(component) => {
                 validate(component, project)?;
                 match component {
+                    Component::SkinnedMesh { .. } => ComponentKind::SkinnedMesh,
+                    Component::AnimationGraph { .. } => ComponentKind::AnimationGraph,
                     Component::SpriteLayout { .. } => ComponentKind::SpriteLayout,
                     Component::Particles { .. } => ComponentKind::Particles,
-                    _ => return Err("SetVisual expects sprite layout or particle data".into()),
+                    _ => {
+                        return Err(
+                            "SetVisual expects sprite layout, animation graph or particle data"
+                                .into(),
+                        )
+                    }
                 }
             }
             ComponentEdit::SetPhysics { .. } => ComponentKind::Physics,
@@ -175,6 +204,21 @@ impl ComponentCommand {
             _ => {}
         }
         let components = &mut scene.entities[*index].components;
+        if kind == ComponentKind::AnimationGraph
+            && !matches!(self.edit, ComponentEdit::Remove(_))
+            && !components
+                .iter()
+                .any(|c| matches!(c, Component::Sprite { .. }))
+        {
+            return Err("Animation graph requires a sprite".into());
+        }
+        if matches!(self.edit, ComponentEdit::Remove(ComponentKind::Sprite))
+            && components
+                .iter()
+                .any(|c| matches!(c, Component::AnimationGraph { .. }))
+        {
+            return Err("Remove Animation States before removing its sprite".into());
+        }
         let matches: Vec<_> = components
             .iter()
             .enumerate()
@@ -318,6 +362,8 @@ impl ComponentCommand {
 
 fn validate(component: &Component, project: &Project) -> Result<(), String> {
     match component {
+        Component::SkinnedMesh { mesh } => mesh.validate(),
+        Component::AnimationGraph { graph } => graph.validate(&project.animation_clips),
         Component::SpriteLayout { settings } => settings.validate(),
         Component::Particles { effect } => effect.validate(),
         Component::Physics { body, collider } => {

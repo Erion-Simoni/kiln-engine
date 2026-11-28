@@ -8,6 +8,7 @@
 //! Sprites sharing a [`TextureId`] are drawn in one instanced call.
 
 use bytemuck::{Pod, Zeroable};
+use wgpu::util::DeviceExt;
 use wgpu::{Device, Queue};
 
 use crate::camera::Camera;
@@ -15,6 +16,33 @@ use crate::texture::{create_rgba8_texture_with_options, TextureId, FULL_UV};
 
 /// Maximum sprites per frame (prevents unbounded allocations).
 pub const MAX_SPRITES: usize = 16_384;
+const MAX_TEXTURE_PAIRS: usize = 1024;
+#[cfg(target_arch = "wasm32")]
+type TextureResource<T> = std::rc::Rc<T>;
+#[cfg(not(target_arch = "wasm32"))]
+type TextureResource<T> = std::sync::Arc<T>;
+
+/// Bounded queue diagnostics for the current frame, including rejected submissions.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SpriteFrameStats {
+    pub attempted: usize,
+    pub queued: usize,
+    pub dropped: usize,
+    pub missing_textures: usize,
+}
+impl SpriteFrameStats {
+    /// A visible warning when sprites are omitted or texture IDs fall back to white.
+    pub fn warning(&self) -> Option<String> {
+        if self.dropped == 0 && self.missing_textures == 0 {
+            None
+        } else {
+            Some(format!(
+                "SPRITES: {} dropped; {} missing",
+                self.dropped, self.missing_textures
+            ))
+        }
+    }
+}
 
 /// Per-sprite GPU data (matches `InstanceInput` in `sprite.wgsl`).
 #[repr(C)]
@@ -32,8 +60,19 @@ pub struct SpriteInstance {
     pub material_id: u32,
     /// Rotation in radians, applied around the sprite centre.
     pub rotation: f32,
+    pub corners: [[f32; 2]; 4],
+    pub corner_uv: [[f32; 2]; 4],
+    pub deformed: u32,
+    pub blend_uv: [f32; 4],
+    pub blend_weight: f32,
+    pub secondary_texture: u32,
 }
 
+impl Default for SpriteInstance {
+    fn default() -> Self {
+        Self::colored([0.0; 2], [1.0; 2], [1.0; 4])
+    }
+}
 impl SpriteInstance {
     /// Byte stride of the instance layout.
     pub const STRIDE: u64 = std::mem::size_of::<SpriteInstance>() as u64;
@@ -47,7 +86,82 @@ impl SpriteInstance {
             uv_rect: FULL_UV,
             material_id: 0,
             rotation: 0.0,
+            corners: [[0.0; 2]; 4],
+            corner_uv: [[0.0; 2]; 4],
+            deformed: 0,
+            blend_uv: FULL_UV,
+            blend_weight: 0.0,
+            secondary_texture: 0,
         }
+    }
+
+    /// A triangle uses the existing quad index buffer with one degenerate triangle.
+    pub fn triangle(points: [[f32; 2]; 3], uv: [[f32; 2]; 3], color: [f32; 4]) -> Self {
+        Self {
+            corners: [points[0], points[1], points[2], points[2]],
+            corner_uv: [uv[0], uv[1], uv[2], uv[2]],
+            deformed: 1,
+            ..Self::colored([0.0; 2], [1.0; 2], color)
+        }
+    }
+    /// Conservative intersection of the transformed quad with [left,bottom,right,top].
+    /// Edge contact is retained; invalid/degenerate geometry is not submitted.
+    pub fn intersects_view(&self, view: [f32; 4]) -> bool {
+        if self.deformed != 0 {
+            if !view.iter().all(|v| v.is_finite())
+                || view[0] >= view[2]
+                || view[1] >= view[3]
+                || self.corners.iter().flatten().any(|v| !v.is_finite())
+            {
+                return false;
+            }
+            let minx = self
+                .corners
+                .iter()
+                .map(|p| p[0])
+                .fold(f32::INFINITY, f32::min);
+            let maxx = self
+                .corners
+                .iter()
+                .map(|p| p[0])
+                .fold(f32::NEG_INFINITY, f32::max);
+            let miny = self
+                .corners
+                .iter()
+                .map(|p| p[1])
+                .fold(f32::INFINITY, f32::min);
+            let maxy = self
+                .corners
+                .iter()
+                .map(|p| p[1])
+                .fold(f32::NEG_INFINITY, f32::max);
+            return maxx >= view[0] && maxy >= view[1] && minx <= view[2] && miny <= view[3];
+        }
+        if !self
+            .position
+            .iter()
+            .chain(self.size.iter())
+            .chain(view.iter())
+            .all(|v| v.is_finite())
+            || !self.rotation.is_finite()
+            || self.size.contains(&0.0)
+            || view[0] >= view[2]
+            || view[1] >= view[3]
+        {
+            return false;
+        }
+        let (sin, cos) = (self.rotation as f64).sin_cos();
+        let ex = (cos.abs() * (self.size[0] as f64).abs()
+            + sin.abs() * (self.size[1] as f64).abs())
+            * 0.5;
+        let ey = (sin.abs() * (self.size[0] as f64).abs()
+            + cos.abs() * (self.size[1] as f64).abs())
+            * 0.5;
+        let [x, y] = self.position.map(f64::from);
+        x + ex >= view[0] as f64
+            && x - ex <= view[2] as f64
+            && y + ey >= view[1] as f64
+            && y - ey <= view[3] as f64
     }
 
     /// Apply an entity transform to this sprite's local size and rotation.
@@ -59,14 +173,11 @@ impl SpriteInstance {
     }
 
     /// `wgpu` vertex attributes for the instance step.
-    pub fn vertex_attributes() -> &'static [wgpu::VertexAttribute; 6] {
-        static ATTRIBUTES: [wgpu::VertexAttribute; 6] = wgpu::vertex_attr_array![
-            1 => Float32x2,   // position
-            2 => Float32x2,   // size
-            3 => Float32x4,   // color
-            4 => Float32x4,   // uv_rect
-            5 => Uint32,      // material_id
-            6 => Float32,     // rotation
+    pub fn vertex_attributes() -> &'static [wgpu::VertexAttribute; 12] {
+        static ATTRIBUTES: [wgpu::VertexAttribute; 12] = wgpu::vertex_attr_array![
+            1=>Float32x4, 2=>Float32x4, 3=>Float32x4, 4=>Uint32, 5=>Float32,
+            6=>Float32x4,7=>Float32x4,8=>Float32x4,9=>Float32x4,10=>Uint32,
+            11=>Float32x4,12=>Float32
         ];
         &ATTRIBUTES
     }
@@ -93,12 +204,34 @@ struct MaterialPipeline {
 }
 
 struct TextureSlot {
-    view: wgpu::TextureView,
-    sampler: wgpu::Sampler,
-    _texture: wgpu::Texture,
+    view: TextureResource<wgpu::TextureView>,
+    sampler: TextureResource<wgpu::Sampler>,
+    _texture: TextureResource<wgpu::Texture>,
     bind_group: wgpu::BindGroup,
     pub width: u32,
     pub height: u32,
+}
+
+/// Independent immutable GPU uploads for one prepared camera view.
+/// Keep alive through submission; discard when project texture/material bindings change.
+/// Geometry is bounded by MAX_SPRITES and empty queues allocate nothing.
+pub struct PreparedSpriteView {
+    _uniform_buffer: wgpu::Buffer,
+    uniform_bind_group: wgpu::BindGroup,
+    instances: wgpu::Buffer,
+    runs: Vec<(TextureId, u32, std::ops::Range<u32>)>,
+    count: usize,
+    resources: std::sync::Arc<()>,
+}
+impl PreparedSpriteView {
+    /// Number of retained sprite instances in this view.
+    pub fn queued_count(&self) -> usize {
+        self.count
+    }
+    /// Adjacent painter-order batches in this view.
+    pub fn draw_calls(&self) -> usize {
+        self.runs.len()
+    }
 }
 
 /// Batching 2D sprite renderer with per-texture draw calls and custom material support.
@@ -108,6 +241,7 @@ pub struct SpriteRenderer {
     uniform_bind_group: wgpu::BindGroup,
     texture_bgl: wgpu::BindGroupLayout,
     textures: Vec<TextureSlot>,
+    texture_pairs: std::collections::HashMap<(TextureId, TextureId), TextureId>,
     uniform_bgl: wgpu::BindGroupLayout,
     format: wgpu::TextureFormat,
     material_pipelines: std::collections::HashMap<u32, MaterialPipeline>,
@@ -121,6 +255,8 @@ pub struct SpriteRenderer {
     /// texture/material runs batch; material changes never reorder sprites.
     pending: Vec<(TextureId, u32, f32, SpriteInstance)>,
     last_draw_calls: u32,
+    frame_stats: SpriteFrameStats,
+    resources: std::sync::Arc<()>,
 }
 
 const QUAD_VERTS: &[QuadVertex] = &[
@@ -140,10 +276,7 @@ const QUAD_INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 impl SpriteRenderer {
     /// Drop project bindings when a host rebuilds all affected sprites.
     pub fn clear_project_textures(&mut self) {
-        self.material_key.clear();
-        self.material_names.clear();
-        self.material_pipelines.clear();
-        self.textures.truncate(1);
+        self.clear_asset_textures();
     }
     /// Create a new renderer (includes [`TextureId::WHITE`]).
     pub fn new(device: &Device, queue: &Queue, format: wgpu::TextureFormat) -> Self {
@@ -204,6 +337,22 @@ impl SpriteRenderer {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
@@ -289,6 +438,7 @@ impl SpriteRenderer {
             uniform_bind_group,
             texture_bgl,
             textures: Vec::new(),
+            texture_pairs: Default::default(),
             uniform_bgl,
             format,
             material_names: Default::default(),
@@ -300,6 +450,8 @@ impl SpriteRenderer {
             instance_buffer,
             pending: Vec::with_capacity(MAX_SPRITES),
             last_draw_calls: 0,
+            frame_stats: Default::default(),
+            resources: std::sync::Arc::new(()),
         };
 
         let white = this.create_texture_rgba(device, queue, "white", 1, 1, &[255, 255, 255, 255]);
@@ -371,13 +523,21 @@ impl SpriteRenderer {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
             ],
         });
         let id = TextureId(self.textures.len() as u32);
         self.textures.push(TextureSlot {
-            _texture: texture,
-            view,
-            sampler,
+            _texture: TextureResource::new(texture),
+            view: TextureResource::new(view),
+            sampler: TextureResource::new(sampler),
             bind_group,
             width,
             height,
@@ -388,11 +548,15 @@ impl SpriteRenderer {
     /// Release asset textures, retaining the built-in white texel. All other
     /// texture IDs are invalidated; call only when replacing the owning resource library.
     pub fn clear_asset_textures(&mut self) {
+        self.last_draw_calls = 0;
+        self.resources = std::sync::Arc::new(());
         self.pending.clear();
+        self.frame_stats = Default::default();
         self.material_key.clear();
         self.material_names.clear();
         self.material_pipelines.clear();
         self.textures.truncate(1);
+        self.texture_pairs.clear();
     }
 
     /// Texture size for UV helpers.
@@ -405,6 +569,7 @@ impl SpriteRenderer {
     /// Clear pending sprites. Call at the start of each frame.
     pub fn begin_frame(&mut self) {
         self.pending.clear();
+        self.frame_stats = Default::default();
         self.last_draw_calls = 0;
     }
 
@@ -415,15 +580,7 @@ impl SpriteRenderer {
 
     /// Queue a sprite sampled from `texture` on the default layer (0.0).
     pub fn push_textured(&mut self, texture: TextureId, instance: SpriteInstance) {
-        if self.pending.len() >= MAX_SPRITES {
-            return;
-        }
-        let id = if (texture.0 as usize) < self.textures.len() {
-            texture
-        } else {
-            TextureId::WHITE
-        };
-        self.pending.push((id, instance.material_id, 0.0, instance));
+        self.push_textured_with_material(texture, 0.0, instance.material_id, instance);
     }
 
     /// Queue a sprite sampled from `texture` on a specific `layer`.
@@ -434,16 +591,7 @@ impl SpriteRenderer {
         layer: f32,
         instance: SpriteInstance,
     ) {
-        if self.pending.len() >= MAX_SPRITES {
-            return;
-        }
-        let id = if (texture.0 as usize) < self.textures.len() {
-            texture
-        } else {
-            TextureId::WHITE
-        };
-        self.pending
-            .push((id, instance.material_id, layer, instance));
+        self.push_textured_with_material(texture, layer, instance.material_id, instance);
     }
 
     /// Queue a sprite sampled from `texture` on a specific `layer` with an explicit material ID.
@@ -454,15 +602,97 @@ impl SpriteRenderer {
         material_id: u32,
         instance: SpriteInstance,
     ) {
+        self.frame_stats.attempted = self.frame_stats.attempted.saturating_add(1);
         if self.pending.len() >= MAX_SPRITES {
+            self.frame_stats.dropped = self.frame_stats.dropped.saturating_add(1);
             return;
         }
         let id = if (texture.0 as usize) < self.textures.len() {
             texture
         } else {
+            self.frame_stats.missing_textures = self.frame_stats.missing_textures.saturating_add(1);
             TextureId::WHITE
         };
         self.pending.push((id, material_id, layer, instance));
+        self.frame_stats.queued = self.pending.len();
+    }
+
+    fn prepare_texture_pairs(&mut self, device: &Device) {
+        let pending = std::mem::take(&mut self.pending);
+        for (mut id, material_id, layer, instance) in pending {
+            // Already prepared synthetic IDs must not create pairs of pairs.
+            if instance.blend_weight > 0.0
+                && !self.texture_pairs.values().any(|pair| *pair == id)
+                && !self.resolve_pair(device, &mut id, &instance)
+            {
+                continue;
+            }
+            self.pending.push((id, material_id, layer, instance));
+        }
+        self.frame_stats.queued = self.pending.len();
+    }
+    fn resolve_pair(
+        &mut self,
+        device: &Device,
+        selected: &mut TextureId,
+        instance: &SpriteInstance,
+    ) -> bool {
+        let mut id = *selected;
+        if instance.blend_weight > 0.0 {
+            let other = TextureId(instance.secondary_texture);
+            if other.0 as usize >= self.textures.len() {
+                self.frame_stats.missing_textures += 1;
+            } else if let Some(pair) = self.texture_pairs.get(&(id, other)) {
+                id = *pair;
+            } else if self.texture_pairs.len() < MAX_TEXTURE_PAIRS {
+                let a = &self.textures[id.0 as usize];
+                let b = &self.textures[other.0 as usize];
+                let bindings = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("sprite_texture_pair"),
+                    layout: &self.texture_bgl,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&a.view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&a.sampler),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::TextureView(&b.view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: wgpu::BindingResource::Sampler(&b.sampler),
+                        },
+                    ],
+                });
+                let slot = TextureSlot {
+                    view: a.view.clone(),
+                    sampler: a.sampler.clone(),
+                    _texture: a._texture.clone(),
+                    width: a.width,
+                    height: a.height,
+                    bind_group: bindings,
+                };
+                let pair = TextureId(self.textures.len() as u32);
+                self.textures.push(slot);
+                self.texture_pairs.insert((id, other), pair);
+                id = pair;
+            } else {
+                self.frame_stats.dropped += 1;
+                return false;
+            }
+        }
+        *selected = id;
+        true
+    }
+
+    /// Queue diagnostics reset by begin_frame; flush does not hide rejected draws.
+    pub fn frame_stats(&self) -> SpriteFrameStats {
+        self.frame_stats
     }
 
     /// Current validated ID for an authored material name.
@@ -510,6 +740,7 @@ impl SpriteRenderer {
         if self.material_key == key {
             return self.material_error.clone().map_or(Ok(()), Err);
         }
+        self.resources = std::sync::Arc::new(());
         self.material_key = key;
         self.material_names.clear();
         self.material_pipelines.clear();
@@ -636,13 +867,115 @@ impl SpriteRenderer {
         Ok(MaterialPipeline { pipeline, bindings })
     }
 
-    /// Upload instances and draw one instanced call per distinct (material, texture) pair.
+    /// Snapshot the bounded queue into independent camera/instance GPU buffers.
+    /// Prepare each view before opening a render pass, then draw all views before
+    /// one submission. This avoids queue.write_buffer overwriting earlier draws.
+    pub fn prepare_view(
+        &mut self,
+        device: &Device,
+        camera: &Camera,
+    ) -> Result<Option<PreparedSpriteView>, String> {
+        let bounds = camera.view_bounds();
+        if !bounds.iter().all(|v| v.is_finite())
+            || bounds[0] >= bounds[2]
+            || bounds[1] >= bounds[3]
+            || !camera.projection_matrix().is_finite()
+        {
+            return Err("Cannot prepare an invalid camera view".into());
+        }
+        self.prepare_texture_pairs(device);
+        self.last_draw_calls = 0;
+        if self.pending.is_empty() {
+            return Ok(None);
+        }
+        sort_painter_order(&mut self.pending);
+        let matrix = camera.projection_matrix().to_cols_array();
+        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("prepared_view_camera"),
+            contents: bytemuck::cast_slice(&matrix),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("prepared_view_camera_group"),
+            layout: &self.uniform_bgl,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+        });
+        let all: Vec<SpriteInstance> = self
+            .pending
+            .iter()
+            .map(|(_, _, _, instance)| *instance)
+            .collect();
+        let instances = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("prepared_view_instances"),
+            contents: bytemuck::cast_slice(&all),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let mut runs = Vec::new();
+        let mut i = 0;
+        while i < self.pending.len() {
+            let (texture, material, _, _) = self.pending[i];
+            let start = i;
+            while i < self.pending.len()
+                && self.pending[i].0 == texture
+                && self.pending[i].1 == material
+            {
+                i += 1;
+            }
+            runs.push((texture, material, start as u32..i as u32));
+        }
+        self.last_draw_calls = runs.len() as u32;
+        Ok(Some(PreparedSpriteView {
+            _uniform_buffer: uniform_buffer,
+            uniform_bind_group,
+            instances,
+            runs,
+            count: all.len(),
+            resources: self.resources.clone(),
+        }))
+    }
+
+    /// Draw a prepared view after setting its viewport/scissor. Uploads remain
+    /// independent even when the pending queue is cleared or another view prepared.
+    pub fn draw_prepared<'a>(
+        &'a self,
+        pass: &mut wgpu::RenderPass<'a>,
+        view: &'a PreparedSpriteView,
+    ) -> Result<(), String> {
+        if !std::sync::Arc::ptr_eq(&self.resources, &view.resources) {
+            return Err("Prepared view uses replaced or different renderer resources".into());
+        }
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &view.uniform_bind_group, &[]);
+        pass.set_vertex_buffer(0, self.quad_vertices.slice(..));
+        pass.set_vertex_buffer(1, view.instances.slice(..));
+        pass.set_index_buffer(self.quad_indices.slice(..), wgpu::IndexFormat::Uint16);
+        for (texture, material, range) in &view.runs {
+            if let Some(material) = self.material_pipelines.get(material) {
+                pass.set_pipeline(&material.pipeline);
+                pass.set_bind_group(2, &material.bindings, &[]);
+            } else {
+                pass.set_pipeline(&self.pipeline);
+            }
+            let slot = &self.textures[texture.0 as usize];
+            pass.set_bind_group(1, &slot.bind_group, &[]);
+            pass.draw_indexed(0..QUAD_INDICES.len() as u32, 0, range.clone());
+        }
+        Ok(())
+    }
+
+    /// Single-view upload/draw. Multiple views before one submit must use
+    /// prepare_view/draw_prepared, since this path reuses its mutable GPU buffers.
     pub fn flush<'a>(
         &'a mut self,
         render_pass: &mut wgpu::RenderPass<'a>,
         camera: &Camera,
         queue: &Queue,
+        device: &Device,
     ) {
+        self.prepare_texture_pairs(device);
         self.last_draw_calls = 0;
         if self.pending.is_empty() {
             return;
@@ -818,7 +1151,7 @@ mod tests {
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 });
-                renderer.flush(&mut pass, &camera, &queue);
+                renderer.flush(&mut pass, &camera, &queue, &device);
             }
             encoder.copy_texture_to_buffer(
                 wgpu::ImageCopyTexture {
@@ -874,12 +1207,90 @@ mod tests {
     }
 
     #[test]
+    fn actual_gpu_queue_reports_all_submission_paths_and_resets() {
+        let gpu = wgpu::Instance::default();
+        let adapter =
+            pollster::block_on(gpu.request_adapter(&wgpu::RequestAdapterOptions::default()));
+        let Some(adapter) = adapter else {
+            assert!(
+                std::env::var_os("KILN_REQUIRE_GPU_TESTS").is_none(),
+                "GPU adapter required"
+            );
+            return;
+        };
+        eprintln!("capacity adapter: {:?}", adapter.get_info());
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
+                .unwrap();
+        let mut renderer =
+            SpriteRenderer::new(&device, &queue, wgpu::TextureFormat::Rgba8UnormSrgb);
+        renderer.upload_quad(&queue);
+        let sprite = SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4]);
+        renderer.begin_frame();
+        renderer.push_textured(TextureId(u32::MAX), sprite);
+        for n in 1..MAX_SPRITES {
+            match n % 3 {
+                0 => renderer.push(sprite),
+                1 => renderer.push_textured_with_layer(TextureId::WHITE, 1.0, sprite),
+                _ => renderer.push_textured_with_material(TextureId::WHITE, 1.0, 0, sprite),
+            }
+        }
+        renderer.push(sprite);
+        renderer.push_textured_with_layer(TextureId::WHITE, 0.0, sprite);
+        renderer.push_textured_with_material(TextureId::WHITE, 0.0, 0, sprite);
+        assert_eq!(
+            renderer.frame_stats(),
+            SpriteFrameStats {
+                attempted: MAX_SPRITES + 3,
+                queued: MAX_SPRITES,
+                dropped: 3,
+                missing_textures: 1
+            }
+        );
+        assert!(renderer
+            .frame_stats()
+            .warning()
+            .unwrap()
+            .contains("3 dropped"));
+        renderer.begin_frame();
+        assert_eq!(renderer.frame_stats(), SpriteFrameStats::default());
+        assert!(renderer.frame_stats().warning().is_none());
+        renderer.push(sprite);
+        assert_eq!(renderer.frame_stats().queued, 1);
+        renderer.clear_asset_textures();
+        assert_eq!(renderer.frame_stats(), SpriteFrameStats::default());
+    }
+
+    #[test]
+    fn conservative_quad_culling_handles_rotation_edges_and_invalid_geometry() {
+        let quad = SpriteInstance::colored([-10.0, 50.0], [20.0, 4.0], [1.0; 4]);
+        assert!(quad.intersects_view([0.0, 0.0, 100.0, 100.0]));
+        assert!(!quad.intersects_view([0.1, 0.0, 100.0, 100.0]));
+        let rotated = SpriteInstance::colored([105.0, 50.0], [-40.0, 12.0], [1.0; 4])
+            .with_transform(std::f32::consts::FRAC_PI_2, [1.0, 1.0]);
+        assert!(rotated.intersects_view([0.0, 0.0, 100.0, 100.0]));
+        assert!(!quad.intersects_view([0.0, 0.0, f32::NAN, 100.0]));
+        assert!(!SpriteInstance {
+            rotation: f32::INFINITY,
+            ..quad
+        }
+        .intersects_view([0.0, 0.0, 100.0, 100.0]));
+        assert!(!SpriteInstance {
+            size: [0.0, 1.0],
+            ..quad
+        }
+        .intersects_view([0.0, 0.0, 100.0, 100.0]));
+        let huge = SpriteInstance::colored([0.0; 2], [f32::MAX; 2], [1.0; 4]);
+        assert!(huge.intersects_view([0.0, 0.0, 100.0, 100.0]));
+    }
+
+    #[test]
     fn sprite_instance_size() {
         // Four float vectors occupy 48 bytes, followed by material ID and rotation.
         assert_eq!(std::mem::offset_of!(SpriteInstance, material_id), 48);
         assert_eq!(std::mem::offset_of!(SpriteInstance, rotation), 52);
-        assert_eq!(std::mem::size_of::<SpriteInstance>(), 56);
-        assert_eq!(SpriteInstance::STRIDE, 56);
+        assert_eq!(std::mem::size_of::<SpriteInstance>(), 148);
+        assert_eq!(SpriteInstance::STRIDE, 148);
     }
 
     #[test]
@@ -1022,6 +1433,21 @@ mod tests {
         assert_eq!(dimensions(scaled_bounds), [64, 8]);
     }
 
+    #[test]
+    fn deformed_triangle_uses_world_corners_and_culls_by_deformed_bounds() {
+        let tri = SpriteInstance::triangle(
+            [[10.0, 10.0], [30.0, 10.0], [30.0, 30.0]],
+            [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
+            [1.0, 0.0, 0.0, 1.0],
+        );
+        assert!(tri.intersects_view([20.0, 20.0, 40.0, 40.0]));
+        assert!(!tri.intersects_view([40.0, 40.0, 60.0, 60.0]));
+        if let Some(bounds) = rendered_bounds(&[tri]) {
+            let b = bounds[0];
+            assert_eq!([b[2] - b[0], b[3] - b[1]], [20, 20]);
+        }
+    }
+
     #[derive(Default)]
     struct SpriteRendererCpu {
         pending: Vec<(TextureId, u32, f32, SpriteInstance)>,
@@ -1100,6 +1526,7 @@ mod material_target_tests {
                 material_id: sprites.material_id("red").unwrap(),
                 uv_rect: FULL_UV,
                 rotation: 0.0,
+                ..Default::default()
             });
             let texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: None,
@@ -1138,7 +1565,7 @@ mod material_target_tests {
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 });
-                sprites.flush(&mut pass, &Camera::new(1.0, 1.0), &queue);
+                sprites.flush(&mut pass, &Camera::new(1.0, 1.0), &queue, &device);
             }
             encoder.copy_texture_to_buffer(
                 texture.as_image_copy(),
@@ -1169,5 +1596,105 @@ mod material_target_tests {
                 .collect();
             assert_eq!(channels, [0x3c00, 0, 0, 0x3c00]);
         });
+    }
+}
+
+#[cfg(test)]
+mod crossfade_pixels {
+    use super::*;
+    #[test]
+    fn transparent_texture_crossfade_is_premultiplied_and_prepared_view_safe() {
+        let instance = wgpu::Instance::default();
+        let Some(adapter) = pollster::block_on(instance.request_adapter(&Default::default()))
+        else {
+            return;
+        };
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&Default::default(), None)).unwrap();
+        let mut renderer = SpriteRenderer::new(&device, &queue, wgpu::TextureFormat::Rgba8Unorm);
+        renderer.upload_quad(&queue);
+        let a = renderer.create_texture_rgba(&device, &queue, "a", 1, 1, &[255, 0, 0, 128]);
+        let b = renderer.create_texture_rgba(&device, &queue, "b", 1, 1, &[0, 255, 0, 0]);
+        let sprite = SpriteInstance {
+            secondary_texture: b.0,
+            blend_weight: 0.5,
+            ..SpriteInstance::colored([0.5, 0.5], [1.0; 2], [1.0; 4])
+        };
+        renderer.push_textured(a, sprite);
+        let camera = Camera::new_top_left(1.0, 1.0);
+        let prepared = renderer.prepare_view(&device, &camera).unwrap().unwrap();
+        renderer.begin_frame();
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&Default::default());
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: 256,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = device.create_command_encoder(&Default::default());
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            renderer.draw_prepared(&mut pass, &prepared).unwrap();
+        }
+        encoder.copy_texture_to_buffer(
+            wgpu::ImageCopyTexture {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyBuffer {
+                buffer: &buffer,
+                layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(256),
+                    rows_per_image: Some(1),
+                },
+            },
+            wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+        );
+        queue.submit([encoder.finish()]);
+        let (tx, rx) = std::sync::mpsc::channel();
+        buffer
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |r| tx.send(r).unwrap());
+        device.poll(wgpu::Maintain::Wait);
+        rx.recv().unwrap().unwrap();
+        let data = buffer.slice(..).get_mapped_range();
+        assert!((data[0] as i32 - 64).abs() <= 2);
+        assert_eq!(data[1], 0);
+        assert_eq!(data[2], 0);
+        assert!((data[3] as i32 - 64).abs() <= 2);
     }
 }

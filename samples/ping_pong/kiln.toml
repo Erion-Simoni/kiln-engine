@@ -1,0 +1,32 @@
+id = "ping-pong"
+name = "Ping-pong Events"
+version = "0.1.0"
+features = []
+[window]
+width = 320
+height = 240
+[scenes.main]
+id = "main"
+name = "Main"
+script = "scripts/main.ks"
+nested_scenes = []
+
+[[scenes.main.entities]]
+id = "actor"
+name = "Event proof"
+components = [
+ {type="Transform",x=160.0,y=120.0,rotation=0.0,scale=1.0},
+ {type="Sprite",color=[1.0,0.0,0.0,1.0],width=64.0,height=64.0,layer=0.0,animation_clip="bounce"},
+ {type="Script",path="scripts/actor.ks",properties={}},
+]
+[animation_clips.bounce]
+name="bounce"
+texture="assets/white.png"
+loops=false
+ping_pong=true
+speed=2.0
+frames=[
+ {rect=[0,0,1,1],pivot=[0.5,0.5],duration=0.125,events=[{name="zero"}]},
+ {rect=[0,0,1,1],pivot=[0.5,0.5],duration=0.125,events=[{name="one"}]},
+ {rect=[0,0,1,1],pivot=[0.5,0.5],duration=0.125,events=[{name="two"}]},
+]

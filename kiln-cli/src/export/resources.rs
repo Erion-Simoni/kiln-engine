@@ -13,6 +13,51 @@ pub fn read_project(path: &Path) -> Result<Project> {
         bail!("Project needs an ID and at least one scene");
     }
     project.ui.validate().map_err(anyhow::Error::msg)?;
+    for entity in project
+        .scenes
+        .values()
+        .flat_map(|scene| &scene.entities)
+        .chain(project.prefabs.values().map(|prefab| &prefab.root_entity))
+    {
+        for component in &entity.components {
+            if let Component::SkinnedMesh { mesh } = component {
+                mesh.validate().map_err(anyhow::Error::msg)?;
+            }
+            if let Component::AnimationGraph { graph } = component {
+                graph
+                    .validate(&project.animation_clips)
+                    .map_err(anyhow::Error::msg)?;
+                if !entity
+                    .components
+                    .iter()
+                    .any(|c| matches!(c, Component::Sprite { .. }))
+                {
+                    bail!("Animation graph requires a sprite");
+                }
+            }
+            if let Component::SpriteLayout { settings } = component {
+                settings
+                    .validate()
+                    .map_err(|error| anyhow::anyhow!("Entity '{}': {error}", entity.id))?;
+            }
+        }
+    }
+    for scene in project.scenes.values() {
+        for e in &scene.entities {
+            for c in &e.components {
+                if let Component::SkinnedMesh { mesh } = c {
+                    mesh.validate_scene(scene).map_err(anyhow::Error::msg)?;
+                    if !e
+                        .components
+                        .iter()
+                        .any(|c| matches!(c, Component::Sprite { .. }))
+                    {
+                        bail!("Skinned mesh requires sprite");
+                    }
+                }
+            }
+        }
+    }
     kiln_runtime::materials::plans(&project).map_err(anyhow::Error::msg)?;
     Ok(project)
 }
@@ -66,6 +111,7 @@ pub fn snapshot(
         fs::copy(entry.path(), &target)?;
         files.push(target);
     }
+    kiln_assets::atlas_project::copy_provenance(root, snapshot).map_err(anyhow::Error::msg)?;
     let manifest = snapshot.join("kiln.toml");
     fs::write(&manifest, project.to_toml().map_err(anyhow::Error::msg)?)?;
     files.push(manifest);

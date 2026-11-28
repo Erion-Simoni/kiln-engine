@@ -269,6 +269,7 @@ struct PlayerApp {
     /// UI renderer for drawing widgets with nine-slice backgrounds and text.
     ui_renderer: UiRenderer,
     /// Current mouse position (screen space, top-left origin).
+    mouse_present: bool,
     mouse_x: f64,
     /// Current mouse position (screen space, top-left origin).
     mouse_y: f64,
@@ -328,6 +329,7 @@ impl PlayerApp {
             ui_commands: Vec::new(),
             ui_widgets: Vec::new(),
             ui_renderer: UiRenderer::new(),
+            mouse_present: false,
             mouse_x: 0.0,
             mouse_y: 0.0,
             mouse_pressed: false,
@@ -788,6 +790,7 @@ impl PlayerApp {
         }
         let axis = self.axis();
         let save_dir = self.save_dir.clone();
+        let mouse_present = self.mouse_present;
         let mouse_x = self.mouse_x;
         let mouse_y = self.mouse_y;
         let mouse_pressed = self.mouse_pressed;
@@ -827,16 +830,18 @@ impl PlayerApp {
                 return;
             }
             if let Some(slice) = slice.as_mut() {
-                if let Some(position) =
-                    camera.screen_to_world([mouse_x as f32, mouse_y as f32], mouse_viewport)
-                {
-                    slice
-                        .host_mut()
-                        .set_mouse_world(position.map(|value| value as f64));
-                }
+                slice.host_mut().set_world_pointer(
+                    mouse_present
+                        .then(|| {
+                            camera
+                                .pointer_to_world([mouse_x as f32, mouse_y as f32], mouse_viewport)
+                        })
+                        .flatten()
+                        .map(|point| point.map(f64::from)),
+                );
                 slice.host_mut().set_ui_pointer(
                     mouse_viewport,
-                    Some([mouse_x as f32, mouse_y as f32]),
+                    mouse_present.then_some([mouse_x as f32, mouse_y as f32]),
                     mouse_pressed,
                 );
                 // Pass mouse state to the slice host for UI click detection.
@@ -874,7 +879,8 @@ impl PlayerApp {
                 }
                 transition = slice.take_scene_request();
                 let _ = kiln_runtime::scene::update_global_transforms(world);
-                match controller.update(
+                match slice.update_camera(
+                    controller,
                     &camera_settings,
                     world,
                     camera.viewport_size,
@@ -1028,7 +1034,19 @@ impl PlayerApp {
 
         // The HUD is drawn in screen space (top-left origin) on top of the
         // scene, so it uses its own renderer and camera.
-        let hud_text = self.hud_text();
+        let warning = gpu.sprite_renderer.frame_stats().warning();
+        let mut hud_text = self.hud_text();
+        if let Some(warning) = warning {
+            hud_text
+                .get_or_insert_with(Vec::new)
+                .extend(TextRenderer::new().render(
+                    &warning,
+                    8.0,
+                    64.0,
+                    12.0,
+                    [1.0, 0.25, 0.1, 1.0],
+                ));
+        }
         let gpu = self.gpu.as_mut().unwrap();
         let mut encoder =
             gpu.renderer
@@ -1064,8 +1082,12 @@ impl PlayerApp {
             let [x, y, width, height] = self.camera.fit_viewport([0, 0, size.width, size.height]);
             pass.set_viewport(x as f32, y as f32, width as f32, height as f32, 0.0, 1.0);
             pass.set_scissor_rect(x, y, width, height);
-            gpu.sprite_renderer
-                .flush(&mut pass, &self.camera, gpu.renderer.queue());
+            gpu.sprite_renderer.flush(
+                &mut pass,
+                &self.camera,
+                gpu.renderer.queue(),
+                gpu.renderer.device(),
+            );
         }
 
         if has_post {
@@ -1176,8 +1198,12 @@ impl PlayerApp {
                     gpu.hud_sprite_renderer.push_textured(q.texture, q.instance);
                 }
             }
-            gpu.hud_sprite_renderer
-                .flush(&mut ui_pass, &ui_camera, gpu.renderer.queue());
+            gpu.hud_sprite_renderer.flush(
+                &mut ui_pass,
+                &ui_camera,
+                gpu.renderer.queue(),
+                gpu.renderer.device(),
+            );
         }
 
         // The HUD is drawn in screen space (top-left origin) on top of the
@@ -1202,8 +1228,12 @@ impl PlayerApp {
                 gpu.hud_sprite_renderer.push(instance);
             }
             let hud_camera = Camera::new_top_left(size.width as f32, size.height as f32);
-            gpu.hud_sprite_renderer
-                .flush(&mut pass, &hud_camera, gpu.renderer.queue());
+            gpu.hud_sprite_renderer.flush(
+                &mut pass,
+                &hud_camera,
+                gpu.renderer.queue(),
+                gpu.renderer.device(),
+            );
         }
 
         gpu.renderer.queue().submit([encoder.finish()]);
@@ -1376,8 +1406,12 @@ impl PlayerApp {
                 gpu.hud_sprite_renderer.push(instance);
             }
             let hud_camera = Camera::new_top_left(size.width as f32, size.height as f32);
-            gpu.hud_sprite_renderer
-                .flush(&mut pass, &hud_camera, gpu.renderer.queue());
+            gpu.hud_sprite_renderer.flush(
+                &mut pass,
+                &hud_camera,
+                gpu.renderer.queue(),
+                gpu.renderer.device(),
+            );
         }
 
         gpu.renderer.queue().submit([encoder.finish()]);
@@ -1422,6 +1456,9 @@ impl winit::application::ApplicationHandler for PlayerApp {
             }
             winit::event::WindowEvent::Focused(focused) => {
                 self.focused = focused;
+                if !focused {
+                    self.mouse_present = false;
+                }
                 if let Some(slice) = self.slice.as_mut() {
                     slice.host_mut().reset_ui_input();
                 }
@@ -1435,18 +1472,24 @@ impl winit::application::ApplicationHandler for PlayerApp {
                 // Keep the configured world extent when the physical window
                 // changes. Rendering and input mapping use the same viewport.
             }
+            winit::event::WindowEvent::CursorLeft { .. } => {
+                self.mouse_present = false;
+            }
             winit::event::WindowEvent::CursorMoved { position, .. } => {
+                self.mouse_present = true;
                 self.mouse_x = position.x;
                 self.mouse_y = position.y;
             }
             winit::event::WindowEvent::Touch(touch) => match touch.phase {
                 winit::event::TouchPhase::Started => {
+                    self.mouse_present = true;
                     self.mouse_x = touch.location.x;
                     self.mouse_y = touch.location.y;
                     self.mouse_pressed = true;
                     self.queue_ui_pointer(true);
                 }
                 winit::event::TouchPhase::Moved => {
+                    self.mouse_present = true;
                     self.mouse_x = touch.location.x;
                     self.mouse_y = touch.location.y;
                 }
@@ -1455,6 +1498,7 @@ impl winit::application::ApplicationHandler for PlayerApp {
                     self.mouse_y = touch.location.y;
                     self.mouse_pressed = false;
                     self.queue_ui_pointer(false);
+                    self.mouse_present = false;
                 }
             },
             winit::event::WindowEvent::MouseInput {

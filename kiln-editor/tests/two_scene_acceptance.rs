@@ -88,6 +88,13 @@ fn spawn(project: &Project, scene_id: &str) -> GameWorld {
             Sprite::new(color[0], color[1], color[2], color[3])
         },
     );
+    kiln_runtime::spawn_tilemaps(
+        &mut world,
+        project,
+        &project.scenes[scene_id],
+        Default::default(),
+        &mut |_| None,
+    );
     world
 }
 
@@ -294,4 +301,254 @@ fn two_scene_transform_hierarchy_and_restart_preserve_authored_documents() {
          .0;
     assert!((runtime_child.position - expected_child.position).length() < 0.0001);
     assert!((runtime_child.rotation - expected_child.rotation).abs() < 0.0001);
+}
+
+fn rich_project() -> Project {
+    use kiln_core::{
+        physics_data::{Collider2D, Joint2D, JointType, RigidBody2D},
+        prefab::{Prefab, PrefabOverride},
+        tilemap::TileMap,
+        visual::{ParticleEffect, SpriteLayout},
+    };
+    let mut project = project();
+    project.tilemaps.insert(
+        "terrain".into(),
+        TileMap {
+            id: "terrain".into(),
+            name: "Authored terrain".into(),
+            tile_size: [24.0, 12.0],
+            ..Default::default()
+        },
+    );
+    for scene in project.scenes.values_mut() {
+        let actor = &mut scene.entities[0];
+        actor.components.extend([
+            Component::EditorFlags {
+                locked: false,
+                hidden: true,
+            },
+            Component::SpriteLayout {
+                settings: SpriteLayout {
+                    pivot: [0.25, 0.75],
+                    flip_x: true,
+                    flip_y: true,
+                    pixels_per_unit: 2.0,
+                    parallax: [0.5, 0.25],
+                    parallax_origin: [100.0, 50.0],
+                },
+            },
+            Component::Particles {
+                effect: ParticleEffect {
+                    max_particles: 37,
+                    playing: false,
+                    layer: 4.5,
+                    ..Default::default()
+                },
+            },
+            Component::Physics {
+                body: RigidBody2D {
+                    linear_velocity: [3.0, -2.0],
+                    angular_velocity: 0.5,
+                    gravity_scale: 0.25,
+                    can_sleep: false,
+                    ..Default::default()
+                },
+                collider: Collider2D {
+                    is_sensor: true,
+                    friction: 0.25,
+                    restitution: 0.75,
+                    density: 2.0,
+                    layer: 3,
+                    mask: 7,
+                    ..Default::default()
+                },
+            },
+            Component::Script {
+                path: "scripts/actor.ks".into(),
+                properties: [("speed".into(), 12.5), ("health".into(), 87.0)].into(),
+            },
+            Component::Joint {
+                joint: Joint2D {
+                    entity_a: "actor".into(),
+                    entity_b: "child".into(),
+                    joint_type: JointType::Prismatic,
+                    anchor_a: [1.0, 2.0],
+                    anchor_b: [-3.0, 4.0],
+                    reference_angle: 0.5,
+                    length: 24.0,
+                    lower_translation: -8.0,
+                    upper_translation: 12.0,
+                    enable_limit: true,
+                    motor_speed: 3.5,
+                    max_motor_torque: 19.0,
+                    enable_motor: true,
+                },
+            },
+        ]);
+        let prefab_id = format!("{}-actor", scene.id);
+        project.prefabs.insert(
+            prefab_id.clone(),
+            Prefab {
+                id: prefab_id.clone(),
+                name: "Authored actor".into(),
+                root_entity: actor.clone(),
+            },
+        );
+        actor.components.push(Component::PrefabInstance {
+            prefab_id,
+            overrides: PrefabOverride {
+                entity_id: actor.id.clone(),
+                ..Default::default()
+            },
+        });
+        scene.entities[1].components.push(Component::Physics {
+            body: Default::default(),
+            collider: Default::default(),
+        });
+        scene.entities[2].components.push(Component::Tilemap {
+            map: "terrain".into(),
+        });
+        project.cameras.insert(
+            scene.id.clone(),
+            kiln_core::camera::CameraSettings {
+                target: Some("child".into()),
+                position: [12.0, -8.0],
+                zoom: 2.0,
+                smoothing: 3.0,
+                dead_zone: [32.0, 16.0],
+                bounds: Some([-100.0, -80.0, 200.0, 160.0]),
+                pixel_perfect: true,
+                pixels_per_unit: 2.0,
+            },
+        );
+    }
+    project
+}
+
+fn json(value: &impl serde::Serialize) -> serde_json::Value {
+    serde_json::to_value(value).unwrap()
+}
+
+#[test]
+fn every_component_survives_projection_history_recovery_and_disk_restart() {
+    let mut project = rich_project();
+    let original = project.clone();
+    // Assert every enum variant participates; empty/default-only documents cannot
+    // silently turn this acceptance into another transform-only roundtrip.
+    let kinds: std::collections::HashSet<_> = project.scenes["alpha"]
+        .entities
+        .iter()
+        .flat_map(|entity| &entity.components)
+        .map(|component| json(component)["type"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(kinds.len(), 12);
+    for id in ["alpha", "beta"] {
+        let observed = snapshot(&project, &spawn(&project, id), id);
+        for (actual, expected) in observed.entities.iter().zip(&original.scenes[id].entities) {
+            assert_eq!(
+                actual.components.len(),
+                expected.components.len(),
+                "{} component count",
+                expected.id
+            );
+            for (a, e) in actual.components.iter().zip(&expected.components) {
+                assert_eq!(
+                    json(a),
+                    json(e),
+                    "{id}/{} component {}",
+                    expected.id,
+                    json(e)["type"]
+                );
+            }
+        }
+        assert_eq!(json(&observed), json(&original.scenes[id]));
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("kiln.toml");
+    project_files::save(&project, &path).unwrap();
+    let original_bytes = std::fs::read(&path).unwrap();
+    let mut history = kiln_editor::SceneHistory::new();
+    let duplicate = entity_edit(
+        &mut project,
+        &mut history,
+        EntityEdit::Duplicate {
+            entity_id: "actor".into(),
+        },
+    )
+    .unwrap();
+    let mut expected_duplicate = original.scenes["alpha"].entities[0].clone();
+    expected_duplicate.id = duplicate.clone();
+    expected_duplicate.name = "Actor Copy".into();
+    for component in &mut expected_duplicate.components {
+        match component {
+            Component::Joint { joint } => joint.entity_a = duplicate.clone(),
+            Component::PrefabInstance { overrides, .. } => overrides.entity_id = duplicate.clone(),
+            _ => {}
+        }
+    }
+    let mut duplicated = original.clone();
+    duplicated
+        .scenes
+        .get_mut("alpha")
+        .unwrap()
+        .entities
+        .push(expected_duplicate);
+    assert_eq!(json(&project), json(&duplicated));
+    let duplicate_entity = project.scenes["alpha"]
+        .entities
+        .iter()
+        .find(|e| e.id == duplicate)
+        .unwrap();
+    let joint = duplicate_entity
+        .components
+        .iter()
+        .find_map(|c| match c {
+            Component::Joint { joint } => Some(joint),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(joint.entity_a, duplicate);
+    assert_eq!(joint.entity_b, "child");
+    assert!(project.scenes["alpha"]
+        .entities
+        .iter()
+        .any(|e| e.id == joint.entity_b));
+    entity_edit(
+        &mut project,
+        &mut history,
+        EntityEdit::Delete {
+            entity_id: duplicate,
+        },
+    );
+    assert_eq!(json(&project), json(&original));
+    let undone = history.undo(project.scenes["alpha"].clone()).unwrap();
+    assert_eq!(json(&undone), json(&duplicated.scenes["alpha"]));
+    let redone = history.redo(undone).unwrap();
+    assert_eq!(json(&redone), json(&original.scenes["alpha"]));
+    project
+        .scenes
+        .insert("alpha".into(), history.undo(redone).unwrap());
+    assert_eq!(json(&project), json(&duplicated));
+
+    kiln_editor::recovery::save(&path, &project).unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), original_bytes);
+    // Set an explicit saved-file age so the newer-sidecar rule is deterministic,
+    // including filesystems whose timestamp granularity exceeds this test's work.
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_modified(std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1))
+        .unwrap();
+    let (_, recovered) = kiln_editor::recovery::load_if_newer(&path)
+        .unwrap()
+        .unwrap();
+    assert_eq!(json(&recovered), json(&duplicated));
+    project_files::save(&recovered, &path).unwrap();
+    let restarted = project_files::load(&path).unwrap().project;
+    assert_eq!(json(&restarted), json(&duplicated));
+    for id in ["alpha", "beta"] {
+        let projected = snapshot(&restarted, &spawn(&restarted, id), id);
+        assert_eq!(json(&projected), json(&restarted.scenes[id]));
+    }
 }

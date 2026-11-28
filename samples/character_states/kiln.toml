@@ -1,0 +1,52 @@
+id="character-states"
+name="Character Animation States"
+version="0.1.0"
+features=[]
+[window]
+width=320
+height=240
+[scenes.main]
+id="main"
+name="Idle, run and one-shot action"
+script="scripts/main.ks"
+nested_scenes=[]
+[[scenes.main.entities]]
+id="actor"
+name="Character"
+components=[
+ {type="Transform",x=160.0,y=120.0,rotation=0.0,scale=1.0},
+ {type="Sprite",color=[1.0,1.0,1.0,1.0],width=64.0,height=64.0,layer=0.0},
+ {type="AnimationGraph",graph={entry="idle",states={idle="idle",run="run",jump="jump"},parameters={moving=0.0,jump=0.0},transitions=[
+  {from="*",to="jump",parameter="jump",comparison="greater",threshold=0.5},
+  {from="idle",to="run",parameter="moving",comparison="greater",threshold=0.5},
+  {from="run",to="idle",parameter="moving",comparison="less",threshold=0.5},
+  {from="jump",to="idle",after_finished=true},
+ ]}},
+]
+[[scenes.main.entities]]
+id="ready"
+name="Demo proof beacon"
+components=[{type="Transform",x=16.0,y=16.0,rotation=0.0,scale=1.0},{type="Sprite",color=[1.0,0.0,0.0,1.0],width=8.0,height=8.0,layer=0.0}]
+
+[animation_clips.idle]
+name="idle"
+texture="assets/idle.png"
+loops=true
+frames=[{rect=[0,0,1,1],pivot=[0.5,0.5],duration=0.25,events=[]}]
+
+[animation_clips.run]
+name="run"
+texture="assets/run.png"
+loops=true
+frames=[{rect=[0,0,1,1],pivot=[0.5,0.5],duration=0.25,events=[]}]
+
+[animation_clips.jump]
+name="jump"
+texture="assets/jump.png"
+loops=false
+frames=[{rect=[0,0,1,1],pivot=[0.5,0.5],duration=0.5,events=[]}]
+
+[action_map.actions.jump]
+id="jump"
+name="One-shot action"
+bindings=[{binding_type={Key="Space"}}]

@@ -22,6 +22,19 @@ pub enum CompileError {
     InvalidLoopControl(String, Span),
 }
 
+fn expression_offset(expr: &Expr) -> usize {
+    match expr {
+        Expr::Number(_, span)
+        | Expr::Boolean(_, span)
+        | Expr::Float(_, span)
+        | Expr::String(_, span)
+        | Expr::Identifier(_, span)
+        | Expr::Call { span, .. } => span.start,
+        Expr::BinaryOp { left, .. } | Expr::Logical { left, .. } => expression_offset(left),
+        Expr::Not(_, span) => span.start,
+    }
+}
+
 struct LoopContext {
     condition: usize,
     breaks: Vec<usize>,
@@ -33,7 +46,9 @@ pub struct Compiler {
     loops: Vec<LoopContext>,
     functions: HashMap<String, (Vec<String>, Vec<Stmt>)>,
     function_stack: Vec<String>,
-    function_returns: Vec<Vec<usize>>,
+    compiled_functions: HashMap<String, (Label, usize)>,
+    function_depths: Vec<usize>,
+    function_labels: Vec<Label>,
     program: Program,
     /// Name → host-call id for script `name(...)` calls.
     builtins: HashMap<String, u32>,
@@ -56,7 +71,9 @@ impl Compiler {
             loops: Vec::new(),
             functions: HashMap::new(),
             function_stack: Vec::new(),
-            function_returns: Vec::new(),
+            compiled_functions: HashMap::new(),
+            function_depths: Vec::new(),
+            function_labels: Vec::new(),
             program: Program::new(),
             builtins,
             arities,
@@ -69,10 +86,29 @@ impl Compiler {
     fn allocate_slot(&mut self, name: &str) -> u16 {
         let slot = self.next_slot;
         self.next_slot += 1;
+        self.program.record_local_name(slot, name);
+        if let Some(entry) = self.function_labels.last() {
+            self.program.record_local_function(slot, *entry);
+        }
         if let Some(scope) = self.scopes.last_mut() {
             scope.insert(name.to_string(), slot);
         }
         slot
+    }
+
+    fn close_scope(&mut self) {
+        if let Some(scope) = self.scopes.pop() {
+            for slot in scope.values() {
+                self.program
+                    .record_local_scope_end(*slot, self.program.len());
+            }
+        }
+    }
+
+    fn initialize_slot(&mut self, slot: u16) {
+        self.program.add_instruction(Instruction::SetLocal(slot));
+        self.program
+            .record_local_scope_start(slot, self.program.len());
     }
 
     /// Find the local slot of `name`, searching scopes innermost first.
@@ -135,6 +171,10 @@ impl Compiler {
                 self.compile_stmt(stmt)?;
             }
         }
+        for slot in self.scopes[0].values() {
+            self.program
+                .record_local_scope_end(*slot, self.program.len());
+        }
         self.program.set_local_slots(self.next_slot);
         self.program.validate_jump_targets()?;
         Ok(self.program.clone())
@@ -174,9 +214,84 @@ impl Compiler {
         Ok(())
     }
 
+    fn compile_function(&mut self, name: &str) -> Result<(Label, usize), CompileError> {
+        if self.function_stack.iter().any(|current| current == name) {
+            return Err(CompileError::Custom(format!("Recursive function '{name}'")));
+        }
+        if self.program.len() > 65536 {
+            return Err(CompileError::Custom(
+                "Function program limit exceeded".into(),
+            ));
+        }
+        if let Some(compiled) = self.compiled_functions.get(name) {
+            return Ok(*compiled);
+        }
+        if self.function_stack.len() >= kiln_ir::vm::MAX_CALL_DEPTH || self.program.len() > 65536 {
+            return Err(CompileError::Custom(
+                "Function call depth or program limit exceeded".into(),
+            ));
+        }
+        let (params, body) = self.functions[name].clone();
+        if self.next_slot as usize + params.len() > 32000 {
+            return Err(CompileError::Custom("Too many script locals".into()));
+        }
+        let skip = self.program.len();
+        self.program.add_instruction(Instruction::Jump(Label(0)));
+        let entry = Label(self.program.len());
+        let caller_scopes = std::mem::replace(&mut self.scopes, vec![HashMap::new()]);
+        let caller_loops = std::mem::take(&mut self.loops);
+        self.function_stack.push(name.to_owned());
+        self.function_labels.push(entry);
+        self.function_depths.push(1);
+        let slots: Vec<_> = params
+            .iter()
+            .map(|param| self.allocate_slot(param))
+            .collect();
+        for slot in slots.into_iter().rev() {
+            self.initialize_slot(slot);
+        }
+        for statement in &body {
+            self.compile_stmt(statement)?;
+        }
+        self.program
+            .add_instruction(Instruction::PushConst(Value::I64(0)));
+        self.program.add_instruction(Instruction::Return);
+        let end = self.program.len();
+        self.close_scope();
+        self.program.record_function(entry.0, end, name);
+        self.program
+            .set_instruction(skip, Instruction::Jump(Label(end)));
+        let depth = self.function_depths.pop().expect("Compiling a function");
+        self.function_stack.pop();
+        self.function_labels.pop();
+        self.scopes = caller_scopes;
+        self.loops = caller_loops;
+        self.compiled_functions
+            .insert(name.to_owned(), (entry, depth));
+        Ok((entry, depth))
+    }
+
     fn compile_stmt(&mut self, stmt: &Stmt) -> Result<(), CompileError> {
         if self.next_slot >= 32000 {
             return Err(CompileError::Custom("Too many script locals".into()));
+        }
+        let offset = match stmt {
+            Stmt::Expr(expr) | Stmt::Return(expr) => Some(expression_offset(expr)),
+            Stmt::Let { span, .. }
+            | Stmt::Assign { span, .. }
+            | Stmt::Break(span)
+            | Stmt::Continue(span) => Some(span.start),
+            Stmt::While { condition, .. } | Stmt::If { condition, .. } => {
+                Some(expression_offset(condition))
+            }
+            Stmt::For { init, .. } => match init.as_ref() {
+                Stmt::Let { span, .. } => Some(span.start),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(offset) = offset {
+            self.program.record_statement(self.program.len(), offset);
         }
         match stmt {
             Stmt::Function { .. } | Stmt::Enum { .. } => {
@@ -190,13 +305,7 @@ impl Compiler {
             }
             Stmt::Return(expr) => {
                 self.compile_expr(expr)?;
-                if let Some(returns) = self.function_returns.last_mut() {
-                    let index = self.program.instructions().len();
-                    self.program.add_instruction(Instruction::Jump(Label(0)));
-                    returns.push(index);
-                } else {
-                    self.program.add_instruction(Instruction::Return);
-                }
+                self.program.add_instruction(Instruction::Return);
             }
             Stmt::Let { name, value, span } => {
                 if self.scopes.iter().any(|scope| scope.contains_key(name)) {
@@ -204,7 +313,7 @@ impl Compiler {
                 }
                 self.compile_expr(value)?;
                 let slot = self.allocate_slot(name);
-                self.program.add_instruction(Instruction::SetLocal(slot));
+                self.initialize_slot(slot);
             }
             Stmt::Assign { name, value, span } => {
                 let slot = self
@@ -215,6 +324,8 @@ impl Compiler {
             }
             Stmt::While { condition, body } => {
                 let start = self.program.len();
+                self.program
+                    .record_statement(start, expression_offset(condition));
                 self.compile_expr(condition)?;
                 let exit = self.program.len();
                 self.program
@@ -228,7 +339,7 @@ impl Compiler {
                 for stmt in body {
                     self.compile_stmt(stmt)?;
                 }
-                self.scopes.pop();
+                self.close_scope();
                 self.program
                     .add_instruction(Instruction::Jump(Label(start)));
                 let end = self.program.len();
@@ -253,8 +364,10 @@ impl Compiler {
                 };
                 self.compile_expr(value)?;
                 let slot = self.allocate_slot(name);
-                self.program.add_instruction(Instruction::SetLocal(slot));
+                self.initialize_slot(slot);
                 let start = self.program.len();
+                self.program
+                    .record_statement(start, expression_offset(condition));
                 self.compile_expr(condition)?;
                 let exit = self.program.len();
                 self.program
@@ -268,7 +381,7 @@ impl Compiler {
                 for statement in body {
                     self.compile_stmt(statement)?;
                 }
-                self.scopes.pop();
+                self.close_scope();
                 let increment = self.program.len();
                 self.compile_stmt(step)?;
                 self.program
@@ -285,7 +398,7 @@ impl Compiler {
                     self.program
                         .set_instruction(index, Instruction::Jump(Label(increment)));
                 }
-                self.scopes.pop();
+                self.close_scope();
             }
             Stmt::Break(span) | Stmt::Continue(span) => {
                 let is_break = matches!(stmt, Stmt::Break(_));
@@ -326,7 +439,7 @@ impl Compiler {
                 for stmt in then_block {
                     self.compile_stmt(stmt)?;
                 }
-                self.scopes.pop();
+                self.close_scope();
 
                 // After then block, if there's an else block, jump over it
                 let jump_end_idx = if else_block.is_some() {
@@ -346,7 +459,7 @@ impl Compiler {
                     for stmt in else_block {
                         self.compile_stmt(stmt)?;
                     }
-                    self.scopes.pop();
+                    self.close_scope();
                 }
                 // End of if statement
                 let end_idx = self.program.len();
@@ -367,20 +480,8 @@ impl Compiler {
     }
 
     fn compile_expr(&mut self, expr: &Expr) -> Result<(), CompileError> {
-        fn offset(expr: &Expr) -> usize {
-            match expr {
-                Expr::Number(_, span)
-                | Expr::Boolean(_, span)
-                | Expr::Float(_, span)
-                | Expr::String(_, span)
-                | Expr::Identifier(_, span)
-                | Expr::Call { span, .. } => span.start,
-                Expr::BinaryOp { left, .. } | Expr::Logical { left, .. } => offset(left),
-                Expr::Not(_, span) => span.start,
-            }
-        }
         let begin = self.program.instructions().len();
-        let source_offset = offset(expr);
+        let source_offset = expression_offset(expr);
         match expr {
             Expr::Number(n, _span) => {
                 self.program
@@ -478,7 +579,7 @@ impl Compiler {
                 for arg in args {
                     self.compile_expr(arg)?;
                 }
-                if let Some((params, body)) = self.functions.get(func).cloned() {
+                if let Some((params, _)) = self.functions.get(func) {
                     if params.len() != args.len() {
                         return Err(CompileError::Custom(format!(
                             "Function '{func}' expects {} arguments, got {}",
@@ -486,36 +587,18 @@ impl Compiler {
                             args.len()
                         )));
                     }
-                    if self.function_stack.contains(func)
-                        || self.function_stack.len() >= 32
-                        || self.program.instructions().len() > 65536
-                    {
-                        return Err(CompileError::Custom(format!(
-                            "Recursive or excessively expanded function '{func}'"
-                        )));
+                    let (entry, depth) = self.compile_function(func)?;
+                    if let Some(parent) = self.function_depths.last_mut() {
+                        *parent = (*parent).max(depth + 1);
+                        if *parent > kiln_ir::vm::MAX_CALL_DEPTH {
+                            return Err(CompileError::Custom(
+                                "Function call depth exceeds 32".into(),
+                            ));
+                        }
                     }
-                    let caller_scopes = std::mem::replace(&mut self.scopes, vec![HashMap::new()]);
-                    let caller_loops = std::mem::take(&mut self.loops);
-                    let slots: Vec<_> =
-                        params.iter().map(|name| self.allocate_slot(name)).collect();
-                    for slot in slots.into_iter().rev() {
-                        self.program.add_instruction(Instruction::SetLocal(slot));
-                    }
-                    self.function_stack.push(func.clone());
-                    self.function_returns.push(Vec::new());
-                    for stmt in &body {
-                        self.compile_stmt(stmt)?;
-                    }
-                    self.program
-                        .add_instruction(Instruction::PushConst(Value::I64(0)));
-                    let end = self.program.instructions().len();
-                    for index in self.function_returns.pop().unwrap_or_default() {
-                        self.program
-                            .set_instruction(index, Instruction::Jump(Label(end)));
-                    }
-                    self.function_stack.pop();
-                    self.scopes = caller_scopes;
-                    self.loops = caller_loops;
+                    let call_site = self.program.len();
+                    self.program.add_instruction(Instruction::Call(entry));
+                    self.program.record_source_offset(call_site, span.start);
                     return Ok(());
                 }
                 let func_id = self

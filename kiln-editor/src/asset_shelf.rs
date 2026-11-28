@@ -68,7 +68,7 @@ impl Thumbnails {
 }
 
 pub(crate) enum ShelfAction {
-    SelectImage(String),
+    SelectAsset(String),
     OpenScene(String),
     OpenScript(String),
 }
@@ -158,13 +158,13 @@ pub(crate) fn show(
                                     name,
                                     texture,
                                     kind,
-                                    browser.preview_source() == Some(&entry.path),
+                                    browser.selected_source() == Some(&entry.path),
                                 );
+                                if response.clicked() {
+                                    action = Some(ShelfAction::SelectAsset(entry.path.clone()));
+                                }
                                 if response.double_clicked() && entry.path.ends_with(".ks") {
                                     action = Some(ShelfAction::OpenScript(entry.path.clone()));
-                                }
-                                if response.clicked() && entry.kind == AssetKind::Image {
-                                    action = Some(ShelfAction::SelectImage(entry.path.clone()));
                                 }
                                 if response.drag_started() && entry.kind == AssetKind::Image {
                                     browser.set_drag_source(Some(&entry.path));

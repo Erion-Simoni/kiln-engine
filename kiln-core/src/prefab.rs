@@ -24,18 +24,87 @@ pub struct PrefabOverride {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ComponentOverride {
+    /// Per-instance material and animation clip: absent inherits, false clears.
+    SpriteResources {
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "texture_value"
+        )]
+        material: Option<Option<String>>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "texture_value"
+        )]
+        animation_clip: Option<Option<String>>,
+    },
+    /// Per-instance dimensions and draw layer; missing values inherit.
+    SpriteGeometry {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        width: Option<f32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        height: Option<f32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        layer: Option<f32>,
+    },
     Transform {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         x: Option<f32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         y: Option<f32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         rotation: Option<f32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         scale: Option<f32>,
     },
     Sprite {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         color: Option<[f32; 4]>,
-        /// Asset path of the sprite texture to override.
-        #[serde(default)]
+        /// Inherit when absent, set a path, or explicitly clear (`false` in saved data).
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "texture_value"
+        )]
         texture: Option<Option<String>>,
     },
+}
+
+// TOML has no null: false is an explicit clear, omitted means inherit.
+mod texture_value {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(
+        value: &Option<Option<String>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        match value {
+            Some(Some(path)) => serializer.serialize_str(path),
+            Some(None) => serializer.serialize_bool(false),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<Option<String>>, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Value {
+            Path(String),
+            Clear(bool),
+            Inherit(()),
+        }
+        match Value::deserialize(deserializer)? {
+            Value::Path(path) => Ok(Some(Some(path))),
+            Value::Clear(false) => Ok(Some(None)),
+            Value::Clear(true) => Err(serde::de::Error::custom(
+                "Resource override must be a string or false to clear",
+            )),
+            Value::Inherit(()) => Ok(None),
+        }
+    }
 }
 
 /// Tracks which prefab an entity instance came from
@@ -85,6 +154,47 @@ impl Prefab {
                         }
                         if let Some(val) = oscale {
                             *scale = *val;
+                        }
+                    }
+                    (
+                        Component::Sprite {
+                            width,
+                            height,
+                            layer,
+                            ..
+                        },
+                        ComponentOverride::SpriteGeometry {
+                            width: ow,
+                            height: oh,
+                            layer: ol,
+                        },
+                    ) => {
+                        if let Some(value) = ow {
+                            *width = *value;
+                        }
+                        if let Some(value) = oh {
+                            *height = *value;
+                        }
+                        if let Some(value) = ol {
+                            *layer = *value;
+                        }
+                    }
+                    (
+                        Component::Sprite {
+                            material,
+                            animation_clip,
+                            ..
+                        },
+                        ComponentOverride::SpriteResources {
+                            material: om,
+                            animation_clip: oc,
+                        },
+                    ) => {
+                        if let Some(value) = om {
+                            *material = value.clone();
+                        }
+                        if let Some(value) = oc {
+                            *animation_clip = value.clone();
                         }
                     }
                     (
@@ -361,5 +471,86 @@ mod tests {
         let loaded: Prefab = ron::from_str(&ron_str).expect("deserialize from RON");
         assert_eq!(loaded.name, prefab.name);
         assert_eq!(loaded.root_entity.name, prefab.root_entity.name);
+    }
+}
+
+#[cfg(test)]
+mod texture_persistence_tests {
+    use super::*;
+
+    #[test]
+    fn texture_override_preserves_inherit_set_and_clear_in_project_and_recovery_formats() {
+        for texture in [Some(None), Some(Some("art/hero.png".into())), None] {
+            let value = ComponentOverride::Sprite {
+                color: None,
+                texture: texture.clone(),
+            };
+            for format in ["json", "toml"] {
+                let decoded = if format == "json" {
+                    serde_json::from_str::<ComponentOverride>(
+                        &serde_json::to_string(&value).unwrap(),
+                    )
+                    .unwrap()
+                } else {
+                    toml::from_str::<ComponentOverride>(&toml::to_string(&value).unwrap()).unwrap()
+                };
+                let ComponentOverride::Sprite {
+                    texture: actual, ..
+                } = decoded
+                else {
+                    unreachable!()
+                };
+                assert_eq!(
+                    actual, texture,
+                    "Texture inherit, set and clear must remain distinct after persistence"
+                );
+            }
+        }
+    }
+    #[test]
+    fn legacy_null_inherits_and_invalid_texture_override_types_are_rejected() {
+        let legacy: ComponentOverride =
+            serde_json::from_str(r#"{"type":"Sprite","color":null,"texture":null}"#).unwrap();
+        assert!(matches!(
+            legacy,
+            ComponentOverride::Sprite { texture: None, .. }
+        ));
+        for value in ["true", "42", "[]", "{}"] {
+            let source = format!(r#"{{"type":"Sprite","texture":{value}}}"#);
+            assert!(serde_json::from_str::<ComponentOverride>(&source).is_err());
+        }
+        assert!(toml::from_str::<ComponentOverride>("type = 'Sprite'\ntexture = true").is_err());
+    }
+    #[test]
+    fn sprite_resources_preserve_all_three_states_and_reject_invalid_values() {
+        for value in [None, Some(None), Some(Some("named-resource".into()))] {
+            let original = ComponentOverride::SpriteResources {
+                material: value.clone(),
+                animation_clip: value.clone(),
+            };
+            for decoded in [
+                serde_json::from_str::<ComponentOverride>(
+                    &serde_json::to_string(&original).unwrap(),
+                )
+                .unwrap(),
+                toml::from_str::<ComponentOverride>(&toml::to_string(&original).unwrap()).unwrap(),
+            ] {
+                let ComponentOverride::SpriteResources {
+                    material,
+                    animation_clip,
+                } = decoded
+                else {
+                    unreachable!()
+                };
+                assert_eq!(material, value);
+                assert_eq!(animation_clip, value);
+            }
+        }
+        for field in ["material", "animation_clip"] {
+            for value in ["true", "42", "[]", "{}"] {
+                let source = format!(r#"{{"type":"SpriteResources","{field}":{value}}}"#);
+                assert!(serde_json::from_str::<ComponentOverride>(&source).is_err());
+            }
+        }
     }
 }

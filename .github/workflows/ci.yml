@@ -71,6 +71,10 @@ jobs:
       - name: Install Linux audio/controller development headers
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libgl1-mesa-dri mesa-vulkan-drivers
+      - name: Verify prepared sprite views on a real GPU adapter
+        env:
+          KILN_REQUIRE_GPU_TESTS: '1'
+        run: cargo test --locked -p kiln-render prepared_views -- --nocapture
       - name: Run tests
         run: cargo nextest run --workspace --locked
       - name: Test portable package preparation and captured builds
@@ -220,6 +224,8 @@ jobs:
         run: python3 tests/native/editor_smoke.py
       - name: Verify panel opening after delayed editor rendering
         run: python3 tests/native/editor_startup_smoke.py
+      - name: Verify foreground floating panels over enlarged source windows
+        run: python3 tests/native/panel_origin_smoke.py
       - name: Exercise saved menus and settings
         env:
           KILN_UI_EVIDENCE_DIR: target/native-ui-evidence
@@ -240,6 +246,8 @@ jobs:
         run: python3 tests/native/local_axes_smoke.py
       - name: Verify empty selection safety and parented multiselect transforms
         run: python3 tests/native/parented_multiselect_smoke.py
+      - name: Verify copied joint references across compositions and recovery
+        run: python3 tests/native/copy_joint_reference_smoke.py
       - name: Preserve joint endpoints and camera targets during entity edits
         run: python3 tests/native/entity_reference_smoke.py
       - name: Reject ambiguous nested identities and preserve imported scene data
@@ -258,6 +266,132 @@ jobs:
         run: python3 tests/native/source_tools_smoke.py
       - name: Verify asset preview, target presets and reference-safe moves
         run: python3 tests/native/asset_import_workflow_smoke.py
+      - name: Move source modules and preserve imports and open buffers
+        run: python3 tests/native/source_move_smoke.py
+      - name: Build, rename, rebuild and reopen saved atlas recipes
+        run: python3 tests/native/atlas_recipe_smoke.py
+      - name: Recover atlas publication before autosave and restore a real recovery draft
+        run: python3 tests/native/atlas_recovery_smoke.py
+      - name: Play the relocated native atlas export
+        run: python3 tests/native/atlas_player_smoke.py
+      - name: Verify imported function calls in a relocated native export
+        env:
+          KILN_ATLAS_PROJECT: samples/function_calls
+          KILN_PIXEL_SCENARIO: function-calls
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a04-functions-native
+        run: python3 tests/native/atlas_player_smoke.py
+      - name: Verify script and graph projectile games in native exports
+        run: |
+          for variant in projectile_range projectile_range_graph; do
+            KILN_ATLAS_PROJECT="samples/$variant" KILN_PIXEL_SCENARIO="$variant" KILN_ATLAS_PLAYER_EVIDENCE="target/a04-range-native-$variant" python3 tests/native/atlas_player_smoke.py
+          done
+      - name: Verify offscreen culling and visible native capacity warnings
+        run: |
+          python3 tools/make_sprite_stress.py target/a05-native-offscreen-project
+          python3 tools/make_sprite_stress.py target/a05-native-overflow-project --visible
+          for kind in offscreen overflow; do
+            if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
+            KILN_ATLAS_PROJECT="target/a05-native-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" KILN_ATLAS_PLAYER_EVIDENCE="target/a05-$kind-native" python3 tests/native/atlas_player_smoke.py
+          done
+      - name: Verify soft mesh, timed crossfade and automatic tree in native exports
+        env:
+          KILN_ATLAS_PROJECT: samples/advanced_animation
+          KILN_PIXEL_SCENARIO: advanced-animation
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_REQUIRE_BLEND: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 80,104,272,136
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a07-advanced-native
+        run: python3 tests/native/atlas_player_smoke.py
+      - name: Verify blended cutout rig and once-only cues in native exports
+        env:
+          KILN_ATLAS_PROJECT: samples/rigged_cutscene
+          KILN_PIXEL_SCENARIO: rigged-cutscene
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 224,104,256,136
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a07-complete-native
+        run: python3 tests/native/atlas_player_smoke.py
+      - name: Verify authored keyframe cutscene in native exports
+        env:
+          KILN_ATLAS_PROJECT: samples/authored_cutscene
+          KILN_PIXEL_SCENARIO: authored-cutscene
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 192,56,256,184
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a07-composer-native
+        run: python3 tests/native/atlas_player_smoke.py
+      - name: Verify rotation and scale cutscene playback in native exports
+        env:
+          KILN_ATLAS_PROJECT: samples/transform_tweens
+          KILN_PIXEL_SCENARIO: transform-tweens
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 192,56,256,184
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a07-transform-native
+        run: python3 tests/native/atlas_player_smoke.py
+      - name: Verify saved cutscene tween playback in native exports
+        env:
+          KILN_ATLAS_PROJECT: samples/cutscene_tweens
+          KILN_PIXEL_SCENARIO: cutscene-tweens
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 192,88,256,152
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a07-tween-rig-native
+        run: python3 tests/native/atlas_player_smoke.py
+      - name: Verify character animation states and real input in native exports
+        env:
+          KILN_ATLAS_PROJECT: samples/character_states
+          KILN_PIXEL_SCENARIO: character-states
+          KILN_PIXEL_TEST_ANIMATION_STATES: '1'
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 128,88,192,152
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a07-graph-native
+        run: python3 tests/native/atlas_player_smoke.py
+      - name: Verify sparse tilemap and ping-pong playback in native exports
+        run: |
+          for scenario in sparse_tilemap ping_pong; do
+            if [ "$scenario" = sparse_tilemap ]; then bounds=128,112,192,176; else bounds=128,88,192,152; fi
+            KILN_ATLAS_PROJECT="samples/$scenario" KILN_PIXEL_SCENARIO="$scenario" KILN_PIXEL_EXPECT_GREEN_BOUNDS="$bounds" KILN_ATLAS_PLAYER_EVIDENCE="target/a07-$scenario-native" python3 tests/native/atlas_player_smoke.py
+          done
+      - name: Verify clipped gameplay pointer in native exports
+        env:
+          KILN_ATLAS_PROJECT: samples/world_pointer
+          KILN_PIXEL_SCENARIO: clipped-pointer
+          KILN_PIXEL_TEST_POINTER: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 288,88,352,152
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a05-views-pointer-native
+        run: python3 tests/native/atlas_player_smoke.py
+      - name: Verify anchored sprite parallax in native exports
+        env:
+          KILN_ATLAS_PROJECT: samples/parallax
+          KILN_PIXEL_SCENARIO: sprite-parallax
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 78,104,142,168
+          KILN_PIXEL_REQUIRE_MOTION: '1'
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a05-parallax-native
+        run: python3 tests/native/atlas_player_smoke.py
+      - name: Verify camera pan and zoom in native exports
+        env:
+          KILN_ATLAS_PROJECT: samples/camera_transition
+          KILN_PIXEL_SCENARIO: camera-transition
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 96,16,224,144
+          KILN_PIXEL_REQUIRE_MOTION: '1'
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a05-transition-native
+        run: python3 tests/native/atlas_player_smoke.py
+      - name: Verify camera shake motion and settling in native exports
+        env:
+          KILN_ATLAS_PROJECT: samples/camera_shake
+          KILN_PIXEL_SCENARIO: camera-shake
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 128,88,192,152
+          KILN_PIXEL_REQUIRE_MOTION: '1'
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a05-shake-native
+        run: python3 tests/native/atlas_player_smoke.py
+      - name: Verify camera dead-zone positions in native exports
+        run: |
+          cp -r samples/camera_dead_zone target/a05-camera-native-edge-project
+          python3 -c 'from pathlib import Path; p=Path("target/a05-camera-native-edge-project/scripts/main.ks"); p.write_text(p.read_text().replace("180.0","220.0"))'
+          for mode in inside edge; do
+            if [ "$mode" = inside ]; then project=samples/camera_dead_zone; bounds=128,88,192,152; else project=target/a05-camera-native-edge-project; bounds=100,88,164,152; fi
+            KILN_ATLAS_PROJECT="$project" KILN_PIXEL_SCENARIO="camera-$mode" KILN_PIXEL_EXPECT_GREEN_BOUNDS="$bounds" KILN_ATLAS_PLAYER_EVIDENCE="target/a05-camera-$mode-native" python3 tests/native/atlas_player_smoke.py
+          done
       - name: Verify external art refresh and structured gameplay authoring
         run: python3 tests/native/asset_script_workflow_smoke.py
       - name: Pack the saved UI game
@@ -309,6 +443,15 @@ jobs:
             target/a02-local-axes/editor/*.png
             target/a02-local-axes/editor/*.log
             target/a02-local-axes/reopened/*.png
+            target/a02-panel-origin/result.json
+            target/a02-panel-origin/failure.json
+            target/a02-panel-origin/editor/*.png
+            target/a02-panel-origin/editor/*.log
+            target/a02-copy-joint/result.json
+            target/a02-copy-joint/failure.json
+            target/a02-copy-joint/editor/*.png
+            target/a02-copy-joint/editor/*.log
+            target/a02-copy-joint/reopened/*.png
             target/a02-entity-references/result.json
             target/a02-entity-references/failure.json
             target/a02-entity-references/editor/*.png
@@ -361,6 +504,35 @@ jobs:
             target/a04-source-tools/editor/*.png
             target/a04-source-tools/editor/*.log
             target/a04-source-tools/reopened/*.png
+            target/a03-atlas-recipe/result.json
+            target/a03-atlas-recipe/failure.json
+            target/a03-atlas-recipe/editor/*.png
+            target/a03-atlas-recipe/editor/*.log
+            target/a03-atlas-recipe/reopened/*.png
+            target/a03-atlas-recovery/result.json
+            target/a03-atlas-recovery/failure.json
+            target/a03-atlas-recovery/*-crash.json
+            target/a03-atlas-recovery/*-restore.json
+            target/a03-atlas-recovery/editor/*.png
+            target/a03-atlas-recovery/editor/*.log
+            target/a03-atlas-recovery/reopened/*.png
+            target/a04-range-native-*/result.json
+            target/a04-range-native-*/*.log
+            target/a04-range-native-*/*.png
+            target/a05-*-native/result.json
+            target/a05-*-native/*.log
+            target/a05-*-native/*.png
+            target/a04-functions-native/result.json
+            target/a04-functions-native/*.log
+            target/a04-functions-native/*.png
+            target/a03-atlas-player/result.json
+            target/a03-atlas-player/*.log
+            target/a03-atlas-player/*.png
+            target/a03-source-move/result.json
+            target/a03-source-move/failure.json
+            target/a03-source-move/editor/*.png
+            target/a03-source-move/editor/*.log
+            target/a03-source-move/reopened/*.png
             target/a03-asset-import/result.json
             target/a03-asset-import/failure.json
             target/a03-asset-import/editor/*.png
@@ -411,6 +583,129 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npx playwright install --with-deps chromium
+      - name: Author and rebuild atlas recipes through native widgets
+        run: python3 tests/native/atlas_recipe_smoke.py
+      - name: Render the relocated generated atlas in Chromium
+        run: node tests/web/atlas.cjs target/debug/web-runtime
+      - name: Verify imported function calls in a relocated browser export
+        env:
+          KILN_ATLAS_PROJECT: samples/function_calls
+          KILN_PIXEL_SCENARIO: function-calls
+          WEB_ATLAS_EVIDENCE: target/a04-functions-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
+      - name: Verify script and graph projectile games in browser exports
+        run: |
+          for variant in projectile_range projectile_range_graph; do
+            KILN_ATLAS_PROJECT="samples/$variant" KILN_PIXEL_SCENARIO="$variant" WEB_ATLAS_EVIDENCE="target/a04-range-browser-$variant" node tests/web/atlas.cjs target/debug/web-runtime
+          done
+      - name: Verify offscreen culling and visible browser capacity warnings
+        run: |
+          python3 tools/make_sprite_stress.py target/a05-browser-offscreen-project
+          python3 tools/make_sprite_stress.py target/a05-browser-overflow-project --visible
+          for kind in offscreen overflow; do
+            if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
+            KILN_ATLAS_PROJECT="target/a05-browser-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" WEB_ATLAS_EVIDENCE="target/a05-$kind-browser" node tests/web/atlas.cjs target/debug/web-runtime
+          done
+      - name: Verify soft mesh, timed crossfade and automatic tree in browser exports
+        env:
+          KILN_ATLAS_PROJECT: samples/advanced_animation
+          KILN_PIXEL_SCENARIO: advanced-animation
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_REQUIRE_BLEND: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 80,104,272,136
+          WEB_ATLAS_EVIDENCE: target/a07-advanced-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
+      - name: Verify blended cutout rig and once-only cues in browser exports
+        env:
+          KILN_ATLAS_PROJECT: samples/rigged_cutscene
+          KILN_PIXEL_SCENARIO: rigged-cutscene
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 224,104,256,136
+          KILN_PIXEL_EXPECT_AUDIO_STARTS: '1'
+          WEB_ATLAS_EVIDENCE: target/a07-complete-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
+      - name: Verify authored keyframe cutscene in browser exports
+        env:
+          KILN_ATLAS_PROJECT: samples/authored_cutscene
+          KILN_PIXEL_SCENARIO: authored-cutscene
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 192,56,256,184
+          WEB_ATLAS_EVIDENCE: target/a07-composer-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
+      - name: Verify rotation and scale cutscene playback in browser exports
+        env:
+          KILN_ATLAS_PROJECT: samples/transform_tweens
+          KILN_PIXEL_SCENARIO: transform-tweens
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 192,56,256,184
+          WEB_ATLAS_EVIDENCE: target/a07-transform-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
+      - name: Verify saved cutscene tween playback in browser exports
+        env:
+          KILN_ATLAS_PROJECT: samples/cutscene_tweens
+          KILN_PIXEL_SCENARIO: cutscene-tweens
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 192,88,256,152
+          WEB_ATLAS_EVIDENCE: target/a07-tween-rig-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
+      - name: Verify character animation states and real input in browser exports
+        env:
+          KILN_ATLAS_PROJECT: samples/character_states
+          KILN_PIXEL_SCENARIO: character-states
+          KILN_PIXEL_TEST_ANIMATION_STATES: '1'
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 128,88,192,152
+          WEB_ATLAS_EVIDENCE: target/a07-graph-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
+      - name: Verify sparse tilemap and ping-pong playback in browser exports
+        run: |
+          for scenario in sparse_tilemap ping_pong; do
+            if [ "$scenario" = sparse_tilemap ]; then bounds=128,112,192,176; else bounds=128,88,192,152; fi
+            KILN_ATLAS_PROJECT="samples/$scenario" KILN_PIXEL_SCENARIO="$scenario" KILN_PIXEL_EXPECT_GREEN_BOUNDS="$bounds" WEB_ATLAS_EVIDENCE="target/a07-$scenario-browser" node tests/web/atlas.cjs target/debug/web-runtime
+          done
+      - name: Verify clipped gameplay pointer in browser exports
+        env:
+          KILN_ATLAS_PROJECT: samples/world_pointer
+          KILN_PIXEL_SCENARIO: clipped-pointer
+          KILN_PIXEL_TEST_POINTER: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 288,88,352,152
+          WEB_ATLAS_EVIDENCE: target/a05-views-pointer-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
+      - name: Verify anchored sprite parallax in browser exports
+        env:
+          KILN_ATLAS_PROJECT: samples/parallax
+          KILN_PIXEL_SCENARIO: sprite-parallax
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 78,104,142,168
+          KILN_PIXEL_REQUIRE_MOTION: '1'
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          WEB_ATLAS_EVIDENCE: target/a05-parallax-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
+      - name: Verify camera pan and zoom in browser exports
+        env:
+          KILN_ATLAS_PROJECT: samples/camera_transition
+          KILN_PIXEL_SCENARIO: camera-transition
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 96,16,224,144
+          KILN_PIXEL_REQUIRE_MOTION: '1'
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          WEB_ATLAS_EVIDENCE: target/a05-transition-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
+      - name: Verify camera shake motion and settling in browser exports
+        env:
+          KILN_ATLAS_PROJECT: samples/camera_shake
+          KILN_PIXEL_SCENARIO: camera-shake
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 128,88,192,152
+          KILN_PIXEL_REQUIRE_MOTION: '1'
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          WEB_ATLAS_EVIDENCE: target/a05-shake-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
+      - name: Verify camera dead-zone positions in browser exports
+        run: |
+          cp -r samples/camera_dead_zone target/a05-camera-browser-edge-project
+          python3 -c 'from pathlib import Path; p=Path("target/a05-camera-browser-edge-project/scripts/main.ks"); p.write_text(p.read_text().replace("180.0","220.0"))'
+          for mode in inside edge; do
+            if [ "$mode" = inside ]; then project=samples/camera_dead_zone; bounds=128,88,192,152; else project=target/a05-camera-browser-edge-project; bounds=100,88,164,152; fi
+            KILN_ATLAS_PROJECT="$project" KILN_PIXEL_SCENARIO="camera-$mode" KILN_PIXEL_EXPECT_GREEN_BOUNDS="$bounds" WEB_ATLAS_EVIDENCE="target/a05-camera-$mode-browser" node tests/web/atlas.cjs target/debug/web-runtime
+          done
       - name: Verify editor-authored counted loops and dictionaries in the browser
         run: python3 tests/native/asset_script_workflow_smoke.py --web-runtime target/debug/web-runtime
       - name: Verify editor-authored graph gameplay and browser save restoration
@@ -459,6 +754,27 @@ jobs:
             target/a04-graph-authoring/reopened/*.png
             target/task7-web-evidence/
             target/task8-browser-export-evidence/
+            target/a03-atlas-recipe/result.json
+            target/a03-atlas-recipe/failure.json
+            target/a03-atlas-recipe/editor/*.png
+            target/a03-atlas-recipe/editor/*.log
+            target/a03-atlas-recipe/reopened/*.png
+            target/a04-range-browser-*/result.json
+            target/a04-range-browser-*/*.log
+            target/a04-range-browser-*/*.png
+            target/a04-range-browser-*/failure.txt
+            target/a05-*-browser/result.json
+            target/a05-*-browser/*.log
+            target/a05-*-browser/*.png
+            target/a05-*-browser/failure.txt
+            target/a04-functions-browser/result.json
+            target/a04-functions-browser/*.log
+            target/a04-functions-browser/*.png
+            target/a04-functions-browser/failure.txt
+            target/a03-atlas-browser/result.json
+            target/a03-atlas-browser/*.log
+            target/a03-atlas-browser/*.png
+            target/a03-atlas-browser/failure.txt
             target/task8-browser-evidence/
             target/task8-portable-evidence/
             target/task8-clean-linux-evidence/

@@ -1,0 +1,34 @@
+id = "sprite-parallax"
+name = "Sprite Parallax"
+version = "0.1.0"
+features = []
+
+[window]
+width = 320
+height = 240
+
+[cameras.main]
+pixel_perfect = false
+
+[scenes.main]
+id = "main"
+name = "Independent horizontal and vertical background scrolling"
+script = "scripts/main.ks"
+nested_scenes = []
+
+[[scenes.main.entities]]
+id = "actor"
+name = "Stationary screen-position witness"
+components = [
+  { type = "Transform", x = 160.0, y = 120.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [0.0, 1.0, 0.0, 1.0], width = 64.0, height = 64.0, layer = 0.0 },
+  { type = "SpriteLayout", settings = { parallax = [0.5, 0.25], parallax_origin = [20.0, 8.0] } },
+]
+
+[[scenes.main.entities]]
+id = "ready"
+name = "Completion beacon"
+components = [
+  { type = "Transform", x = 100.0, y = 60.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [1.0, 0.0, 0.0, 1.0], width = 8.0, height = 8.0, layer = 0.0 },
+]

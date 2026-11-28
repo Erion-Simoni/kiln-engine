@@ -13,7 +13,7 @@ View. The editor decodes its dimensions and creates an undoable sprite entity at
 the pointer's world position. Image payloads are distinct from prefab payloads.
 The texture path remains project-relative after saving and packing.
 
-Use **Inspector → Sprite Pivot / Pixel Scale**, or **View → Sprite Editor**, to
+Use **Inspector → Sprite Pivot / Pixel Scale / Parallax**, or **View → Sprite Editor**, to
 set the pivot, horizontal/vertical flips and pixels per world unit. A pivot of
 `[0,0]` is the image's top left; `[0.5,1]` anchors its feet. Higher pixel density
 reduces drawn world size. Rotation and negative transform scale apply around the
@@ -145,3 +145,62 @@ On a graphical machine, record the build revision, OS/GPU, results and screensho
    reopen; verify images, palette selection, collisions and offsets in Play.
 4. Author an effect with two emitters of different gravity/alpha. Compare preview
    and Play, then pack and launch the saved archive with the native player.
+
+Camera follow, dead zones, bounds and finite screen mapping are documented in
+[CAMERAS_2D.md](CAMERAS_2D.md).
+
+## Parallax sprites
+
+Sprite Layout now includes per-axis scroll factors and a camera-origin anchor.
+Defaults preserve ordinary world scrolling. Inspector and Sprite Editor edits
+are validated and undoable; Play previews parallax while authoring retains world
+geometry for picking and gizmos. Project files and logical saves preserve the
+settings. See [camera/parallax contracts](CAMERAS_2D.md#sprite-parallax).
+
+## Ping-pong and authored playback speed
+
+Animation Editor now exposes **Ping-pong** and **Speed** (0..16; zero pauses).
+Defaults preserve forward playback at speed one. Looping ping-pong visits forward
+frames then reverse interiors without holding endpoints twice. A non-looping
+ping-pong returns through frame zero, then holds or transitions to its next clip.
+Authored speed multiplies runtime player speed. Frame sampling, crossed events
+and seek share one f64 clock. Paused/zero-dt updates emit nothing, including initial
+entry; seek suppresses historical events. Leftover real time crossing a transition
+uses the new clip's speed. Controls participate in clip undo/redo and saves.
+
+`samples/ping_pong` turns green only after zero/one/two/one/zero events and a speed-2
+checkpoint. Matching tools now require contract v16. These clip controls complement the
+state graphs, property timelines, sound/signal cues and cutout FK/IK workflows
+described below. The existing 4096-cycle update limit remains; extreme event/cycle
+overload and production performance acceptance are separate.
+
+## Character animation states
+
+Select a sprite and open **Inspector → Animation States**. Add states referencing
+project clips, parameters and ordered conditions; select an entry state and click
+**Apply Animation States**. Drafts validate before one undoable component edit.
+One-shot states can return automatically after completion. Project reopen and
+logical saves preserve the graph. See [the workflow](ANIMATION_STATES_2D.md) and
+`samples/character_states`: Left/Right or A/D moves, Space plays a one-shot action.
+
+Saved script-authored movement, tint and camera-follow rig sequences are described
+in [Cutscene tweens](CUTSCENE_TWEENS.md). Pause, seek, cancel and logical save/resume
+are supported; use Cutscene Composer for graphical property keyframes.
+
+The Source Editor can also author local rotation and XY scale tracks with
+`tween_rotation` and `tween_scale`; [transform_tweens](../samples/transform_tweens/README.md)
+shows a multi-turn spin and stretch alongside movement, tint and camera follow.
+All four properties share pause/seek/cancel and logical-save support.
+
+Use **Animation Editor → Cutscene Composer** for saved source-backed property
+keyframes, easing, value scrubbing and draft undo/redo. See the
+[composer guide](CUTSCENE_COMPOSER.md) and the implemented preview, cue, blend and
+cutout-rig workflows linked below.
+
+Animation Editor now offers **Preview in Scene View**, **Audio / Signal cues**,
+**Blend second take**, and **Create Two-Bone Cutout Rig** plus IK chain authoring.
+See [A07 workflows](A07_ANIMATION_WORKFLOWS.md) for supported constraints.
+
+Soft multi-influence mesh deformation, timed texture crossfades and automatic 1D
+parameter blend trees are now available. See [advanced animation](ADVANCED_ANIMATION_2D.md)
+for authoring, save/restore and the supported bounds.

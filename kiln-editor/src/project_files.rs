@@ -8,9 +8,11 @@ use std::path::{Path, PathBuf};
 pub struct LoadedProject {
     pub project: Project,
     pub path: PathBuf,
+    /// Generated-resource recovery notices for the editor console.
+    pub messages: Vec<String>,
 }
 
-/// Accept a project directory or a manifest file, without changing editor state.
+/// Read a project without changing authoring files or generated resources.
 pub fn load(path: &Path) -> Result<LoadedProject, String> {
     let path = if path.is_dir() {
         path.join("kiln.toml")
@@ -22,7 +24,23 @@ pub fn load(path: &Path) -> Result<LoadedProject, String> {
         .map_err(|e| format!("Cannot open {}: {e}", path.display()))?;
     let source = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let project = Project::from_toml(&source).map_err(|e| e.to_string())?;
-    Ok(LoadedProject { project, path })
+    let messages = Vec::new();
+    Ok(LoadedProject {
+        project,
+        path,
+        messages,
+    })
+}
+
+/// Open a project and reconstruct recorded interrupted generated atlases.
+/// Call only for an explicit open; disk conflict checks must remain read-only.
+pub fn load_recovering(path: &Path) -> Result<LoadedProject, String> {
+    let mut loaded = load(path)?;
+    loaded.messages = kiln_assets::atlas_project::recover(
+        &mut loaded.project,
+        loaded.path.parent().ok_or("Missing project directory")?,
+    );
+    Ok(loaded)
 }
 
 /// Serialize to a sibling temporary file, then replace the manifest atomically.
@@ -48,6 +66,9 @@ pub fn save(project: &Project, path: &Path) -> Result<PathBuf, String> {
         .map_err(|e| e.to_string())?;
     temporary.as_file().sync_all().map_err(|e| e.to_string())?;
     temporary.persist(&path).map_err(|e| e.to_string())?;
+    if let Err(error) = kiln_assets::atlas_project::finish_saved(project, &parent) {
+        log::warn!("Project saved; atlas provenance cleanup deferred: {error}");
+    }
     Ok(path)
 }
 
@@ -104,8 +125,13 @@ pub fn save_as(project: &Project, source: &Path, destination: &Path) -> Result<P
         .tempdir_in(staging_parent)
         .map_err(|e| e.to_string())?;
     copy_project_directory(&root, source, staging.path())?;
+    kiln_assets::atlas_project::copy_provenance(&root, staging.path())?;
     let staged_manifest = staging.path().join(name);
-    save(project, &staged_manifest)?;
+    let mut staged_project = project.clone();
+    for message in kiln_assets::atlas_project::recover(&mut staged_project, staging.path()) {
+        log::warn!("{message}");
+    }
+    save(&staged_project, &staged_manifest)?;
 
     let target_was_empty = target_root.is_dir();
     if target_was_empty {
@@ -175,6 +201,9 @@ fn copy_directory_contents(
         let path = entry.path();
         let name = entry.file_name();
         let name_text = name.to_string_lossy();
+        if kiln_assets::atlas_project::private_name(&name_text) {
+            continue;
+        }
         if path == source_manifest
             || matches!(name_text.as_ref(), ".git" | "target" | ".kiln-save")
             || (name_text.starts_with('.')

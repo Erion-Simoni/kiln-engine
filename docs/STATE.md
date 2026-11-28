@@ -1,70 +1,79 @@
 # Kiln Session Handoff
 
-Owner scope remains A02–A04 on `fix/a01-ci-baseline`.
-Current focus: A02 reference-safe entity deletion/joint editing, following bf206f9.
-A02–A04 remain PARTIAL; A01 baseline accepted on 6de428b only. 3D behind G2D.
-MIT OR Apache-2.0 settled; no package-size ceiling.
+Branch fix/a01-ci-baseline. Current A07 advanced-animation checkpoint, 2026-11-28,
+following c9dc49f. User explicitly requested soft mesh skinning, texture crossfades
+and automatic blend trees; those bounded 2D workflows are now implemented.
+A05/A06/A07 release acceptance remains PARTIAL. Do not advance to A08 unasked.
+At most three focused attempts per blocked check; record and move on. A03/A04
+gates remain deferred. Full 3D remains behind G2D.
 
 ## Done
 
-- Reproduced deletion leaving joint endpoints/camera targets dangling and Add/Set
-  Joint accepting missing/ambiguous endpoints. Three integration regressions failed
-  before and pass after shared composition-aware reference validation.
-- Deletion refuses dependent camera/joints in containing scenes, keeps document/
-  history/redo unchanged, and permits ordinary deletion once references are removed.
-  Independent scenes may reuse IDs without being incorrectly treated as dependents.
-- Joint inspector retains a form draft, validates on explicit Apply, commits fields
-  together once, retains invalid input/errors and supports Cancel preserving redo.
-  Endpoint fields/numeric controls wrap in narrow panes. Unapplied form input is
-  not a project edit; Apply before save/recovery.
-- Generic errors are centered/foreground; deterministic raised-panel hit regression
-  fails before the layer fix and passes after. No new format/dependency/history stack.
-- CI/docs/evidence: docs/evidence/A02_ENTITY_REFERENCES.md and entity_reference_smoke.py.
-  Previous camera/settings/nested-identity protections remain implemented.
+- ADR-0118: actual soft triangle skins with world mesh/bone bind poses, inverse
+  binds and four normalized influences per vertex. Bounds: 64 bones, 256 vertices,
+  512 triangles. Inspector Soft Mesh Skinning generates a grid, captures binds,
+  edits references/positions/UVs/weights, normalizes and applies through undoable
+  component transactions. Bone deletion/Transform removal rejects if referenced.
+  Scene projection, export and logical save retain mesh data.
+- Shared sprite renderer submits deformed triangles/per-corner UVs and blends two
+  textures in premultiplied color. Correct transparent crossfade demonstrated by
+  GPU readback. Compact attributes fit the downlevel limit. Existing culling,
+  painter order/materials, prepared views and MAX_SPRITES warnings retained.
+  Bounded 1024 texture-pair cache; native Arc/WASM Rc handles. Custom fragments
+  call sample_sprite to honor fades. Each mesh triangle uses a queue entry.
+- Authored graph transition Crossfade seconds and queued script API
+  crossfade_animation(entity,clip,seconds), ID 142. Saved source/target clocks,
+  exact endpoints, paused hold, seek cancellation and manual cuts. Destination
+  owns events; old source keeps advancing silently. Active fade finishes before
+  another graph edge, preventing unsupported three-texture interruption.
+- Automatic per-state 1D blend trees use a declared parameter and 2..16 sorted
+  clip thresholds. Adjacent clips mix without restarting time, normalized to the
+  reference clip clock; reference owns events. Inspector authors thresholds and
+  parameters through existing graph Apply/undo. Timed edges involving trees reject
+  because each tree already uses two samples. Logical saves retain parameters.
+- Restore applies the saved animation sample to Sprite immediately, including
+  paused fades/trees. Legacy optional fade/tree fields default empty. Runtime
+  contract v17; matching native/browser tools rebuilt; actual prior v16 SDK rejects.
+  No dependency or VM layout change. New sample advanced_animation and CI checks
+  observe both intermediate texture blends and final soft mesh deformation.
+- Existing cutout FK/IK, audio/signal cues, Scene View preview, composer, saved
+  tweens, character states, tilemaps and camera/view functionality retained.
+  Guide: ADVANCED_ANIMATION_2D.md; evidence/A07_ADVANCED_ANIMATION.md.
 
 ## Executed validation
 
-- just check PASSED. Full cargo test --workspace --locked: 777 PASSED, zero failed
-  including docs. Python regressions: 40 PASSED. py_compile/diff checks pass.
-- Final widget workflow PASSED: joint invalid/corrected Apply, one Undo, Cancel
-  preserves redo, specific joint/camera deletion diagnostics and visible errors,
-  dependency resolution, delete/Undo/Redo and exact full-project restart.
-- Existing scene-settings regression PASSED real camera-only autosave, forced
-  crash/recovery, composition preview/history and exact restart. Screenshots inspected.
-- Existing local_axes_smoke.py PASSED isolated/serial on new source. Hosted failure
-  remains unresolved; a local pass does not establish its cause.
-- Raw evidence: target/a02-entity-references, target/a02-entity-references-logs,
-  target/a02-entity-references-layout. Failed setup attempts remain retained.
+- Locked Rust workspace: 953 passing, zero failed, 104 suites. Five new editor
+  integration tests cover multi-weight bind/deform, crossfade pause/seek/snapshot,
+  automatic thresholds/time, editor Apply/undo/reopen and mesh/fade logical saves.
+  GPU tests verify transparent blend readback and deformed triangle bounds, plus
+  all prior renderer/material/prepared-view/capacity regressions.
+- just check, strict WASM default/opt-out, 49 Python helper tests, Node syntax,
+  py_compile and whitespace pass. Native and SDK builds complete before replays.
+- Native/browser advanced sample passes: observed fade and tree mixed-pixel phases,
+  final mesh green 6144 at [80,104,272,136], blue 64. Prior rig sample passes both:
+  green tip 1024 at [224,104,256,136], blue 64, browser audio starts exactly once.
+  Four final replays serial, relocated/authoring hidden; native PATH lacks tools.
+- Logs target/a07-advanced-{focused,render,quality,workspace,wasm,wasm-optout,tools,
+  web,python,stale}.log. Receipts/screenshots target/a07-advanced-{native,browser},
+  target/a07-advanced-rig-{native,browser}. Final pre-commit check receipt:
+  target/a07-advanced-precommit.log. Generated outputs are untracked.
 
-## Next / known issues
+## Open / deferred
 
-Prior bf206f9 Windows 43723198796 and reference 43723198790 PASSED.
-CI 43723198838 FAILED local_axes_smoke.py: Saved constrained position (40,60)
-timed out. Linux candidate 43723198819 was IN_PROGRESS at observation. Do not
-claim that hosted failure resolved from unrelated green runs. Obtain matching
-new-source checks and investigate retained local-axis evidence; no checks weakened.
-Prior 9bc2ace CI 43722214097/Windows 43722214082 PASSED; reference/Linux CANCELLED.
+- Full OS authoring/reimport acceptance, external Spine/DragonBones import and
+  physical device/DPI/performance acceptance remain separate A07 release gates.
+  Implemented automatic trees are 1D sprite-clip trees; bone pose tracks keep
+  their existing two-take and IK/FK mixing. Renderer uses at most two texture
+  samples per draw, with documented crossfade interruption/graph restrictions.
+- A05 full split-screen authoring/host and remaining rendering/capacity acceptance;
+  A06 stamps/streaming and complete level-authoring acceptance remain open.
+  Animation 4096-cycle cap/extreme overload and physical performance acceptance
+  remain open; no budgets bypassed. Direct camera-effect history stays transient.
+- A04 source widget gate stopped after three attempts; saved-physics pose divergence
+  remains. A03 identity/override/crash-transaction and A02 combined inspector gates
+  deferred. No release/certification or full 3D acceptance claimed.
 
-Continue A02 combined every-property/reference acceptance and cross-platform GUI
-coverage. Scoped/repeated nested identities need a deliberate runtime/script contract;
-new ambiguous links are refused, existing authored data preserved. Inspector edits
-remain primary-entity scoped. Save As rescue needs existing source resources and
-explicit Save/Revert of dirty scripts. A03/A04 remain requested and PARTIAL.
+## Next
 
-A03: 3daaa1c adds typed dependencies/reference-safe moves, per-target import rules,
-worker diagnostics and fixed GPU preview lifetime. Full nested prefab/variants,
-integrated atlas build/rebuild/reopen/export, source-module import refactoring and
-combined renamed-art/prefab/override/multiple-scene production acceptance remain open.
-A04: actual live source breakpoints, statement stepping, imported function frames/
-locals/watches, safe reload specification and the new enemy/projectile/trigger game
-with equivalent graph and complete exports remain open. Cooperative task payloads
-are explicit state machines, not automatic suspended function stacks/yield syntax.
-The legacy separate bytecode debugger is not the live gameplay source debugger.
-
-## Tools / boundaries
-
-Source /workspace/.kiln-tools/activate.sh (Rust 1.99.1, rootless libraries/software
-Vulkan, CHROMIUM_PATH Debian Chromium 156). Run timed UI/gameplay checks serially;
-concurrent build/export load previously exposed graph/physics timing issues.
-Generated target artifacts stay out of Git. Do not kill unrelated editor/Xvfb.
-just check before every commit. No physical-GPU/audio/controller claims.
+Consolidate A07 authoring/reimport acceptance or follow explicit user direction.
+Preserve bounded attempts and deferred gates; do not advance past A07 unasked.

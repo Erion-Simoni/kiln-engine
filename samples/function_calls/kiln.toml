@@ -1,0 +1,24 @@
+id = "shared-function-calls"
+name = "Shared Function Calls"
+version = "0.1.0"
+features = []
+
+[window]
+width = 320
+height = 240
+vsync = true
+resizable = true
+
+[scenes.main]
+id = "main"
+name = "Imported function result"
+script = "scripts/main.ks"
+nested_scenes = []
+
+[[scenes.main.entities]]
+id = "actor"
+name = "Result: green when calls return 7 and 2"
+components = [
+  { type = "Transform", x = 160.0, y = 120.0, rotation = 0.0, scale = 1.0 },
+  { type = "Sprite", color = [1.0, 0.0, 0.0, 1.0], width = 64.0, height = 64.0, layer = 0.0 },
+]

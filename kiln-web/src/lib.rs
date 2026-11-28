@@ -122,6 +122,7 @@ struct WebInput {
     keys: std::collections::HashSet<String>,
     key_edges: Vec<String>,
     pointer_edges: Vec<([f32; 2], bool)>,
+    pointer_present: bool,
     mouse_x: f64,
     mouse_y: f64,
     mouse_pressed: bool,
@@ -433,16 +434,24 @@ impl App {
                 }
                 host.set_ui_pointer(
                     viewport,
-                    Some([input.mouse_x as f32, input.mouse_y as f32]),
+                    input
+                        .pointer_present
+                        .then_some([input.mouse_x as f32, input.mouse_y as f32]),
                     input.mouse_pressed,
                 );
                 host.set_mouse_state(input.mouse_x, input.mouse_y, input.mouse_just_pressed);
-                if let Some(position) = self
-                    .camera
-                    .screen_to_world([input.mouse_x as f32, input.mouse_y as f32], viewport)
-                {
-                    host.set_mouse_world(position.map(|v| v as f64));
-                }
+                host.set_world_pointer(
+                    input
+                        .pointer_present
+                        .then(|| {
+                            self.camera.pointer_to_world(
+                                [input.mouse_x as f32, input.mouse_y as f32],
+                                viewport,
+                            )
+                        })
+                        .flatten()
+                        .map(|point| point.map(f64::from)),
+                );
                 if let Err(error) = slice.step(&mut self.world, input.axes(), dt.as_secs_f64()) {
                     web_sys::console::error_1(&JsValue::from_str(&format!(
                         "Script execution failed: {error}"
@@ -471,7 +480,8 @@ impl App {
                     ))),
                 }
                 transition = slice.take_scene_request();
-                if let Ok(camera) = self.camera_controller.update(
+                if let Ok(camera) = slice.update_camera(
+                    &mut self.camera_controller,
                     &self
                         .project
                         .cameras
@@ -568,8 +578,12 @@ impl App {
             if viewport[2] > 0.0 && viewport[3] > 0.0 {
                 pass.set_viewport(viewport[0], viewport[1], viewport[2], viewport[3], 0.0, 1.0);
             }
-            self.sprite_renderer
-                .flush(&mut pass, &self.camera, self.renderer.queue());
+            self.sprite_renderer.flush(
+                &mut pass,
+                &self.camera,
+                self.renderer.queue(),
+                self.renderer.device(),
+            );
         }
 
         if self.renderer.has_post() {
@@ -616,6 +630,13 @@ impl App {
                     }
                 }
             }
+            if let Some(warning) = self.sprite_renderer.frame_stats().warning() {
+                for instance in
+                    TextRenderer::new().render(&warning, 8.0, 64.0, 12.0, [1.0, 0.25, 0.1, 1.0])
+                {
+                    self.overlay_renderer.push(instance);
+                }
+            }
             let size = self.renderer.surface_config();
             let camera = Camera::new_top_left(size.width as f32, size.height as f32);
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -632,8 +653,12 @@ impl App {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            self.overlay_renderer
-                .flush(&mut pass, &camera, self.renderer.queue());
+            self.overlay_renderer.flush(
+                &mut pass,
+                &camera,
+                self.renderer.queue(),
+                self.renderer.device(),
+            );
         }
 
         self.renderer.finish_profiler_frame(&mut encoder);

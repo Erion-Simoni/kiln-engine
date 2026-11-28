@@ -358,11 +358,15 @@ pub fn update_prefab_instances(world: &mut GameWorld, prefab: &kiln_core::Prefab
                     layer,
                     width,
                     height,
+                    material,
+                    animation_clip,
                     ..
                 } => {
                     sprite = Sprite::new(color[0], color[1], color[2], color[3])
                         .with_size(*width, *height)
                         .with_layer(*layer);
+                    sprite.material = material.clone();
+                    sprite.animation_clip = animation_clip.clone();
                     if let Some(path) = texture {
                         // Texture override would need asset loading; skip for now
                         let _ = path;
@@ -398,6 +402,38 @@ pub fn update_prefab_instances(world: &mut GameWorld, prefab: &kiln_core::Prefab
                             }
                         }
                     }
+                    "sprite_resources" | "SpriteResources" => {
+                        if let kiln_core::ComponentOverride::SpriteResources {
+                            material,
+                            animation_clip,
+                        } = comp_override
+                        {
+                            if let Some(value) = material {
+                                sprite.material = value.clone();
+                            }
+                            if let Some(value) = animation_clip {
+                                sprite.animation_clip = value.clone();
+                            }
+                        }
+                    }
+                    "sprite_geometry" | "SpriteGeometry" => {
+                        if let kiln_core::ComponentOverride::SpriteGeometry {
+                            width,
+                            height,
+                            layer,
+                        } = comp_override
+                        {
+                            if let Some(value) = width {
+                                sprite.size[0] = *value;
+                            }
+                            if let Some(value) = height {
+                                sprite.size[1] = *value;
+                            }
+                            if let Some(value) = layer {
+                                sprite.layer = *value;
+                            }
+                        }
+                    }
                     "sprite" | "Sprite" => {
                         if let kiln_core::prefab::ComponentOverride::Sprite { color, texture } =
                             comp_override
@@ -426,7 +462,30 @@ pub fn update_prefab_instances(world: &mut GameWorld, prefab: &kiln_core::Prefab
 
 /// Propagate a changed prefab into every saved scene while preserving each
 /// instance's identity, authored name, hierarchy parent, and overrides.
+/// Reject invalid changed joint references without modifying the project.
 pub fn propagate_prefab_in_scenes(
+    project: &mut kiln_core::Project,
+    prefab: &kiln_core::Prefab,
+) -> Result<usize, String> {
+    let mut staged = project.clone();
+    let updated = propagate_prefab_unchecked(&mut staged, prefab);
+    validate_prefab_joints(project, &staged)?;
+    *project = staged;
+    Ok(updated)
+}
+
+fn validate_prefab_joints(before: &Project, after: &Project) -> Result<(), String> {
+    let mut ids: Vec<_> = after.scenes.keys().collect();
+    ids.sort();
+    for id in ids {
+        if let Some(previous) = before.scenes.get(id) {
+            crate::scene_references::require_changed_joints(after, previous, &after.scenes[id])?;
+        }
+    }
+    Ok(())
+}
+
+fn propagate_prefab_unchecked(
     project: &mut kiln_core::Project,
     prefab: &kiln_core::Prefab,
 ) -> usize {
@@ -455,6 +514,7 @@ pub fn propagate_prefab_in_scenes(
                 });
             let mut propagated = prefab.root_entity.clone();
             propagated.id = entity.id.clone();
+            crate::scene_references::remap_joint_owner(&mut propagated, &prefab.root_entity.id);
             propagated.name = entity.name.clone();
             propagated.components.retain(|component| {
                 !matches!(
@@ -485,8 +545,21 @@ pub fn propagate_prefab_in_scenes(
 
 /// Apply one linked scene instance's supported authored components to its
 /// prefab definition, clear that instance's overrides, and propagate the new
-/// definition into every saved instance in the project.
+/// definition into every saved instance in the project. Invalid changed joints
+/// reject the complete operation without modifying definitions or scenes.
 pub fn apply_prefab_instance_to_definition(
+    project: &mut kiln_core::Project,
+    scene_id: &str,
+    entity_id: &str,
+) -> Result<kiln_core::Prefab, String> {
+    let mut staged = project.clone();
+    let updated = apply_prefab_unchecked(&mut staged, scene_id, entity_id)?;
+    validate_prefab_joints(project, &staged)?;
+    *project = staged;
+    Ok(updated)
+}
+
+fn apply_prefab_unchecked(
     project: &mut kiln_core::Project,
     scene_id: &str,
     entity_id: &str,
@@ -516,6 +589,7 @@ pub fn apply_prefab_instance_to_definition(
         .ok_or("Prefab definition is missing")?;
     let mut root = scene.entities[*index].clone();
     root.id = definition.root_entity.id.clone();
+    crate::scene_references::remap_joint_owner(&mut root, entity_id);
     root.name = definition.root_entity.name.clone();
     root.components.retain(|component| {
         !matches!(
@@ -543,6 +617,7 @@ pub fn apply_prefab_instance_to_definition(
             }
             let mut propagated = updated.root_entity.clone();
             propagated.id = instance.id.clone();
+            crate::scene_references::remap_joint_owner(&mut propagated, &updated.root_entity.id);
             propagated.name = instance.name.clone();
             let parent = instance
                 .components

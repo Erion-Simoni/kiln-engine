@@ -115,9 +115,97 @@ pub struct Program {
     /// Number of local variable slots the program uses.
     local_slots: u16,
     source_offsets: HashMap<usize, usize>,
+    statement_offsets: std::collections::BTreeMap<usize, usize>,
+    local_names: HashMap<u16, String>,
+    local_functions: HashMap<u16, Label>,
+    local_scopes: HashMap<u16, (usize, usize)>,
+    function_ranges: Vec<(usize, usize, String)>,
 }
 
 impl Program {
+    /// Associate a compiled body range with its function; nested bodies retain
+    /// their more specific ownership without per-instruction name copies.
+    pub fn record_function(&mut self, start: usize, end: usize, name: &str) {
+        self.function_ranges.push((start, end, name.to_owned()));
+    }
+
+    /// Function owning an instruction, or None for the entry program.
+    pub fn function_name(&self, instruction: usize) -> Option<&str> {
+        self.function_ranges
+            .iter()
+            .filter(|(start, end, _)| *start <= instruction && instruction < *end)
+            .min_by_key(|(start, end, _)| end - start)
+            .map(|(_, _, name)| name.as_str())
+    }
+
+    /// Record a function-local slot's entry label.
+    pub fn record_local_function(&mut self, slot: u16, entry: Label) {
+        self.local_functions.insert(slot, entry);
+    }
+
+    /// Function owning a local slot; None denotes entry-program locals.
+    pub fn local_function(&self, slot: u16) -> Option<&str> {
+        self.local_functions
+            .get(&slot)
+            .and_then(|entry| self.function_name(entry.0))
+    }
+
+    /// Mark a binding initialized and visible at the next instruction.
+    pub fn record_local_scope_start(&mut self, slot: u16, instruction: usize) {
+        self.local_scopes.insert(slot, (instruction, usize::MAX));
+    }
+
+    /// Close the lexical instruction range of an allocated binding.
+    pub fn record_local_scope_end(&mut self, slot: u16, instruction: usize) {
+        if let Some(range) = self.local_scopes.get_mut(&slot) {
+            range.1 = instruction;
+        }
+    }
+
+    /// Whether a binding is initialized and in the current function's lexical scope.
+    /// Completed positions and programs without scope metadata report false.
+    pub fn local_in_scope(&self, slot: u16, instruction: usize) -> bool {
+        instruction < self.len()
+            && self.local_function(slot) == self.function_name(instruction)
+            && self
+                .local_scopes
+                .get(&slot)
+                .is_some_and(|(start, end)| *start <= instruction && instruction < *end)
+    }
+
+    /// Resolve a current-frame lexical name, choosing the innermost shadowing binding.
+    pub fn scoped_local(&self, name: &str, instruction: usize) -> Option<u16> {
+        self.local_names
+            .iter()
+            .filter(|(slot, local)| {
+                local.as_str() == name && self.local_in_scope(**slot, instruction)
+            })
+            .max_by_key(|(slot, _)| self.local_scopes[slot].0)
+            .map(|(slot, _)| *slot)
+    }
+
+    /// Record a compiler-allocated local name for read-only live inspection.
+    pub fn record_local_name(&mut self, slot: u16, name: &str) {
+        self.local_names.insert(slot, name.to_owned());
+    }
+
+    /// Name associated with an allocated slot; scope lifetime is not implied.
+    pub fn local_name(&self, slot: u16) -> Option<&str> {
+        self.local_names.get(&slot).map(String::as_str)
+    }
+
+    /// Mark an executable source statement boundary without changing bytecode.
+    pub fn record_statement(&mut self, instruction: usize, offset: usize) {
+        self.statement_offsets.entry(instruction).or_insert(offset);
+    }
+
+    /// Statement instruction indices and source offsets in execution-layout order.
+    pub fn statements(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
+        self.statement_offsets
+            .iter()
+            .map(|(ip, offset)| (*ip, *offset))
+    }
+
     /// Associate an instruction with its source byte offset, retaining a more
     /// precise mapping already recorded by a nested expression.
     pub fn record_source_offset(&mut self, instruction: usize, offset: usize) {

@@ -149,6 +149,7 @@ impl PlayerApp {
                     uv_rect: sprite.uv_rect,
                     material_id: 0,
                     rotation: 0.0,
+                    ..Default::default()
                 }
                 .with_transform(transform.rotation, [transform.scale.x, transform.scale.y]),
             );
@@ -183,8 +184,12 @@ impl PlayerApp {
                 occlusion_query_set: None,
             });
 
-            gpu.sprite_renderer
-                .flush(&mut pass, &self.camera, gpu.renderer.queue());
+            gpu.sprite_renderer.flush(
+                &mut pass,
+                &self.camera,
+                gpu.renderer.queue(),
+                gpu.renderer.device(),
+            );
         }
 
         gpu.renderer.queue().submit([encoder.finish()]);

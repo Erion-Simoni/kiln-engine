@@ -105,6 +105,8 @@ pub(super) fn capture(
                     flip_x: sprite.flip_x,
                     flip_y: sprite.flip_y,
                     pixels_per_unit: sprite.pixels_per_unit,
+                    parallax: sprite.parallax,
+                    parallax_origin: sprite.parallax_origin,
                 },
             });
         }
@@ -255,11 +257,22 @@ pub(super) fn validate(
                         resource_path(path)?;
                     }
                 }
+                Component::AnimationGraph { graph } => {
+                    graph.validate(&project.animation_clips)?;
+                    if !entity
+                        .components
+                        .iter()
+                        .any(|c| matches!(c, Component::Sprite { .. }))
+                    {
+                        return Err("Animation graph requires a saved sprite".into());
+                    }
+                }
                 Component::SpriteLayout { settings } => settings.validate()?,
                 Component::Physics { body, collider } => {
                     kiln_core::physics_data::validate_body(body, collider)?
                 }
                 Component::Joint { joint } => kiln_core::physics_data::validate_joint(joint)?,
+                Component::SkinnedMesh { mesh } => mesh.validate_scene(scene)?,
                 Component::Particles { effect } => effect.validate()?,
                 Component::Script { path, properties } => {
                     resource_path(path)?;
@@ -396,6 +409,9 @@ pub(super) fn restore(
         if let Some(saved) = &extra.animation {
             let animation =
                 AnimationPlayer::restore_snapshot(saved, |path| resources.get(path).copied())?;
+            if let Ok(mut sprite) = world.world_mut().get::<&mut Sprite>(handle) {
+                animation.apply_to_sprite(&mut sprite);
+            }
             world
                 .world_mut()
                 .insert_one(handle, animation)

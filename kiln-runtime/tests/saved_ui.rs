@@ -174,7 +174,7 @@ fn authored_labels_accept_numeric_gameplay_values_without_a_formatting_workaroun
 }
 #[test]
 fn attached_ui_callbacks_receive_current_physical_input_while_gameplay_is_paused() {
-    let source = r#"if script_phase() == "ui_event" {state_set("action",get_action("move"));state_set("pointer",get_mouse_world_x());}"#;
+    let source = r#"if script_phase() == "ui_event" {state_set("action",get_action("move"));state_set("pointer",get_mouse_world_x());state_set("valid",mouse_world_valid());}"#;
     let (mut session, mut world) = setup("return 0;", source);
     session.host_mut().set_pressed_keys(&["d".into()]);
     session.host_mut().set_mouse_world([123.0, 456.0]);
@@ -187,6 +187,10 @@ fn attached_ui_callbacks_receive_current_physical_input_while_gameplay_is_paused
     assert_eq!(
         session.entity_script_state("controller", "pointer"),
         Some(&Value::F64(123.0))
+    );
+    assert_eq!(
+        session.entity_script_state("controller", "valid"),
+        Some(&Value::Bool(true))
     );
     assert_eq!(session.state().elapsed, 0.0);
 }

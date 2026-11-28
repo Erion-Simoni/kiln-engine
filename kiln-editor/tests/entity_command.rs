@@ -536,7 +536,10 @@ fn prefab_definition_changes_propagate_to_saved_instances_and_keep_overrides() {
     if let Component::Transform { y, .. } = &mut changed.root_entity.components[0] {
         *y = 12.0;
     }
-    assert_eq!(propagate_prefab_in_scenes(&mut project, &changed), 1);
+    assert_eq!(
+        propagate_prefab_in_scenes(&mut project, &changed).unwrap(),
+        1
+    );
     let instance = project.scenes["main"]
         .entities
         .iter()
@@ -922,4 +925,113 @@ fn deletion_checks_containing_scene_references_but_isolates_uncomposed_scenes() 
         error.contains("joint") && error.contains("entity_1"),
         "{error}"
     );
+}
+
+#[test]
+fn prefab_joint_owner_is_remapped_for_instantiation_and_revert() {
+    let mut project = project();
+    let prefab = Prefab {
+        id: "rig".into(),
+        name: "Rig".into(),
+        root_entity: Entity {
+            id: "template".into(),
+            name: "Template".into(),
+            components: vec![
+                Component::Transform {
+                    x: 1.0,
+                    y: 2.0,
+                    rotation: 0.2,
+                    scale: 1.0,
+                },
+                endpoint_joint("template", "root"),
+            ],
+        },
+    };
+    project.prefabs.insert("rig".into(), prefab);
+    let mut history = SceneHistory::new();
+    let id = run(
+        &mut project,
+        EntityEdit::InstantiatePrefab {
+            prefab_id: "rig".into(),
+            position: [30.0, 40.0],
+        },
+        &mut history,
+    )
+    .unwrap()
+    .unwrap();
+    let joint_of = |scene: &Scene| {
+        scene
+            .entities
+            .iter()
+            .find(|e| e.id == id)
+            .unwrap()
+            .components
+            .iter()
+            .find_map(|c| {
+                if let Component::Joint { joint } = c {
+                    Some(joint.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap()
+    };
+    let joint = joint_of(&project.scenes["main"]);
+    assert_eq!(joint.entity_a, id);
+    assert_eq!(joint.entity_b, "root");
+    run(
+        &mut project,
+        EntityEdit::RevertPrefabOverrides {
+            entity_id: id.clone(),
+        },
+        &mut history,
+    )
+    .unwrap();
+    assert_eq!(joint_of(&project.scenes["main"]), joint);
+    assert_eq!(history.undo_depth(), 2);
+    let current = project.scenes["main"].clone();
+    let previous = history.undo(current.clone()).unwrap();
+    let redone = history.redo(previous).unwrap();
+    assert_eq!(
+        serde_json::to_value(&redone).unwrap(),
+        serde_json::to_value(&current).unwrap()
+    );
+    let root = tempfile::tempdir().unwrap();
+    project_files::save(&project, &root.path().join("kiln.toml")).unwrap();
+    let reopened = project_files::load(root.path()).unwrap().project;
+    assert_eq!(
+        serde_json::to_value(&reopened).unwrap(),
+        serde_json::to_value(&project).unwrap()
+    );
+    let world = spawn(&reopened);
+    let runtime_joint = world
+        .world_ref()
+        .query::<(&SourceId, &kiln_core::physics_data::Joint2D)>()
+        .iter()
+        .find(|(source, _)| source.0 == id)
+        .unwrap()
+        .1
+        .clone();
+    assert_eq!(runtime_joint, joint);
+}
+
+#[test]
+fn duplicate_rejects_missing_joint_reference_without_mutation_or_history() {
+    let mut project = project();
+    project.scenes.get_mut("main").unwrap().entities[1]
+        .components
+        .push(endpoint_joint("child", "missing"));
+    let before = serde_json::to_value(&project).unwrap();
+    let mut history = SceneHistory::new();
+    let error = run(
+        &mut project,
+        EntityEdit::Duplicate {
+            entity_id: "child".into(),
+        },
+        &mut history,
+    )
+    .unwrap_err();
+    assert!(error.contains("missing"), "{error}");
+    assert_eq!(serde_json::to_value(&project).unwrap(), before);
+    assert!(!history.can_undo());
 }

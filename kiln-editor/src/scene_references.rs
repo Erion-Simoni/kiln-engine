@@ -1,5 +1,5 @@
 //! Resolve entity references in a composed scene before publishing edits.
-use kiln_core::{physics_data::Joint2D, Component, Project, Scene};
+use kiln_core::{physics_data::Joint2D, Component, Entity, Project, Scene};
 use std::collections::{HashMap, HashSet};
 
 fn composition<'a>(
@@ -83,4 +83,42 @@ pub(crate) fn require_unreferenced(
         }
     }
     Ok(())
+}
+
+// Validate only newly published/changed joints; unrelated entity edits must not
+// reject an unchanged legacy component that the user still needs to repair.
+pub(crate) fn require_changed_joints(
+    project: &Project,
+    before: &Scene,
+    after: &Scene,
+) -> Result<(), String> {
+    let previous: HashMap<_, _> = before
+        .entities
+        .iter()
+        .map(|entity| (entity.id.as_str(), entity))
+        .collect();
+    for entity in &after.entities {
+        let previous = previous.get(entity.id.as_str());
+        for component in &entity.components {
+            if let Component::Joint { joint } = component {
+                let unchanged = previous.is_some_and(|old| old.components.iter().any(|component| matches!(component,Component::Joint {joint: previous} if previous == joint)));
+                if !unchanged {
+                    require_joint_endpoints(project, after, joint)?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn remap_joint_owner(entity: &mut Entity, original_id: &str) {
+    for component in &mut entity.components {
+        if let Component::Joint { joint } = component {
+            for endpoint in [&mut joint.entity_a, &mut joint.entity_b] {
+                if endpoint == original_id {
+                    *endpoint = entity.id.clone();
+                }
+            }
+        }
+    }
 }

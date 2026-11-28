@@ -19,6 +19,8 @@ The Kiln project manifest is a single TOML file (`kiln.toml`) at the project roo
 | `scenes` | `HashMap<String, Scene>` | `{}` | Scenes keyed by id |
 | `tilemaps` | `HashMap<String, TileMap>` | `{}` | Tilemaps keyed by id |
 | `tilesets` | `HashMap<String, TileSet>` | `{}` | Tilesets keyed by id |
+| `animation_clips` | `HashMap<String, Clip>` | `{}` | Named sheet animations and generated static clips |
+| `atlases` | `HashMap<String, AtlasRecipe>` | `{}` | Saved deterministic atlas recipes |
 
 ## `[window]` — WindowSettings
 
@@ -192,6 +194,54 @@ solid = [false, true, false, false]
 | `rows` | u32 | `1` | Tile rows in the atlas |
 | `solid` | `Vec<bool>` | `[]` | Per-tile solid flags, indexed by tile id |
 
+## `[atlases.<id>]` — Saved texture atlas recipe
+
+Use **View → Sprite Editor → Atlas Builder** to add labeled PNG sources, build
+an atlas, then Save Project. The output folder must already exist. Load the saved
+recipe to rebuild it after reopening or moving its source art through Assets.
+Each source generates a static clip named `atlas:<id>:<label>`; select that clip
+and the output texture in the sprite Inspector. Existing sprites and prefabs keep
+their authored texture/clip references until explicitly edited.
+
+```toml
+[atlases.characters]
+output = "art/characters.png"
+size = 512
+padding = 2
+
+[atlases.characters.sources]
+hero = "art/hero.png"
+coin = "art/coin.png"
+```
+
+Labels determine packing order and keep clip identities/regions stable when only
+a source path changes. `built_hash` and `built_regions` are generated bookkeeping:
+the output PNG hash and label-to-`[x,y,width,height]` regions. Keep generated clips
+unchanged; duplicate a clip before making independent animation edits. Rebuild
+refuses externally edited output, unrelated file/clip collisions and removal of
+clips still used by scene entities, prefabs or clip transitions.
+
+Recipes allow 1–256 sources, sides up to 4096 pixels, padding up to 64 pixels,
+80 MiB per PNG and 256 MiB total decoded source pixels. Paths stay inside the
+project without symlinks, private directories or generated export trees. Inputs
+are original art rather than other generated atlases. Missing/invalid/oversized
+images or a failed fit leave the prior output and project intact.
+
+PNG publication uses a staged file replacement; Save Project persists the recipe
+and generated clips. Export rebuilds the atlas and normalizes its clips in its
+staging snapshot using current source art, without modifying the authoring project.
+Before PNG publication, `.kiln-atlas-generations.json` records bounded provenance
+(512 KiB, 4096 generated versions); `.kiln-atlas.lock` serializes cooperating atlas
+publishers. Open reconstructs interrupted known-generated output for the saved
+recipe; Restore reconstructs the selected autosave recipe. Reconstruction uses
+current source art, preserves the manifest and refuses unknown output edits.
+Save removes matching committed provenance. Save As normalizes only its copy;
+export copies validated provenance into staging and strips private metadata before
+publication. Read-only project checks never reconstruct resources. This does not
+provide atomic transactions for source moves or arbitrary multi-file changes.
+The native and browser players render the ordinary PNG/clip data. Runtime frame
+budgets and cross-platform visual acceptance remain separate gates.
+
 ## `[mobile]` — MobileSettings
 
 ```toml
@@ -304,3 +354,58 @@ list authored dependents, duplicated stable IDs are named, and equal file conten
 is reported without deleting either asset. Content hashes stream from disk instead
 of allocating whole source files. Diagnostics cover manifest references, not code
 imports or arbitrary paths constructed dynamically by scripts.
+
+### Prefab texture override persistence
+
+A `PrefabInstance` Sprite override distinguishes three states: omit `texture` to
+inherit the definition; use `texture = "art/hero.png"` to set a path; use
+`texture = false` to clear the inherited texture. JSON recovery uses the same
+string/false/omitted convention. Legacy string overrides are accepted, and legacy
+JSON null retains its previous inherit meaning. True and other value types are
+invalid. Sparse transform/color override fields are omitted when inherited.
+Explicit clears survive Save, recovery Restore and cross-scene prefab propagation;
+resource moves rewrite explicit paths while leaving clears unchanged. Old snapshots
+that already lost a clear cannot reconstruct that intent automatically.
+
+Prefab Apply converts self-referential joint endpoints from instance ID to template
+ID; propagation converts template ID to each destination instance ID. Other joint
+endpoints remain literal scene IDs and must resolve uniquely within each destination
+scene and its nested scenes. Apply/propagation reject invalid changed endpoints
+without publishing staged definitions or scenes. This does not introduce scoped
+nested prefab identities or automatic cross-scene target lookup.
+
+### Prefab sprite geometry overrides
+
+`SpriteGeometry` overrides hold optional `width`, `height` and `layer` numbers;
+absent values inherit the definition independently. Captured instance edits use
+the `sprite_geometry` override entry. Returning all three properties to their
+current definition values removes that entry. Apply/propagation preserves deltas;
+Revert clears them. Existing Sprite color/texture override data is unchanged.
+Matching native/browser tools must advertise runtime contract `kiln-authoring-v6`;
+older parsers do not support the new tag and are rejected before export.
+
+### Prefab material and clip overrides
+
+`SpriteResources` overrides hold optional `material` and `animation_clip` IDs.
+An absent field inherits; a string assigns its ID; false clears it. Capture stores
+per-property deltas under `sprite_resources` and removes the entry when both
+properties inherit. Resource IDs are not file paths. Generated atlas clips remain
+protected while any scene/prefab override references them, even without a current
+Sprite component. Matching runtime contract is `kiln-authoring-v6`; rebuild native
+and browser tools with updated editors. Older tools cannot parse this override tag.
+
+### Aggregate script instruction limit
+
+Project root `script_instruction_budget` is an unsigned integer from 1 through
+10,000,000, default 1,000,000. Default values are omitted on save. It applies across
+scene/entity/lifecycle/UI bytecode invocations within each gameplay tick. It does
+not replace the individual VM invocation limit or measure host/render/physics time.
+Runtime construction/export validates the range. Runtime contract v6 requires
+matching rebuilt player/browser tools; older tools are refused before publication.
+
+
+Function-calling programs now compile bodies once and store a `shared-calls-v1`
+VM-memory signature. Older function slot layouts are rejected before a saved-game
+load commits; straight-line program memory signatures remain compatible. Actual
+call depth is capped at 32 and recursive source functions are rejected. Current
+matching runtime contract is kiln-authoring-v6.

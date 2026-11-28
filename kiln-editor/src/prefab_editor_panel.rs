@@ -192,6 +192,46 @@ impl PrefabEditorPanel {
                                             ui.add(DragValue::new(scale).speed(0.01).suffix(" s"));
                                         }
                                     }
+                                    ComponentOverride::SpriteResources {
+                                        material,
+                                        animation_clip,
+                                    } => {
+                                        for (name, value) in [
+                                            ("Material", material),
+                                            ("Animation clip", animation_clip),
+                                        ] {
+                                            match value {
+                                                Some(Some(id)) => {
+                                                    ui.label(name);
+                                                    ui.text_edit_singleline(id);
+                                                }
+                                                Some(None) => {
+                                                    ui.label(format!("{name}: cleared"));
+                                                }
+                                                None => {
+                                                    ui.label(format!("{name}: inherited"));
+                                                }
+                                            }
+                                        }
+                                    }
+                                    ComponentOverride::SpriteGeometry {
+                                        width,
+                                        height,
+                                        layer,
+                                    } => {
+                                        ui.label("Sprite dimensions and layer:");
+                                        for (label, value) in
+                                            [("Width", width), ("Height", height), ("Layer", layer)]
+                                        {
+                                            if let Some(value) = value {
+                                                ui.add(
+                                                    DragValue::new(value)
+                                                        .speed(0.1)
+                                                        .prefix(format!("{label}: ")),
+                                                );
+                                            }
+                                        }
+                                    }
                                     ComponentOverride::Sprite { color, texture } => {
                                         ui.label("Sprite:");
                                         if let Some(color) = color {

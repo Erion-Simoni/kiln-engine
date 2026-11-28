@@ -52,6 +52,12 @@ the documents unchanged. Legacy ambiguous compositions retain their authored dat
 the inspector/gizmo disables ambiguous targets. Edit a child through its own tab.
 Repeated instances with scoped identities are not implemented.
 
+Joint references in pasted or duplicated entities are checked against the target
+scene and its nested scenes before the command is committed. A missing or ambiguous
+endpoint refuses the entire copy operation and preserves history. References to the copied
+owner receive its new entity ID; prefab placement and Revert keep that owner
+identity. An external endpoint keeps its original ID when it resolves uniquely.
+
 Deletion refuses entities still used by a joint or camera follow target, including
 references from containing scene compositions. Remove the joint or change the
 camera target first; the refusal preserves the document and undo/redo history.

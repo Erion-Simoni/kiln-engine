@@ -6,6 +6,9 @@ use std::{collections::HashMap, path::Path};
 
 #[derive(Debug, Default)]
 pub struct AnimationEditorState {
+    pub cutscene: crate::cutscene_editor::Composer,
+    pub skin_editor: crate::skin_editor::SkinEditor,
+    pub graph_editor: crate::animation_graph_editor::GraphEditorState,
     pub clips: HashMap<String, Clip>,
     pub selected_clip: Option<String>,
     pub selected_frame: usize,
@@ -203,6 +206,13 @@ impl AnimationEditorState {
             ui.label("Sheet");
             ui.text_edit_singleline(&mut clip.texture);
             ui.checkbox(&mut clip.loops, "Loop");
+            ui.checkbox(&mut clip.ping_pong, "Ping-pong");
+            ui.add(
+                egui::DragValue::new(&mut clip.speed)
+                    .prefix("Speed ")
+                    .speed(0.05)
+                    .range(0.0..=16.0),
+            );
         });
         egui::ComboBox::from_id_salt("next_clip")
             .selected_text(clip.next.as_deref().unwrap_or("Hold last frame"))
@@ -481,13 +491,19 @@ mod texture_preview_tests {
         assert_eq!(state.preview_events[0].name, "step");
         let before = clips.clone();
         clips.get_mut("walk").unwrap().frames[1].events.clear();
+        clips.get_mut("walk").unwrap().ping_pong = true;
+        clips.get_mut("walk").unwrap().speed = 2.0;
         state.record_edit(before.clone());
         state.undo_clips(&mut clips);
         assert_eq!(
             clips["walk"].frames[1].events[0].payload.as_deref(),
             Some("stone")
         );
+        assert!(!clips["walk"].ping_pong);
+        assert_eq!(clips["walk"].speed, 1.0);
         state.redo_clips(&mut clips);
         assert!(clips["walk"].frames[1].events.is_empty());
+        assert!(clips["walk"].ping_pong);
+        assert_eq!(clips["walk"].speed, 2.0);
     }
 }

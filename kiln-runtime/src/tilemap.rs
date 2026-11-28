@@ -84,16 +84,8 @@ impl Tilemap {
     ///
     /// Returns the world position of the first solid tile found.
     pub fn first_solid_hit(&self, rect: [f32; 4]) -> Option<[f32; 2]> {
-        let [min_x, min_y, max_x, max_y] = rect;
-        let shifted = [
-            min_x - self.offset[0],
-            min_y - self.offset[1],
-            max_x - self.offset[0],
-            max_y - self.offset[1],
-        ];
         self.map
-            .first_solid_hit(&self.tilesets, shifted)
-            .map(|point| [point[0] + self.offset[0], point[1] + self.offset[1]])
+            .first_solid_hit_offset(&self.tilesets, rect, self.offset)
     }
 
     /// Collect the visible tile instances for a camera viewport.
@@ -119,15 +111,6 @@ impl Tilemap {
             return instances;
         }
 
-        let [min_x, min_y, max_x, max_y] = view;
-        let origin_x = min_x - self.offset[0];
-        let origin_y = min_y - self.offset[1];
-        let end_x = max_x - self.offset[0];
-        let end_y = max_y - self.offset[1];
-
-        let chunk_span = CHUNK_SIZE as f32 * ts[0];
-        let chunk_span_y = CHUNK_SIZE as f32 * ts[1];
-
         for layer in self.map.sorted_layers() {
             let Some(tileset) = self.tilesets.get(&layer.tileset) else {
                 continue;
@@ -136,42 +119,44 @@ impl Tilemap {
                 continue;
             };
 
-            let cx0 = ((origin_x - layer.offset[0]) / chunk_span).floor() as i32;
-            let cy0 = ((origin_y - layer.offset[1]) / chunk_span_y).floor() as i32;
-            let cx1 = ((end_x - layer.offset[0]) / chunk_span).floor() as i32;
-            let cy1 = ((end_y - layer.offset[1]) / chunk_span_y).floor() as i32;
-
-            for cy in cy0..=cy1 {
-                for cx in cx0..=cx1 {
-                    let Some(chunk) = layer.chunk(cx, cy) else {
-                        continue;
-                    };
-                    for ly in 0..CHUNK_SIZE {
-                        for lx in 0..CHUNK_SIZE {
-                            let tile = chunk.tile(lx, ly);
-                            if tile == EMPTY_TILE {
-                                continue;
-                            }
-                            let Some(uv_rect) = tileset.tile_uv(tile) else {
-                                continue;
-                            };
-                            let tx = cx * CHUNK_SIZE as i32 + lx as i32;
-                            let ty = cy * CHUNK_SIZE as i32 + ly as i32;
-                            let px = self.offset[0] + layer.offset[0] + tx as f32 * ts[0];
-                            let py = self.offset[1] + layer.offset[1] + ty as f32 * ts[1];
-                            instances.push((
-                                layer.z as f32,
-                                texture,
-                                SpriteInstance {
-                                    position: [px + ts[0] * 0.5, py + ts[1] * 0.5],
-                                    size: ts,
-                                    color: self.color,
-                                    uv_rect,
-                                    material_id: 0,
-                                    rotation: 0.0,
-                                },
-                            ));
+            for chunk in layer.visible_chunks(view, ts, self.offset) {
+                for ly in 0..CHUNK_SIZE {
+                    for lx in 0..CHUNK_SIZE {
+                        let tile = chunk.tile(lx, ly);
+                        if tile == EMPTY_TILE {
+                            continue;
                         }
+                        let Some(uv_rect) = tileset.tile_uv(tile) else {
+                            continue;
+                        };
+                        let tx = chunk.x as i64 * CHUNK_SIZE as i64 + lx as i64;
+                        let ty = chunk.y as i64 * CHUNK_SIZE as i64 + ly as i64;
+                        let px = self.offset[0] as f64
+                            + layer.offset[0] as f64
+                            + (tx as f64 + 0.5) * ts[0] as f64;
+                        let py = self.offset[1] as f64
+                            + layer.offset[1] as f64
+                            + (ty as f64 + 0.5) * ts[1] as f64;
+                        if !px.is_finite()
+                            || !py.is_finite()
+                            || px.abs() > f32::MAX as f64
+                            || py.abs() > f32::MAX as f64
+                        {
+                            continue;
+                        }
+                        instances.push((
+                            layer.z as f32,
+                            texture,
+                            SpriteInstance {
+                                position: [px as f32, py as f32],
+                                size: ts,
+                                color: self.color,
+                                uv_rect,
+                                material_id: 0,
+                                rotation: 0.0,
+                                ..Default::default()
+                            },
+                        ));
                     }
                 }
             }
@@ -261,5 +246,34 @@ mod tests {
         let bounds = tm.world_bounds();
         // The map spans two chunks of 16 tiles each.
         assert_eq!(bounds[2], 2.0 * CHUNK_SIZE as f32 * 16.0);
+    }
+}
+
+#[cfg(test)]
+mod sparse_render_tests {
+    use super::*;
+    #[test]
+    fn huge_views_visit_only_stored_chunks_in_stable_order() {
+        let mut map = TileMapData::default();
+        let mut layer = kiln_core::TileMapLayer {
+            tileset: "set".into(),
+            ..Default::default()
+        };
+        layer.set_tile_at(2_000_000_000, 0, 0);
+        layer.set_tile_at(0, 0, 0);
+        map.layers.push(layer);
+        let runtime = Tilemap::new(
+            "map".into(),
+            map,
+            HashMap::from([("set".into(), TileSet::default())]),
+            HashMap::from([("set".into(), TextureId::WHITE)]),
+        );
+        let draws = runtime.collect_visible([-f32::MAX, -f32::MAX, f32::MAX, f32::MAX]);
+        assert_eq!(draws.len(), 2);
+        assert_eq!(draws[0].1.position, [8.0, 8.0]);
+        assert!(draws[1].1.position[0] > 1e10);
+        assert!(runtime
+            .collect_visible([f32::NAN, 0.0, 10.0, 10.0])
+            .is_empty());
     }
 }

@@ -10,11 +10,21 @@
 //! behaves identically in both.
 
 mod authored_ui;
+mod camera_effects;
 mod game_save;
+mod live_debug;
+mod pending_tick;
+mod source_debug;
+pub use source_debug::{SourceBreakpoint, SourceStop};
 mod tasks;
+mod tweens;
+mod value_reads;
+mod watch_expression;
+mod work_budget;
 pub use game_save::{
     GameProgress, GameSave, SaveRequest, SaveValue, GAME_SAVE_VERSION, MAX_GAME_SAVE_BYTES,
 };
+pub use live_debug::{LiveVmDebug, LiveVmFrame, LiveVmLocal};
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -71,6 +81,11 @@ pub const ROLE_COIN: &str = "coin";
 /// What the script can read about the current frame.
 #[derive(Debug, Clone, Default)]
 pub struct SliceFacts {
+    pub entity_tween_rotations: std::collections::HashSet<String>,
+    pub entity_tween_scales: std::collections::HashSet<String>,
+    pub entity_tween_positions: std::collections::HashSet<String>,
+    pub entity_animation_states: HashMap<String, String>,
+    pub entity_animation_parameters: HashMap<String, std::collections::BTreeMap<String, f64>>,
     /// Horizontal input axis, -1 to 1.
     pub input_x: f64,
     /// Vertical input axis, -1 to 1.
@@ -108,8 +123,27 @@ pub struct SliceFacts {
 /// A change the script asked for.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SliceCommand {
+    CrossfadeAnimation {
+        entity: String,
+        clip: String,
+        seconds: f64,
+    },
+    SolveIk(crate::rig::IkRequest),
+    QueueSound(String),
+    Tween(crate::tweens::TweenCommand),
+    /// Callback-atomic change to a declared animation graph parameter.
+    SetAnimationParameter {
+        entity: String,
+        name: String,
+        value: f64,
+    },
+    /// Validated transient camera effect, committed with the callback.
+    CameraEffect(crate::camera::CameraEffect),
     /// Move the player by the given delta.
-    MovePlayer { dx: f64, dy: f64 },
+    MovePlayer {
+        dx: f64,
+        dy: f64,
+    },
     /// Add to the score.
     AddScore(i64),
     /// Collect the pickup with the given source id.
@@ -126,9 +160,17 @@ pub enum SliceCommand {
     /// Despawn an entity by source id.
     DespawnEntity(String),
     /// Set entity position.
-    SetEntityPos { source_id: String, x: f64, y: f64 },
+    SetEntityPos {
+        source_id: String,
+        x: f64,
+        y: f64,
+    },
     /// Set entity velocity.
-    SetEntityVel { source_id: String, vx: f64, vy: f64 },
+    SetEntityVel {
+        source_id: String,
+        vx: f64,
+        vy: f64,
+    },
     /// Set entity component value.
     SetEntityComponent {
         source_id: String,
@@ -152,11 +194,20 @@ pub enum SliceCommand {
         clip_name: String,
     },
     /// Stop the current animation on an entity.
-    StopAnimation { source_id: String },
+    StopAnimation {
+        source_id: String,
+    },
     /// Set animation playback speed on an entity.
-    SetAnimationSpeed { source_id: String, speed: f64 },
+    SetAnimationSpeed {
+        source_id: String,
+        speed: f64,
+    },
     /// Render a UI button at screen position.
-    UiButton { id: String, x: f64, y: f64 },
+    UiButton {
+        id: String,
+        x: f64,
+        y: f64,
+    },
     /// Render a UI label at screen position.
     UiLabel {
         id: String,
@@ -173,7 +224,9 @@ pub enum SliceCommand {
         h: f64,
     },
     /// Load a save slot.
-    LoadGame { slot: u32 },
+    LoadGame {
+        slot: u32,
+    },
     /// Create a new animation clip on an entity.
     CreateAnimationClip {
         source_id: String,
@@ -197,7 +250,9 @@ pub enum SliceCommand {
         loops: bool,
     },
     /// Create a particle system on an entity.
-    CreateParticleSystem { source_id: String },
+    CreateParticleSystem {
+        source_id: String,
+    },
     /// Add a particle emitter to an entity's particle system.
     AddParticleEmitter {
         source_id: String,
@@ -215,9 +270,13 @@ pub enum SliceCommand {
         fade_out: bool,
     },
     /// Start particle system emission.
-    StartParticleSystem { source_id: String },
+    StartParticleSystem {
+        source_id: String,
+    },
     /// Stop particle system emission.
-    StopParticleSystem { source_id: String },
+    StopParticleSystem {
+        source_id: String,
+    },
 }
 
 /// The persistent state of a slice.
@@ -278,7 +337,7 @@ pub struct SliceHost {
     ui_size: [f32; 2],
     ui_key_edges: Vec<String>,
     ui_pointer_edges: Vec<(Option<[f32; 2]>, bool)>,
-    mouse_world: [f64; 2],
+    mouse_world: Option<[f64; 2]>,
     self_entity: String,
     script_state: HashMap<String, Value>,
     properties: HashMap<String, f64>,
@@ -290,6 +349,9 @@ pub struct SliceHost {
     scene_request: Option<String>,
     facts: SliceFacts,
     commands: Vec<SliceCommand>,
+    camera_effects: Vec<crate::camera::CameraEffect>,
+    tweens: crate::tweens::TweenSnapshot,
+    pending_camera_effects: usize,
     #[cfg(feature = "audio")]
     audio: Option<AudioEngine>,
     #[cfg(feature = "physics")]
@@ -365,7 +427,7 @@ impl SliceHost {
             ui_size: [0.0; 2],
             ui_key_edges: Vec::new(),
             ui_pointer_edges: Vec::new(),
-            mouse_world: [0.0; 2],
+            mouse_world: None,
             self_entity: String::new(),
             script_state: HashMap::new(),
             properties: HashMap::new(),
@@ -377,6 +439,9 @@ impl SliceHost {
             scene_request: None,
             facts,
             commands: Vec::new(),
+            camera_effects: Vec::new(),
+            tweens: Default::default(),
+            pending_camera_effects: 0,
             #[cfg(feature = "audio")]
             audio: None,
             #[cfg(feature = "physics")]
@@ -421,6 +486,7 @@ impl SliceHost {
 
     /// Take the recorded commands, leaving the host empty.
     pub fn take_commands(&mut self) -> Vec<SliceCommand> {
+        self.pending_camera_effects = 0;
         std::mem::take(&mut self.commands)
     }
 
@@ -433,7 +499,12 @@ impl SliceHost {
 
     /// Set the pointer position mapped through the active gameplay camera.
     pub fn set_mouse_world(&mut self, point: [f64; 2]) {
-        self.mouse_world = point;
+        self.set_world_pointer(Some(point));
+    }
+
+    /// Set or clear the clipped gameplay pointer, rejecting non-finite coordinates.
+    pub fn set_world_pointer(&mut self, point: Option<[f64; 2]>) {
+        self.mouse_world = point.filter(|point| point.iter().all(|v| v.is_finite()));
     }
 
     /// Whether a UI widget was clicked this frame.
@@ -1359,8 +1430,124 @@ impl SliceHost {
                 .into(),
             )),
             116..=123 => self.call_task(func_id, args),
+            131..=139 => self.call_tween(func_id, args),
+            142 => {
+                let entity = args[0]
+                    .as_str()
+                    .ok_or_else(|| VmError::HostCallError("Expected entity".into()))?
+                    .to_owned();
+                let clip = args[1]
+                    .as_str()
+                    .ok_or_else(|| VmError::HostCallError("Expected clip".into()))?
+                    .to_owned();
+                let seconds = args[2]
+                    .to_f64()
+                    .filter(|v| v.is_finite() && (0.0..=60.0).contains(v))
+                    .ok_or_else(|| VmError::HostCallError("Fade duration must be 0..60".into()))?;
+                self.commands.push(SliceCommand::CrossfadeAnimation {
+                    entity,
+                    clip,
+                    seconds,
+                });
+                Ok(Value::Bool(true))
+            }
+            140 => {
+                let text = |i: usize| {
+                    args[i]
+                        .as_str()
+                        .map(str::to_owned)
+                        .ok_or_else(|| VmError::HostCallError("Expected IK bone ID".into()))
+                };
+                let number = |i: usize| {
+                    args[i]
+                        .to_f64()
+                        .ok_or_else(|| VmError::HostCallError("Expected IK number".into()))
+                };
+                let request = crate::rig::IkRequest {
+                    bones: [text(0)?, text(1)?, text(2)?],
+                    target: [number(3)?, number(4)?],
+                    bend: number(5)?,
+                    weight: number(6)?,
+                };
+                request.validate().map_err(VmError::HostCallError)?;
+                if request
+                    .bones
+                    .iter()
+                    .any(|id| !self.facts.entity_tween_positions.contains(id))
+                {
+                    return Ok(Value::Bool(false));
+                }
+                self.commands.push(SliceCommand::SolveIk(request));
+                Ok(Value::Bool(true))
+            }
+            141 => {
+                let name = args[0]
+                    .as_str()
+                    .ok_or_else(|| VmError::HostCallError("Expected sound name".into()))?;
+                if name.trim().is_empty() || name.len() > 64 || name.chars().any(char::is_control) {
+                    return Err(VmError::HostCallError(
+                        "Sound name must be 1..64 bytes".into(),
+                    ));
+                }
+                self.commands.push(SliceCommand::QueueSound(name.into()));
+                Ok(Value::Bool(true))
+            }
+
+            129 => {
+                let entity = args[0]
+                    .as_str()
+                    .ok_or_else(|| VmError::HostCallError("Expected entity ID".into()))?;
+                let name = args[1].as_str().ok_or_else(|| {
+                    VmError::HostCallError("Expected animation parameter name".into())
+                })?;
+                let value = match &args[2] {
+                    Value::Bool(v) => {
+                        if *v {
+                            1.0
+                        } else {
+                            0.0
+                        }
+                    }
+                    v => v.to_f64().ok_or_else(|| {
+                        VmError::HostCallError("Expected numeric/bool animation parameter".into())
+                    })?,
+                };
+                if !value.is_finite() {
+                    return Err(VmError::HostCallError(
+                        "Animation parameter must be finite".into(),
+                    ));
+                }
+                if !self
+                    .facts
+                    .entity_animation_parameters
+                    .get(entity)
+                    .is_some_and(|params| params.contains_key(name))
+                {
+                    return Ok(Value::Bool(false));
+                }
+                self.commands.push(SliceCommand::SetAnimationParameter {
+                    entity: entity.into(),
+                    name: name.into(),
+                    value,
+                });
+                Ok(Value::Bool(true))
+            }
+            130 => {
+                let entity = args[0]
+                    .as_str()
+                    .ok_or_else(|| VmError::HostCallError("Expected entity ID".into()))?;
+                Ok(self
+                    .facts
+                    .entity_animation_states
+                    .get(entity)
+                    .map(|state| Value::Str(state.clone()))
+                    .unwrap_or_else(|| Value::Str(String::new())))
+            }
+            128 => Ok(Value::Bool(self.mouse_world.is_some())),
+            124..=127 => self.call_camera_effect(func_id, args),
             110 => Ok(Value::Map(Default::default())),
-            111..=114 => {
+            61 | 62 | 111 | 113 => value_reads::call(func_id, args),
+            112 | 114 => {
                 let Value::Map(values) = &args[0] else {
                     return Err(VmError::HostCallError("Expected dictionary".into()));
                 };
@@ -1372,26 +1559,20 @@ impl SliceHost {
                             "Dictionary key must be a string of at most 256 bytes".into(),
                         )
                     })?;
-                match func_id {
-                    111 => Ok(values.get(key).cloned().unwrap_or_else(|| args[2].clone())),
-                    113 => Ok(Value::Bool(values.contains_key(key))),
-                    _ => {
-                        let mut changed = values.clone();
-                        if func_id == 112 {
-                            if changed.len() >= 4096 && !changed.contains_key(key) {
-                                return Err(VmError::HostCallError(
-                                    "Dictionary item limit reached".into(),
-                                ));
-                            }
-                            changed.insert(key.into(), args[2].clone());
-                        } else {
-                            changed.remove(key);
-                        }
-                        let value = Value::Map(changed);
-                        game_save::SaveValue::capture(&value).map_err(VmError::HostCallError)?;
-                        Ok(value)
+                let mut changed = values.clone();
+                if func_id == 112 {
+                    if changed.len() >= 4096 && !changed.contains_key(key) {
+                        return Err(VmError::HostCallError(
+                            "Dictionary item limit reached".into(),
+                        ));
                     }
+                    changed.insert(key.into(), args[2].clone());
+                } else {
+                    changed.remove(key);
                 }
+                let value = Value::Map(changed);
+                game_save::SaveValue::capture(&value).map_err(VmError::HostCallError)?;
+                Ok(value)
             }
             115 => match &args[0] {
                 Value::Map(values) => Ok(Value::Array(
@@ -1399,21 +1580,6 @@ impl SliceHost {
                 )),
                 _ => Err(VmError::HostCallError(
                     "dict_keys expects a dictionary".into(),
-                )),
-            },
-            61 => match &args[0] {
-                Value::Array(values) => Ok(Value::I64(values.len() as i64)),
-                _ => Err(VmError::HostCallError(
-                    "array_length expects an array".into(),
-                )),
-            },
-            62 => match (&args[0], args[1].as_i64()) {
-                (Value::Array(values), Some(index)) if index >= 0 => values
-                    .get(index as usize)
-                    .cloned()
-                    .ok_or_else(|| VmError::HostCallError("array index is out of range".into())),
-                _ => Err(VmError::HostCallError(
-                    "array_get expects an array and nonnegative integer".into(),
                 )),
             },
             63 => match &args[0] {
@@ -1492,8 +1658,8 @@ impl SliceHost {
                 }
                 Ok(Value::Bool(false))
             }
-            72 => Ok(Value::F64(self.mouse_world[0])),
-            73 => Ok(Value::F64(self.mouse_world[1])),
+            72 => Ok(Value::F64(self.mouse_world.unwrap_or([0.0; 2])[0])),
+            73 => Ok(Value::F64(self.mouse_world.unwrap_or([0.0; 2])[1])),
             74 => Ok(Value::Str(self.animation_event.0.clone())),
             75 => Ok(Value::Str(self.animation_event.1.clone())),
             76 => {
@@ -1568,6 +1734,11 @@ fn describe(value: &Value) -> String {
 
 /// A running slice: the compiled script plus its state.
 pub struct SliceSession {
+    source_debug: source_debug::SharedDebug,
+    debug_sites: HashMap<usize, SourceBreakpoint>,
+    program_pending: bool,
+    pending_tick: Option<pending_tick::PendingTick>,
+    work_budget: work_budget::ScriptWorkBudget,
     source: Option<crate::script_source::ExpandedSource>,
     save_identity: Option<(String, String, Option<String>)>,
     save_project: Option<std::sync::Arc<kiln_core::Project>>,
@@ -1613,9 +1784,22 @@ impl AttachedScript {
         dt: f64,
         collisions: &[(String, String, bool)],
     ) -> Result<(), VmError> {
+        // Earlier lifecycle callbacks may despawn this entity in the same tick.
+        // Stop still runs once through the outer scheduler's started guard.
+        if phase != "stop"
+            && !world
+                .world_ref()
+                .query::<&SourceId>()
+                .iter()
+                .any(|id| id.0 == self.entity_id)
+        {
+            return Ok(());
+        }
         self.session.vm.host_mut().swap_game_services(_parent);
         self.session.vm.host_mut().phase = phase.into();
-        self.session.vm.host_mut().frame_count = self.frame.saturating_sub(1);
+        if !self.session.program_pending {
+            self.session.vm.host_mut().frame_count = self.frame.saturating_sub(1);
+        }
         #[cfg(feature = "physics")]
         std::mem::swap(
             &mut _parent.physics,
@@ -1666,6 +1850,9 @@ impl AttachedScript {
         );
         self.session.vm.host_mut().swap_game_services(_parent);
         result.map_err(|error| {
+            if matches!(error, VmError::DebugSuspended) {
+                return error;
+            }
             VmError::HostCallError(format!(
                 "{} (entity {}, {phase}): {error}",
                 self.path, self.entity_id
@@ -1754,6 +1941,11 @@ impl SliceSession {
                             .collect::<Vec<_>>()
                             .join("\n")
                     })?;
+            session.debug_sites = source_debug::sites(&session.program, &expanded.source, |row| {
+                expanded
+                    .origin(row)
+                    .map(|(path, line)| (path.to_owned(), line))
+            });
             session.source = Some(expanded);
             Ok(session)
         }
@@ -1778,6 +1970,14 @@ impl SliceSession {
             stack.pop();
             Ok(())
         }
+        if !(1..=kiln_core::project::MAX_SCRIPT_INSTRUCTION_BUDGET)
+            .contains(&project.script_instruction_budget)
+        {
+            return Err(
+                "script_instruction_budget must be between 1 and 10000000 instructions per tick"
+                    .into(),
+            );
+        }
         let scene = project.scenes.get(scene_id).ok_or("Scene is missing")?;
         let mut session = if let Some(path) = &scene.script {
             compile_resource(path, project, &read)?
@@ -1785,6 +1985,7 @@ impl SliceSession {
             Self::with_action_map("return 0;", project.action_map.clone())
                 .map_err(|errors| format!("{errors:?}"))?
         };
+        session.work_budget = work_budget::ScriptWorkBudget::new(project.script_instruction_budget);
         #[cfg(feature = "physics")]
         {
             session.vm.host_mut().physics = Some(PhysicsWorld::new());
@@ -1813,6 +2014,8 @@ impl SliceSession {
                     return Err(format!("Non-finite script property for '{}'", entity.id));
                 }
                 let mut child = compile_resource(path, project, &read)?;
+                child.work_budget = session.work_budget.clone();
+                child.source_debug = session.source_debug.clone();
                 child.vm.host_mut().self_entity = entity.id.clone();
                 child.vm.host_mut().properties = properties.clone();
                 session.attached.push(AttachedScript {
@@ -1836,14 +2039,28 @@ impl SliceSession {
 
     /// Invoke stop callbacks for started attachments before discarding a world.
     pub fn stop(&mut self, world: &mut GameWorld) -> Result<(), VmError> {
+        self.pending_tick = None;
+        self.program_pending = false;
+        self.source_debug.abandon();
+        self.source_debug.mute(true);
         for attached in &mut self.attached {
-            if attached.started {
-                attached.run(self.vm.host_mut(), "stop", world, (0.0, 0.0), 0.0, &[])?;
-                attached.started = false;
-            }
+            attached.session.program_pending = false;
         }
-        Ok(())
+        self.work_budget.reset();
+        let result = (|| {
+            for attached in &mut self.attached {
+                if attached.started {
+                    attached.run(self.vm.host_mut(), "stop", world, (0.0, 0.0), 0.0, &[])?;
+                    attached.started = false;
+                }
+            }
+            Ok(())
+        })();
+        self.source_debug.mute(false);
+        self.host_mut().tweens.tracks.clear();
+        result
     }
+
     /// Compile a slice script with the default action map.
     pub fn new(source: &str) -> Result<Self, Vec<Diagnostic>> {
         Self::with_action_map(source, ActionMap::new())
@@ -1868,7 +2085,16 @@ impl SliceSession {
             ..Default::default()
         };
         let debugger = Debugger::new(program.clone(), host);
+        let debug_sites =
+            source_debug::sites(&program, source, |row| Some(("<script>".into(), row + 1)));
         Ok(Self {
+            source_debug: Default::default(),
+            debug_sites,
+            program_pending: false,
+            pending_tick: None,
+            work_budget: work_budget::ScriptWorkBudget::new(
+                kiln_core::project::DEFAULT_SCRIPT_INSTRUCTION_BUDGET,
+            ),
             source: None,
             save_identity: None,
             save_project: None,
@@ -1938,143 +2164,16 @@ impl SliceSession {
     ///
     /// `input` is the (x, y) movement axis and `dt` the frame time in
     /// seconds. The commands the script emits are applied to `world`.
+    /// With source debugging enabled, DebugSuspended retains the unfinished tick.
+    /// Call debug_continue/debug_step_statement and step again to resume; new input
+    /// and time are ignored until that pending tick finishes.
     pub fn step(
         &mut self,
         world: &mut GameWorld,
         input: (f64, f64),
         dt: f64,
     ) -> Result<(), VmError> {
-        #[cfg(feature = "audio")]
-        if let Some(audio) = &mut self.vm.host_mut().audio {
-            audio.advance_silent(dt);
-        }
-        self.dispatch_saved_ui(world)?;
-        let paused = self.vm.host().ui.pauses_game();
-        let input = if self.vm.host().ui.captures_input() {
-            (0.0, 0.0)
-        } else {
-            input
-        };
-        let captures = self.vm.host().ui.captures_input();
-        if !paused {
-            let keys = if captures {
-                Some(std::mem::take(&mut self.vm.host_mut().pressed_keys))
-            } else {
-                None
-            };
-            let result = self.step_program(world, input, dt, true, Vec::new());
-            if let Some(keys) = keys {
-                self.vm.host_mut().pressed_keys = keys;
-            }
-            result?;
-        }
-        let collisions = if paused {
-            Vec::new()
-        } else {
-            self.vm.host_mut().facts.collision_events.clone()
-        };
-        let animation_events: Vec<_> = world
-            .world_mut()
-            .query_mut::<(&SourceId, &mut crate::AnimationPlayer)>()
-            .into_iter()
-            .flat_map(|(source, animation)| {
-                animation
-                    .take_events()
-                    .into_iter()
-                    .map(|event| (source.0.clone(), event))
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-        let signals = std::mem::take(&mut self.signals);
-        let keys = if captures {
-            Default::default()
-        } else {
-            self.vm.host_mut().pressed_keys.clone()
-        };
-        let mouse_world = self.vm.host().mouse_world;
-        let save_dir = self.vm.host_mut().save_dir.clone();
-        let frame = self.vm.host().frame_count;
-        self.signals.append(&mut self.vm.host_mut().emitted_signals);
-        for attached in &mut self.attached {
-            attached.frame = frame;
-            if !world
-                .world_ref()
-                .query::<&SourceId>()
-                .iter()
-                .any(|id| id.0 == attached.entity_id)
-            {
-                if attached.started {
-                    attached.run(self.vm.host_mut(), "stop", world, input, 0.0, &collisions)?;
-                    attached.started = false;
-                    self.signals
-                        .append(&mut attached.session.vm.host_mut().emitted_signals);
-                }
-                continue;
-            }
-            attached.session.vm.host_mut().pressed_keys = keys.clone();
-            attached.session.vm.host_mut().mouse_world = mouse_world;
-            attached.session.vm.host_mut().save_dir = save_dir.clone();
-            if !attached.started {
-                attached.started = true;
-                attached.run(self.vm.host_mut(), "start", world, input, 0.0, &collisions)?;
-            }
-            for (id, event) in &animation_events {
-                if id != &attached.entity_id {
-                    continue;
-                }
-                attached.session.vm.host_mut().animation_event = (
-                    event.name.clone(),
-                    event.payload.clone().unwrap_or_default(),
-                );
-                attached.run(
-                    self.vm.host_mut(),
-                    "animation_event",
-                    world,
-                    input,
-                    0.0,
-                    &collisions,
-                )?;
-            }
-            for (name, value) in &signals {
-                attached.session.vm.host_mut().signal_name = name.clone();
-                attached.session.vm.host_mut().signal_value = Some(value.clone());
-                attached.run(self.vm.host_mut(), "signal", world, input, 0.0, &collisions)?;
-            }
-            for (a, b, started) in &collisions {
-                let other = if a == &attached.entity_id {
-                    b
-                } else if b == &attached.entity_id {
-                    a
-                } else {
-                    continue;
-                };
-                attached.session.vm.host_mut().event_entity = other.clone();
-                attached.run(
-                    self.vm.host_mut(),
-                    if *started {
-                        "collision_enter"
-                    } else {
-                        "collision_exit"
-                    },
-                    world,
-                    input,
-                    0.0,
-                    &collisions,
-                )?;
-            }
-            if !self.vm.host().ui.pauses_game() {
-                attached.run(self.vm.host_mut(), "update", world, input, dt, &collisions)?;
-            }
-            self.ui_commands.append(&mut attached.session.ui_commands);
-            self.signals
-                .append(&mut attached.session.vm.host_mut().emitted_signals);
-        }
-        if self.signals.len() > 256 {
-            return Err(VmError::HostCallError(
-                "scene signal queue limit reached".into(),
-            ));
-        }
-        Ok(())
+        self.step_resumable(world, input, dt)
     }
 
     fn step_program(
@@ -2085,55 +2184,60 @@ impl SliceSession {
         advance_systems: bool,
         inherited_collisions: Vec<(String, String, bool)>,
     ) -> Result<(), VmError> {
-        self.state.elapsed += dt;
+        if !self.program_pending {
+            self.state.elapsed += dt;
 
-        // Sync persistent state to host so save_game can access it.
-        self.vm.host_mut().state = self.state.clone();
+            // Sync persistent state to host so save_game can access it.
+            self.vm.host_mut().state = self.state.clone();
 
-        // Reset per-frame UI click state (clicks only last one frame).
-        self.host_mut().ui_widgets.clear();
+            // Reset per-frame UI click state (clicks only last one frame).
+            self.host_mut().ui_widgets.clear();
 
-        // Step physics and collect collision events (if physics feature enabled)
-        #[cfg(feature = "physics")]
-        let collision_events = {
-            use crate::physics::sync_physics_with_ecs;
-            let host = self.vm.host_mut();
-            if let Some(physics) = host.physics.as_mut().filter(|_| advance_systems) {
-                sync_physics_with_ecs(physics, world)
+            // Step physics and collect collision events (if physics feature enabled)
+            #[cfg(feature = "physics")]
+            let collision_events = {
+                use crate::physics::sync_physics_with_ecs;
+                let host = self.vm.host_mut();
+                if let Some(physics) = host.physics.as_mut().filter(|_| advance_systems) {
+                    sync_physics_with_ecs(physics, world)
+                } else {
+                    Vec::new()
+                }
+            };
+            #[cfg(feature = "physics")]
+            let collision_events: Vec<(String, String, bool)> = collision_events
+                .into_iter()
+                .map(|e| (e.entity_a, e.entity_b, e.started))
+                .collect();
+            #[cfg(not(feature = "physics"))]
+            let collision_events: Vec<(String, String, bool)> = Vec::new();
+
+            let mut collision_events = if advance_systems {
+                collision_events
             } else {
-                Vec::new()
+                inherited_collisions
+            };
+            collision_events.append(&mut self.external_collisions);
+
+            // Update animations (reads AnimationPlayer, writes Sprite uv_rect)
+            if advance_systems {
+                self.advance_tweens(world, dt);
+                crate::sprite::update_animations_dt(world.world_mut(), dt as f32);
+                // Update particle systems
+                crate::sprite::update_particle_systems(world.world_mut(), dt as f32);
             }
-        };
-        #[cfg(feature = "physics")]
-        let collision_events: Vec<(String, String, bool)> = collision_events
-            .into_iter()
-            .map(|e| (e.entity_a, e.entity_b, e.started))
-            .collect();
-        #[cfg(not(feature = "physics"))]
-        let collision_events: Vec<(String, String, bool)> = Vec::new();
 
-        let mut collision_events = if advance_systems {
-            collision_events
-        } else {
-            inherited_collisions
-        };
-        collision_events.append(&mut self.external_collisions);
-
-        // Update animations (reads AnimationPlayer, writes Sprite uv_rect)
-        if advance_systems {
-            crate::sprite::update_animations_dt(world.world_mut(), dt as f32);
-            // Update particle systems
-            crate::sprite::update_particle_systems(world.world_mut(), dt as f32);
+            let facts = self.collect_facts(world, input, dt, collision_events);
+            {
+                let host = self.vm.host_mut();
+                host.facts = facts;
+                host.take_commands();
+            }
         }
-
-        let facts = self.collect_facts(world, input, dt, collision_events);
-        {
-            let host = self.vm.host_mut();
-            host.facts = facts;
-            host.take_commands();
-        }
-
-        if let Err(error) = self.vm.execute(&self.program) {
+        if let Err(error) = self.execute_gameplay_vm() {
+            if matches!(error, VmError::DebugSuspended) {
+                return Err(error);
+            }
             if let Some(source) = &self.source {
                 let offset = self
                     .program
@@ -2266,6 +2370,45 @@ impl SliceSession {
             entity_sprite_sizes.insert(source_id.0.clone(), sprite.size.map(|s| s as f64));
         }
 
+        let mut entity_animation_states = HashMap::new();
+        let mut entity_animation_parameters = HashMap::new();
+        for (id, player) in world
+            .world_ref()
+            .query::<(&SourceId, &crate::AnimationPlayer)>()
+            .iter()
+        {
+            if let Some(state) = player.graph_state() {
+                entity_animation_states.insert(id.0.clone(), state.into());
+            }
+            if let Some(params) = player.graph_parameters() {
+                entity_animation_parameters.insert(id.0.clone(), params.clone());
+            }
+        }
+        let blocked: std::collections::HashSet<_> = world
+            .world_ref()
+            .query::<(&SourceId, &kiln_core::physics_data::RigidBody2D)>()
+            .iter()
+            .map(|(id, _)| id.0.clone())
+            .collect();
+        let entity_tween_positions = entity_positions
+            .iter()
+            .filter(|(id, point)| {
+                !blocked.contains(*id) && point.0.is_finite() && point.1.is_finite()
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        let mut entity_tween_rotations = std::collections::HashSet::new();
+        let mut entity_tween_scales = std::collections::HashSet::new();
+        for (id, pose) in world.world_ref().query::<(&SourceId, &Transform)>().iter() {
+            if !blocked.contains(&id.0) {
+                if pose.rotation.is_finite() {
+                    entity_tween_rotations.insert(id.0.clone());
+                }
+                if pose.scale.is_finite() && pose.scale.min_element() >= 0.000001 {
+                    entity_tween_scales.insert(id.0.clone());
+                }
+            }
+        }
         self.host_mut().frame_count += 1;
 
         SliceFacts {
@@ -2279,6 +2422,11 @@ impl SliceSession {
             delta_time: dt,
             frame_count: self.host_mut().frame_count,
             time_scale: self.host_mut().time_scale,
+            entity_tween_positions,
+            entity_tween_rotations,
+            entity_tween_scales,
+            entity_animation_states,
+            entity_animation_parameters,
             entity_positions,
             entity_velocities,
             entity_sprite_colors,
@@ -2291,8 +2439,72 @@ impl SliceSession {
     /// Apply one command to the world and the slice state.
     fn apply(&mut self, command: SliceCommand, world: &mut GameWorld) {
         match command {
+            SliceCommand::Tween(command) => self.apply_tween(command, world),
+            SliceCommand::CrossfadeAnimation {
+                entity,
+                clip,
+                seconds,
+            } => {
+                if let Some(handle) = crate::tweens::handle(world, &entity) {
+                    if let Ok(mut player) =
+                        world.world_mut().get::<&mut crate::AnimationPlayer>(handle)
+                    {
+                        let _ = player.crossfade(&clip, seconds);
+                    }
+                }
+            }
+            SliceCommand::QueueSound(name) => {
+                if self.host_mut().platform_audio.is_some() {
+                    if let Err(error) = self.host_mut().call_platform_audio(12, &[Value::Str(name)])
+                    {
+                        log::error!("Queued sound failed: {error}");
+                    }
+                } else if let Some(player) = &self.host_mut().audio_player {
+                    player(&name);
+                } else {
+                    #[cfg(feature = "audio")]
+                    if let Some(audio) = &mut self.host_mut().audio {
+                        audio.play_sound(&name);
+                    }
+                }
+            }
+            SliceCommand::SolveIk(request) => {
+                if crate::rig::solve(world, &request).is_ok() {
+                    for id in &request.bones[..2] {
+                        self.host_mut()
+                            .tweens
+                            .cancel(id, crate::tweens::TweenProperty::Rotation);
+                    }
+                }
+            }
+
+            SliceCommand::SetAnimationParameter {
+                entity,
+                name,
+                value,
+            } => {
+                let handle = world
+                    .world_ref()
+                    .query::<(hecs::Entity, &SourceId)>()
+                    .iter()
+                    .find(|(_, id)| id.0 == entity)
+                    .map(|(handle, _)| handle);
+                if let Some(handle) = handle {
+                    if let Ok(mut player) =
+                        world.world_mut().get::<&mut crate::AnimationPlayer>(handle)
+                    {
+                        let _ = player.set_graph_parameter(&name, value);
+                    }
+                }
+            }
+            SliceCommand::CameraEffect(effect) => self.vm.host_mut().camera_effects.push(effect),
             SliceCommand::MovePlayer { dx, dy } => {
                 if let Some(player) = find_player(world) {
+                    if dx != 0.0 || dy != 0.0 {
+                        self.host_mut()
+                            .tweens
+                            .cancel(&player.source_id, crate::tweens::TweenProperty::Position);
+                    }
                     let target = crate::tilemap_collision::move_with_collision(
                         world,
                         [
@@ -2316,6 +2528,7 @@ impl SliceSession {
                 if self.state.is_collected(&source_id) {
                     return;
                 }
+                self.host_mut().tweens.remove_entity(&source_id);
                 despawn_coin(world, &source_id);
                 self.state.collected.push(source_id);
                 self.state.collected.sort();
@@ -2363,6 +2576,7 @@ impl SliceSession {
                 }
             }
             SliceCommand::DespawnEntity(source_id) => {
+                self.host_mut().tweens.remove_entity(&source_id);
                 use crate::SourceId;
                 for (eid, sid) in world.world_mut().query_mut::<(hecs::Entity, &SourceId)>() {
                     if sid.0 == source_id {
@@ -2372,6 +2586,9 @@ impl SliceSession {
                 }
             }
             SliceCommand::SetEntityPos { source_id, x, y } => {
+                self.host_mut()
+                    .tweens
+                    .cancel(&source_id, crate::tweens::TweenProperty::Position);
                 use crate::SourceId;
                 use kiln_core::Transform;
                 for (eid, sid) in world.world_mut().query_mut::<(hecs::Entity, &SourceId)>() {
@@ -2427,6 +2644,10 @@ impl SliceSession {
                                                 .world_mut()
                                                 .query_one_mut::<&mut Transform>(eid)
                                             {
+                                                self.host_mut().tweens.cancel(
+                                                    &source_id,
+                                                    crate::tweens::TweenProperty::Position,
+                                                );
                                                 transform.position.x = *x as f32;
                                                 transform.position.y = *y as f32;
                                             }
@@ -2470,6 +2691,10 @@ impl SliceSession {
                                             if let Ok(sprite) =
                                                 world.world_mut().query_one_mut::<&mut Sprite>(eid)
                                             {
+                                                self.host_mut().tweens.cancel(
+                                                    &source_id,
+                                                    crate::tweens::TweenProperty::Color,
+                                                );
                                                 sprite.color =
                                                     [*r as f32, *g as f32, *b as f32, *a as f32];
                                             }
@@ -2505,6 +2730,10 @@ impl SliceSession {
                                                 .world_mut()
                                                 .query_one_mut::<&mut Transform>(eid)
                                             {
+                                                self.host_mut().tweens.cancel(
+                                                    &source_id,
+                                                    crate::tweens::TweenProperty::Position,
+                                                );
                                                 transform.position.x = *x as f32;
                                                 transform.position.y = *y as f32;
                                             }
@@ -2548,6 +2777,10 @@ impl SliceSession {
                                             if let Ok(sprite) =
                                                 world.world_mut().query_one_mut::<&mut Sprite>(eid)
                                             {
+                                                self.host_mut().tweens.cancel(
+                                                    &source_id,
+                                                    crate::tweens::TweenProperty::Color,
+                                                );
                                                 sprite.color =
                                                     [*r as f32, *g as f32, *b as f32, *a as f32];
                                             }
@@ -2565,6 +2798,16 @@ impl SliceSession {
                 source_id,
                 component_type,
             } => {
+                match component_type.as_str() {
+                    "sprite" | "Sprite" => self
+                        .host_mut()
+                        .tweens
+                        .cancel(&source_id, crate::tweens::TweenProperty::Color),
+                    "transform" | "Transform" => {
+                        self.host_mut().tweens.remove_transform(&source_id)
+                    }
+                    _ => {}
+                }
                 #[cfg(feature = "physics")]
                 use crate::Velocity;
                 use crate::{SourceId, Sprite};
@@ -2573,10 +2816,10 @@ impl SliceSession {
                     if sid.0 == source_id {
                         match component_type.as_str() {
                             "transform" | "Transform" => {
-                                let _ = world.world_mut().remove::<Transform>(eid);
+                                let _ = world.world_mut().remove_one::<Transform>(eid);
                             }
                             "sprite" | "Sprite" => {
-                                let _ = world.world_mut().remove::<Sprite>(eid);
+                                let _ = world.world_mut().remove_one::<Sprite>(eid);
                             }
                             "velocity" | "Velocity" => {
                                 #[cfg(feature = "physics")]
