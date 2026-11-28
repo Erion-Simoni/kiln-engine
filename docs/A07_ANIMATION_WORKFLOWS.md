@@ -45,8 +45,8 @@ The optional **Live weight game variable** uses `game_get(name, authored_weight)
 scripts can change it with `game_set`, and logical saves retain it. Runtime weights
 clamp to 0..1; use finite numeric values. Scene preview uses the authored weight.
 
-This is pose/property blending and IK/FK mixing. Sprite-frame texture crossfades
-and automatic parameter-driven blend trees are separate future extensions.
+This section describes pose/property and IK/FK mixing. Texture crossfades and
+automatic sprite-clip trees are available through the advanced workflow below.
 
 ## Cutout skeletal rigs
 
@@ -72,11 +72,15 @@ uniform scale ancestry. Physics-owned bones, nonuniform/sheared chains and inval
 bindings reject without partial pose writes. Animated positions can change link
 lengths but must retain +X rest alignment. IK owns the two solved rotation tracks.
 
-This custom cutout approach supersedes ADR-0022's earlier deferral. It does not
-implement soft multi-influence vertex mesh deformation or external Spine/
-DragonBones import. Those capabilities and complete OS authoring/performance
-acceptance remain separate from this implemented cutout workflow.
+This custom cutout approach supersedes ADR-0022's earlier deferral. Soft
+multi-influence vertex deformation is now available through the advanced workflow
+below. External Spine/DragonBones import and complete OS authoring/performance
+acceptance remain separate.
 
-Matching runtime contract **kiln-authoring-v16** is required for IK and queued
+Matching runtime contract **kiln-authoring-v17** is required for IK and queued
 sound calls. Rebuild editor, CLI, player and browser SDK together. Existing
 unextended composer documents retain their original canonical generated source.
+
+Soft multi-influence mesh deformation, timed texture crossfades and automatic 1D
+parameter blend trees are now available. See [advanced animation](ADVANCED_ANIMATION_2D.md)
+for authoring, save/restore and the supported bounds.

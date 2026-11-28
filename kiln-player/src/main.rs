@@ -1082,8 +1082,12 @@ impl PlayerApp {
             let [x, y, width, height] = self.camera.fit_viewport([0, 0, size.width, size.height]);
             pass.set_viewport(x as f32, y as f32, width as f32, height as f32, 0.0, 1.0);
             pass.set_scissor_rect(x, y, width, height);
-            gpu.sprite_renderer
-                .flush(&mut pass, &self.camera, gpu.renderer.queue());
+            gpu.sprite_renderer.flush(
+                &mut pass,
+                &self.camera,
+                gpu.renderer.queue(),
+                gpu.renderer.device(),
+            );
         }
 
         if has_post {
@@ -1194,8 +1198,12 @@ impl PlayerApp {
                     gpu.hud_sprite_renderer.push_textured(q.texture, q.instance);
                 }
             }
-            gpu.hud_sprite_renderer
-                .flush(&mut ui_pass, &ui_camera, gpu.renderer.queue());
+            gpu.hud_sprite_renderer.flush(
+                &mut ui_pass,
+                &ui_camera,
+                gpu.renderer.queue(),
+                gpu.renderer.device(),
+            );
         }
 
         // The HUD is drawn in screen space (top-left origin) on top of the
@@ -1220,8 +1228,12 @@ impl PlayerApp {
                 gpu.hud_sprite_renderer.push(instance);
             }
             let hud_camera = Camera::new_top_left(size.width as f32, size.height as f32);
-            gpu.hud_sprite_renderer
-                .flush(&mut pass, &hud_camera, gpu.renderer.queue());
+            gpu.hud_sprite_renderer.flush(
+                &mut pass,
+                &hud_camera,
+                gpu.renderer.queue(),
+                gpu.renderer.device(),
+            );
         }
 
         gpu.renderer.queue().submit([encoder.finish()]);
@@ -1394,8 +1406,12 @@ impl PlayerApp {
                 gpu.hud_sprite_renderer.push(instance);
             }
             let hud_camera = Camera::new_top_left(size.width as f32, size.height as f32);
-            gpu.hud_sprite_renderer
-                .flush(&mut pass, &hud_camera, gpu.renderer.queue());
+            gpu.hud_sprite_renderer.flush(
+                &mut pass,
+                &hud_camera,
+                gpu.renderer.queue(),
+                gpu.renderer.device(),
+            );
         }
 
         gpu.renderer.queue().submit([encoder.finish()]);

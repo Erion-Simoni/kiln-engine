@@ -200,3 +200,7 @@ cutout-rig workflows linked below.
 Animation Editor now offers **Preview in Scene View**, **Audio / Signal cues**,
 **Blend second take**, and **Create Two-Bone Cutout Rig** plus IK chain authoring.
 See [A07 workflows](A07_ANIMATION_WORKFLOWS.md) for supported constraints.
+
+Soft multi-influence mesh deformation, timed texture crossfades and automatic 1D
+parameter blend trees are now available. See [advanced animation](ADVANCED_ANIMATION_2D.md)
+for authoring, save/restore and the supported bounds.

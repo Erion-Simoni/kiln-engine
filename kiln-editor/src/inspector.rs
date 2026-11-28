@@ -104,6 +104,7 @@ pub fn render_inspector_panel(
 fn component_header_name(component: &Component) -> String {
     match component {
         Component::EditorFlags { .. } => "Editor Locks / Visibility".into(),
+        Component::SkinnedMesh { .. } => "Soft Skinned Mesh".into(),
         Component::AnimationGraph { .. } => "Animation States".into(),
         Component::SpriteLayout { .. } => "Sprite Layout".into(),
         Component::Particles { .. } => "Particles".into(),
@@ -130,6 +131,13 @@ fn render_component(ui: &mut egui::Ui, component: &mut Component, project: &Proj
         Component::EditorFlags { locked, hidden } => {
             ui.label(format!(
                 "Locked: {locked}, hidden in editor: {hidden}. Use hierarchy controls to edit."
+            ));
+        }
+        Component::SkinnedMesh { mesh } => {
+            ui.label(format!(
+                "{} vertices, {} triangles",
+                mesh.vertices.len(),
+                mesh.triangles.len()
             ));
         }
         Component::AnimationGraph { graph } => {

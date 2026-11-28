@@ -140,4 +140,5 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("tween_scale", 139, 5),
     ("solve_ik_2d", 140, 7),
     ("queue_sound", 141, 1),
+    ("crossfade_animation", 142, 3),
 ];

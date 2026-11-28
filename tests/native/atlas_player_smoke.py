@@ -53,11 +53,16 @@ def main():
         handle=wait_for(window,player,player_log)
         subprocess.run([xdo,'windowfocus','--sync',handle],env=env,check=True,timeout=10)
         subprocess.run([xdo,'key','--clearmodifiers','Return'],env=env,check=True,timeout=10)
+        require_blend=os.environ.get('KILN_PIXEL_REQUIRE_BLEND')=='1'; mixed_seen=set()
         def pixels():
             nonlocal observed_bounds,blue_pixels
             ppm=subprocess.check_output([executable('import'),'-display',':86','-window',handle,'-depth','8','ppm:-'],env=env)
             header,frame=ppm.split(b'\n255\n',1);width,height=map(int,header.splitlines()[-1].split())
             green=sum(1 for at in range(0,len(frame),3) if ((frame[at]>220 and 30<frame[at+1]<200 and frame[at+2]<180) if expect_warning else (frame[at+1]>220 and frame[at]<30 and frame[at+2]<30)))
+            if require_blend:
+                for label,x0,x1 in [('fade',96,128),('tree',208,240)]:
+                    count=sum(1 for y in range(104,136) for x in range(x0,x1) if frame[(y*width+x)*3]>40 and frame[(y*width+x)*3+1]>40 and frame[(y*width+x)*3+2]<30)
+                    if count>200:mixed_seen.add(label)
             if (expected_bounds or require_motion) and green:
                 hits=[at//3 for at in range(0,len(frame),3) if frame[at+1]>220 and frame[at]<30 and frame[at+2]<30]
                 observed_bounds=[min(n%width for n in hits),min(n//width for n in hits),max(n%width for n in hits)+1,max(n//width for n in hits)+1]
@@ -67,6 +72,7 @@ def main():
             if require_ready:
                 blue_pixels=sum(1 for at in range(0,len(frame),3) if frame[at+2]>220 and frame[at]<30 and frame[at+1]<30)
                 if blue_pixels<=20:return None
+            if require_blend and len(mixed_seen)<2:return None
             return (width,height,green) if green>200 else None
         if pointer_test:
             subprocess.run([xdo,'windowsize','--sync',handle,'640','240'],env=env,check=True,timeout=10)
@@ -117,6 +123,7 @@ def main():
         result=dict(passed=True,relocated_native_export=True,authoring_copy_hidden=True,developer_tools_absent_from_player_path=True,
                     frame=[width,height],scope='Linux Xvfb/software graphics')
         result['rendered_warning_pixels' if expect_warning else ('rendered_green_pixels' if scenario else 'generated_clip_green_pixels')]=green
+        if require_blend:result['mixed_texture_phases']=sorted(mixed_seen)
         if animation_test:result['animation_input_phases']=['run-moves','idle-on-release','one-shot-action','idle-on-finish','run-at-boundary']
         if pointer_test:result['pointer_phases']=['inside','letterbox-invalid','inside','outside-invalid','inside']
         if scenario:result['scenario']=scenario

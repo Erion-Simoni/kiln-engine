@@ -66,3 +66,7 @@ prefab data; arbitrary prefab override authoring remains governed by A03 limits.
 Use matching v13 editor/CLI/player/browser tools. No dependency was added. This is
 a discrete sprite state machine; blending, arbitrary timelines, skeletal rigs/IK
 and full A07 acceptance remain separate. [Executed evidence](evidence/A07_CHARACTER_STATES.md).
+
+Soft multi-influence mesh deformation, timed texture crossfades and automatic 1D
+parameter blend trees are now available. See [advanced animation](ADVANCED_ANIMATION_2D.md)
+for authoring, save/restore and the supported bounds.

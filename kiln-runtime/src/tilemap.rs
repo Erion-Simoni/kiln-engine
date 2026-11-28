@@ -154,6 +154,7 @@ impl Tilemap {
                                 uv_rect,
                                 material_id: 0,
                                 rotation: 0.0,
+                                ..Default::default()
                             },
                         ));
                     }

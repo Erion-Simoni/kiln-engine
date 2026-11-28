@@ -16,6 +16,11 @@ use crate::texture::{create_rgba8_texture_with_options, TextureId, FULL_UV};
 
 /// Maximum sprites per frame (prevents unbounded allocations).
 pub const MAX_SPRITES: usize = 16_384;
+const MAX_TEXTURE_PAIRS: usize = 1024;
+#[cfg(target_arch = "wasm32")]
+type TextureResource<T> = std::rc::Rc<T>;
+#[cfg(not(target_arch = "wasm32"))]
+type TextureResource<T> = std::sync::Arc<T>;
 
 /// Bounded queue diagnostics for the current frame, including rejected submissions.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -55,8 +60,19 @@ pub struct SpriteInstance {
     pub material_id: u32,
     /// Rotation in radians, applied around the sprite centre.
     pub rotation: f32,
+    pub corners: [[f32; 2]; 4],
+    pub corner_uv: [[f32; 2]; 4],
+    pub deformed: u32,
+    pub blend_uv: [f32; 4],
+    pub blend_weight: f32,
+    pub secondary_texture: u32,
 }
 
+impl Default for SpriteInstance {
+    fn default() -> Self {
+        Self::colored([0.0; 2], [1.0; 2], [1.0; 4])
+    }
+}
 impl SpriteInstance {
     /// Byte stride of the instance layout.
     pub const STRIDE: u64 = std::mem::size_of::<SpriteInstance>() as u64;
@@ -70,12 +86,57 @@ impl SpriteInstance {
             uv_rect: FULL_UV,
             material_id: 0,
             rotation: 0.0,
+            corners: [[0.0; 2]; 4],
+            corner_uv: [[0.0; 2]; 4],
+            deformed: 0,
+            blend_uv: FULL_UV,
+            blend_weight: 0.0,
+            secondary_texture: 0,
         }
     }
 
+    /// A triangle uses the existing quad index buffer with one degenerate triangle.
+    pub fn triangle(points: [[f32; 2]; 3], uv: [[f32; 2]; 3], color: [f32; 4]) -> Self {
+        Self {
+            corners: [points[0], points[1], points[2], points[2]],
+            corner_uv: [uv[0], uv[1], uv[2], uv[2]],
+            deformed: 1,
+            ..Self::colored([0.0; 2], [1.0; 2], color)
+        }
+    }
     /// Conservative intersection of the transformed quad with [left,bottom,right,top].
     /// Edge contact is retained; invalid/degenerate geometry is not submitted.
     pub fn intersects_view(&self, view: [f32; 4]) -> bool {
+        if self.deformed != 0 {
+            if !view.iter().all(|v| v.is_finite())
+                || view[0] >= view[2]
+                || view[1] >= view[3]
+                || self.corners.iter().flatten().any(|v| !v.is_finite())
+            {
+                return false;
+            }
+            let minx = self
+                .corners
+                .iter()
+                .map(|p| p[0])
+                .fold(f32::INFINITY, f32::min);
+            let maxx = self
+                .corners
+                .iter()
+                .map(|p| p[0])
+                .fold(f32::NEG_INFINITY, f32::max);
+            let miny = self
+                .corners
+                .iter()
+                .map(|p| p[1])
+                .fold(f32::INFINITY, f32::min);
+            let maxy = self
+                .corners
+                .iter()
+                .map(|p| p[1])
+                .fold(f32::NEG_INFINITY, f32::max);
+            return maxx >= view[0] && maxy >= view[1] && minx <= view[2] && miny <= view[3];
+        }
         if !self
             .position
             .iter()
@@ -112,14 +173,11 @@ impl SpriteInstance {
     }
 
     /// `wgpu` vertex attributes for the instance step.
-    pub fn vertex_attributes() -> &'static [wgpu::VertexAttribute; 6] {
-        static ATTRIBUTES: [wgpu::VertexAttribute; 6] = wgpu::vertex_attr_array![
-            1 => Float32x2,   // position
-            2 => Float32x2,   // size
-            3 => Float32x4,   // color
-            4 => Float32x4,   // uv_rect
-            5 => Uint32,      // material_id
-            6 => Float32,     // rotation
+    pub fn vertex_attributes() -> &'static [wgpu::VertexAttribute; 12] {
+        static ATTRIBUTES: [wgpu::VertexAttribute; 12] = wgpu::vertex_attr_array![
+            1=>Float32x4, 2=>Float32x4, 3=>Float32x4, 4=>Uint32, 5=>Float32,
+            6=>Float32x4,7=>Float32x4,8=>Float32x4,9=>Float32x4,10=>Uint32,
+            11=>Float32x4,12=>Float32
         ];
         &ATTRIBUTES
     }
@@ -146,9 +204,9 @@ struct MaterialPipeline {
 }
 
 struct TextureSlot {
-    view: wgpu::TextureView,
-    sampler: wgpu::Sampler,
-    _texture: wgpu::Texture,
+    view: TextureResource<wgpu::TextureView>,
+    sampler: TextureResource<wgpu::Sampler>,
+    _texture: TextureResource<wgpu::Texture>,
     bind_group: wgpu::BindGroup,
     pub width: u32,
     pub height: u32,
@@ -183,6 +241,7 @@ pub struct SpriteRenderer {
     uniform_bind_group: wgpu::BindGroup,
     texture_bgl: wgpu::BindGroupLayout,
     textures: Vec<TextureSlot>,
+    texture_pairs: std::collections::HashMap<(TextureId, TextureId), TextureId>,
     uniform_bgl: wgpu::BindGroupLayout,
     format: wgpu::TextureFormat,
     material_pipelines: std::collections::HashMap<u32, MaterialPipeline>,
@@ -282,6 +341,22 @@ impl SpriteRenderer {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
             ],
         });
 
@@ -363,6 +438,7 @@ impl SpriteRenderer {
             uniform_bind_group,
             texture_bgl,
             textures: Vec::new(),
+            texture_pairs: Default::default(),
             uniform_bgl,
             format,
             material_names: Default::default(),
@@ -447,13 +523,21 @@ impl SpriteRenderer {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
             ],
         });
         let id = TextureId(self.textures.len() as u32);
         self.textures.push(TextureSlot {
-            _texture: texture,
-            view,
-            sampler,
+            _texture: TextureResource::new(texture),
+            view: TextureResource::new(view),
+            sampler: TextureResource::new(sampler),
             bind_group,
             width,
             height,
@@ -472,6 +556,7 @@ impl SpriteRenderer {
         self.material_names.clear();
         self.material_pipelines.clear();
         self.textures.truncate(1);
+        self.texture_pairs.clear();
     }
 
     /// Texture size for UV helpers.
@@ -530,6 +615,79 @@ impl SpriteRenderer {
         };
         self.pending.push((id, material_id, layer, instance));
         self.frame_stats.queued = self.pending.len();
+    }
+
+    fn prepare_texture_pairs(&mut self, device: &Device) {
+        let pending = std::mem::take(&mut self.pending);
+        for (mut id, material_id, layer, instance) in pending {
+            // Already prepared synthetic IDs must not create pairs of pairs.
+            if instance.blend_weight > 0.0
+                && !self.texture_pairs.values().any(|pair| *pair == id)
+                && !self.resolve_pair(device, &mut id, &instance)
+            {
+                continue;
+            }
+            self.pending.push((id, material_id, layer, instance));
+        }
+        self.frame_stats.queued = self.pending.len();
+    }
+    fn resolve_pair(
+        &mut self,
+        device: &Device,
+        selected: &mut TextureId,
+        instance: &SpriteInstance,
+    ) -> bool {
+        let mut id = *selected;
+        if instance.blend_weight > 0.0 {
+            let other = TextureId(instance.secondary_texture);
+            if other.0 as usize >= self.textures.len() {
+                self.frame_stats.missing_textures += 1;
+            } else if let Some(pair) = self.texture_pairs.get(&(id, other)) {
+                id = *pair;
+            } else if self.texture_pairs.len() < MAX_TEXTURE_PAIRS {
+                let a = &self.textures[id.0 as usize];
+                let b = &self.textures[other.0 as usize];
+                let bindings = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("sprite_texture_pair"),
+                    layout: &self.texture_bgl,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&a.view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&a.sampler),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::TextureView(&b.view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: wgpu::BindingResource::Sampler(&b.sampler),
+                        },
+                    ],
+                });
+                let slot = TextureSlot {
+                    view: a.view.clone(),
+                    sampler: a.sampler.clone(),
+                    _texture: a._texture.clone(),
+                    width: a.width,
+                    height: a.height,
+                    bind_group: bindings,
+                };
+                let pair = TextureId(self.textures.len() as u32);
+                self.textures.push(slot);
+                self.texture_pairs.insert((id, other), pair);
+                id = pair;
+            } else {
+                self.frame_stats.dropped += 1;
+                return false;
+            }
+        }
+        *selected = id;
+        true
     }
 
     /// Queue diagnostics reset by begin_frame; flush does not hide rejected draws.
@@ -725,6 +883,7 @@ impl SpriteRenderer {
         {
             return Err("Cannot prepare an invalid camera view".into());
         }
+        self.prepare_texture_pairs(device);
         self.last_draw_calls = 0;
         if self.pending.is_empty() {
             return Ok(None);
@@ -814,7 +973,9 @@ impl SpriteRenderer {
         render_pass: &mut wgpu::RenderPass<'a>,
         camera: &Camera,
         queue: &Queue,
+        device: &Device,
     ) {
+        self.prepare_texture_pairs(device);
         self.last_draw_calls = 0;
         if self.pending.is_empty() {
             return;
@@ -990,7 +1151,7 @@ mod tests {
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 });
-                renderer.flush(&mut pass, &camera, &queue);
+                renderer.flush(&mut pass, &camera, &queue, &device);
             }
             encoder.copy_texture_to_buffer(
                 wgpu::ImageCopyTexture {
@@ -1128,8 +1289,8 @@ mod tests {
         // Four float vectors occupy 48 bytes, followed by material ID and rotation.
         assert_eq!(std::mem::offset_of!(SpriteInstance, material_id), 48);
         assert_eq!(std::mem::offset_of!(SpriteInstance, rotation), 52);
-        assert_eq!(std::mem::size_of::<SpriteInstance>(), 56);
-        assert_eq!(SpriteInstance::STRIDE, 56);
+        assert_eq!(std::mem::size_of::<SpriteInstance>(), 148);
+        assert_eq!(SpriteInstance::STRIDE, 148);
     }
 
     #[test]
@@ -1272,6 +1433,21 @@ mod tests {
         assert_eq!(dimensions(scaled_bounds), [64, 8]);
     }
 
+    #[test]
+    fn deformed_triangle_uses_world_corners_and_culls_by_deformed_bounds() {
+        let tri = SpriteInstance::triangle(
+            [[10.0, 10.0], [30.0, 10.0], [30.0, 30.0]],
+            [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
+            [1.0, 0.0, 0.0, 1.0],
+        );
+        assert!(tri.intersects_view([20.0, 20.0, 40.0, 40.0]));
+        assert!(!tri.intersects_view([40.0, 40.0, 60.0, 60.0]));
+        if let Some(bounds) = rendered_bounds(&[tri]) {
+            let b = bounds[0];
+            assert_eq!([b[2] - b[0], b[3] - b[1]], [20, 20]);
+        }
+    }
+
     #[derive(Default)]
     struct SpriteRendererCpu {
         pending: Vec<(TextureId, u32, f32, SpriteInstance)>,
@@ -1350,6 +1526,7 @@ mod material_target_tests {
                 material_id: sprites.material_id("red").unwrap(),
                 uv_rect: FULL_UV,
                 rotation: 0.0,
+                ..Default::default()
             });
             let texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: None,
@@ -1388,7 +1565,7 @@ mod material_target_tests {
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 });
-                sprites.flush(&mut pass, &Camera::new(1.0, 1.0), &queue);
+                sprites.flush(&mut pass, &Camera::new(1.0, 1.0), &queue, &device);
             }
             encoder.copy_texture_to_buffer(
                 texture.as_image_copy(),
@@ -1419,5 +1596,105 @@ mod material_target_tests {
                 .collect();
             assert_eq!(channels, [0x3c00, 0, 0, 0x3c00]);
         });
+    }
+}
+
+#[cfg(test)]
+mod crossfade_pixels {
+    use super::*;
+    #[test]
+    fn transparent_texture_crossfade_is_premultiplied_and_prepared_view_safe() {
+        let instance = wgpu::Instance::default();
+        let Some(adapter) = pollster::block_on(instance.request_adapter(&Default::default()))
+        else {
+            return;
+        };
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&Default::default(), None)).unwrap();
+        let mut renderer = SpriteRenderer::new(&device, &queue, wgpu::TextureFormat::Rgba8Unorm);
+        renderer.upload_quad(&queue);
+        let a = renderer.create_texture_rgba(&device, &queue, "a", 1, 1, &[255, 0, 0, 128]);
+        let b = renderer.create_texture_rgba(&device, &queue, "b", 1, 1, &[0, 255, 0, 0]);
+        let sprite = SpriteInstance {
+            secondary_texture: b.0,
+            blend_weight: 0.5,
+            ..SpriteInstance::colored([0.5, 0.5], [1.0; 2], [1.0; 4])
+        };
+        renderer.push_textured(a, sprite);
+        let camera = Camera::new_top_left(1.0, 1.0);
+        let prepared = renderer.prepare_view(&device, &camera).unwrap().unwrap();
+        renderer.begin_frame();
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&Default::default());
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: 256,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = device.create_command_encoder(&Default::default());
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            renderer.draw_prepared(&mut pass, &prepared).unwrap();
+        }
+        encoder.copy_texture_to_buffer(
+            wgpu::ImageCopyTexture {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyBuffer {
+                buffer: &buffer,
+                layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(256),
+                    rows_per_image: Some(1),
+                },
+            },
+            wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+        );
+        queue.submit([encoder.finish()]);
+        let (tx, rx) = std::sync::mpsc::channel();
+        buffer
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |r| tx.send(r).unwrap());
+        device.poll(wgpu::Maintain::Wait);
+        rx.recv().unwrap().unwrap();
+        let data = buffer.slice(..).get_mapped_range();
+        assert!((data[0] as i32 - 64).abs() <= 2);
+        assert_eq!(data[1], 0);
+        assert_eq!(data[2], 0);
+        assert!((data[3] as i32 - 64).abs() <= 2);
     }
 }

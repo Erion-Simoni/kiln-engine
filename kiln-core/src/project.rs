@@ -348,6 +348,9 @@ pub struct Entity {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Component {
+    SkinnedMesh {
+        mesh: crate::skin::SkinMesh,
+    },
     /// Parameter-driven sprite animation, referencing project clips.
     AnimationGraph {
         graph: crate::animation_graph::AnimationGraph,
@@ -374,7 +377,9 @@ pub enum Component {
         collider: crate::physics_data::Collider2D,
     },
     /// Authored physical joint between stable entity source IDs.
-    Joint { joint: crate::physics_data::Joint2D },
+    Joint {
+        joint: crate::physics_data::Joint2D,
+    },
     /// Entity-attached gameplay program with per-instance numeric properties.
     Script {
         /// Project-relative script resource path.

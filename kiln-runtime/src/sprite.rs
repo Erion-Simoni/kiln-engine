@@ -3,9 +3,18 @@
 use kiln_render::{TextureId, FULL_UV};
 use kiln_vfx::{Emitter, EmitterConfig, ParticleSystem};
 
+#[derive(Debug, Clone)]
+/// Secondary atlas sample consumed by the shared dual-texture sprite renderer.
+pub struct TextureBlend {
+    pub texture: TextureId,
+    pub uv: [f32; 4],
+    pub weight: f32,
+}
+
 /// CPU-side sprite drawn via [`kiln_render::SpriteRenderer`].
 #[derive(Debug, Clone, hecs::Bundle)]
 pub struct Sprite {
+    pub blend: Option<TextureBlend>,
     pub color: [f32; 4],
     pub size: [f32; 2],
     /// Normalised UV rect into [`Self::texture`].
@@ -68,13 +77,24 @@ impl Sprite {
         if self.flip_y {
             uv.swap(1, 3);
         }
+        let mut blend_uv = self.blend.as_ref().map(|b| b.uv).unwrap_or(FULL_UV);
+        if self.flip_x {
+            blend_uv.swap(0, 2);
+        }
+        if self.flip_y {
+            blend_uv.swap(1, 3);
+        }
         kiln_render::SpriteInstance {
             position: center.to_array(),
             size,
             color: self.color,
             uv_rect: uv,
+            blend_uv,
+            blend_weight: self.blend.as_ref().map_or(0.0, |b| b.weight),
+            secondary_texture: self.blend.as_ref().map_or(0, |b| b.texture.0),
             material_id: 0,
             rotation: 0.0,
+            ..Default::default()
         }
         .with_transform(pose.rotation, pose.scale.to_array())
     }
@@ -99,6 +119,7 @@ impl Sprite {
     }
     pub fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
         Self {
+            blend: None,
             color: [r, g, b, a],
             size: [32.0, 32.0],
             uv_rect: FULL_UV,

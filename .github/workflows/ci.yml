@@ -293,6 +293,15 @@ jobs:
             if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
             KILN_ATLAS_PROJECT="target/a05-native-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" KILN_ATLAS_PLAYER_EVIDENCE="target/a05-$kind-native" python3 tests/native/atlas_player_smoke.py
           done
+      - name: Verify soft mesh, timed crossfade and automatic tree in native exports
+        env:
+          KILN_ATLAS_PROJECT: samples/advanced_animation
+          KILN_PIXEL_SCENARIO: advanced-animation
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_REQUIRE_BLEND: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 80,104,272,136
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a07-advanced-native
+        run: python3 tests/native/atlas_player_smoke.py
       - name: Verify blended cutout rig and once-only cues in native exports
         env:
           KILN_ATLAS_PROJECT: samples/rigged_cutscene
@@ -597,6 +606,15 @@ jobs:
             if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
             KILN_ATLAS_PROJECT="target/a05-browser-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" WEB_ATLAS_EVIDENCE="target/a05-$kind-browser" node tests/web/atlas.cjs target/debug/web-runtime
           done
+      - name: Verify soft mesh, timed crossfade and automatic tree in browser exports
+        env:
+          KILN_ATLAS_PROJECT: samples/advanced_animation
+          KILN_PIXEL_SCENARIO: advanced-animation
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_REQUIRE_BLEND: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 80,104,272,136
+          WEB_ATLAS_EVIDENCE: target/a07-advanced-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
       - name: Verify blended cutout rig and once-only cues in browser exports
         env:
           KILN_ATLAS_PROJECT: samples/rigged_cutscene

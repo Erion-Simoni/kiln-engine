@@ -35,6 +35,31 @@ pub struct AnimationTransition {
     pub comparison: Comparison,
     pub threshold: f64,
     pub after_finished: bool,
+    pub blend_seconds: f64,
+}
+/// Adjacent clips are mixed automatically using a declared graph parameter.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct BlendTree {
+    pub parameter: String,
+    pub points: Vec<BlendPoint>,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BlendPoint {
+    pub threshold: f64,
+    pub clip: String,
+}
+impl BlendTree {
+    pub fn samples(&self, value: f64) -> (&str, &str, f32) {
+        for pair in self.points.windows(2) {
+            if value < pair[1].threshold {
+                let w = ((value - pair[0].threshold) / (pair[1].threshold - pair[0].threshold))
+                    .clamp(0.0, 1.0);
+                return (&pair[0].clip, &pair[1].clip, w as f32);
+            }
+        }
+        let last = self.points.last().expect("validated tree");
+        (&last.clip, &last.clip, 0.0)
+    }
 }
 /// Per-entity graph; clips and texture assets remain project resources.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -45,6 +70,7 @@ pub struct AnimationGraph {
     pub states: BTreeMap<String, String>,
     pub parameters: BTreeMap<String, f64>,
     pub transitions: Vec<AnimationTransition>,
+    pub blend_trees: BTreeMap<String, BlendTree>,
 }
 impl AnimationGraph {
     /// A single idle state ready for editing with project clips.
@@ -85,7 +111,44 @@ impl AnimationGraph {
         {
             return Err("Animation parameters need valid names and finite defaults".into());
         }
+        if self.blend_trees.len() > 64 {
+            return Err("At most 64 state blend trees".into());
+        }
+        for (state, tree) in &self.blend_trees {
+            if !self.states.contains_key(state)
+                || !self.parameters.contains_key(&tree.parameter)
+                || tree.points.len() < 2
+                || tree.points.len() > 16
+            {
+                return Err("Blend tree needs an existing state/parameter and 2..16 points".into());
+            }
+            let mut previous = f64::NEG_INFINITY;
+            for point in &tree.points {
+                if !point.threshold.is_finite()
+                    || point.threshold <= previous
+                    || !clips.contains_key(&point.clip)
+                    || clips[&point.clip].name != point.clip
+                    || clips[&point.clip].next.is_some()
+                {
+                    return Err("Blend thresholds must increase and reference existing clips without next edges".into());
+                }
+                previous = point.threshold;
+            }
+        }
         for edge in &self.transitions {
+            if !edge.blend_seconds.is_finite() || !(0.0..=60.0).contains(&edge.blend_seconds) {
+                return Err("Crossfade duration must be 0..60".into());
+            }
+            if edge.blend_seconds > 0.0
+                && (self.blend_trees.contains_key(&edge.to)
+                    || self.blend_trees.contains_key(&edge.from)
+                    || (edge.from == "*" && !self.blend_trees.is_empty()))
+            {
+                return Err(
+                    "Timed crossfades require plain clip states; trees already mix two textures"
+                        .into(),
+                );
+            }
             if (edge.from != "*" && !self.states.contains_key(&edge.from))
                 || !self.states.contains_key(&edge.to)
                 || !edge.threshold.is_finite()

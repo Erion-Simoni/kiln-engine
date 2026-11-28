@@ -89,7 +89,7 @@ fn render_scene(width: u32, height: u32) -> Option<Vec<Vec<[u8; 4]>>> {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
-        renderer.flush(&mut pass, &camera, &queue);
+        renderer.flush(&mut pass, &camera, &queue, &device);
     }
 
     let bytes_per_row = width * 4;

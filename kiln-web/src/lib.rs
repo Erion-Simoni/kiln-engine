@@ -578,8 +578,12 @@ impl App {
             if viewport[2] > 0.0 && viewport[3] > 0.0 {
                 pass.set_viewport(viewport[0], viewport[1], viewport[2], viewport[3], 0.0, 1.0);
             }
-            self.sprite_renderer
-                .flush(&mut pass, &self.camera, self.renderer.queue());
+            self.sprite_renderer.flush(
+                &mut pass,
+                &self.camera,
+                self.renderer.queue(),
+                self.renderer.device(),
+            );
         }
 
         if self.renderer.has_post() {
@@ -649,8 +653,12 @@ impl App {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            self.overlay_renderer
-                .flush(&mut pass, &camera, self.renderer.queue());
+            self.overlay_renderer.flush(
+                &mut pass,
+                &camera,
+                self.renderer.queue(),
+                self.renderer.device(),
+            );
         }
 
         self.renderer.finish_profiler_frame(&mut encoder);

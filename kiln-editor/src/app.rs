@@ -3722,8 +3722,12 @@ impl EditorApp {
                         1.0,
                     );
                     pass.set_scissor_rect(origin_x, origin_y, viewport.width, viewport.height);
-                    gpu.scene_view_sprite_renderer
-                        .flush(&mut pass, camera, queue);
+                    gpu.scene_view_sprite_renderer.flush(
+                        &mut pass,
+                        camera,
+                        queue,
+                        gpu.renderer.device(),
+                    );
                 }
 
                 // Apply post-processing if available.
@@ -3806,8 +3810,12 @@ impl EditorApp {
                         1.0,
                     );
                     pass.set_scissor_rect(origin_x, origin_y, viewport.width, viewport.height);
-                    gpu.scene_view_overlay_renderer
-                        .flush(&mut pass, &overlay_camera, queue);
+                    gpu.scene_view_overlay_renderer.flush(
+                        &mut pass,
+                        &overlay_camera,
+                        queue,
+                        gpu.renderer.device(),
+                    );
                 }
             }
         }
@@ -5682,6 +5690,10 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                             let scope=format!("{:?}:{}",self.asset_browser.root(),self.scenes.active_id().unwrap_or(""));
                             let graph=self.current_project.as_ref().and_then(|project|crate::animation_graph_editor::show(ui,&mut self.anim_editor.graph_editor,&authored,&project.animation_clips,&scope));
                             if let Some(graph)=graph {self.queue_component(entity,ComponentEdit::SetVisual(kiln_core::Component::AnimationGraph {graph}));}
+                            let mesh=self.current_project.as_ref().and_then(|p|self.scenes.active_id().and_then(|id|p.scenes.get(id))).and_then(|scene|crate::skin_editor::show(ui,&mut self.anim_editor.skin_editor,scene,&authored,&scope));
+                            if let Some(mesh)=mesh{self.queue_component(entity,ComponentEdit::SetVisual(kiln_core::Component::SkinnedMesh{mesh}));}
+                            if authored.components.iter().any(|c|matches!(c,kiln_core::Component::SkinnedMesh{..}))&&ui.button("Remove Skinned Mesh").clicked(){self.remove_component(entity,ComponentKind::SkinnedMesh);}
+
                             if authored.components.iter().any(|c|matches!(c,kiln_core::Component::AnimationGraph {..})) && ui.button("Remove Animation States").clicked() {
                                 self.remove_component(entity,ComponentKind::AnimationGraph);
                             }

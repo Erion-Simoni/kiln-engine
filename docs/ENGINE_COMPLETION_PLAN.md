@@ -707,6 +707,18 @@ and full OS/performance acceptance remain open; A07 stays PARTIAL rather than
 claiming these advanced capabilities. See [workflows](A07_ANIMATION_WORKFLOWS.md)
 and [evidence](evidence/A07_ANIMATION_WORKFLOWS.md).
 
+**Advanced-animation checkpoint 2026-11-28:** ADR-0118 implements soft
+multi-influence triangle skins with bind/weight editor controls, actual dual-texture
+crossfades and parameter-driven automatic 1D clip blend trees. Save/restore retains
+mesh binds, parameters and fade clocks and rebuilds the blended sprite immediately.
+Native/browser exports observe both intermediate texture mixes and the final soft
+mesh; prior cutout/audio regression passes. Full Rust suite: 953 passing; contract
+v17 gates renderer/data changes. Requested feature areas are implemented within
+bounded 2D workflows. Full OS authoring/reimport, hardware/performance acceptance
+and external rig imports remain separate A07 acceptance work; A07 stays PARTIAL.
+See [advanced guide](ADVANCED_ANIMATION_2D.md) and
+[evidence](evidence/A07_ADVANCED_ANIMATION.md).
+
 ### A08 — Complete 2D physics and character tools
 
 **Status:** PARTIAL. **Depends on:** A04, A06.

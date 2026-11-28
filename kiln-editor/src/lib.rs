@@ -89,3 +89,5 @@ mod source_search;
 mod source_move;
 
 mod atlas_editor;
+
+pub mod skin_editor;

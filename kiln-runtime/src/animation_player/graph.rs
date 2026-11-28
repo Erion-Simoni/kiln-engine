@@ -12,7 +12,12 @@ impl AnimationPlayer {
     /// Bind a validated graph and enter its initial state.
     pub fn bind_graph(&mut self, definition: AnimationGraph) -> Result<(), String> {
         definition.validate(&self.clips)?;
-        for clip in definition.states.values() {
+        for clip in definition.states.values().chain(
+            definition
+                .blend_trees
+                .values()
+                .flat_map(|t| t.points.iter().map(|p| &p.clip)),
+        ) {
             let size = self
                 .textures
                 .get(clip)
@@ -23,6 +28,7 @@ impl AnimationPlayer {
         let state = definition.entry.clone();
         let clip = definition.states[&state].clone();
         let parameters = definition.parameters.clone();
+        self.fade = None;
         self.events.clear();
         self.enter_graph_clip(&clip);
         self.graph = Some(GraphSnapshot {
@@ -59,6 +65,9 @@ impl AnimationPlayer {
         self.started = false;
     }
     pub(super) fn advance_graph(&mut self) {
+        if self.fade.is_some() {
+            return;
+        }
         let Some(graph) = self.graph.as_ref() else {
             return;
         };
@@ -81,10 +90,19 @@ impl AnimationPlayer {
                             edge.threshold,
                         ))
             })
-            .map(|edge| edge.to.clone());
-        if let Some(state) = next {
+            .map(|edge| (edge.to.clone(), edge.blend_seconds));
+        if let Some((state, seconds)) = next {
             let clip = graph.definition.states[&state].clone();
+            let fade = self.current.clone().map(|from_clip| super::FadeSnapshot {
+                from_clip,
+                from_time: self.elapsed,
+                elapsed: 0.0,
+                duration: seconds,
+            });
             self.enter_graph_clip(&clip);
+            if seconds > 0.0 {
+                self.fade = fade;
+            }
             self.graph.as_mut().unwrap().state = state;
         }
     }

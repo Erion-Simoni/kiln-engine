@@ -52,3 +52,5 @@ pub mod vfx;
 pub mod visual;
 
 pub mod atlas;
+
+pub mod skin;

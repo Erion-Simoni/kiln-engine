@@ -1,82 +1,79 @@
 # Kiln Session Handoff
 
-Branch fix/a01-ci-baseline. Current A07 preview/cues/blending/cutout-rig checkpoint,
-2026-11-28, following 15e3dbc. User explicitly requested those four feature areas.
-A05/A06/A07 remain PARTIAL; do not advance to A08 unasked. At most three focused
-attempts per blocked check; record and move on. A03/A04 gates remain deferred.
-Full 3D remains behind G2D.
+Branch fix/a01-ci-baseline. Current A07 advanced-animation checkpoint, 2026-11-28,
+following c9dc49f. User explicitly requested soft mesh skinning, texture crossfades
+and automatic blend trees; those bounded 2D workflows are now implemented.
+A05/A06/A07 release acceptance remains PARTIAL. Do not advance to A08 unasked.
+At most three focused attempts per blocked check; record and move on. A03/A04
+gates remain deferred. Full 3D remains behind G2D.
 
 ## Done
 
-- ADR-0117: draw-only Scene View preview samples composer tracks/blends/IK, restores
-  local/global transforms and tint after drawing and unwind, and never mutates
-  authoring/saves. Hidden composer tabs keep preview playback advancing. Scope
-  changes clear draft. Scene gizmos are inactive; Stop Scene Preview exits.
-- Audio/signal cues: chronological, at most 32, saved once-per-playthrough latches,
-  silent seek, pause, restart rearming. Signals use next-tick entity callbacks.
-  Sound names validate against project SFX assets. queue_sound (141,1) commits
-  after successful callback; failed/debug-suspended callbacks do not start audio.
-- Weighted two-take property/pose animation and optional saved game variable for
-  live weight. Preview uses authored weight. Local rotations stay unwrapped;
-  positive XY scale/tint/position obey existing bounds. Shared 16 tracks/64 keys.
-- Custom cutout skeletal workflow supersedes ADR-0022 deferral: bone hierarchy,
-  rigid single-bone sprite skin attachments (weight 1), bone-local FK animation,
-  root target tracks and weighted two-bone IK. Create Two-Bone Cutout Rig is one
-  undoable scene transaction creating bones, skins and target. Inspector/hierarchy
-  edit existing transforms/textures/parents; project and logical saves retain them.
-- solve_ik_2d (140,7): world target, bend +/-1, IK/FK weight 0..1. +X rest links,
-  directly parented bones and positive uniform scale ancestry required. Both bends,
-  unreachable-target clamp, rotated/scaled parents and zero-distance target work.
-  Physics-owned/unsupported chains reject without partial local-pose changes.
-- Runtime contract v16; native tools and browser SDK rebuilt. No dependency or VM
-  layout change. Legacy unextended composer canonical source unchanged.
-- samples/rigged_cutscene demonstrates blend, rigid skins, IK, sound and events;
-  generated source reproducible from timeline.json. Guide A07_ANIMATION_WORKFLOWS.md.
-  Source-backed draft/save guards and existing animation/camera/tile features kept.
+- ADR-0118: actual soft triangle skins with world mesh/bone bind poses, inverse
+  binds and four normalized influences per vertex. Bounds: 64 bones, 256 vertices,
+  512 triangles. Inspector Soft Mesh Skinning generates a grid, captures binds,
+  edits references/positions/UVs/weights, normalizes and applies through undoable
+  component transactions. Bone deletion/Transform removal rejects if referenced.
+  Scene projection, export and logical save retain mesh data.
+- Shared sprite renderer submits deformed triangles/per-corner UVs and blends two
+  textures in premultiplied color. Correct transparent crossfade demonstrated by
+  GPU readback. Compact attributes fit the downlevel limit. Existing culling,
+  painter order/materials, prepared views and MAX_SPRITES warnings retained.
+  Bounded 1024 texture-pair cache; native Arc/WASM Rc handles. Custom fragments
+  call sample_sprite to honor fades. Each mesh triangle uses a queue entry.
+- Authored graph transition Crossfade seconds and queued script API
+  crossfade_animation(entity,clip,seconds), ID 142. Saved source/target clocks,
+  exact endpoints, paused hold, seek cancellation and manual cuts. Destination
+  owns events; old source keeps advancing silently. Active fade finishes before
+  another graph edge, preventing unsupported three-texture interruption.
+- Automatic per-state 1D blend trees use a declared parameter and 2..16 sorted
+  clip thresholds. Adjacent clips mix without restarting time, normalized to the
+  reference clip clock; reference owns events. Inspector authors thresholds and
+  parameters through existing graph Apply/undo. Timed edges involving trees reject
+  because each tree already uses two samples. Logical saves retain parameters.
+- Restore applies the saved animation sample to Sprite immediately, including
+  paused fades/trees. Legacy optional fade/tree fields default empty. Runtime
+  contract v17; matching native/browser tools rebuilt; actual prior v16 SDK rejects.
+  No dependency or VM layout change. New sample advanced_animation and CI checks
+  observe both intermediate texture blends and final soft mesh deformation.
+- Existing cutout FK/IK, audio/signal cues, Scene View preview, composer, saved
+  tweens, character states, tilemaps and camera/view functionality retained.
+  Guide: ADVANCED_ANIMATION_2D.md; evidence/A07_ADVANCED_ANIMATION.md.
 
 ## Executed validation
 
-- Locked workspace: 946 Rust tests pass, zero failed, 103 suites. Six new editor
-  integration tests and six runtime tests cover combined workflows, cue delivery,
-  silent seeking, paused JSON restore, preview draw/restore/unwind, rig undo,
-  native decoded audio playback, IK bounds/ownership and callback fail/debug stops.
-  egui pointer-event controls cover preview, blend, cue and IK creation UI.
-- just check and strict WASM default/opt-out Clippy pass. Matching v16 tools/SDK
-  rebuilt serially before GUI replays. Python helper tests: 49 pass.
-- Rigged cutscene native/browser exports pass: green tip 1024 pixels at
-  [224,104,256,136], blue beacon 64. Browser audit: zero Web Audio starts before
-  consent, exactly one cue start. Platform audio adapter routing fixed and covered
-  by a new callback/attachment regression. Prior v15 SDK export rejects.
-- Original authored cutscene regression passes native/browser: 8192 green at
-  [192,56,256,184], blue 64. Four final replays run serially after builds, relocated
-  with authoring copies hidden; native PATH has no developer tools. Receipts:
-  target/a07-complete-{native,browser},
-  target/a07-complete-legacy-{native,browser}. Final pre-commit just check and
-  whitespace checks pass (target/a07-complete-precommit.log).
-- Logs target/a07-complete-{focused,rig,widgets,legacy,quality,workspace,wasm,
-  wasm-optout,tools,web,python}.log. Final export receipts, stale SDK rejection
-  and pre-commit checks are recorded in evidence/A07_ANIMATION_WORKFLOWS.md.
-  Generated artifacts stay under target.
+- Locked Rust workspace: 953 passing, zero failed, 104 suites. Five new editor
+  integration tests cover multi-weight bind/deform, crossfade pause/seek/snapshot,
+  automatic thresholds/time, editor Apply/undo/reopen and mesh/fade logical saves.
+  GPU tests verify transparent blend readback and deformed triangle bounds, plus
+  all prior renderer/material/prepared-view/capacity regressions.
+- just check, strict WASM default/opt-out, 49 Python helper tests, Node syntax,
+  py_compile and whitespace pass. Native and SDK builds complete before replays.
+- Native/browser advanced sample passes: observed fade and tree mixed-pixel phases,
+  final mesh green 6144 at [80,104,272,136], blue 64. Prior rig sample passes both:
+  green tip 1024 at [224,104,256,136], blue 64, browser audio starts exactly once.
+  Four final replays serial, relocated/authoring hidden; native PATH lacks tools.
+- Logs target/a07-advanced-{focused,render,quality,workspace,wasm,wasm-optout,tools,
+  web,python,stale}.log. Receipts/screenshots target/a07-advanced-{native,browser},
+  target/a07-advanced-rig-{native,browser}. Final pre-commit check receipt:
+  target/a07-advanced-precommit.log. Generated outputs are untracked.
 
 ## Open / deferred
 
-- Soft multi-influence weighted vertex mesh deformation, external Spine/DragonBones
-  imports, sprite-frame texture crossfades and automatic parameter blend trees.
-  Implemented skeleton is cutout, with rigid one-bone attachment skins; do not
-  claim soft mesh skinning. Full OS authoring/reimport and hardware/performance
-  acceptance remain open, so A07 stays PARTIAL. No physical audio/DPI claim.
-- Editor camera navigation stays under user control during draw-only preview;
-  gameplay camera-follow rigs save their poses/clocks, direct controller effect
-  history remains transient. Existing logical-save script signatures still apply.
+- Full OS authoring/reimport acceptance, external Spine/DragonBones import and
+  physical device/DPI/performance acceptance remain separate A07 release gates.
+  Implemented automatic trees are 1D sprite-clip trees; bone pose tracks keep
+  their existing two-take and IK/FK mixing. Renderer uses at most two texture
+  samples per draw, with documented crossfade interruption/graph restrictions.
 - A05 full split-screen authoring/host and remaining rendering/capacity acceptance;
   A06 stamps/streaming and complete level-authoring acceptance remain open.
   Animation 4096-cycle cap/extreme overload and physical performance acceptance
-  remain open; no budgets bypassed.
+  remain open; no budgets bypassed. Direct camera-effect history stays transient.
 - A04 source widget gate stopped after three attempts; saved-physics pose divergence
   remains. A03 identity/override/crash-transaction and A02 combined inspector gates
   deferred. No release/certification or full 3D acceptance claimed.
 
 ## Next
 
-Continue A07 acceptance or explicitly requested extensions. Preserve bounded
-attempts and deferred A03/A04 gates; do not advance past A07 unasked.
+Consolidate A07 authoring/reimport acceptance or follow explicit user direction.
+Preserve bounded attempts and deferred gates; do not advance past A07 unasked.

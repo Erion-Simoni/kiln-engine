@@ -123,6 +123,11 @@ pub struct SliceFacts {
 /// A change the script asked for.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SliceCommand {
+    CrossfadeAnimation {
+        entity: String,
+        clip: String,
+        seconds: f64,
+    },
     SolveIk(crate::rig::IkRequest),
     QueueSound(String),
     Tween(crate::tweens::TweenCommand),
@@ -1426,6 +1431,26 @@ impl SliceHost {
             )),
             116..=123 => self.call_task(func_id, args),
             131..=139 => self.call_tween(func_id, args),
+            142 => {
+                let entity = args[0]
+                    .as_str()
+                    .ok_or_else(|| VmError::HostCallError("Expected entity".into()))?
+                    .to_owned();
+                let clip = args[1]
+                    .as_str()
+                    .ok_or_else(|| VmError::HostCallError("Expected clip".into()))?
+                    .to_owned();
+                let seconds = args[2]
+                    .to_f64()
+                    .filter(|v| v.is_finite() && (0.0..=60.0).contains(v))
+                    .ok_or_else(|| VmError::HostCallError("Fade duration must be 0..60".into()))?;
+                self.commands.push(SliceCommand::CrossfadeAnimation {
+                    entity,
+                    clip,
+                    seconds,
+                });
+                Ok(Value::Bool(true))
+            }
             140 => {
                 let text = |i: usize| {
                     args[i]
@@ -2415,6 +2440,19 @@ impl SliceSession {
     fn apply(&mut self, command: SliceCommand, world: &mut GameWorld) {
         match command {
             SliceCommand::Tween(command) => self.apply_tween(command, world),
+            SliceCommand::CrossfadeAnimation {
+                entity,
+                clip,
+                seconds,
+            } => {
+                if let Some(handle) = crate::tweens::handle(world, &entity) {
+                    if let Ok(mut player) =
+                        world.world_mut().get::<&mut crate::AnimationPlayer>(handle)
+                    {
+                        let _ = player.crossfade(&clip, seconds);
+                    }
+                }
+            }
             SliceCommand::QueueSound(name) => {
                 if self.host_mut().platform_audio.is_some() {
                     if let Err(error) = self.host_mut().call_platform_audio(12, &[Value::Str(name)])

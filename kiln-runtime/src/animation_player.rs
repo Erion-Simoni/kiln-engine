@@ -1,6 +1,8 @@
 //! Shared clip playback, crossed frame events and non-looping transitions.
 use kiln_core::{Clip, Frame, FrameEvent};
+mod blending;
 mod graph;
+pub use blending::FadeSnapshot;
 pub use graph::GraphSnapshot;
 use kiln_render::TextureId;
 use std::collections::HashMap;
@@ -8,6 +10,8 @@ use std::collections::HashMap;
 /// Logical clip playback; GPU bindings and pending frame events are transient.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AnimationSnapshot {
+    #[serde(default)]
+    pub fade: Option<FadeSnapshot>,
     #[serde(default)]
     pub graph: Option<GraphSnapshot>,
     pub clips: std::collections::BTreeMap<String, Clip>,
@@ -19,6 +23,7 @@ pub struct AnimationSnapshot {
 
 #[derive(Debug)]
 pub struct AnimationPlayer {
+    fade: Option<FadeSnapshot>,
     graph: Option<GraphSnapshot>,
     clips: HashMap<String, Clip>,
     textures: HashMap<String, (TextureId, [u32; 2])>,
@@ -32,6 +37,7 @@ pub struct AnimationPlayer {
 impl AnimationPlayer {
     pub fn snapshot(&self) -> Result<AnimationSnapshot, String> {
         let saved = AnimationSnapshot {
+            fade: self.fade.clone(),
             graph: self.graph.clone(),
             clips: self
                 .clips
@@ -87,10 +93,12 @@ impl AnimationPlayer {
         player.elapsed = saved.elapsed;
         player.speed = saved.speed;
         player.started = saved.started;
+        player.restore_fade(saved.fade.clone())?;
         Ok(player)
     }
     pub fn new() -> Self {
         Self {
+            fade: None,
             graph: None,
             clips: HashMap::new(),
             textures: HashMap::new(),
@@ -120,6 +128,7 @@ impl AnimationPlayer {
         if !self.clips.contains_key(name) {
             return;
         }
+        self.fade = None;
         self.graph = None;
         if self.current.as_deref() != Some(name) && self.clips.contains_key(name) {
             self.current = Some(name.into());
@@ -128,6 +137,7 @@ impl AnimationPlayer {
         }
     }
     pub fn stop(&mut self) {
+        self.fade = None;
         self.graph = None;
         self.current = None;
         self.elapsed = 0.0;
@@ -145,6 +155,7 @@ impl AnimationPlayer {
         if !time.is_finite() {
             return;
         }
+        self.fade = None;
         if let Some(clip) = self.current.as_ref().and_then(|name| self.clips.get(name)) {
             let duration = clip.duration_seconds();
             self.elapsed = if duration > 0.0 {
@@ -193,19 +204,7 @@ impl AnimationPlayer {
         ])
     }
     pub fn apply_to_sprite(&self, sprite: &mut crate::Sprite) {
-        if let Some(uv) = self.current_uv_rect() {
-            sprite.uv_rect = uv;
-            if let Some((texture, _)) = self
-                .current
-                .as_ref()
-                .and_then(|name| self.textures.get(name))
-            {
-                sprite.texture = *texture;
-            }
-            if let Some(frame) = self.frame() {
-                sprite.pivot = frame.pivot;
-            }
-        }
+        self.apply_samples(sprite);
     }
     /// Consume real elapsed time, reporting every crossed frame once.
     pub fn update(&mut self, dt: f32) {
@@ -213,6 +212,7 @@ impl AnimationPlayer {
             return;
         }
         self.advance_graph();
+        self.advance_fade(dt as f64);
         let mut remaining = dt as f64;
         for _ in 0..4096 {
             let Some(clip) = self.current.as_ref().and_then(|name| self.clips.get(name)) else {

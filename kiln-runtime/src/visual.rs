@@ -50,6 +50,12 @@ pub fn collect_scene_draws_filtered_mode(
         return Vec::new();
     }
     let mut draws = Vec::new();
+    let bone_poses: std::collections::HashMap<_, _> = world
+        .world_ref()
+        .query::<(&SourceId, &GlobalTransform)>()
+        .iter()
+        .map(|(id, p)| (id.0.clone(), p.0))
+        .collect();
     for (entity, source, pose, sprite) in world
         .world_ref()
         .query::<(hecs::Entity, Option<&SourceId>, &GlobalTransform, &Sprite)>()
@@ -74,9 +80,6 @@ pub fn collect_scene_draws_filtered_mode(
         } else {
             sprite.draw_instance(pose.0)
         };
-        if !instance.intersects_view(view) {
-            continue;
-        }
         if let Some(name) = &sprite.material {
             if let Some(id) = resolve(name) {
                 instance.material_id = id;
@@ -84,7 +87,38 @@ pub fn collect_scene_draws_filtered_mode(
                 instance.color = [1.0, 0.0, 1.0, 1.0];
             }
         }
-        draws.push((sprite.layer, order, id, 0, sprite.texture, instance));
+        if let Ok(mesh) = world.world_ref().get::<&kiln_core::skin::SkinMesh>(entity) {
+            if let Ok(points) = mesh.deform(&bone_poses) {
+                let shift = if parallax {
+                    [
+                        instance.position[0] - sprite.draw_instance(pose.0).position[0],
+                        instance.position[1] - sprite.draw_instance(pose.0).position[1],
+                    ]
+                } else {
+                    [0.0; 2]
+                };
+                for (index, t) in mesh.triangles.iter().enumerate() {
+                    let p = t.map(|i| {
+                        [
+                            points[i as usize][0] + shift[0],
+                            points[i as usize][1] + shift[1],
+                        ]
+                    });
+                    let uv = t.map(|i| mesh.vertices[i as usize].uv);
+                    let mut tri = SpriteInstance::triangle(p, uv, instance.color);
+                    tri.uv_rect = instance.uv_rect;
+                    tri.material_id = instance.material_id;
+                    tri.blend_uv = instance.blend_uv;
+                    tri.blend_weight = instance.blend_weight;
+                    tri.secondary_texture = instance.secondary_texture;
+                    if tri.intersects_view(view) {
+                        draws.push((sprite.layer, order, id.clone(), index, sprite.texture, tri));
+                    }
+                }
+            }
+        } else if instance.intersects_view(view) {
+            draws.push((sprite.layer, order, id, 0, sprite.texture, instance));
+        }
     }
     for (entity, source, map) in world
         .world_ref()
@@ -133,6 +167,7 @@ pub fn collect_scene_draws_filtered_mode(
                 uv_rect: FULL_UV,
                 material_id: 0,
                 rotation: 0.0,
+                ..kiln_render::SpriteInstance::colored([0.0; 2], [1.0; 2], [1.0; 4])
             };
             if !instance.intersects_view(view) {
                 continue;

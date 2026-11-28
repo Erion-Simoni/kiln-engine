@@ -2678,3 +2678,32 @@ chains reject without partial pose changes. Logical snapshots retain hierarchy,
 pose and generated clocks. No external dependency. Soft multi-influence vertex
 mesh deformation and external Spine/DragonBones import are outside this cutout
 approach and must not be claimed. Runtime contract v16 gates new host calls.
+
+## ADR-0118 — Soft skins, texture crossfades and automatic 1D blend trees (2026-11-28)
+
+Extend the existing bounded sprite path with CPU linear-blend skinning of authored
+triangle meshes, up to four normalized bone influences per vertex. Capture mesh
+and bone world bind poses; evaluate current bone globals through the shared
+hierarchy. Submit deformed triangles with per-corner UVs through the sprite queue,
+retaining culling, materials, painter order, prepared views and MAX_SPRITES warning.
+Limits: 64 bone binds, 256 vertices, 512 triangles per mesh. Editor drafts capture
+binds/generate a grid and edit influences; validated Apply uses component undo and
+project save. Logical snapshots preserve the mesh and bind data. No dependency.
+
+Default sprite shading blends two independently bound textures/UVs in premultiplied
+color, then converts to the existing straight-alpha output. Compact vertex attrs
+stay below the downlevel 16-attribute limit. Texture-pair bind groups are cached
+with a 1024-pair ceiling and cleared with resource replacement. Custom fragments
+can call sample_sprite to honor blending. Graph transitions and an explicit script
+call support saved, bounded timed crossfades; seek cancels the fade. Active fades
+finish before another graph edge is evaluated, preventing unsupported three-way
+interruption. Manual play/stop can cut immediately.
+
+State-local automatic 1D blend trees map a declared parameter to sorted clip
+thresholds and interpolate the adjacent samples. Clocks synchronize to the state's
+reference clip normalized phase; that reference owns events, avoiding duplicate
+child events. Trees and timed fades each use at most two textures. A timed edge
+involving a tree is rejected rather than silently dropping a third sample.
+Editor controls author thresholds, parameter and transition fade duration.
+Runtime contract v17 gates renderer/mesh/graph data and crossfade builtin.
+A07 scope only; no physical performance or external rig importer claim.

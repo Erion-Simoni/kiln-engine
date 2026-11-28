@@ -337,6 +337,11 @@ pub fn spawn_entities(
                         }
                     }
                 }
+                Component::SkinnedMesh { mesh } => {
+                    if mesh.validate().is_ok() {
+                        let _ = world.world_mut().insert_one(*child, mesh.clone());
+                    }
+                }
                 Component::Particles { effect } => {
                     if let Ok(effect) = crate::sprite::ParticleSystemComponent::from_effect(effect)
                     {

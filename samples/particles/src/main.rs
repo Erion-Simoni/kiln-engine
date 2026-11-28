@@ -162,8 +162,12 @@ impl ParticleApp {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            gpu.sprite_renderer
-                .flush(&mut pass, &self.camera, gpu.renderer.queue());
+            gpu.sprite_renderer.flush(
+                &mut pass,
+                &self.camera,
+                gpu.renderer.queue(),
+                gpu.renderer.device(),
+            );
         }
 
         gpu.renderer.queue().submit([encoder.finish()]);

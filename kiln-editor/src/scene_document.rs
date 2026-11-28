@@ -171,6 +171,7 @@ fn reconcile(
                 | Component::Joint { .. }
                 | Component::AnimationGraph { .. }
                 | Component::SpriteLayout { .. }
+                | Component::SkinnedMesh { .. }
                 | Component::Particles { .. } => Some(component.clone()),
             };
             if let Some(updated) = updated {

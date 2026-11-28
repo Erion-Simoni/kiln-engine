@@ -778,7 +778,7 @@ Add `KILN_DEBUG_EXPRESSION_WATCHES=1` to verify computed watch values before and
 after corrected-source Restart. `KILN_DEBUG_ACTIVE_SCOPES=1` additionally verifies
 strict scope reads, the active-only view and completed-scope rejection.
 
-Runtime tools now use contract `kiln-authoring-v16` (saved cutscene tweens and character animation states, following
+Runtime tools now use contract `kiln-authoring-v17` (saved cutscene tweens and character animation states, following
 the v6 shared-call change). Function-using VM snapshots
 include `shared-calls-v1` in their memory signature, so older incompatible function
 slot layouts reject before a load commits. Straight-line program signatures remain
@@ -814,3 +814,7 @@ script state. Altered generated source rejects regeneration to preserve manual w
 
 Scene preview, audio/signal cues, weighted property animation and cutout skeletal
 FK/IK are described in [A07 workflows](A07_ANIMATION_WORKFLOWS.md).
+
+Soft multi-influence mesh deformation, timed texture crossfades and automatic 1D
+parameter blend trees are now available. See [advanced animation](ADVANCED_ANIMATION_2D.md)
+for authoring, save/restore and the supported bounds.

@@ -202,14 +202,16 @@ pub fn validate_source(source: &str, entry: &str, textures: usize) -> Result<(),
         .iter()
         .filter(|(_, v)| v.binding.is_some())
         .count()
-        != 3 + textures * 2
+        != 5 + textures * 2
     {
         return Err("Material declares additional resource bindings".into());
     }
     for (_, variable) in module.global_variables.iter() {
         if let Some(binding) = &variable.binding {
-            if !matches!((binding.group, binding.binding), (0, 0) | (1, 0) | (1, 1))
-                && !(binding.group == 2 && binding.binding < textures as u32 * 2)
+            if !matches!(
+                (binding.group, binding.binding),
+                (0, 0) | (1, 0) | (1, 1) | (1, 2) | (1, 3)
+            ) && !(binding.group == 2 && binding.binding < textures as u32 * 2)
             {
                 return Err("Material declares an unsupported resource binding".into());
             }

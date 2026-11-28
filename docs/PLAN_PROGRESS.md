@@ -166,3 +166,10 @@ weighted FK/IK. Runtime v16; 946 Rust tests, quality and strict WASM checks pass
 The supported skeleton uses rigid single-bone sprite skins. Soft weighted vertex
 meshes, atlas crossfades, automatic blend trees and full OS/performance acceptance
 remain open. See [workflow evidence](evidence/A07_ANIMATION_WORKFLOWS.md).
+
+2026-11-28 A07 ADR-0118: actual soft multi-influence vertex skins, dual-texture
+crossfades and automatic parameter-driven 1D clip trees. Bind/weight/threshold/fade
+controls persist through project transactions and logical saves. 953 Rust tests,
+49 Python helpers, quality/WASM and native/browser intermediate-pixel checks pass.
+Runtime v17; requested features implemented with documented bounds. Full OS and
+hardware acceptance remains open. See [evidence](evidence/A07_ADVANCED_ANIMATION.md).

@@ -75,6 +75,13 @@ impl EntityCommand {
         }
         let mut edited = scene.clone();
         let result = apply(&mut edited, project, &self.edit)?;
+        for e in &edited.entities {
+            for c in &e.components {
+                if let Component::SkinnedMesh { mesh } = c {
+                    mesh.validate_scene(&edited)?;
+                }
+            }
+        }
         crate::scene_references::require_changed_joints(project, scene, &edited)?;
         if edited.entities.len() != scene.entities.len()
             || serde_json::to_value(&edited).ok() != serde_json::to_value(&*scene).ok()

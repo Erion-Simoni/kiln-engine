@@ -20,6 +20,9 @@ pub fn read_project(path: &Path) -> Result<Project> {
         .chain(project.prefabs.values().map(|prefab| &prefab.root_entity))
     {
         for component in &entity.components {
+            if let Component::SkinnedMesh { mesh } = component {
+                mesh.validate().map_err(anyhow::Error::msg)?;
+            }
             if let Component::AnimationGraph { graph } = component {
                 graph
                     .validate(&project.animation_clips)
@@ -36,6 +39,22 @@ pub fn read_project(path: &Path) -> Result<Project> {
                 settings
                     .validate()
                     .map_err(|error| anyhow::anyhow!("Entity '{}': {error}", entity.id))?;
+            }
+        }
+    }
+    for scene in project.scenes.values() {
+        for e in &scene.entities {
+            for c in &e.components {
+                if let Component::SkinnedMesh { mesh } = c {
+                    mesh.validate_scene(scene).map_err(anyhow::Error::msg)?;
+                    if !e
+                        .components
+                        .iter()
+                        .any(|c| matches!(c, Component::Sprite { .. }))
+                    {
+                        bail!("Skinned mesh requires sprite");
+                    }
+                }
             }
         }
     }

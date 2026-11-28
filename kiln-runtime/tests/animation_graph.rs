@@ -66,6 +66,7 @@ fn graph() -> AnimationGraph {
                 ..Default::default()
             },
         ],
+        ..Default::default()
     }
 }
 fn player() -> AnimationPlayer {
