@@ -806,3 +806,8 @@ See [authoring and runtime contracts](ANIMATION_STATES_2D.md).
 Saved script-authored movement, tint and camera-follow rig sequences are described
 in [Cutscene tweens](CUTSCENE_TWEENS.md). Pause, seek, cancel and logical save/resume
 are supported; a graphical timeline remains open A07 work.
+
+Animation Editor can generate keyframe scripts through the
+[Cutscene Composer](CUTSCENE_COMPOSER.md). A versioned metadata comment preserves
+editable keys; the resulting gameplay uses existing v15 tween builtins and saved
+script state. Altered generated source rejects regeneration to preserve manual work.

@@ -151,3 +151,11 @@ Multi-turn spins and positive squash/stretch share pause/seek/cancel and capacit
 Fixed script Transform/Sprite removal using single-component ECS removal.
 Contract v15; A07 remains PARTIAL. See
 [transform evidence](evidence/A07_TRANSFORM_TWEENS.md).
+
+2026-11-28 A07 ADR-0116: graphical source-backed cutscene keyframes, easing,
+value scrubbing and undo/redo in Animation Editor. Embedded authoring data reloads
+from canonical generated scripts; guarded source staging/saving preserves manual
+and external edits. 934 Rust tests and quality checks pass. Existing v15 runtime
+contract retained. A07 stays PARTIAL; scene preview, broad/audio/event tracks,
+blending and skeletal rigs/IK remain open. See
+[composer evidence](evidence/A07_CUTSCENE_COMPOSER.md).

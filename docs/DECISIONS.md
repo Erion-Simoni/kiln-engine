@@ -2626,3 +2626,30 @@ rotation/scale tracks. Bound/property validation and shared capacity stay intact
 Runtime contract v15 rejects older SDKs that cannot execute the new builtins.
 A source-authored exported fixture and logical-save tests verify these contracts;
 this does not close graphical timeline or skeletal-rig acceptance.
+
+## ADR-0116 — Source-backed graphical cutscene composer (2026-11-28)
+
+Add an Animation Editor composer for explicit per-entity position, rotation,
+positive XY scale and tint keyframes. A bounded versioned document (16 unique
+entity/property tracks, 64 total keys, duration <=60 seconds) compiles to ordinary
+KilnScript using existing zero-duration tween writes. One saved script-state clock
+samples every track analytically, so large ticks and seeking skip no interpolation
+state. Easing belongs to each destination key; endpoints hold. Pause/seek/restart/
+cancel use named actions and rising edges. Completion stops writing until restarted
+or sought. No audio/event tracks or skeletal rigging are implied.
+
+Embed the document as a single JSON comment in the generated .ks file. The composer
+can reload canonical generated source; altered source rejects regeneration to
+preserve manual work. Generated source enters the existing guarded Script Editor
+buffer and uses its explicit atomic Save and external-change protection. Never
+overwrite unrelated source or silently attach/replace gameplay. Users attach the
+saved file to one director entity with existing Inspector controls. Draft undo/redo
+and a timeline scrub strip support authoring; the property-value preview shares
+the compiler's interpolation contract. No runtime ABI, dependency or VM layout
+change: matching v15 runtimes already execute all emitted builtins. Logical saves
+retain the script clock/flags and rendered poses. Graphical scene preview,
+audio/events, reimport conflict resolution and full A07 acceptance remain open.
+
+Composer metadata serializes key times/values as decimal strings (numeric recipe
+JSON is accepted), preserving exact f64 values without changing workspace JSON
+features. Emitted literals use decimal notation supported by KilnScript.

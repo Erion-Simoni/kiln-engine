@@ -5,7 +5,8 @@ Author sequences in the Source Editor using `tween_*` builtins. See
 tint, a camera dolly, automatic checks and interactive pause/seek/restart/cancel.
 [samples/transform_tweens](../samples/transform_tweens/README.md) adds a 450-degree
 spin and XY stretch, with the same controls.
-This checkpoint provides script authoring; a graphical timeline remains open.
+A source-backed graphical keyframe composer is available in Animation Editor;
+see [Cutscene Composer](CUTSCENE_COMPOSER.md).
 
 | Builtin | ID | Arguments |
 | --- | --- | --- |
@@ -62,3 +63,8 @@ tween its position. The sample saves the rig pose and its active track, preservi
 view continuity. Existing direct camera transitions/shake can be composed with
 sequences, but their controller history remains transient. Runtime contract
 `kiln-authoring-v15` requires matching editor, CLI, player and browser SDK.
+
+Use **Animation Editor → Cutscene Composer** for saved source-backed property
+keyframes, easing, value scrubbing and draft undo/redo. See the
+[composer guide](CUTSCENE_COMPOSER.md); scene-view preview, audio/event tracks and
+skeletal rigging remain open.

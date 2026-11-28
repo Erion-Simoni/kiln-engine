@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "tracks": [
+    {
+      "entity": "actor",
+      "property": "position",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            80,
+            120
+          ],
+          "ease": "linear"
+        },
+        {
+          "time": 1,
+          "value": [
+            144,
+            88
+          ],
+          "ease": "smooth"
+        },
+        {
+          "time": 3,
+          "value": [
+            256,
+            120
+          ],
+          "ease": "smooth"
+        }
+      ]
+    },
+    {
+      "entity": "actor",
+      "property": "rotation",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            0
+          ],
+          "ease": "linear"
+        },
+        {
+          "time": 3,
+          "value": [
+            7.853981633974483
+          ],
+          "ease": "linear"
+        }
+      ]
+    },
+    {
+      "entity": "actor",
+      "property": "scale",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            1,
+            1
+          ],
+          "ease": "linear"
+        },
+        {
+          "time": 1,
+          "value": [
+            0.75,
+            1.5
+          ],
+          "ease": "smooth"
+        },
+        {
+          "time": 3,
+          "value": [
+            2,
+            1
+          ],
+          "ease": "smooth"
+        }
+      ]
+    },
+    {
+      "entity": "actor",
+      "property": "color",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            1,
+            0,
+            0,
+            1
+          ],
+          "ease": "linear"
+        },
+        {
+          "time": 3,
+          "value": [
+            0,
+            1,
+            0,
+            1
+          ],
+          "ease": "linear"
+        }
+      ]
+    },
+    {
+      "entity": "camera_rig",
+      "property": "position",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            160,
+            120
+          ],
+          "ease": "linear"
+        },
+        {
+          "time": 3,
+          "value": [
+            192,
+            120
+          ],
+          "ease": "smooth"
+        }
+      ]
+    },
+    {
+      "entity": "ready",
+      "property": "color",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            1,
+            0,
+            0,
+            1
+          ],
+          "ease": "linear"
+        },
+        {
+          "time": 3,
+          "value": [
+            1,
+            0,
+            0,
+            1
+          ],
+          "ease": "linear"
+        },
+        {
+          "time": 3.05,
+          "value": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "ease": "linear"
+        }
+      ]
+    }
+  ],
+  "actions": [
+    "pause",
+    "restart",
+    "seek",
+    "cancel"
+  ]
+}

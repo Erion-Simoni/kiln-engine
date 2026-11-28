@@ -1,71 +1,70 @@
 # Kiln Session Handoff
 
-Branch fix/a01-ci-baseline. Current A07 checkpoint: rotation and scale cutscene
-tracks, 2026-11-28, following 140ed9b (saved movement/tint tweens).
-A05/A06/A07 remain PARTIAL. Authorized scope stops at A07; do not start A08
-unasked. At most three focused attempts per blocked check, then record and move
-on. A03/A04 gates remain deferred. Full 3D remains behind G2D.
+Branch fix/a01-ci-baseline. Current A07 checkpoint: source-backed graphical
+Cutscene Composer, 2026-11-28, following 914f1ed (rotation/scale tracks).
+A05/A06/A07 remain PARTIAL. Scope stops at A07; do not start A08 unasked.
+At most three focused attempts per blocked check; record and move on. A03/A04
+gates remain deferred. Full 3D remains behind G2D.
 
 ## Done
 
-- ADR-0115 extends ADR-0114's shared saved tween service with local rotation and
-  XY scale. tween_rotation(entity,radians,seconds,ease) ID 138, arity 4;
-  tween_scale(entity,x,y,seconds,ease) ID 139, arity 5. Property controls/query
-  accept position, color, rotation and scale. Four easing curves, bounded shared
-  capacity, callback atomicity, pause/seek/cancel and exact endpoints retained.
-- Rotation uses unwrapped radians for deliberate multi-turn spins. Positive scale
-  sources/destinations >= 0.000001 preserve the existing non-singular logical-save
-  geometry contract. Zero crossings/mirroring are deferred. All transform tracks
-  reject RigidBody2D ownership; tint remains usable on bodies.
-- Position-only writes preserve rotation/scale tracks. Removing Transform clears
-  all transform tracks, preserving tint. Fixed pre-existing script removal of
-  Transform/Sprite: remove_one removes components instead of Bundle-derived fields.
-- Logical GameSave records rotation/scale sources/destinations, clocks, easing and
-  pause state through the existing optional snapshot. Corrupt shape/bindings reject;
-  legacy optional-field behavior and VM memory layout unchanged. No new dependency.
-- Runtime contract v15; matching editor/CLI/player and browser SDK rebuilt.
-  Actual prior v14 browser SDK export rejects.
-- samples/transform_tweens composes actor movement, tint, 450-degree spin, XY
-  stretch and camera-follow dolly. It automatically pauses five tracks, checks
-  held clocks, seeks while paused, resumes and gates completion with blue beacon.
-  Space pauses/resumes, Right seeks, R restarts, C cancels. Source Editor authoring;
-  no graphical timeline. CI native/browser replay steps added.
-- Existing character states, ping-pong/speed, saved movement/tint, camera effects,
-  sparse tilemaps, prepared views/pointer and parallax work remains intact.
+- ADR-0116: Animation Editor → Cutscene Composer authors position, rotation,
+  positive XY scale and tint keyframes. Editable keys/times/incoming easing,
+  timeline-strip/value scrub and Play Values; bounded draft undo/redo.
+  Limits: 16 unique entity/property tracks, 64 total keys, duration <=60 seconds.
+  Explicit zero-time starts, validated bindings, physics-free transform ownership.
+- Generate source into guarded Script Editor buffer, then Save Script. Versioned
+  JSON comment restores editable keys/path from canonical source. Altered/unrelated
+  files reject regeneration; external edits reject atomic save. No silent gameplay
+  attachment or replacement. Attach once to a director entity through Inspector;
+  samples/authored_cutscene already uses it as its scene script.
+- One saved script clock analytically samples all tracks with existing zero-duration
+  tween writes. Large ticks cross keys correctly. Rising-edge action pause/seek/
+  restart/cancel; completion stops writes so later manual edits persist. Generated
+  timeline clock lives in script state, separate from active tween snapshots.
+- Exact decimal-string metadata avoids JSON float-roundtrip drift. Emitted literals
+  use supported decimal notation, including extreme/subnormal f32 values. No new
+  dependency, runtime ABI or VM layout change; existing v15 runtime retained.
+- Composer drafts persist when generated/saved, not independently. Scene/project
+  changes reset draft; Source Editor retains existing dirty/recovery protections.
+  Value preview does not change scene poses. Guide: CUTSCENE_COMPOSER.md.
+- Existing saved movement/tint/rotation/scale tweens, character state graphs,
+  ping-pong/speed, camera effects, sparse maps and prepared views/pointer retained.
 
 ## Executed validation
 
-- Full locked Rust workspace: 927 passing tests, zero failed, 100 suites.
-  All 11 tween integration tests pass; new coverage includes unwrapped spins,
-  scale midpoint/endpoints, paused seek and JSON save/resume, corrupt dimensions,
-  replacement/cancel/cut, position-write independence, Transform removal, physics
-  ownership and pending shared capacity. Python helper suite: 49 passing.
-- just check and strict WASM default/opt-out Clippy pass. Matching native/browser
-  tools built serially before GUI replays. Actual stale v14 export rejects.
-- Transform demo native/browser exports pass: 8192 green pixels at
-  [192,56,256,184], blue completion beacon 64, relocated/hidden sources and
-  native player PATH without developer tools. Receipts target/a07-transform-
-  {native,browser}.
-- Earlier movement/tint/camera-rig demo also passes both exports, green 4096 at
-  [192,88,256,152], blue 64. Receipts target/a07-transform-cutscene-{native,browser}.
-  All four replays ran serially after builds. Final pre-commit just check and
-  whitespace checks pass (target/a07-transform-precommit.log).
-- Logs target/a07-transform-{focused,workspace,python,quality,wasm,wasm-optout,
-  tools,web,stale}.log. Final export replay outcomes and pre-commit receipt are
-  recorded in evidence/A07_TRANSFORM_TWEENS.md. Generated artifacts stay in target.
+- Full locked Rust workspace: 934 passing, zero failed, 101 suites. Quality check
+  and matching native tool rebuild pass. Actual egui pointer-event widget test
+  adds tracks/keys, undo/redoes, generates reloadable source and plays values.
+- Six integration tests: preview/runtime agreement, multi-key/large-tick sampling,
+  completion ownership, controls, paused JSON save/resume, disk reopen, manual and
+  external edit protection, invalid metadata/bindings and maximum 16-track/64-key
+  playback at default budget. Extreme/subnormal literals persist exactly.
+  Generated sample source has a reproducibility check.
+- New authored cutscene and prior transform-tween regression each pass native
+  and browser exports: 8192 green pixels at [192,56,256,184], blue beacon 64.
+  All four run serially after builds, with relocated exports/hidden authoring
+  sources and native player PATH excluding developer tools. Receipts/screenshots
+  target/a07-composer-{native,browser},
+  target/a07-composer-transform-{native,browser}. Python helpers: 49 passing.
+  Final pre-commit just check and whitespace checks pass.
+- Logs target/a07-composer-{focused,widgets,quality,workspace,tools,python}.log.
+  Final native/browser replay receipts and pre-commit checks are recorded in
+  evidence/A07_CUTSCENE_COMPOSER.md. Generated artifacts stay under target.
 
 ## Open / deferred
 
-- A07 graphical timeline, general/audio/event tracks, blending/blend trees,
-  skeletal bones/weights/skinning/IK and complete editor/reimport acceptance.
-  Transform-only camera-follow rig is not a skeletal rig. Tween completion remains
-  script-owned polling; no internal completion-event queue. Direct camera effect
-  controller history remains transient. No physical save-hotkey replay claimed;
-  logical JSON save/resume is tested.
+- A07 scene-view animation preview, broader/general/audio/event tracks,
+  blending/blend trees, skeletal bones/weights/skinning/IK and complete editor/
+  reimport acceptance. Composer uses a source-backed property timeline, not full
+  sequencer or skeletal rigging. No full OS project-authoring replay claimed.
+  Direct camera-effect controller history remains transient; follow-rig pose and
+  generated script clocks save normally. Source edits retain existing logical-save
+  memory-signature compatibility checks. No physical save-hotkey replay claimed.
 - A05 full split-screen authoring/host and remaining rendering/capacity acceptance;
   A06 stamps/streaming and complete level-authoring acceptance remain open.
   Animation 4096-cycle cap/extreme overload and physical performance acceptance
-  remain open; no budget bypass introduced.
+  remain open; no budgets bypassed.
 - A04 source widget gate stopped after three attempts; saved-physics pose divergence
   remains. A03 identity/override/crash-transaction and A02 combined inspector gates
   deferred. No physical device/DPI, production performance, release/certification
@@ -73,5 +72,5 @@ on. A03/A04 gates remain deferred. Full 3D remains behind G2D.
 
 ## Next
 
-Continue useful A07 gameplay/authoring work within authorized scope. Keep bounded
-attempts; do not retry deferred A03/A04 gates or advance past A07 unasked.
+Continue useful A07 gameplay/authoring within authorized scope. Preserve bounded
+attempts, do not retry deferred A03/A04 gates or advance past A07 unasked.

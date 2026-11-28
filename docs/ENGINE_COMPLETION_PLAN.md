@@ -686,6 +686,15 @@ Contract v15 requires matching tools. A07 remains PARTIAL; graphical timeline,
 general/audio/event tracks, blending and skeletal rigs/IK remain open.
 See [transform evidence](evidence/A07_TRANSFORM_TWEENS.md).
 
+**Composer checkpoint 2026-11-28:** ADR-0116 adds Animation Editor property
+keyframes with incoming easing, timeline-strip/value scrubbing and draft undo/redo.
+Generated source embeds reloadable authoring data and uses guarded Source Editor
+saving; unrelated or manually altered source rejects replacement. One saved
+script clock samples all keys, including across large ticks. Existing v15 exports
+execute the generated sequence. A07 stays PARTIAL: scene-view preview, broader
+tracks/audio/events, blending, skeletal rigs/IK and full authoring acceptance
+remain open. See [composer evidence](evidence/A07_CUTSCENE_COMPOSER.md).
+
 ### A08 — Complete 2D physics and character tools
 
 **Status:** PARTIAL. **Depends on:** A04, A06.

@@ -191,3 +191,8 @@ The Source Editor can also author local rotation and XY scale tracks with
 `tween_rotation` and `tween_scale`; [transform_tweens](../samples/transform_tweens/README.md)
 shows a multi-turn spin and stretch alongside movement, tint and camera follow.
 All four properties share pause/seek/cancel and logical-save support.
+
+Use **Animation Editor → Cutscene Composer** for saved source-backed property
+keyframes, easing, value scrubbing and draft undo/redo. See the
+[composer guide](CUTSCENE_COMPOSER.md); scene-view preview, audio/event tracks and
+skeletal rigging remain open.

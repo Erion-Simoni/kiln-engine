@@ -82,6 +82,7 @@ struct RecoveryPrompt {
 
 enum ProjectRequest {
     OpenScript(String),
+    FocusScriptEditor,
     ScriptError(String),
     Export(crate::build_panel::BuildConfig),
     RefreshVisuals,
@@ -2579,6 +2580,10 @@ impl EditorApp {
                     }
                 }
                 ProjectRequest::ScriptError(error) => Err(error),
+                ProjectRequest::FocusScriptEditor => {
+                    open_panel(&mut self.dock_state, Tab::ScriptEditor);
+                    Ok(())
+                }
                 ProjectRequest::OpenScript(path) => {
                     let result = self
                         .asset_browser
@@ -6685,7 +6690,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
             }
 
             Tab::AnimationEditor => {
-                ui.vertical(|ui| {
+                egui::ScrollArea::vertical().id_salt("animation_workspace_scroll").show(ui, |ui| {
                     if self.editing_locked() {
                         ui.disable();
                     }
@@ -6700,6 +6705,16 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         );
                         if before != serde_json::to_value(&project.animation_clips).ok() {
                             self.project_requests.push(ProjectRequest::RefreshVisuals);
+                        }
+                        if let Some(scene) = self.scenes.active_id().and_then(|id| project.scenes.get(id)) {
+                            let scope = format!("{}:{}", self.asset_browser.root().map(|p|p.display().to_string()).unwrap_or_default(), scene.id);
+                            if let Some(source) = self.anim_editor.cutscene.render(ui, scene, (&self.shell.script_editor.source,self.shell.script_editor.loaded_path()), &scope, ui.input(|i|i.stable_dt)) {
+                                let result = self.asset_browser.root().ok_or_else(||"Open a project first".to_owned()).and_then(|root|self.shell.script_editor.stage_cutscene(root,&self.anim_editor.cutscene.path,source));
+                                match result {
+                                    Ok(()) => {self.anim_editor.cutscene.message="Generated source staged; Save Script, then attach it to one director entity.".into();self.project_requests.push(ProjectRequest::FocusScriptEditor);},
+                                    Err(error) => self.anim_editor.cutscene.message=error,
+                                }
+                            }
                         }
                     } else {
                         ui.heading("Animation Editor");

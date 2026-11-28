@@ -293,6 +293,14 @@ jobs:
             if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
             KILN_ATLAS_PROJECT="target/a05-native-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" KILN_ATLAS_PLAYER_EVIDENCE="target/a05-$kind-native" python3 tests/native/atlas_player_smoke.py
           done
+      - name: Verify authored keyframe cutscene in native exports
+        env:
+          KILN_ATLAS_PROJECT: samples/authored_cutscene
+          KILN_PIXEL_SCENARIO: authored-cutscene
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 192,56,256,184
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a07-composer-native
+        run: python3 tests/native/atlas_player_smoke.py
       - name: Verify rotation and scale cutscene playback in native exports
         env:
           KILN_ATLAS_PROJECT: samples/transform_tweens
@@ -581,6 +589,14 @@ jobs:
             if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
             KILN_ATLAS_PROJECT="target/a05-browser-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" WEB_ATLAS_EVIDENCE="target/a05-$kind-browser" node tests/web/atlas.cjs target/debug/web-runtime
           done
+      - name: Verify authored keyframe cutscene in browser exports
+        env:
+          KILN_ATLAS_PROJECT: samples/authored_cutscene
+          KILN_PIXEL_SCENARIO: authored-cutscene
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 192,56,256,184
+          WEB_ATLAS_EVIDENCE: target/a07-composer-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
       - name: Verify rotation and scale cutscene playback in browser exports
         env:
           KILN_ATLAS_PROJECT: samples/transform_tweens
