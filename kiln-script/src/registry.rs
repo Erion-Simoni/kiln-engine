@@ -138,4 +138,6 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("tween_pause", 137, 3),
     ("tween_rotation", 138, 4),
     ("tween_scale", 139, 5),
+    ("solve_ik_2d", 140, 7),
+    ("queue_sound", 141, 1),
 ];

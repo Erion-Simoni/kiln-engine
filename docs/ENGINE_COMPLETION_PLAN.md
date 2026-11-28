@@ -695,6 +695,18 @@ execute the generated sequence. A07 stays PARTIAL: scene-view preview, broader
 tracks/audio/events, blending, skeletal rigs/IK and full authoring acceptance
 remain open. See [composer evidence](evidence/A07_CUTSCENE_COMPOSER.md).
 
+**Animation-workflow checkpoint 2026-11-28:** ADR-0117 implements reversible
+Scene View pose/rig preview, chronological once-per-playthrough sound/signal cues,
+weighted two-take property animation, and custom cutout skeletal authoring with
+rigid sprite attachments and weighted two-bone FK/IK. Rig creation is one undoable
+scene transaction; scenes and logical saves retain hierarchy, poses, clocks and
+cue latches. Contract v16 gates queued audio and IK. Full Rust suite: 946 passing.
+The cutout approach uses one bone influence per sprite. Soft multi-influence
+vertex meshes, sprite-frame crossfades, automated blend trees, external rig imports
+and full OS/performance acceptance remain open; A07 stays PARTIAL rather than
+claiming these advanced capabilities. See [workflows](A07_ANIMATION_WORKFLOWS.md)
+and [evidence](evidence/A07_ANIMATION_WORKFLOWS.md).
+
 ### A08 — Complete 2D physics and character tools
 
 **Status:** PARTIAL. **Depends on:** A04, A06.

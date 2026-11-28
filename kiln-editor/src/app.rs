@@ -2713,6 +2713,23 @@ impl EditorApp {
             self.update_play();
         }
 
+        let preview_scope = format!(
+            "{}:{}",
+            self.asset_browser
+                .root()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default(),
+            self.scenes.active_id().unwrap_or_default()
+        );
+        self.anim_editor.cutscene.sync_scope(&preview_scope);
+        if self.play.is_none()
+            && self
+                .anim_editor
+                .cutscene
+                .advance(self.egui_winit.egui_ctx().input(|i| i.stable_dt))
+        {
+            self.egui_winit.egui_ctx().request_repaint();
+        }
         // The world size and the scene view rectangle are read before the GPU
         // state is borrowed, so the scene can be drawn into the panel.
         let world = self.world_size();
@@ -3642,18 +3659,28 @@ impl EditorApp {
                 let camera = &scene_camera;
                 let view_bounds = camera.view_bounds();
                 let _ = kiln_runtime::update_global_transforms(&mut self.world);
-                for (texture, instance) in kiln_runtime::visual::collect_scene_draws_filtered_mode(
-                    &self.world,
-                    view_bounds,
-                    |name| gpu.scene_view_sprite_renderer.material_id(name),
-                    |source| {
-                        self.is_playing
-                            || !source
-                                .and_then(|id| authoring_flags.get(id))
-                                .is_some_and(|f| f.hidden)
+                let draws = crate::cutscene_preview::collect(
+                    &mut self.world,
+                    (!self.is_playing && self.anim_editor.cutscene.scene_preview).then_some((
+                        &self.anim_editor.cutscene.draft,
+                        self.anim_editor.cutscene.time,
+                    )),
+                    |draw_world| {
+                        kiln_runtime::visual::collect_scene_draws_filtered_mode(
+                            draw_world,
+                            view_bounds,
+                            |name| gpu.scene_view_sprite_renderer.material_id(name),
+                            |source| {
+                                self.is_playing
+                                    || !source
+                                        .and_then(|id| authoring_flags.get(id))
+                                        .is_some_and(|f| f.hidden)
+                            },
+                            self.is_playing,
+                        )
                     },
-                    self.is_playing,
-                ) {
+                );
+                for (texture, instance) in draws {
                     gpu.scene_view_sprite_renderer
                         .push_textured(texture, instance);
                 }
@@ -4344,6 +4371,9 @@ impl TabViewer<'_> {
     }
 
     fn translation_canvas(&mut self, ui: &mut egui::Ui, panel: egui::Rect) {
+        if self.anim_editor.cutscene.scene_preview && !*self.is_playing {
+            return;
+        }
         if self.editing_locked() || self.project_blocked {
             return;
         }
@@ -4911,6 +4941,14 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
         }
         match tab {
             Tab::SceneView | Tab::GameView => {
+                if self.anim_editor.cutscene.scene_preview && !*self.is_playing {
+                    ui.horizontal(|ui| {
+                        ui.label("Cutscene preview · scene poses are unchanged");
+                        if ui.button("Stop Scene Preview").clicked() {
+                            self.anim_editor.cutscene.scene_preview = false;
+                        }
+                    });
+                }
                 if matches!(tab, Tab::GameView) {
                     self.shell.set_preview(false);
                 }
@@ -5087,6 +5125,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
 
                 // Draw gizmo mode indicator in the top-left of the scene view
                 if self.shell.gizmos
+                    && !self.anim_editor.cutscene.scene_preview
                     && self.gizmo.mode != GizmoMode::None
                     && !self.selected_flags().hidden
                     && !self.selected_flags().locked
@@ -6695,6 +6734,9 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         ui.disable();
                     }
                     if let Some(project) = self.current_project.as_mut() {
+                        if ui.button("Create Two-Bone Cutout Rig").clicked() {
+                            if let Some(scene_id)=self.scenes.active_id(){self.project_requests.push(ProjectRequest::Entity(crate::entity_command::EntityCommand{scene_id:scene_id.into(),edit:crate::entity_command::EntityEdit::CreateCutoutRig{position:[80.0,120.0],length:64.0}}));}
+                        }
                         let before = serde_json::to_value(&project.animation_clips).ok();
                         AnimationEditorState::render_with_root(
                             ui,
@@ -6709,7 +6751,7 @@ impl<'a> egui_dock::TabViewer for TabViewer<'a> {
                         if let Some(scene) = self.scenes.active_id().and_then(|id| project.scenes.get(id)) {
                             let scope = format!("{}:{}", self.asset_browser.root().map(|p|p.display().to_string()).unwrap_or_default(), scene.id);
                             if let Some(source) = self.anim_editor.cutscene.render(ui, scene, (&self.shell.script_editor.source,self.shell.script_editor.loaded_path()), &scope, ui.input(|i|i.stable_dt)) {
-                                let result = self.asset_browser.root().ok_or_else(||"Open a project first".to_owned()).and_then(|root|self.shell.script_editor.stage_cutscene(root,&self.anim_editor.cutscene.path,source));
+                                let result = self.anim_editor.cutscene.draft.validate_assets(project).and_then(|_|self.asset_browser.root().ok_or_else(||"Open a project first".to_owned())).and_then(|root|self.shell.script_editor.stage_cutscene(root,&self.anim_editor.cutscene.path,source));
                                 match result {
                                     Ok(()) => {self.anim_editor.cutscene.message="Generated source staged; Save Script, then attach it to one director entity.".into();self.project_requests.push(ProjectRequest::FocusScriptEditor);},
                                     Err(error) => self.anim_editor.cutscene.message=error,

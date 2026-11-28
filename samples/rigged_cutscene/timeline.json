@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "tracks": [
+    {
+      "entity": "target",
+      "property": "position",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            140.0,
+            80.0
+          ],
+          "ease": "smooth"
+        },
+        {
+          "time": 3,
+          "value": [
+            240.0,
+            120.0
+          ],
+          "ease": "smooth"
+        }
+      ],
+      "blend": {
+        "keys": [
+          {
+            "time": 0,
+            "value": [
+              180.0,
+              160.0
+            ],
+            "ease": "smooth"
+          },
+          {
+            "time": 3,
+            "value": [
+              240.0,
+              120.0
+            ],
+            "ease": "smooth"
+          }
+        ],
+        "weight": 0.5,
+        "parameter": "reach_blend"
+      }
+    }
+  ],
+  "actions": [
+    "pause",
+    "restart",
+    "seek",
+    "cancel"
+  ],
+  "cues": [
+    {
+      "time": 0,
+      "kind": "signal",
+      "name": "marker",
+      "value": 1
+    },
+    {
+      "time": 0.5,
+      "kind": "sound",
+      "name": "chime",
+      "value": 0
+    },
+    {
+      "time": 1,
+      "kind": "signal",
+      "name": "marker",
+      "value": 1
+    },
+    {
+      "time": 3.05,
+      "kind": "signal",
+      "name": "done",
+      "value": 1
+    }
+  ],
+  "ik": [
+    {
+      "bones": [
+        "upper",
+        "lower",
+        "tip"
+      ],
+      "target": "target",
+      "bend": 1.0,
+      "weight": 1.0
+    }
+  ]
+}

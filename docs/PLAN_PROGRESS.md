@@ -159,3 +159,10 @@ and external edits. 934 Rust tests and quality checks pass. Existing v15 runtime
 contract retained. A07 stays PARTIAL; scene preview, broad/audio/event tracks,
 blending and skeletal rigs/IK remain open. See
 [composer evidence](evidence/A07_CUTSCENE_COMPOSER.md).
+
+2026-11-28 A07 ADR-0117: Scene View draw-only preview/restoration, saved once-only
+sound/signal cues, two-take property blending and cutout skeletal creation plus
+weighted FK/IK. Runtime v16; 946 Rust tests, quality and strict WASM checks pass.
+The supported skeleton uses rigid single-bone sprite skins. Soft weighted vertex
+meshes, atlas crossfades, automatic blend trees and full OS/performance acceptance
+remain open. See [workflow evidence](evidence/A07_ANIMATION_WORKFLOWS.md).

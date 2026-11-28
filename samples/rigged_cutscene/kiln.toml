@@ -1,0 +1,81 @@
+id="rigged-cutscene"
+name="Blended cutout rig and cues"
+version="0.1.0"
+features=[]
+[window]
+width=320
+height=240
+[scenes.main]
+id="main"
+name="Rigged Cutscene"
+script="scripts/main.ks"
+nested_scenes=[]
+
+[[scenes.main.entities]]
+id="upper"
+name="Upper Bone"
+components=[{type="Transform",x=80.0,y=120.0,rotation=0.0,scale=1.0}]
+
+[[scenes.main.entities]]
+id="lower"
+name="Lower Bone"
+components=[{type="Transform",x=80.0,y=0.0,rotation=0.0,scale=1.0},{type="Parent",parent="upper"}]
+
+[[scenes.main.entities]]
+id="tip"
+name="Tip Bone"
+components=[{type="Transform",x=80.0,y=0.0,rotation=0.0,scale=1.0},{type="Parent",parent="lower"},{type="Sprite",width=32.0,height=32.0,color=[0.0, 1.0, 0.0, 1.0],layer=1.0}]
+
+[[scenes.main.entities]]
+id="upper_skin"
+name="Rigid upper skin"
+components=[{type="Transform",x=40.0,y=0.0,rotation=0.0,scale=1.0},{type="Parent",parent="upper"},{type="Sprite",width=80.0,height=12.0,color=[0.4, 0.4, 0.4, 1.0],layer=0.0}]
+
+[[scenes.main.entities]]
+id="lower_skin"
+name="Rigid lower skin"
+components=[{type="Transform",x=40.0,y=0.0,rotation=0.0,scale=1.0},{type="Parent",parent="lower"},{type="Sprite",width=80.0,height=12.0,color=[0.4, 0.4, 0.4, 1.0],layer=0.0}]
+
+[[scenes.main.entities]]
+id="target"
+name="IK Target"
+components=[{type="Transform",x=160.0,y=120.0,rotation=0.0,scale=1.0}]
+
+[[scenes.main.entities]]
+id="ready"
+name="Completion witness"
+components=[{type="Transform",x=24.0,y=16.0,rotation=0.0,scale=1.0},{type="Sprite",width=8.0,height=8.0,color=[1.0, 0.0, 0.0, 1.0],layer=1.0},{type="Script",path="scripts/listener.ks",properties={}}]
+
+[[scenes.main.entities]]
+id="director"
+name="Director"
+components=[{type="Transform",x=0.0,y=0.0,rotation=0.0,scale=1.0},{type="Script",path="scripts/director.ks",properties={}}]
+
+[action_map.actions.pause]
+id="pause"
+name="pause"
+bindings=[{binding_type={Key="Space"}}]
+
+[action_map.actions.restart]
+id="restart"
+name="restart"
+bindings=[{binding_type={Key="r"}}]
+
+[action_map.actions.seek]
+id="seek"
+name="seek"
+bindings=[{binding_type={Key="ArrowRight"}}]
+
+[action_map.actions.cancel]
+id="cancel"
+name="cancel"
+bindings=[{binding_type={Key="c"}}]
+
+[[audio_assets]]
+id="chime"
+name="chime"
+path="assets/chime.wav"
+is_music=false
+volume=0.3
+bus="SFX"
+looped=false

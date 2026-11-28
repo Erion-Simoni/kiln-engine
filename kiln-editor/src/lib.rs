@@ -10,6 +10,7 @@ pub mod build_panel;
 pub mod component_command;
 pub mod cutscene;
 pub mod cutscene_editor;
+pub mod cutscene_preview;
 pub mod debugger_panel;
 pub mod editing;
 pub mod editor_shell;

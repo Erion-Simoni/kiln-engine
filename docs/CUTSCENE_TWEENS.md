@@ -62,9 +62,12 @@ For a saved camera dolly, follow a Transform-only rig with zero smoothing and
 tween its position. The sample saves the rig pose and its active track, preserving
 view continuity. Existing direct camera transitions/shake can be composed with
 sequences, but their controller history remains transient. Runtime contract
-`kiln-authoring-v15` requires matching editor, CLI, player and browser SDK.
+`kiln-authoring-v16` requires matching editor, CLI, player and browser SDK.
 
 Use **Animation Editor → Cutscene Composer** for saved source-backed property
 keyframes, easing, value scrubbing and draft undo/redo. See the
-[composer guide](CUTSCENE_COMPOSER.md); scene-view preview, audio/event tracks and
-skeletal rigging remain open.
+[composer guide](CUTSCENE_COMPOSER.md) and the implemented preview, cue, blend and
+cutout-rig workflows linked below.
+
+Scene preview, audio/signal cues, weighted property animation and cutout skeletal
+FK/IK are described in [A07 workflows](A07_ANIMATION_WORKFLOWS.md).

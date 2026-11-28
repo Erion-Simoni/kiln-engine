@@ -1,5 +1,7 @@
 //! Visual key editing, scrub preview and guarded handoff to the Source Editor.
-use crate::cutscene::{property_name, sample, Cutscene, Key, Track};
+use crate::cutscene::{
+    property_name, sample, Blend, Cue, CueKind, Cutscene, IkBinding, Key, Track,
+};
 use kiln_core::{Component, Entity, Scene};
 use kiln_runtime::tweens::{TweenEase, TweenProperty as Property};
 #[derive(Debug)]
@@ -7,7 +9,8 @@ pub struct Composer {
     pub draft: Cutscene,
     pub path: String,
     pub message: String,
-    time: f64,
+    pub time: f64,
+    pub scene_preview: bool,
     playing: bool,
     entity: String,
     property: Property,
@@ -22,6 +25,7 @@ impl Default for Composer {
             path: "cutscene.ks".into(),
             message: String::new(),
             time: 0.0,
+            scene_preview: false,
             playing: false,
             entity: String::new(),
             property: Property::Position,
@@ -74,6 +78,26 @@ impl Composer {
             }
         }
     }
+    pub fn sync_scope(&mut self, scope: &str) {
+        if self.scope != scope {
+            *self = Self {
+                scope: scope.into(),
+                ..Default::default()
+            };
+        }
+    }
+    pub fn advance(&mut self, dt: f32) -> bool {
+        if self.playing {
+            let duration = self.draft.duration().max(0.001);
+            self.time = (self.time + f64::from(dt.max(0.0))).min(duration);
+            if self.time >= duration {
+                self.playing = false;
+            }
+            true
+        } else {
+            false
+        }
+    }
     /// Returns generated source only; disk writes use ScriptEditor atomic Save.
     pub fn render(
         &mut self,
@@ -81,14 +105,9 @@ impl Composer {
         scene: &Scene,
         source: (&str, &str),
         scope: &str,
-        dt: f32,
+        _dt: f32,
     ) -> Option<String> {
-        if self.scope != scope {
-            *self = Self {
-                scope: scope.into(),
-                ..Default::default()
-            };
-        }
+        self.sync_scope(scope);
         let mut generated = None;
         ui.collapsing("Cutscene Composer",|ui|{
             ui.label("Add entity tracks and keys, scrub values, then open generated source and Save Script. Attach the saved file to one director entity in the Inspector.");
@@ -103,6 +122,7 @@ impl Composer {
                     }
                 }
             });
+            ui.checkbox(&mut self.scene_preview,"Preview in Scene View (draw only)");
             let before=self.draft.clone();
             ui.horizontal(|ui|{
                 egui::ComboBox::from_id_salt("cutscene_entity").selected_text(if self.entity.is_empty(){"Choose entity"}else{&self.entity}).show_ui(ui,|ui|{
@@ -115,18 +135,17 @@ impl Composer {
                     if let Some(entity)=scene.entities.iter().find(|e|e.id==self.entity) {
                         if !self.draft.tracks.iter().any(|t|t.entity==self.entity&&t.property==self.property){
                             let value=initial(entity,self.property);
-                            self.draft.tracks.push(Track{entity:self.entity.clone(),property:self.property,keys:vec![Key{time:0.0,value:value.clone(),ease:TweenEase::Linear},Key{time:1.0,value,ease:TweenEase::Smooth}]});
+                            self.draft.tracks.push(Track{blend:None,entity:self.entity.clone(),property:self.property,keys:vec![Key{time:0.0,value:value.clone(),ease:TweenEase::Linear},Key{time:1.0,value,ease:TweenEase::Smooth}]});
                         }
                     }
                 }
             });
             let duration=self.draft.duration().max(0.001);
-            if self.playing {self.time=(self.time+f64::from(dt.max(0.0))).min(duration);if self.time>=duration{self.playing=false;}ui.ctx().request_repaint();}
             ui.horizontal(|ui|{
                 if ui.button(if self.playing{"Pause Preview"}else{"Play Values"}).clicked(){if self.time>=duration{self.time=0.0;}self.playing = !self.playing;}
                 if ui.add(egui::Slider::new(&mut self.time,0.0..=duration).text("Seconds")).changed(){self.playing=false;}
             });
-            let total_keys:usize=self.draft.tracks.iter().map(|t|t.keys.len()).sum();
+            let total_keys=self.draft.key_count();
             let mut remove_track=None;
             for (index,track) in self.draft.tracks.iter_mut().enumerate(){
                 ui.push_id(index,|ui|{
@@ -151,10 +170,44 @@ impl Composer {
                     if let Some(i)=remove_key{track.keys.remove(i);}
                     if ui.add_enabled(total_keys<64&&track.keys.last().is_some_and(|k|k.time<60.0),egui::Button::new("Add Key")).clicked(){if let Some(last)=track.keys.last().cloned(){track.keys.push(Key{time:(last.time+1.0).min(60.0),..last});}}
                     if ui.small_button("Sort Keys by Time").clicked(){track.keys.sort_by(|a,b|a.time.total_cmp(&b.time));}
+                    let mut enabled=track.blend.is_some();
+                    if ui.checkbox(&mut enabled,"Blend second take").changed(){track.blend=enabled.then(||Blend{keys:track.keys.clone(),weight:0.5,parameter:String::new()});}
+                    if let Some(blend)=&mut track.blend {
+                        ui.add(egui::Slider::new(&mut blend.weight,0.0..=1.0).text("Blend weight"));
+                        ui.horizontal(|ui|{ui.label("Live weight game variable (optional)");ui.text_edit_singleline(&mut blend.parameter);});
+                        ui.push_id("blend_keys",|ui|edit_keys(ui,&mut blend.keys,total_keys));
+                    }
+
                 });
             }
             if let Some(i)=remove_track{self.draft.tracks.remove(i);}
             ui.collapsing("Runtime control actions",|ui|{for (label,action) in ["Pause","Restart","Seek midpoint","Cancel"].into_iter().zip(&mut self.draft.actions){ui.horizontal(|ui|{ui.label(label);ui.text_edit_singleline(action);});}ui.label("Bind these action names in Project input settings; empty disables that control.");});
+            ui.collapsing("Audio / Signal cues",|ui|{
+                if ui.add_enabled(self.draft.cues.len()<32,egui::Button::new("Add Cue")).clicked(){self.draft.cues.push(Cue{time:0.0,kind:CueKind::Signal,name:"cutscene_event".into(),value:1.0});}
+                let mut remove=None;
+                for(i,cue)in self.draft.cues.iter_mut().enumerate(){ui.push_id(("cue",i),|ui|{ui.horizontal_wrapped(|ui|{
+                    ui.add(egui::DragValue::new(&mut cue.time).range(0.0..=60.0).speed(0.05));
+                    egui::ComboBox::from_id_salt("cue_kind").selected_text(format!("{:?}",cue.kind)).show_ui(ui,|ui|{ui.selectable_value(&mut cue.kind,CueKind::Signal,"Signal");ui.selectable_value(&mut cue.kind,CueKind::Sound,"Sound");});
+                    ui.text_edit_singleline(&mut cue.name);
+                    if cue.kind==CueKind::Signal{ui.add(egui::DragValue::new(&mut cue.value).speed(0.1));}
+                    if ui.small_button("Remove Cue").clicked(){remove=Some(i);}
+                });});}
+                if let Some(i)=remove{self.draft.cues.remove(i);}
+                ui.label("Cues fire once per restart in chronological order. Seeking and editor preview are silent. Sound names use project audio assets.");
+            });
+            ui.collapsing("Cutout Skeletal IK",|ui|{
+                ui.label("Create a two-bone rig above, then select its Upper, Lower, Tip bones and root-level target. Animate the target with a position track.");
+                if ui.add_enabled(self.draft.ik.len()<8,egui::Button::new("Add IK Chain")).clicked(){self.draft.ik.push(IkBinding{bones:[String::new(),String::new(),String::new()],target:String::new(),bend:1.0,weight:1.0});}
+                let mut remove=None;
+                for(index,ik)in self.draft.ik.iter_mut().enumerate(){ui.push_id(("ik",index),|ui|{
+                    for(label,value)in ["Upper","Lower","Tip","Target"].into_iter().zip(ik.bones.iter_mut().chain(std::iter::once(&mut ik.target))){
+                        egui::ComboBox::from_id_salt(label).selected_text(format!("{label}: {value}")).show_ui(ui,|ui|{for entity in &scene.entities{ui.selectable_value(value,entity.id.clone(),format!("{} ({})",entity.name,entity.id));}});
+                    }
+                    ui.add(egui::Slider::new(&mut ik.weight,0.0..=1.0).text("IK / FK weight"));
+                    ui.horizontal(|ui|{ui.selectable_value(&mut ik.bend,1.0,"Bend +");ui.selectable_value(&mut ik.bend,-1.0,"Bend -");if ui.button("Remove IK Chain").clicked(){remove=Some(index);}});
+                });}
+                if let Some(i)=remove{self.draft.ik.remove(i);}
+            });
             self.record(before);
             ui.horizontal(|ui|{ui.label("Source path");ui.text_edit_singleline(&mut self.path);});
             if ui.button("Open Generated Source").clicked(){match self.draft.validate_scene(scene).and_then(|_|self.draft.source()){Ok(source)=>generated=Some(source),Err(e)=>self.message=e}}
@@ -162,6 +215,61 @@ impl Composer {
             if !self.message.is_empty(){ui.label(&self.message);}
         });
         generated
+    }
+}
+
+fn edit_keys(ui: &mut egui::Ui, keys: &mut Vec<Key>, total: usize) {
+    let mut remove = None;
+    for (i, key) in keys.iter_mut().enumerate() {
+        ui.push_id(i, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(format!("Blend key {i}"));
+                ui.add_enabled(
+                    i > 0,
+                    egui::DragValue::new(&mut key.time)
+                        .speed(0.05)
+                        .range(0.0..=60.0),
+                );
+                for value in &mut key.value {
+                    ui.add(egui::DragValue::new(value).speed(0.05));
+                }
+                egui::ComboBox::from_id_salt("blend_ease")
+                    .selected_text(format!("{:?}", key.ease))
+                    .show_ui(ui, |ui| {
+                        for e in [
+                            TweenEase::Linear,
+                            TweenEase::Smooth,
+                            TweenEase::In,
+                            TweenEase::Out,
+                        ] {
+                            ui.selectable_value(&mut key.ease, e, format!("{e:?}"));
+                        }
+                    });
+                if i > 0 && ui.small_button("Remove Blend Key").clicked() {
+                    remove = Some(i);
+                }
+            });
+        });
+    }
+    if let Some(i) = remove {
+        keys.remove(i);
+    }
+    if ui
+        .add_enabled(
+            total < 64 && keys.last().is_some_and(|k| k.time < 60.0),
+            egui::Button::new("Add Blend Key"),
+        )
+        .clicked()
+    {
+        if let Some(last) = keys.last().cloned() {
+            keys.push(Key {
+                time: (last.time + 1.0).min(60.0),
+                ..last
+            });
+        }
+    }
+    if ui.button("Sort Blend Keys").clicked() {
+        keys.sort_by(|a, b| a.time.total_cmp(&b.time));
     }
 }
 
@@ -276,5 +384,22 @@ mod tests {
         click(&ctx, &mut composer, &scene, "Play Values");
         frame(&ctx, &mut composer, &scene, vec![]);
         assert!(composer.playing);
+        click(
+            &ctx,
+            &mut composer,
+            &scene,
+            "Preview in Scene View (draw only)",
+        );
+        assert!(composer.scene_preview);
+        click(&ctx, &mut composer, &scene, "Blend second take");
+        assert!(composer.draft.tracks[0].blend.is_some());
+        click(&ctx, &mut composer, &scene, "Audio / Signal cues");
+        click(&ctx, &mut composer, &scene, "Add Cue");
+        assert_eq!(composer.draft.cues.len(), 1);
+        let source = click(&ctx, &mut composer, &scene, "Open Generated Source").unwrap();
+        assert_eq!(Cutscene::from_source(&source).unwrap(), composer.draft);
+        click(&ctx, &mut composer, &scene, "Cutout Skeletal IK");
+        click(&ctx, &mut composer, &scene, "Add IK Chain");
+        assert_eq!(composer.draft.ik.len(), 1);
     }
 }

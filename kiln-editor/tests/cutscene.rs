@@ -262,6 +262,7 @@ fn bounded_document_runs_at_default_budget_and_literals_preserve_extreme_values(
                 vec![-f32::MAX as f64]
             };
             doc.tracks.push(Track {
+                blend: None,
                 entity: id.clone(),
                 property,
                 keys: (0..4)

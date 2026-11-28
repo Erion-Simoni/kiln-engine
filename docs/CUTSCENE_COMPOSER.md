@@ -1,8 +1,9 @@
 # Cutscene Composer
 
 Open **Animation Editor → Cutscene Composer** to author position, rotation,
-XY scale and tint keyframes. This is a source-backed property timeline; skeletal
-rigging, audio/event tracks and scene-view animation preview remain open work.
+XY scale and tint keyframes. This source-backed timeline now includes Scene View
+preview, sound/signal cues,
+weighted takes and cutout skeletal FK/IK; see [workflows](A07_ANIMATION_WORKFLOWS.md).
 
 1. Choose an entity and property, then **Add Track**. The first key captures its
    authored value at time zero. Change the second key's time and destination;
@@ -11,7 +12,8 @@ rigging, audio/event tracks and scene-view animation preview remain open work.
    Smooth, In or Out. Times must strictly increase; use **Sort Keys by Time** after
    changing their order. Time-zero keys cannot be removed. Duplicate times reject.
 3. Click or drag the timeline strip, use the Seconds slider, or **Play Values** to
-   preview interpolated values. This previews values without changing scene poses.
+   preview interpolated values. Enable **Preview in Scene View (draw only)** to
+   render the sampled poses without changing authored data.
    **Undo Timeline / Redo Timeline** restore draft edits.
 4. Set a project-relative `.ks` source path. Its parent directory must exist.
    **Open Generated Source** stages the script and opens Source Editor.
@@ -48,8 +50,8 @@ starts at zero. Transform bindings need a Transform and reject all RigidBody2D
 entities. Tint needs a Sprite; channels must be 0..1. Scale axes must be positive
 and at least 0.000001. Other destinations must be finite and f32-representable.
 The metadata comment stores decimal strings to preserve authored values exactly;
-source numeric literals avoid unsupported exponent notation. Existing v15 tools
-execute the generated script; this adds no runtime ABI or dependency.
+source numeric literals avoid unsupported exponent notation. Legacy unextended documents keep their canonical source. New IK/sound calls
+require matching v16 tools; no new dependency is introduced.
 
 [samples/authored_cutscene](../samples/authored_cutscene/README.md) demonstrates
 multi-key motion, a 450-degree spin, squash/stretch, tint and a camera-follow dolly.

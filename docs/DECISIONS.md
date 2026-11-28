@@ -2653,3 +2653,28 @@ audio/events, reimport conflict resolution and full A07 acceptance remain open.
 Composer metadata serializes key times/values as decimal strings (numeric recipe
 JSON is accepted), preserving exact f64 values without changing workspace JSON
 features. Emitted literals use decimal notation supported by KilnScript.
+
+## ADR-0117 — A07 preview, cues, pose blending and cutout skeletal rigs (2026-11-28)
+
+Extend ADR-0116 with a reversible draw-only Scene View preview; original local
+poses/tints and resolved globals restore before picking, saving or simulation.
+Preview playback advances even when the composer tab is hidden. No audio/events
+are emitted by scrubbing. Add bounded chronological sound/signal cues, saved
+once-per-playthrough latches, silent seeking and explicit restart rearming.
+A queued sound host call defers audio delivery until successful callback commit.
+Add a second key take with 0..1 weighted pose blending and optional saved game
+variable controlling weight. Preview uses the authored weight; live playback can
+change it. Rotation blends unwrapped radians. Legacy empty additions serialize
+away and preserve original canonical generated source.
+
+Supersede ADR-0022's deferral for a custom cutout skeletal workflow: hierarchy
+Transform entities are bones, sprite children are rigid skin attachments (one
+bone influence, weight 1). Bone-local animation uses the same authored tracks;
+attachment transforms follow the shared native/browser hierarchy resolver. Add an
+undoable two-bone rig creation transaction and a callback-atomic analytic two-bone
+IK solver with bend direction, unreachable-target clamping and 0..1 IK/FK weight.
+The solver accepts +X rest links and positive uniform scale ancestry; unsupported
+chains reject without partial pose changes. Logical snapshots retain hierarchy,
+pose and generated clocks. No external dependency. Soft multi-influence vertex
+mesh deformation and external Spine/DragonBones import are outside this cutout
+approach and must not be claimed. Runtime contract v16 gates new host calls.

@@ -778,7 +778,7 @@ Add `KILN_DEBUG_EXPRESSION_WATCHES=1` to verify computed watch values before and
 after corrected-source Restart. `KILN_DEBUG_ACTIVE_SCOPES=1` additionally verifies
 strict scope reads, the active-only view and completed-scope rejection.
 
-Runtime tools now use contract `kiln-authoring-v15` (saved cutscene tweens and character animation states, following
+Runtime tools now use contract `kiln-authoring-v16` (saved cutscene tweens and character animation states, following
 the v6 shared-call change). Function-using VM snapshots
 include `shared-calls-v1` in their memory signature, so older incompatible function
 slot layouts reject before a load commits. Straight-line program signatures remain
@@ -811,3 +811,6 @@ Animation Editor can generate keyframe scripts through the
 [Cutscene Composer](CUTSCENE_COMPOSER.md). A versioned metadata comment preserves
 editable keys; the resulting gameplay uses existing v15 tween builtins and saved
 script state. Altered generated source rejects regeneration to preserve manual work.
+
+Scene preview, audio/signal cues, weighted property animation and cutout skeletal
+FK/IK are described in [A07 workflows](A07_ANIMATION_WORKFLOWS.md).

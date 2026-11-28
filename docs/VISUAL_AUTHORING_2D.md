@@ -169,9 +169,9 @@ entry; seek suppresses historical events. Leftover real time crossing a transiti
 uses the new clip's speed. Controls participate in clip undo/redo and saves.
 
 `samples/ping_pong` turns green only after zero/one/two/one/zero events and a speed-2
-checkpoint. Matching tools require contract v12. These are clip playback controls;
-state graphs, arbitrary property/camera/audio tracks, curves, rigs and IK remain
-open A07 work. The existing 4096-cycle update limit remains; extreme event/cycle
+checkpoint. Matching tools now require contract v16. These clip controls complement the
+state graphs, property timelines, sound/signal cues and cutout FK/IK workflows
+described below. The existing 4096-cycle update limit remains; extreme event/cycle
 overload and production performance acceptance are separate.
 
 ## Character animation states
@@ -185,7 +185,7 @@ logical saves preserve the graph. See [the workflow](ANIMATION_STATES_2D.md) and
 
 Saved script-authored movement, tint and camera-follow rig sequences are described
 in [Cutscene tweens](CUTSCENE_TWEENS.md). Pause, seek, cancel and logical save/resume
-are supported; a graphical timeline remains open A07 work.
+are supported; use Cutscene Composer for graphical property keyframes.
 
 The Source Editor can also author local rotation and XY scale tracks with
 `tween_rotation` and `tween_scale`; [transform_tweens](../samples/transform_tweens/README.md)
@@ -194,5 +194,9 @@ All four properties share pause/seek/cancel and logical-save support.
 
 Use **Animation Editor → Cutscene Composer** for saved source-backed property
 keyframes, easing, value scrubbing and draft undo/redo. See the
-[composer guide](CUTSCENE_COMPOSER.md); scene-view preview, audio/event tracks and
-skeletal rigging remain open.
+[composer guide](CUTSCENE_COMPOSER.md) and the implemented preview, cue, blend and
+cutout-rig workflows linked below.
+
+Animation Editor now offers **Preview in Scene View**, **Audio / Signal cues**,
+**Blend second take**, and **Create Two-Bone Cutout Rig** plus IK chain authoring.
+See [A07 workflows](A07_ANIMATION_WORKFLOWS.md) for supported constraints.

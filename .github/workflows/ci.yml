@@ -293,6 +293,14 @@ jobs:
             if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
             KILN_ATLAS_PROJECT="target/a05-native-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" KILN_ATLAS_PLAYER_EVIDENCE="target/a05-$kind-native" python3 tests/native/atlas_player_smoke.py
           done
+      - name: Verify blended cutout rig and once-only cues in native exports
+        env:
+          KILN_ATLAS_PROJECT: samples/rigged_cutscene
+          KILN_PIXEL_SCENARIO: rigged-cutscene
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 224,104,256,136
+          KILN_ATLAS_PLAYER_EVIDENCE: target/a07-complete-native
+        run: python3 tests/native/atlas_player_smoke.py
       - name: Verify authored keyframe cutscene in native exports
         env:
           KILN_ATLAS_PROJECT: samples/authored_cutscene
@@ -589,6 +597,15 @@ jobs:
             if [ "$kind" = overflow ]; then warning=1; else warning=0; fi
             KILN_ATLAS_PROJECT="target/a05-browser-$kind-project" KILN_PIXEL_SCENARIO="sprite-$kind" KILN_EXPECT_SPRITE_DROPS="$warning" WEB_ATLAS_EVIDENCE="target/a05-$kind-browser" node tests/web/atlas.cjs target/debug/web-runtime
           done
+      - name: Verify blended cutout rig and once-only cues in browser exports
+        env:
+          KILN_ATLAS_PROJECT: samples/rigged_cutscene
+          KILN_PIXEL_SCENARIO: rigged-cutscene
+          KILN_PIXEL_REQUIRE_BLUE_READY: '1'
+          KILN_PIXEL_EXPECT_GREEN_BOUNDS: 224,104,256,136
+          KILN_PIXEL_EXPECT_AUDIO_STARTS: '1'
+          WEB_ATLAS_EVIDENCE: target/a07-complete-browser
+        run: node tests/web/atlas.cjs target/debug/web-runtime
       - name: Verify authored keyframe cutscene in browser exports
         env:
           KILN_ATLAS_PROJECT: samples/authored_cutscene

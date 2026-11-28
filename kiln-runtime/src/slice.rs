@@ -123,6 +123,8 @@ pub struct SliceFacts {
 /// A change the script asked for.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SliceCommand {
+    SolveIk(crate::rig::IkRequest),
+    QueueSound(String),
     Tween(crate::tweens::TweenCommand),
     /// Callback-atomic change to a declared animation graph parameter.
     SetAnimationParameter {
@@ -1424,6 +1426,48 @@ impl SliceHost {
             )),
             116..=123 => self.call_task(func_id, args),
             131..=139 => self.call_tween(func_id, args),
+            140 => {
+                let text = |i: usize| {
+                    args[i]
+                        .as_str()
+                        .map(str::to_owned)
+                        .ok_or_else(|| VmError::HostCallError("Expected IK bone ID".into()))
+                };
+                let number = |i: usize| {
+                    args[i]
+                        .to_f64()
+                        .ok_or_else(|| VmError::HostCallError("Expected IK number".into()))
+                };
+                let request = crate::rig::IkRequest {
+                    bones: [text(0)?, text(1)?, text(2)?],
+                    target: [number(3)?, number(4)?],
+                    bend: number(5)?,
+                    weight: number(6)?,
+                };
+                request.validate().map_err(VmError::HostCallError)?;
+                if request
+                    .bones
+                    .iter()
+                    .any(|id| !self.facts.entity_tween_positions.contains(id))
+                {
+                    return Ok(Value::Bool(false));
+                }
+                self.commands.push(SliceCommand::SolveIk(request));
+                Ok(Value::Bool(true))
+            }
+            141 => {
+                let name = args[0]
+                    .as_str()
+                    .ok_or_else(|| VmError::HostCallError("Expected sound name".into()))?;
+                if name.trim().is_empty() || name.len() > 64 || name.chars().any(char::is_control) {
+                    return Err(VmError::HostCallError(
+                        "Sound name must be 1..64 bytes".into(),
+                    ));
+                }
+                self.commands.push(SliceCommand::QueueSound(name.into()));
+                Ok(Value::Bool(true))
+            }
+
             129 => {
                 let entity = args[0]
                     .as_str()
@@ -2371,6 +2415,31 @@ impl SliceSession {
     fn apply(&mut self, command: SliceCommand, world: &mut GameWorld) {
         match command {
             SliceCommand::Tween(command) => self.apply_tween(command, world),
+            SliceCommand::QueueSound(name) => {
+                if self.host_mut().platform_audio.is_some() {
+                    if let Err(error) = self.host_mut().call_platform_audio(12, &[Value::Str(name)])
+                    {
+                        log::error!("Queued sound failed: {error}");
+                    }
+                } else if let Some(player) = &self.host_mut().audio_player {
+                    player(&name);
+                } else {
+                    #[cfg(feature = "audio")]
+                    if let Some(audio) = &mut self.host_mut().audio {
+                        audio.play_sound(&name);
+                    }
+                }
+            }
+            SliceCommand::SolveIk(request) => {
+                if crate::rig::solve(world, &request).is_ok() {
+                    for id in &request.bones[..2] {
+                        self.host_mut()
+                            .tweens
+                            .cancel(id, crate::tweens::TweenProperty::Rotation);
+                    }
+                }
+            }
+
             SliceCommand::SetAnimationParameter {
                 entity,
                 name,

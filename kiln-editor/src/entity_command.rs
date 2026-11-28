@@ -9,6 +9,8 @@ use crate::{editing::next_entity_id, history::SceneHistory};
 /// A single authored entity or hierarchy operation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum EntityEdit {
+    /// Create a two-link cutout skeleton and rigid sprite attachments in one undo step.
+    CreateCutoutRig { position: [f32; 2], length: f32 },
     /// Change editor-only flags, including unlocking a protected entity.
     SetEditorFlags {
         entity_id: String,
@@ -195,6 +197,75 @@ fn apply(
             }
             scene.entities[index].name = name.to_owned();
             Ok(None)
+        }
+        EntityEdit::CreateCutoutRig { position, length } => {
+            if !position.iter().all(|v| v.is_finite())
+                || !length.is_finite()
+                || !(1.0..=4096.0).contains(length)
+            {
+                return Err("Rig needs finite position and length 1..4096".into());
+            }
+            let mut ids = vec![];
+            for index in 0..6 {
+                let id = next_id(project, scene);
+                ids.push(id.clone());
+                let (x, y, parent) = match index {
+                    0 => (position[0], position[1], None),
+                    1 => (*length, 0.0, Some(ids[0].clone())),
+                    2 => (*length, 0.0, Some(ids[1].clone())),
+                    3 | 4 => (*length / 2.0, 0.0, Some(ids[index - 3].clone())),
+                    _ => (
+                        position[0] + *length * 1.5,
+                        position[1] + *length * 0.5,
+                        None,
+                    ),
+                };
+                let mut components = vec![Component::Transform {
+                    x,
+                    y,
+                    rotation: 0.0,
+                    scale: 1.0,
+                }];
+                if let Some(parent) = parent {
+                    components.push(Component::Parent { parent });
+                }
+                if (3..=4).contains(&index) {
+                    components.push(Component::Sprite {
+                        color: [0.2, 0.6, 0.9, 1.0],
+                        width: *length,
+                        height: 12.0,
+                        texture: None,
+                        layer: 0.0,
+                        material: None,
+                        animation_clip: None,
+                    });
+                }
+                if index == 2 {
+                    components.push(Component::Sprite {
+                        color: [0.0, 1.0, 0.0, 1.0],
+                        width: 16.0,
+                        height: 16.0,
+                        texture: None,
+                        layer: 1.0,
+                        material: None,
+                        animation_clip: None,
+                    });
+                }
+                scene.entities.push(Entity {
+                    id,
+                    name: [
+                        "Upper Bone",
+                        "Lower Bone",
+                        "Tip Bone",
+                        "Upper Skin (rigid weight 1)",
+                        "Lower Skin (rigid weight 1)",
+                        "IK Target",
+                    ][index]
+                        .into(),
+                    components,
+                });
+            }
+            Ok(Some(ids[0].clone()))
         }
         EntityEdit::Create { name, position } => {
             if name.trim().is_empty() || !position.iter().all(|value| value.is_finite()) {
