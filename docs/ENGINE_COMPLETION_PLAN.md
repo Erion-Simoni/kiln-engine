@@ -677,6 +677,15 @@ browser exports prove hold, seek and exact endpoints. Contract v14 rejects older
 SDKs. Timeline GUI, general/audio/event tracks, blending and skeletal rigs/IK
 remain open; A07 stays PARTIAL. [Evidence](evidence/A07_CUTSCENE_TWEENS.md).
 
+**Transform-track checkpoint 2026-11-28:** ADR-0115 extends saved cutscene tracks
+with local rotation and XY scale. Unwrapped radians support deliberate multi-turn
+spins; positive scale supports squash/stretch while preserving saved geometry.
+Pause/seek/cancel and shared capacity apply to all four property types. Transform
+removal releases all transform tracks; position writes preserve spin/stretch.
+Contract v15 requires matching tools. A07 remains PARTIAL; graphical timeline,
+general/audio/event tracks, blending and skeletal rigs/IK remain open.
+See [transform evidence](evidence/A07_TRANSFORM_TWEENS.md).
+
 ### A08 — Complete 2D physics and character tools
 
 **Status:** PARTIAL. **Depends on:** A04, A06.

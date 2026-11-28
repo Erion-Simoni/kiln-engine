@@ -145,3 +145,9 @@ passes native/browser exports. 924 Rust tests, 49 Python helpers, quality and
 strict WASM checks pass; v14 rejects stale SDKs. A07 remains PARTIAL; graphical
 timeline, general/audio/event tracks, blending and skeletal rigs/IK remain open.
 See [cutscene evidence](evidence/A07_CUTSCENE_TWEENS.md).
+
+2026-11-28 A07 ADR-0115: local rotation and XY scale join saved cutscene tracks.
+Multi-turn spins and positive squash/stretch share pause/seek/cancel and capacity.
+Fixed script Transform/Sprite removal using single-component ECS removal.
+Contract v15; A07 remains PARTIAL. See
+[transform evidence](evidence/A07_TRANSFORM_TWEENS.md).

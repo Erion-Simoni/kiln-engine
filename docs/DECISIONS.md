@@ -2609,3 +2609,20 @@ No new dependency or authored timeline GUI. Combine with existing camera_transit
 and script tasks for sequences; camera history remains transient as documented.
 Contract v14 rejects older runtimes lacking tween host calls. Full timeline/track
 editor, sound tracks and rigs/IK remain open A07 work.
+
+## ADR-0115 — Rotation and scale cutscene tracks (2026-11-28)
+
+Extend ADR-0114's bounded shared service with local rotation (radians, unwrapped
+linear angle interpolation for deliberate multi-turn spins) and local XY scale.
+Finite f32-representable scale sources and targets must be at least 0.000001
+per axis, preserving existing non-singular saved-geometry contracts. Positive
+interpolation supports squash/stretch; zero crossings and mirroring are deferred. All transform tracks reject RigidBody2D ownership; color remains valid.
+Use tween_rotation(entity,radians,seconds,ease), ID 138, and
+tween_scale(entity,x,y,seconds,ease), ID 139. Existing property control/query APIs
+accept rotation and scale. Save clocks and sources/destinations use the existing
+validated optional snapshot, with no new dependency or VM layout change.
+Removing Transform clears all transform tracks; position-only writes preserve
+rotation/scale tracks. Bound/property validation and shared capacity stay intact.
+Runtime contract v15 rejects older SDKs that cannot execute the new builtins.
+A source-authored exported fixture and logical-save tests verify these contracts;
+this does not close graphical timeline or skeletal-rig acceptance.

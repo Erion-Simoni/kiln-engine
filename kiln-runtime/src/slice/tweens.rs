@@ -19,6 +19,8 @@ impl SliceHost {
         let property = match id {
             131 => Property::Position,
             132 => Property::Color,
+            138 => Property::Rotation,
+            139 => Property::Scale,
             _ => Property::parse(
                 args[1]
                     .as_str()
@@ -39,6 +41,8 @@ impl SliceHost {
         }
         let eligible = match property {
             Property::Position => self.facts.entity_tween_positions.contains(&entity),
+            Property::Rotation => self.facts.entity_tween_rotations.contains(&entity),
+            Property::Scale => self.facts.entity_tween_scales.contains(&entity),
             Property::Color => self
                 .facts
                 .entity_sprite_colors
@@ -49,9 +53,11 @@ impl SliceHost {
             return Ok(Value::Bool(false));
         }
         let command = match id {
-            131 | 132 => {
-                let (to, duration, index) = if id == 131 {
+            131 | 132 | 138 | 139 => {
+                let (to, duration, index) = if id == 131 || id == 139 {
                     (vec![number(1)?, number(2)?], number(3)?, 4)
+                } else if id == 138 {
+                    (vec![number(1)?], number(2)?, 3)
                 } else {
                     (
                         (1..=4).map(number).collect::<Result<Vec<_>, _>>()?,

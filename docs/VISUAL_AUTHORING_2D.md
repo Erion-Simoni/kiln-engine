@@ -186,3 +186,8 @@ logical saves preserve the graph. See [the workflow](ANIMATION_STATES_2D.md) and
 Saved script-authored movement, tint and camera-follow rig sequences are described
 in [Cutscene tweens](CUTSCENE_TWEENS.md). Pause, seek, cancel and logical save/resume
 are supported; a graphical timeline remains open A07 work.
+
+The Source Editor can also author local rotation and XY scale tracks with
+`tween_rotation` and `tween_scale`; [transform_tweens](../samples/transform_tweens/README.md)
+shows a multi-turn spin and stretch alongside movement, tint and camera follow.
+All four properties share pause/seek/cancel and logical-save support.

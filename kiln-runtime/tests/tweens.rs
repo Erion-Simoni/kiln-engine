@@ -330,3 +330,105 @@ fn invalid_requests_leave_no_queued_state_and_old_snapshots_remain_readable() {
         .restore(&project, |_| Ok(CONTROL.into()), |_| None)
         .is_ok());
 }
+
+const TRANSFORM_CONTROL: &str = r#"
+let command=game_get("command","");game_set("command","");
+if command=="start" {tween_rotation("a0",12.0,2.0,"linear");tween_scale("a0",3.0,0.5,2.0,"linear");}
+if command=="pause" {tween_pause("a0","rotation",true);tween_pause("a0","scale",true);}
+if command=="resume" {tween_pause("a0","rotation",false);tween_pause("a0","scale",false);}
+if command=="seek" {tween_seek("a0","rotation",1.0);tween_seek("a0","scale",1.0);}
+if command=="replace" {tween_rotation("a0",0.0,1.0,"linear");tween_scale("a0",1.0,1.0,1.0,"linear");}
+if command=="manual" {set_entity_pos("a0",50.0,120.0);}
+if command=="remove" {remove_component("a0","transform");}
+if command=="cancel" {tween_cancel("a0","rotation");tween_cancel("a0","scale");}
+if command=="cut" {tween_rotation("a0",-4.0,0.0,"smooth");tween_scale("a0",2.0,0.25,0.0,"smooth");}
+"#;
+fn pose(world: &GameWorld) -> Transform {
+    *world.world_ref().get::<&Transform>(handle(world)).unwrap()
+}
+#[test]
+fn transform_tracks_preserve_spins_scale_and_paused_saved_clocks() {
+    let (project, mut s, mut world) = session(TRANSFORM_CONTROL, 1, None);
+    control(&mut s, &mut world, "start");
+    s.step(&mut world, (0.0, 0.0), 0.5).unwrap();
+    assert_eq!(pose(&world).rotation, 3.0); // No shortest-arc normalization.
+    assert_eq!(pose(&world).scale.to_array(), [1.5, 0.875]);
+    control(&mut s, &mut world, "pause");
+    control(&mut s, &mut world, "seek");
+    assert_eq!(pose(&world).rotation, 6.0);
+    assert_eq!(pose(&world).scale.to_array(), [2.0, 0.75]);
+    let save = s.snapshot(&world).unwrap();
+    let decoded = kiln_runtime::GameSave::from_json(&save.to_json().unwrap()).unwrap();
+    let (mut resumed, mut other) = decoded
+        .restore(&project, |_| Ok(TRANSFORM_CONTROL.into()), |_| None)
+        .unwrap();
+    resumed.step(&mut other, (0.0, 0.0), 4.0).unwrap();
+    assert_eq!(pose(&other).rotation, 6.0);
+    assert_eq!(pose(&other).scale.to_array(), [2.0, 0.75]);
+    control(&mut resumed, &mut other, "resume");
+    resumed.step(&mut other, (0.0, 0.0), 1.0).unwrap();
+    assert_eq!(pose(&other).rotation, 12.0);
+    assert_eq!(pose(&other).scale.to_array(), [3.0, 0.5]);
+    assert!(resumed.snapshot(&other).unwrap().tweens.tracks.is_empty());
+    let mut corrupt = save;
+    corrupt.tweens.tracks[0].from.push(1.0);
+    assert!(corrupt
+        .restore(&project, |_| Ok(TRANSFORM_CONTROL.into()), |_| None)
+        .is_err());
+}
+#[test]
+fn transform_replacement_cut_cleanup_and_position_override_are_independent() {
+    let (_, mut s, mut world) = session(TRANSFORM_CONTROL, 1, None);
+    control(&mut s, &mut world, "start");
+    s.step(&mut world, (0.0, 0.0), 1.0).unwrap();
+    control(&mut s, &mut world, "replace");
+    control(&mut s, &mut world, "manual");
+    s.step(&mut world, (0.0, 0.0), 0.5).unwrap();
+    assert_eq!(pose(&world).rotation, 3.0);
+    assert_eq!(pose(&world).scale.to_array(), [1.5, 0.875]);
+    assert_eq!(x(&world), 50.0);
+    control(&mut s, &mut world, "cancel");
+    s.step(&mut world, (0.0, 0.0), 2.0).unwrap();
+    assert_eq!(pose(&world).rotation, 3.0);
+    control(&mut s, &mut world, "cut");
+    assert_eq!(pose(&world).rotation, -4.0);
+    assert_eq!(pose(&world).scale.to_array(), [2.0, 0.25]);
+    assert!(s.snapshot(&world).unwrap().tweens.tracks.is_empty());
+    control(&mut s, &mut world, "start");
+    control(&mut s, &mut world, "remove");
+    assert!(world.world_ref().get::<&Transform>(handle(&world)).is_err());
+    assert!(s.snapshot(&world).unwrap().tweens.tracks.is_empty());
+}
+#[test]
+fn rotation_scale_validation_ownership_and_pending_capacity_are_shared() {
+    for source in [
+        "tween_scale(\"a0\",0.0,1.0,1.0,\"linear\");",
+        "tween_scale(\"a0\",-1.0,1.0,1.0,\"linear\");",
+        "tween_rotation(\"a0\",1.0,-1.0,\"linear\");",
+        "tween_scale(\"a0\",99999999999999999999999999999999999999999999999999.0,1.0,1.0,\"linear\");",
+        "tween_scale(\"a0\",1.0,1.0,1.0,\"invalid\");",
+    ] {
+        let (_, mut s, mut world) = session(source, 1, None);
+        assert!(s.step(&mut world, (0.0, 0.0), 0.0).is_err());
+        assert!(s.snapshot(&world).unwrap().tweens.tracks.is_empty());
+    }
+    let source = "state_set(\"r\",tween_rotation(\"a0\",1.0,1.0,\"linear\"));state_set(\"s\",tween_scale(\"a0\",2.0,2.0,1.0,\"linear\"));";
+    let (_, mut s, mut world) = session(source, 1, None);
+    let actor = handle(&world);
+    world
+        .world_mut()
+        .insert_one(actor, kiln_core::physics_data::RigidBody2D::default())
+        .unwrap();
+    s.step(&mut world, (0.0, 0.0), 0.0).unwrap();
+    assert_eq!(s.root_script_state("r"), Some(&Value::Bool(false)));
+    assert_eq!(s.root_script_state("s"), Some(&Value::Bool(false)));
+    let mut source = String::new();
+    for i in 0..32 {
+        source.push_str(&format!("tween_rotation(\"a{i}\",1.0,1.0,\"linear\");tween_scale(\"a{i}\",2.0,2.0,1.0,\"linear\");"));
+    }
+    source.push_str("state_set(\"overflow\",tween_position(\"a0\",0.0,0.0,1.0,\"linear\"));");
+    let (_, mut s, mut world) = session(&source, 32, None);
+    s.step(&mut world, (0.0, 0.0), 0.0).unwrap();
+    assert_eq!(s.root_script_state("overflow"), Some(&Value::Bool(false)));
+    assert_eq!(s.snapshot(&world).unwrap().tweens.tracks.len(), 64);
+}

@@ -136,4 +136,6 @@ pub const BUILTINS: &[(&str, u32, u32)] = &[
     ("tween_active", 135, 2),
     ("tween_remaining", 136, 2),
     ("tween_pause", 137, 3),
+    ("tween_rotation", 138, 4),
+    ("tween_scale", 139, 5),
 ];

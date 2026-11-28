@@ -9,6 +9,8 @@ pub const MAX_TWEENS: usize = 64;
 #[serde(rename_all = "snake_case")]
 pub enum TweenProperty {
     Position,
+    Rotation,
+    Scale,
     Color,
 }
 impl TweenProperty {
@@ -16,12 +18,15 @@ impl TweenProperty {
         match name {
             "position" => Ok(Self::Position),
             "color" => Ok(Self::Color),
-            _ => Err("Tween property must be position or color".into()),
+            "rotation" => Ok(Self::Rotation),
+            "scale" => Ok(Self::Scale),
+            _ => Err("Tween property must be position, rotation, scale or color".into()),
         }
     }
     fn dimensions(self) -> usize {
         match self {
-            Self::Position => 2,
+            Self::Position | Self::Scale => 2,
+            Self::Rotation => 1,
             Self::Color => 4,
         }
     }
@@ -67,6 +72,11 @@ pub struct TweenTrack {
 impl TweenTrack {
     pub fn validate(&self) -> Result<(), String> {
         validate_request(self.property, &self.to, self.duration)?;
+        if self.property == TweenProperty::Scale
+            && self.from.iter().any(|v| *v < f64::from(0.000001_f32))
+        {
+            return Err("Tween scale source must be >= 0.000001".into());
+        }
         if self.entity.is_empty()
             || self.from.len() != self.property.dimensions()
             || self
@@ -99,10 +109,14 @@ pub fn validate_request(property: TweenProperty, to: &[f64], duration: f64) -> R
             .iter()
             .any(|v| !v.is_finite() || v.abs() > f32::MAX as f64)
         || (property == TweenProperty::Color && to.iter().any(|v| !(0.0..=1.0).contains(v)))
+        || (property == TweenProperty::Scale && to.iter().any(|v| *v < 0.000001))
         || !duration.is_finite()
         || !(0.0..=60.0).contains(&duration)
     {
-        return Err("Tween needs finite targets, duration 0..60 and color channels 0..1".into());
+        return Err(
+            "Tween needs finite targets, duration 0..60, scale >= 0.000001 and color channels 0..1"
+                .into(),
+        );
     }
     Ok(())
 }
@@ -144,6 +158,11 @@ impl TweenSnapshot {
         self.tracks
             .retain(|track| track.entity != entity || track.property != property);
     }
+    /// Release every local-transform binding without affecting tint.
+    pub fn remove_transform(&mut self, entity: &str) {
+        self.tracks
+            .retain(|track| track.entity != entity || track.property == TweenProperty::Color);
+    }
     pub fn remove_entity(&mut self, entity: &str) {
         self.tracks.retain(|track| track.entity != entity);
     }
@@ -182,18 +201,22 @@ pub fn read_handle(
     property: TweenProperty,
 ) -> Option<Vec<f64>> {
     let values = match property {
-        TweenProperty::Position => {
+        TweenProperty::Position | TweenProperty::Rotation | TweenProperty::Scale => {
             if world.world_ref().get::<&RigidBody2D>(entity).is_ok() {
                 return None;
             }
-            world
-                .world_ref()
-                .get::<&Transform>(entity)
-                .ok()?
-                .position
-                .to_array()
-                .map(f64::from)
-                .to_vec()
+            let pose = world.world_ref().get::<&Transform>(entity).ok()?;
+            match property {
+                TweenProperty::Position => pose.position.to_array().map(f64::from).to_vec(),
+                TweenProperty::Rotation => vec![f64::from(pose.rotation)],
+                TweenProperty::Scale => {
+                    if pose.scale.min_element() < 0.000001 {
+                        return None;
+                    }
+                    pose.scale.to_array().map(f64::from).to_vec()
+                }
+                TweenProperty::Color => unreachable!(),
+            }
         }
         TweenProperty::Color => world
             .world_ref()
@@ -218,11 +241,18 @@ pub fn write_handle(
         return false;
     }
     match property {
-        TweenProperty::Position => {
+        TweenProperty::Position | TweenProperty::Rotation | TweenProperty::Scale => {
             let Ok(mut pose) = world.world_mut().get::<&mut Transform>(entity) else {
                 return false;
             };
-            pose.position = kiln_core::Vec2::new(values[0], values[1]);
+            match property {
+                TweenProperty::Position => {
+                    pose.position = kiln_core::Vec2::new(values[0], values[1])
+                }
+                TweenProperty::Rotation => pose.rotation = values[0],
+                TweenProperty::Scale => pose.scale = kiln_core::Vec2::new(values[0], values[1]),
+                TweenProperty::Color => unreachable!(),
+            }
         }
         TweenProperty::Color => {
             let Ok(mut sprite) = world.world_mut().get::<&mut Sprite>(entity) else {

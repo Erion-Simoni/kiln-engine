@@ -81,6 +81,8 @@ pub const ROLE_COIN: &str = "coin";
 /// What the script can read about the current frame.
 #[derive(Debug, Clone, Default)]
 pub struct SliceFacts {
+    pub entity_tween_rotations: std::collections::HashSet<String>,
+    pub entity_tween_scales: std::collections::HashSet<String>,
     pub entity_tween_positions: std::collections::HashSet<String>,
     pub entity_animation_states: HashMap<String, String>,
     pub entity_animation_parameters: HashMap<String, std::collections::BTreeMap<String, f64>>,
@@ -1421,7 +1423,7 @@ impl SliceHost {
                 .into(),
             )),
             116..=123 => self.call_task(func_id, args),
-            131..=137 => self.call_tween(func_id, args),
+            131..=139 => self.call_tween(func_id, args),
             129 => {
                 let entity = args[0]
                     .as_str()
@@ -2326,6 +2328,18 @@ impl SliceSession {
             })
             .map(|(id, _)| id.clone())
             .collect();
+        let mut entity_tween_rotations = std::collections::HashSet::new();
+        let mut entity_tween_scales = std::collections::HashSet::new();
+        for (id, pose) in world.world_ref().query::<(&SourceId, &Transform)>().iter() {
+            if !blocked.contains(&id.0) {
+                if pose.rotation.is_finite() {
+                    entity_tween_rotations.insert(id.0.clone());
+                }
+                if pose.scale.is_finite() && pose.scale.min_element() >= 0.000001 {
+                    entity_tween_scales.insert(id.0.clone());
+                }
+            }
+        }
         self.host_mut().frame_count += 1;
 
         SliceFacts {
@@ -2340,6 +2354,8 @@ impl SliceSession {
             frame_count: self.host_mut().frame_count,
             time_scale: self.host_mut().time_scale,
             entity_tween_positions,
+            entity_tween_rotations,
+            entity_tween_scales,
             entity_animation_states,
             entity_animation_parameters,
             entity_positions,
@@ -2680,10 +2696,9 @@ impl SliceSession {
                         .host_mut()
                         .tweens
                         .cancel(&source_id, crate::tweens::TweenProperty::Color),
-                    "transform" | "Transform" => self
-                        .host_mut()
-                        .tweens
-                        .cancel(&source_id, crate::tweens::TweenProperty::Position),
+                    "transform" | "Transform" => {
+                        self.host_mut().tweens.remove_transform(&source_id)
+                    }
                     _ => {}
                 }
                 #[cfg(feature = "physics")]
@@ -2694,10 +2709,10 @@ impl SliceSession {
                     if sid.0 == source_id {
                         match component_type.as_str() {
                             "transform" | "Transform" => {
-                                let _ = world.world_mut().remove::<Transform>(eid);
+                                let _ = world.world_mut().remove_one::<Transform>(eid);
                             }
                             "sprite" | "Sprite" => {
-                                let _ = world.world_mut().remove::<Sprite>(eid);
+                                let _ = world.world_mut().remove_one::<Sprite>(eid);
                             }
                             "velocity" | "Velocity" => {
                                 #[cfg(feature = "physics")]
